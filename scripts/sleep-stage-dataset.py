@@ -41,14 +41,15 @@ Stdlib only; runs under python3 >= 3.9 directly or via the uv shebang.
 import argparse
 import bisect
 import csv
-import html
 import math
 import os
 import re
 import sqlite3
 import sys
+import xml.etree.ElementTree as ET
 from collections import Counter
 from datetime import datetime, timedelta
+from pathlib import Path
 
 STAGES = ('wake', 'light', 'deep', 'rem')
 CSV_FIELDS = ('night', 'side', 'ts', 'watch_stage', 'hr', 'hrv', 'br', 'movement', 'hr_quality', 'watch_hr')
@@ -67,9 +68,6 @@ HK_HR = 'HKQuantityTypeIdentifierHeartRate'
 JOIN_TOLERANCE_S = 60
 MIN_HR_MATCHES = 10
 NIGHT_ROLLOVER = timedelta(hours=12)
-
-_RECORD_RE = re.compile(r'<Record\s([^>]*?)/?>')
-_ATTR_RE = re.compile(r'(\w+)="([^"]*)"')
 
 
 def warn(msg):
@@ -94,31 +92,36 @@ def parse_export(path, source_pattern='Watch'):
         path = os.path.join(path, 'export.xml')
     source_re = re.compile(source_pattern)
     segments, hr = [], []
-    with open(path, encoding='utf-8', errors='replace') as f:
-        for line in f:
-            if '<Record' not in line or (HK_SLEEP not in line and HK_HR + '"' not in line):
-                continue
-            m = _RECORD_RE.search(line)
-            if not m:
-                continue
-            a = {k: html.unescape(v) for k, v in _ATTR_RE.findall(m.group(1))}
-            if not source_re.search(a.get('sourceName', '')):
-                continue
-            kind = a.get('type')
-            try:
-                start = datetime.strptime(a['startDate'], '%Y-%m-%d %H:%M:%S %z')
-                end = datetime.strptime(a['endDate'], '%Y-%m-%d %H:%M:%S %z')
-            except (KeyError, ValueError):
-                continue
-            if kind == HK_SLEEP:
-                stage = HK_STAGE.get(a.get('value', ''))
-                if stage and end > start:
-                    segments.append((start, end, stage))
-            elif kind == HK_HR:
-                try:
-                    hr.append((int(start.timestamp()), float(a['value'])))
-                except (KeyError, ValueError):
-                    continue
+
+    def add(a):
+        kind = a.get('type')
+        if kind not in (HK_SLEEP, HK_HR) or not source_re.search(a.get('sourceName', '')):
+            return
+        try:
+            start = datetime.strptime(a['startDate'], '%Y-%m-%d %H:%M:%S %z')
+            end = datetime.strptime(a['endDate'], '%Y-%m-%d %H:%M:%S %z')
+        except (KeyError, ValueError):
+            return
+        if kind == HK_SLEEP:
+            stage = HK_STAGE.get(a.get('value', ''))
+            if stage and end > start:
+                segments.append((start, end, stage))
+            return
+        try:
+            bpm = float(a['value'])
+        except (KeyError, ValueError):
+            return
+        if math.isfinite(bpm):
+            hr.append((int(start.timestamp()), bpm))
+
+    # Incremental parse, so record layout (line breaks, attribute wrapping)
+    # does not matter. Clearing the root after each record keeps memory flat.
+    events = ET.iterparse(path, events=('start', 'end'))
+    _, root = next(events)
+    for event, elem in events:
+        if event == 'end' and elem.tag == 'Record':
+            add(elem.attrib)
+            root.clear()
     hr.sort()
     return segments, hr
 
@@ -200,11 +203,12 @@ def group_nights(segments, pad_min):
 
 # ── Pod DB ─────────────────────────────────────────────────────────────────
 
-def load_pod(conn, side, start_s, end_s):
+def load_pod(conn, side, start_s, end_s, join_pad_s=0):
     """Return (vitals, movement) for one side and window, ascending.
 
     vitals:   [(id, ts, hr, hrv, br, quality)]
-    movement: [(ts, total_movement)]
+    movement: [(ts, total_movement)], over the window widened by join_pad_s
+              on each side so vitals at the edges can match their nearest row
     """
     has_quality = conn.execute(
         "SELECT 1 FROM sqlite_master WHERE type='table' AND name='vitals_quality'").fetchone()
@@ -218,7 +222,7 @@ def load_pod(conn, side, start_s, end_s):
     vitals = conn.execute(q, (side, start_s, end_s)).fetchall()
     movement = conn.execute(
         'SELECT timestamp, total_movement FROM movement WHERE side = ? AND timestamp BETWEEN ? AND ? '
-        'ORDER BY timestamp', (side, start_s, end_s)).fetchall()
+        'ORDER BY timestamp', (side, start_s - join_pad_s, end_s + join_pad_s)).fetchall()
     return vitals, movement
 
 
@@ -258,8 +262,10 @@ def join_night(night, side, vitals, movement, stage_at, watch_hr):
 
 
 def hr_mad(rows):
-    """(mean |pod HR - Watch HR|, matched count) over rows with both values."""
+    """(mean |pod HR - Watch HR|, matched count) over rows with both values
+    finite."""
     diffs = [abs(r['hr'] - r['watch_hr']) for r in rows if r['hr'] is not None and r['watch_hr'] is not None]
+    diffs = [d for d in diffs if math.isfinite(d)]
     return (sum(diffs) / len(diffs) if diffs else None), len(diffs)
 
 
@@ -386,7 +392,7 @@ def print_summary(results, out=None):
     for r in results:
         print(f"{r['night']}  {r['side']:5} {r['rows']:5} {r['labeled']:7} {mad(r['mad'])}  "
               f"{pct(r['deployed']):>14}  {pct(r['ios']):>9}  {pct(r['light']):>12}", file=out)
-    print('\nWatch stage minutes per night:', file=out)
+    print('\nWatch-labeled samples per night:', file=out)
     for r in results:
         dist = ', '.join(f'{s}={r["watch_dist"].get(s, 0)}' for s in STAGES)
         print(f"  {r['night']}: {dist}", file=out)
@@ -401,12 +407,15 @@ def build(conn, segments, watch_hr, side, pad_min=10, max_hr_mad=8.0, nights=Non
     for night, (start_s, end_s) in group_nights(segments, pad_min).items():
         if nights and night not in nights:
             continue
-        vitals, movement = load_pod(conn, side, start_s, end_s)
+        vitals, near_mov = load_pod(conn, side, start_s, end_s, JOIN_TOLERANCE_S)
         if not vitals:
             warn(f'{night}: no {side} vitals in the Watch window; skipped')
             continue
-        hr_in = [(t, v) for t, v in watch_hr if start_s <= t <= end_s]
-        rows = join_night(night, side, vitals, movement, stage_at, hr_in)
+        # Join candidates reach JOIN_TOLERANCE_S past the window; the
+        # classifier's movement input stays inside it.
+        hr_in = [(t, v) for t, v in watch_hr if start_s - JOIN_TOLERANCE_S <= t <= end_s + JOIN_TOLERANCE_S]
+        rows = join_night(night, side, vitals, near_mov, stage_at, hr_in)
+        movement = [(t, v) for t, v in near_mov if start_s <= t <= end_s]
         mad, matched = hr_mad(rows)
         if matched < MIN_HR_MATCHES:
             warn(f'{night}: only {matched} pod/Watch HR matches; side-mismatch guard not applied')
@@ -422,6 +431,9 @@ def _fmt(v):
     if v is None:
         return ''
     if isinstance(v, float):
+        if v != 0 and abs(v) < 0.0005:
+            # Three decimals would print it as 0.
+            return f'{v:.3g}'
         return f'{v:.3f}'.rstrip('0').rstrip('.')
     return v
 
@@ -456,19 +468,26 @@ def main(argv=None):
     db_path = args.inputs[-1]
     if not os.path.exists(db_path):
         ap.error(f'{db_path} not found')
-    if args.out and os.path.exists(args.out):
-        inputs = [db_path]
-        if not args.from_db:
-            export = args.inputs[0]
-            inputs.append(os.path.join(export, 'export.xml') if os.path.isdir(export) else export)
-        if any(os.path.exists(p) and os.path.samefile(args.out, p) for p in inputs):
-            ap.error(f'--out {args.out} is an input file; refusing to overwrite it')
-    conn = sqlite3.connect(f'file:{db_path}?mode=ro', uri=True)
+    inputs = [db_path]
+    if not args.from_db:
+        export = args.inputs[0]
+        export_xml = os.path.join(export, 'export.xml') if os.path.isdir(export) else export
+        if not os.path.exists(export_xml):
+            ap.error(f'{export_xml} not found')
+        inputs.append(export_xml)
+    if args.out and os.path.exists(args.out) and any(os.path.samefile(args.out, p) for p in inputs):
+        ap.error(f'--out {args.out} is an input file; refusing to overwrite it')
+    # as_uri() percent-encodes ?, # and %, which SQLite would otherwise read
+    # as URI syntax and open a different file.
+    conn = sqlite3.connect(Path(db_path).resolve().as_uri() + '?mode=ro', uri=True)
 
     if args.from_db:
         segments, watch_hr = segments_from_db(conn, args.side), []
     else:
-        segments, watch_hr = parse_export(args.inputs[0], args.source)
+        try:
+            segments, watch_hr = parse_export(export_xml, args.source)
+        except ET.ParseError as e:
+            raise SystemExit(f'error: {export_xml} is not valid XML: {e}')
     if not segments:
         raise SystemExit('error: no Watch sleep-stage samples found')
 

@@ -136,6 +136,23 @@ class ParseExportTest(Fixture):
         self.assertEqual([s for _, _, s in segments], ['deep'])
         self.assertEqual(hr, [(int(T0.timestamp()), 150.0)])
 
+    def test_record_layout_does_not_matter(self):
+        # Attributes wrapped over lines, and two records on one line.
+        wrapped = sleep_record(T0, T0 + timedelta(minutes=10), 'AsleepCore').replace('" ', '"\n   ')
+        one_line = (hr_record(T0 + timedelta(minutes=1), 61) + hr_record(T0 + timedelta(minutes=2), 62)).replace('\n', '')
+        with open(self.export, 'w', encoding='utf-8') as f:
+            f.write(f'<?xml version="1.0" encoding="UTF-8"?>\n<HealthData>\n{wrapped}{one_line}\n</HealthData>\n')
+        segments, hr = ds.parse_export(self.export)
+        self.assertEqual([s for _, _, s in segments], ['light'])
+        self.assertEqual([v for _, v in hr], [61.0, 62.0])
+
+    def test_nonfinite_watch_hr_is_dropped(self):
+        with open(self.export, 'w', encoding='utf-8') as f:
+            f.write('<HealthData>\n' + ''.join(hr_record(T0 + timedelta(minutes=m), v)
+                                                for m, v in enumerate(('nan', 'inf', '61'))) + '</HealthData>\n')
+        _, hr = ds.parse_export(self.export)
+        self.assertEqual([v for _, v in hr], [61.0])
+
 
 class JoinTest(Fixture):
     def test_rows_per_minute_with_labels_movement_quality_and_watch_hr(self):
@@ -208,6 +225,41 @@ class JoinTest(Fixture):
                 self.run_main(self.tmp.name, self.db_path, '--out', target)
         self.assertEqual(os.path.getsize(self.db_path), size)
 
+    def test_join_matches_rows_just_outside_the_window(self):
+        conn = sqlite3.connect(self.db_path)
+        conn.executescript('''
+            CREATE TABLE vitals (id INTEGER PRIMARY KEY, side TEXT, timestamp INTEGER,
+                                 heart_rate REAL, hrv REAL, breathing_rate REAL);
+            CREATE TABLE movement (id INTEGER PRIMARY KEY, side TEXT, timestamp INTEGER, total_movement INTEGER);
+        ''')
+        base = int(T0.timestamp())
+        conn.execute("INSERT INTO vitals (side, timestamp, heart_rate, hrv, breathing_rate) VALUES ('left',?,60,50,14)",
+                     (base,))
+        conn.execute("INSERT INTO movement (side, timestamp, total_movement) VALUES ('left',?,77)", (base - 10,))
+        segs = [(T0, T0 + timedelta(minutes=30), 'light')]
+        [(_night, rows, movement, _mad, _matched)] = ds.build(conn, segs, [(base - 10, 60.0)], 'left', pad_min=0)
+        conn.close()
+        self.assertEqual((rows[0]['movement'], rows[0]['watch_hr']), (77, 60.0))
+        # The classifier's movement stays inside the window.
+        self.assertEqual(movement, [])
+
+    def test_db_path_with_uri_characters(self):
+        write_export(self.export)
+        db_dir = os.path.join(self.tmp.name, 'pod#copy?1%')
+        os.mkdir(db_dir)
+        db_path = os.path.join(db_dir, 'biometrics.db')
+        make_db(db_path).close()
+        out, _ = self.run_main(self.export, db_path)
+        self.assertEqual(len(out.strip().splitlines()), 41)
+
+    def test_missing_export_is_a_usage_error(self):
+        make_db(self.db_path).close()
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err), self.assertRaises(SystemExit) as cm:
+            ds.main([os.path.join(self.tmp.name, 'nope.xml'), self.db_path])
+        self.assertEqual(cm.exception.code, 2)
+        self.assertIn('nope.xml not found', err.getvalue())
+
     def test_from_db_without_table_exits_with_message(self):
         make_db(self.db_path).close()
         with self.assertRaises(SystemExit) as cm:
@@ -243,6 +295,27 @@ class LabelAndWindowTest(unittest.TestCase):
         start, end = windows['2026-10-08']
         self.assertEqual((start, end), (int(noon.timestamp()) - 20 * 60, int(noon.timestamp()) + 40 * 60))
 
+    def test_dst_change_keeps_one_night_and_contiguous_labels(self):
+        # Segment times carry the offset in force when they were written, so a
+        # night across a DST change mixes two offsets.
+        pdt, pst = timezone(timedelta(hours=-7)), timezone(timedelta(hours=-8))
+        fall = [(datetime(2026, 11, 1, 0, 30, tzinfo=pdt), datetime(2026, 11, 1, 1, 50, tzinfo=pdt), 'light'),
+                (datetime(2026, 11, 1, 1, 50, tzinfo=pdt), datetime(2026, 11, 1, 1, 20, tzinfo=pst), 'deep'),
+                (datetime(2026, 11, 1, 1, 20, tzinfo=pst), datetime(2026, 11, 1, 6, 0, tzinfo=pst), 'rem')]
+        spring = [(datetime(2027, 3, 14, 0, 30, tzinfo=pst), datetime(2027, 3, 14, 1, 50, tzinfo=pst), 'light'),
+                  (datetime(2027, 3, 14, 3, 50, tzinfo=pdt), datetime(2027, 3, 14, 6, 0, tzinfo=pdt), 'deep')]
+        for segs, night in ((fall, '2026-10-31'), (spring, '2027-03-13')):
+            windows = ds.group_nights(segs, 0)
+            self.assertEqual(list(windows), [night])
+            self.assertEqual(windows[night], (int(segs[0][0].timestamp()), int(segs[-1][1].timestamp())))
+        # The repeated 01:00-02:00 hour labels by absolute time: 01:50 PDT is
+        # 01:20 + 30 min PST, so deep covers exactly 30 minutes.
+        stage_at = ds.stage_lookup(fall)
+        deep_start = int(fall[1][0].timestamp())
+        self.assertEqual(int(fall[1][1].timestamp()) - deep_start, 30 * 60)
+        self.assertEqual([stage_at(deep_start - 1), stage_at(deep_start), stage_at(deep_start + 30 * 60)],
+                         ['light', 'deep', 'rem'])
+
 
 class SideMismatchGuardTest(Fixture):
     def test_night_within_threshold_is_kept(self):
@@ -277,6 +350,7 @@ class SideMismatchGuardTest(Fixture):
         rows = [{'hr': 60.0, 'watch_hr': 70.0}, {'hr': 60.0, 'watch_hr': 58.0},
                 {'hr': None, 'watch_hr': 90.0}, {'hr': 60.0, 'watch_hr': None}]
         self.assertEqual(ds.hr_mad(rows), (6.0, 2))
+        self.assertEqual(ds.hr_mad(rows + [{'hr': 60.0, 'watch_hr': float('nan')}]), (6.0, 2))
 
 
 def vit(minute, hr, hrv=None, br=None):
@@ -342,6 +416,12 @@ class ClassifierPortTest(unittest.TestCase):
         # Vitals at minute 1 rounds to bucket 0; movement rows at minutes 0 and 2 share it.
         self.assertEqual(self.stages([vit(1, 60)], [mov(0, 10), mov(2, 300)]), ['wake'])
         self.assertEqual(self.stages([vit(1, 60)], [mov(0, 300), mov(2, 10)]), ['light'])
+
+
+class FormatTest(unittest.TestCase):
+    def test_fmt(self):
+        self.assertEqual([ds._fmt(v) for v in (None, 0.0, 0.5, 61.23456, 7)], ['', '0', '0.5', '61.235', 7])
+        self.assertEqual([ds._fmt(v) for v in (1e-7, -0.0003)], ['1e-07', '-0.0003'])
 
 
 class SummaryTest(Fixture):
