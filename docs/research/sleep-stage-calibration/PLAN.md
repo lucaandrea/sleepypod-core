@@ -3,17 +3,18 @@
 Status: draft 2026-10-10. Owner: Jonathan. Each workstream below is scoped so one
 agent can own it end to end. Workstreams A–D are independent; E depends on C.
 
-## 1. Findings (do not re-derive)
+## 1. Recorded findings
 
 Source: Health export `/Users/ng/Desktop/apple_health_export/export.xml` joined per
 minute with `vitals` + `movement` from the Pod 5 `biometrics.db`
 (192.168.1.88:8822, `/persistent/sleepypod-data/biometrics.db`, timestamps in
 seconds). `scripts/sleep-stage-dataset.py` does the join and reproduces the
-first three table rows with `--summary`; `feat2.py` here runs the windowed
+first three table rows within 1 point with `--summary` (it labels by exact
+Watch segment times, so 10-08 prints 52/32/68); `feat2.py` here runs the windowed
 features and leave-one-night-out tree on its CSV. See `README.md`. The
 720-combo grid search lived in the original `eval.py` (removed; in git history).
 
-Usable nights: 2026-10-08/09 and 2026-10-09/10, left side, 587 labeled minutes.
+Usable nights: 2026-10-08/09 and 2026-10-09/10, left side, 587 Watch-labeled vitals samples (about one per minute).
 (2026-10-01/02 has Watch only against the right side, HR MAD 12 bpm — excluded.)
 
 | Variant | 10-08 | 10-09 |
@@ -38,7 +39,7 @@ Stages are **not stored**. `classifySleepStages` runs at query time over `vitals
 | Layer | Stored? | Backfill |
 |---|---|---|
 | Sleep stages | No (derived at read) | Automatic once classifier changes. Nothing to migrate. |
-| `sleep_records` 16 h cap | Yes | One-off repair: for records with `sleep_duration_seconds`=57600, set `left_bed_at` = last `vitals`/`movement` timestamp for that side within the record + `ABSENCE_TIMEOUT_S` (120 s); recompute duration. Deterministic from existing rows. Keep a `.bak` (pattern: `biometrics.db.bak.<epoch>` already exists on the pod). |
+| `sleep_records` 16 h cap | Yes | One-off repair, `scripts/repair-capped-sessions.py` (PR #804), for records with `sleep_duration_seconds`=57600. Occupancy evidence is the side's `vitals` only; `movement` is written every minute while a session is open, so it runs to the cap. Vitals are split into runs at gaps > 5 min; occupancy ends at the end of the last run lasting ≥ 30 min. `left_bed_at` = that end + `ABSENCE_TIMEOUT_S` (120 s), never later than the original; duration recomputed, intervals clipped, exits recounted. Records with no qualifying run are left unchanged and listed. Dry run by default; `--apply` first writes `<db>.bak.<epoch>` with the SQLite backup API. |
 | `movement` zeros | Yes | Not recoverable: raw `.RAW` is a rolling single file on tmpfs (Pod 5), nothing archived (`archive-push-staging` empty). `cap_sense_frames` holds ~2 days of per-window zone sums (69k rows, 10-08→10-10) — only those days could be re-derived, not worth it. Forward-only fix. |
 | `vitals` HR/HRV/BR | Yes | Not recomputable (raw gone). Keep as is; treat HRV as an index. |
 | HealthKit samples written by the iOS app ("sleepypod" source) | In HealthKit | iOS app must delete its own `HKCategoryTypeIdentifierSleepAnalysis` samples for affected nights and rewrite after the server returns new stages. HealthKit permits deleting samples your app wrote. Out of this repo; track in sleepypod-ios. |
@@ -51,7 +52,7 @@ Why: 126/782 sessions hit `MAX_SESSION_S`; the stage timeline runs to 17:30 on a
 What: find why presence stays true after the bed empties on Pod 5 (adaptive baseline, exit fraction, or capSense2 sentinel handling); fix; add the repair script from §2 as `scripts/repair-capped-sessions.py` (dry-run default).
 Acceptance:
 - Replay test with recorded capSense2 frames ending in an empty bed closes the session within `ABSENCE_TIMEOUT_S`.
-- Repair script on a copy of the pod DB rewrites all 126 capped records; `left_bed_at` ≤ last vitals timestamp + 120 s; writes `.bak` first.
+- Repair script on a copy of the pod DB rewrites every capped record that has a qualifying vitals run (52 of 126 on the 2026-10-10 copy) and lists the rest unchanged; new `left_bed_at` ≤ end of the last qualifying run + 120 s and ≤ the original; writes `.bak` first; a re-run finds nothing.
 - `docs/sleep-detector.md` updated.
 
 ### B. Sleep detector: movement all-zero  (modules/sleep-detector, python)
@@ -63,18 +64,19 @@ Acceptance:
 
 ### C. Dataset builder  (scripts/, typescript or python)
 Why: calibration needs ≥ 20 labeled nights; today the join lives in three scratch scripts.
-What: `scripts/sleep-stage-dataset.py <export.xml|export dir> <biometrics.db> --side left --out dataset.csv` emitting one row per minute: `night, side, ts, watch_stage, hr, hrv, br, movement, hr_quality` plus `watch_hr` when within 60 s. Reuse `parse.py`/`eval.py` logic. Also `--summary` printing per-night agreement for the current classifier and the always-light baseline.
+What: `scripts/sleep-stage-dataset.py <export.xml|export dir> <biometrics.db> --side left --out dataset.csv` emitting one row per pod vitals sample (about one per minute): `night, side, ts, watch_stage, hr, hrv, br, movement, hr_quality` plus `watch_hr` when within 60 s. Reuse `parse.py`/`eval.py` logic. Also `--summary` printing per-night agreement for the current classifier and the always-light baseline.
 Acceptance:
-- Reproduces the table in §1 for the two nights (±1%).
+- Reproduces the first three rows of the table in §1 for the two nights (±1 point).
 - Rejects nights where pod-vs-Watch HR MAD > 8 bpm with a warning (side mismatch guard).
-- README in this folder documents how to pull the DB (`scp -P 8822 root@<pod>:/persistent/sleepypod-data/biometrics.db{,-wal}`).
+- README in this folder documents how to pull a consistent copy of the DB (SQLite backup API on the pod, or `scp -P 8822 root@<pod>:/persistent/sleepypod-data/biometrics.db{,-wal}` while the writers are quiet).
+- Python tests run in CI (Python Modules workflow).
 
 ### D. Comparison-data ingestion from the app  (src/server, tRPC + iOS stub)
 Why: manual Health exports do not scale to 20 nights.
-What: tRPC mutation `biometrics.importReferenceStages({side, source:'apple_watch', segments:[{start,end,stage}]})` writing a new `reference_stages` table (migration in `src/db/biometrics-migrations`), idempotent on (side, source, start); a post that overlaps itself or a different stored segment is rejected. The iOS app posts the Watch's `SleepAnalysis` samples each morning. Dataset builder (C) reads this table when no export is given.
+What: tRPC mutation `biometrics.importReferenceStages({side, source:'apple_watch', segments:[{start,end,stage}]})` writing a new `reference_stages` table (migration in `src/db/biometrics-migrations`), idempotent on (side, source, start). The iOS app posts the Watch's `SleepAnalysis` samples each morning. Dataset builder (C) reads this table when no export is given.
 Acceptance:
 - Migration + Drizzle schema; mutation validates input at the boundary; duplicate posts are no-ops.
-- `sleep-stage-dataset.py --from-db` yields the same rows as `--from-export` for 10-09 (pending C, which adds `--from-db`).
+- `sleep-stage-dataset.py --from-db` yields the same rows as the export input (the default; there is no `--from-export` flag) for 10-09, once the iOS app has posted that night.
 
 ### E. Classifier v2  (src/lib/sleep-stages.ts) — blocked on C, needs ≥ 20 nights
 Why: the current rule family cannot beat always-light.

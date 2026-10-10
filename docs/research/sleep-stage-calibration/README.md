@@ -6,24 +6,41 @@ measured and recalibrated. Background and findings: [PLAN.md](PLAN.md).
 
 ## 1. Pull the pod database
 
-The pod has no `sqlite3` binary, so copy the database and its write-ahead log
-off the pod and query locally. sshd listens on port 8822.
+The pod has no `sqlite3` binary, so copy the database off the pod and query
+locally. sshd listens on port 8822.
+
+The pod's services write to the database all the time, so copying
+`biometrics.db` and its `-wal` file one after the other is not an atomic
+snapshot. A checkpoint between the two reads can leave the copy inconsistent.
+Take the snapshot on the pod with SQLite's backup API through the pod's
+`python3`, then copy that one file:
 
 ```sh
-mkdir -p poddb && cd poddb
-scp -P 8822 root@<pod-ip>:/persistent/sleepypod-data/biometrics.db{,-wal} .
+ssh -p 8822 root@<pod-ip> python3 - <<'EOF'
+import sqlite3
+src = sqlite3.connect('file:/persistent/sleepypod-data/biometrics.db?mode=ro', uri=True)
+dst = sqlite3.connect('/persistent/sleepypod-data/biometrics.snapshot.db')
+src.backup(dst)
+dst.close()
+EOF
+mkdir -p poddb
+scp -P 8822 root@<pod-ip>:/persistent/sleepypod-data/biometrics.snapshot.db poddb/biometrics.db
+ssh -p 8822 root@<pod-ip> rm -f /persistent/sleepypod-data/biometrics.snapshot.db
 ```
 
-Copy both files in the same command. The `-wal` file holds the most recent
-rows; without it the last few hours are missing. The script opens the DB
-read-only. SQLite still reads the WAL and may create a `-shm` file beside it.
+The snapshot includes the rows still in the WAL. If you copy the live files
+instead (`scp -P 8822 root@<pod-ip>:/persistent/sleepypod-data/biometrics.db{,-wal} .`),
+do it while the writers are quiet, such as when no one is in bed, and copy
+both files in one command. Without the `-wal` file the last few hours are
+missing. The script opens the DB read-only. SQLite still reads a WAL if one is
+present and may create a `-shm` file beside it.
 
 ## 2. Export Apple Health
 
 On the iPhone: Health → profile picture → Export All Health Data. AirDrop the
 zip to the Mac and unzip it. The script needs `apple_health_export/export.xml`
-(or the directory). The file is streamed line by line, so a 100+ MB export is
-fine.
+(or the directory). The file is parsed incrementally with constant memory, so
+a 100+ MB export takes a few seconds.
 
 Only samples whose source name matches `--source` (default `Watch`) are used:
 `SleepAnalysis` stages (Core→light, Deep, REM, Awake; InBed and Unspecified are
@@ -71,10 +88,12 @@ Options:
 
 ## 4. Summary
 
-`--summary` prints, per night, the agreement with the Watch over labeled
-minutes for the ported classifier as deployed (`calibrationQuality` 0,
+`--summary` prints, per night, the agreement with the Watch over Watch-labeled
+vitals samples for the ported classifier as deployed (`calibrationQuality` 0,
 movement-only), with the iOS rule set (`calibrationQuality` 1), and for an
-always-light baseline. The classifier runs over the night window, so its
+always-light baseline. Samples arrive about once a minute, so agreement is
+weighted by sample, and the per-stage distribution below the table counts
+samples, not minutes. The classifier runs over the night window, so its
 average HR differs slightly from the server's, which uses the whole sleep
 record.
 
@@ -107,6 +126,7 @@ It needs numpy and scikit-learn; its shebang pulls them through `uv`.
 python3 -m unittest scripts/tests/test_sleep_stage_dataset.py
 ```
 
-The tests use small synthetic fixtures, not a real export. When
+The Python Modules CI workflow runs them on every PR that touches
+`scripts/**/*.py`. The tests use small synthetic fixtures, not a real export. When
 `src/lib/sleep-stages.ts` changes, update the port in the script and the
 classifier cases in the test, which mirror `src/lib/tests/sleep-stages.test.ts`.
