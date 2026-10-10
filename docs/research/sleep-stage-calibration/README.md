@@ -41,14 +41,15 @@ works too (stdlib only, Python ≥ 3.9).
 
 One row per pod vitals sample (about one per minute) inside each night's
 window. A window is the Watch's stage coverage padded by `--pad-min` (default
-10) on each side.
+10) on each side. Windows never overlap: sleep that runs past the noon
+rollover stays with the night it started in.
 
 | column | meaning |
 |---|---|
 | `night` | local date the night started (sample time minus 12 h) |
 | `side` | `left` or `right` |
 | `ts` | pod vitals timestamp, unix seconds |
-| `watch_stage` | `wake`/`light`/`deep`/`rem` for that minute, empty in the padding |
+| `watch_stage` | `wake`/`light`/`deep`/`rem` of the Watch segment containing `ts`, empty in the padding |
 | `hr`, `hrv`, `br` | raw pod vitals, not outlier-filtered. HRV is a pod index, not SDNN |
 | `movement` | nearest `movement.total_movement` within 60 s |
 | `hr_quality` | `vitals_quality.quality_score` for that vitals row |
@@ -77,11 +78,12 @@ always-light baseline. The classifier runs over the night window, so its
 average HR differs slightly from the server's, which uses the whole sleep
 record.
 
-Output for the two usable nights on 2026-10-10 (matches PLAN.md section 1):
+Output for the two usable nights on 2026-10-10. It is within 1 point of
+PLAN.md section 1, which labeled whole minutes instead of exact segment times:
 
 ```
 night       side   rows labeled  HR-MAD  deployed(cq=0)  iOS(cq=1)  always-light
-2026-10-08  left    212     202    2.3             53%        33%           69%
+2026-10-08  left    212     202    2.3             52%        32%           68%
 2026-10-09  left    405     385    5.4             55%        31%           57%
 ```
 

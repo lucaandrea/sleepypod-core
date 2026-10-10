@@ -199,11 +199,49 @@ class JoinTest(Fixture):
             os.environ['TZ'] = old_tz
         time.tzset()
 
+    def test_out_matching_an_input_is_refused(self):
+        write_export(self.export)
+        make_db(self.db_path).close()
+        size = os.path.getsize(self.db_path)
+        for target in (self.db_path, self.export):
+            with self.assertRaises(SystemExit):
+                self.run_main(self.tmp.name, self.db_path, '--out', target)
+        self.assertEqual(os.path.getsize(self.db_path), size)
+
     def test_from_db_without_table_exits_with_message(self):
         make_db(self.db_path).close()
         with self.assertRaises(SystemExit) as cm:
             self.run_main('--from-db', self.db_path)
         self.assertIn('reference_stages', str(cm.exception.code))
+
+
+class LabelAndWindowTest(unittest.TestCase):
+    def test_sample_before_mid_minute_transition_keeps_earlier_stage(self):
+        t = T0 + timedelta(minutes=1, seconds=30)
+        segs = [(T0, t, 'light'), (t, T0 + timedelta(minutes=5), 'deep')]
+        stage_at = ds.stage_lookup(segs)
+        base = int(T0.timestamp())
+        self.assertEqual(stage_at(base + 70), 'light')
+        self.assertEqual(stage_at(base + 90), 'deep')
+        self.assertIsNone(stage_at(base + 300))
+        self.assertIsNone(stage_at(base - 1))
+
+    def test_overlap_resolution_ignores_input_order(self):
+        segs = [(T0, T0 + timedelta(minutes=30), 'light'),
+                (T0 + timedelta(minutes=10), T0 + timedelta(minutes=12), 'rem')]
+        base = int(T0.timestamp())
+        for order in (segs, segs[::-1]):
+            stage_at = ds.stage_lookup(order)
+            self.assertEqual([stage_at(base + m * 60) for m in (5, 11, 20)], ['light', 'rem', 'light'])
+
+    def test_sleep_spanning_noon_belongs_to_one_night(self):
+        noon = datetime(2026, 10, 9, 12, 0, tzinfo=TZ)
+        segs = [(noon - timedelta(minutes=10), noon + timedelta(minutes=10), 'light'),
+                (noon + timedelta(minutes=10), noon + timedelta(minutes=30), 'deep')]
+        windows = ds.group_nights(segs, 10)
+        self.assertEqual(list(windows), ['2026-10-08'])
+        start, end = windows['2026-10-08']
+        self.assertEqual((start, end), (int(noon.timestamp()) - 20 * 60, int(noon.timestamp()) + 40 * 60))
 
 
 class SideMismatchGuardTest(Fixture):

@@ -31,16 +31,24 @@ def load(path):
 
 
 def windowed(rows):
-    """15-min centered window features for every row of one night."""
+    """15-min centered window features for every row of one night.
+
+    Windows and elapsed fraction use timestamps, not row indices, so gaps in
+    the vitals do not stretch a window across hours."""
+    ts = np.array([int(r['ts']) for r in rows])
     hr = np.array([num(r['hr']) for r in rows])
     hrv = np.array([num(r['hrv']) for r in rows])
     br = np.array([num(r['br']) for r in rows])
     medhr, medhrv = np.nanmedian(hr), np.nanmedian(hrv)
+    lo = np.searchsorted(ts, ts - 450, side='left')
+    hi = np.searchsorted(ts, ts + 450, side='right')
+    span = max(ts[-1] - ts[0], 1)
     out = []
     for i, r in enumerate(rows):
-        s = slice(max(0, i - 7), i + 8)
+        s = slice(lo[i], hi[i])
         out.append({'w': r['watch_stage'], 'hr_std': np.nanstd(hr[s]), 'hr_rel': np.nanmean(hr[s]) / medhr,
-                    'hrv_rel': np.nanmean(hrv[s]) / medhrv, 'br_std': np.nanstd(br[s]), 'tso': i / len(rows)})
+                    'hrv_rel': np.nanmean(hrv[s]) / medhrv, 'br_std': np.nanstd(br[s]),
+                    'tso': (ts[i] - ts[0]) / span})
     return out
 
 

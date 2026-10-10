@@ -9,7 +9,7 @@ that has Watch stage labels:
 
 - night        local date the night started (sample time minus 12 h)
 - ts           pod vitals timestamp, unix seconds
-- watch_stage  wake|light|deep|rem from the Watch for that minute, empty if none
+- watch_stage  wake|light|deep|rem of the Watch segment containing ts, empty if none
 - hr,hrv,br    raw pod vitals (not outlier-filtered)
 - movement     nearest movement.total_movement within 60 s, empty if none
 - hr_quality   vitals_quality.quality_score for that vitals row, empty if none
@@ -148,21 +148,36 @@ def segments_from_db(conn, side, source='apple_watch'):
     return [(to_dt(s), to_dt(e), st) for s, e, st in rows if st in STAGES and float(e) > float(s)]
 
 
-def minute_labels(segments):
-    """Expand segments to {unix_minute: stage}. Each segment labels the minute
-    containing its start through the last minute starting before its end; later
-    segments overwrite earlier ones."""
-    labels = {}
-    for start, end, stage in segments:
-        t = start.replace(second=0, microsecond=0)
-        while t < end:
-            labels[int(t.timestamp()) // 60] = stage
-            t += timedelta(minutes=1)
-    return labels
+def stage_lookup(segments):
+    """Return stage_at(ts) -> stage of the segment whose [start, end) contains
+    unix second ts, else None. Where segments overlap, the one starting latest
+    wins, so export file order and DB order give the same labels."""
+    segs = sorted((s.timestamp(), e.timestamp(), st) for s, e, st in segments)
+    starts = [s for s, _, _ in segs]
+    reach, m = [], float('-inf')
+    for _, e, _ in segs:
+        m = max(m, e)
+        reach.append(m)
+
+    def stage_at(ts):
+        j = bisect.bisect_right(starts, ts) - 1
+        # reach[j] is the latest end among segments 0..j; once it is <= ts no
+        # earlier segment can contain ts.
+        while j >= 0 and reach[j] > ts:
+            if segs[j][1] > ts:
+                return segs[j][2]
+            j -= 1
+        return None
+
+    return stage_at
 
 
 def group_nights(segments, pad_min):
-    """{night: (window_start_s, window_end_s)} from Watch coverage + padding."""
+    """{night: (window_start_s, window_end_s)} from Watch coverage + padding.
+
+    Windows are disjoint: a window that touches the previous night's (sleep
+    spanning the noon rollover, or padding) is merged into that night, so no
+    vitals row is emitted under two nights."""
     spans = {}
     for start, end, _ in segments:
         n = night_of(start)
@@ -172,7 +187,15 @@ def group_nights(segments, pad_min):
         else:
             spans[n] = (s, e)
     pad = pad_min * 60
-    return {n: (int(s - pad), int(e + pad)) for n, (s, e) in sorted(spans.items())}
+    out, prev = {}, None
+    for n, (s, e) in sorted(spans.items(), key=lambda kv: kv[1][0]):
+        s, e = int(s - pad), int(e + pad)
+        if prev is not None and s <= out[prev][1]:
+            out[prev] = (out[prev][0], max(out[prev][1], e))
+            continue
+        out[n] = (s, e)
+        prev = n
+    return out
 
 
 # ── Pod DB ─────────────────────────────────────────────────────────────────
@@ -211,7 +234,7 @@ def nearest(times, values, t, tol=JOIN_TOLERANCE_S):
     return best
 
 
-def join_night(night, side, vitals, movement, labels, watch_hr):
+def join_night(night, side, vitals, movement, stage_at, watch_hr):
     """Build dataset rows (dicts keyed by CSV_FIELDS) for one night."""
     mov_t = [t for t, _ in movement]
     mov_v = [v for _, v in movement]
@@ -223,7 +246,7 @@ def join_night(night, side, vitals, movement, labels, watch_hr):
             'night': night,
             'side': side,
             'ts': int(ts),
-            'watch_stage': labels.get(int(ts) // 60),
+            'watch_stage': stage_at(ts),
             'hr': hr,
             'hrv': hrv,
             'br': br,
@@ -373,7 +396,7 @@ def print_summary(results, out=None):
 
 def build(conn, segments, watch_hr, side, pad_min=10, max_hr_mad=8.0, nights=None):
     """Return [(night, rows, movement, mad, matched)] for nights passing the guard."""
-    labels = minute_labels(segments)
+    stage_at = stage_lookup(segments)
     out = []
     for night, (start_s, end_s) in group_nights(segments, pad_min).items():
         if nights and night not in nights:
@@ -383,7 +406,7 @@ def build(conn, segments, watch_hr, side, pad_min=10, max_hr_mad=8.0, nights=Non
             warn(f'{night}: no {side} vitals in the Watch window; skipped')
             continue
         hr_in = [(t, v) for t, v in watch_hr if start_s <= t <= end_s]
-        rows = join_night(night, side, vitals, movement, labels, hr_in)
+        rows = join_night(night, side, vitals, movement, stage_at, hr_in)
         mad, matched = hr_mad(rows)
         if matched < MIN_HR_MATCHES:
             warn(f'{night}: only {matched} pod/Watch HR matches; side-mismatch guard not applied')
@@ -433,6 +456,13 @@ def main(argv=None):
     db_path = args.inputs[-1]
     if not os.path.exists(db_path):
         ap.error(f'{db_path} not found')
+    if args.out and os.path.exists(args.out):
+        inputs = [db_path]
+        if not args.from_db:
+            export = args.inputs[0]
+            inputs.append(os.path.join(export, 'export.xml') if os.path.isdir(export) else export)
+        if any(os.path.exists(p) and os.path.samefile(args.out, p) for p in inputs):
+            ap.error(f'--out {args.out} is an input file; refusing to overwrite it')
     conn = sqlite3.connect(f'file:{db_path}?mode=ro', uri=True)
 
     if args.from_db:
