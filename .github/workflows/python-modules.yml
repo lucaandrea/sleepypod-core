@@ -109,7 +109,9 @@ jobs:
             uv sync --locked --no-install-project
           else
             uv venv .venv
-            uv pip install --python .venv/bin/python ${{ matrix.module.deps }}
+            if [ -n "${{ matrix.module.deps }}" ]; then
+              uv pip install --python .venv/bin/python ${{ matrix.module.deps }}
+            fi
           fi
           # shellcheck source=/dev/null
           . .venv/bin/activate
