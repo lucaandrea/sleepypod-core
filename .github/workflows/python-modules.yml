@@ -8,6 +8,7 @@ on:
       - 'modules/**/pyproject.toml'
       - 'modules/**/uv.lock'
       - 'modules/.coveragerc'
+      - 'scripts/**/*.py'
       - '.github/workflows/python-modules.yml'
   pull_request:
     types: [opened, synchronize, reopened]
@@ -16,6 +17,7 @@ on:
       - 'modules/**/pyproject.toml'
       - 'modules/**/uv.lock'
       - 'modules/.coveragerc'
+      - 'scripts/**/*.py'
       - '.github/workflows/python-modules.yml'
   workflow_dispatch:
 
@@ -74,6 +76,13 @@ jobs:
           - name: sleep-detector
             workdir: modules/sleep-detector
             target: .
+            cov_source: .
+            deps: ""
+          # Stdlib-only repo scripts; tests load them by path from
+          # scripts/tests/.
+          - name: scripts
+            workdir: scripts
+            target: tests
             cov_source: .
             deps: ""
 
