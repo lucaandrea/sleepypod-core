@@ -54,10 +54,10 @@ def main(path):
                   f'p50={np.percentile(mv, 50):.0f} p90={np.percentile(mv, 90):.0f} p99={np.percentile(mv, 99):.0f}')
 
     print('\n=== windowed features per Watch stage (15-min centered)')
-    groups = []
+    groups = defaultdict(list)
     for (n, side), rows in nights.items():
         f = [x for x in windowed(rows) if x['w']]
-        groups.append(((n, side), f))
+        groups[n].extend(f)
         print(f'  night {n} {side}')
         for s in STAGES:
             g = [x for x in f if x['w'] == s]
@@ -83,14 +83,14 @@ def main(path):
         return [x['w'] for x in g]
 
     print('\n=== leave-one-night-out, windowed features, small tree / forest')
-    for i, (key, te) in enumerate(groups):
-        tr = [x for j, (_, g) in enumerate(groups) if j != i for x in g]
+    for night, te in groups.items():
+        tr = [x for n, g in groups.items() if n != night for x in g]
         for name, clf in (('tree d3', DecisionTreeClassifier(max_depth=3, class_weight='balanced', random_state=0)),
                           ('forest', RandomForestClassifier(200, max_depth=4, class_weight='balanced', random_state=0))):
             clf.fit(X(tr), y(tr))
             pr = clf.predict(X(te))
             acc = np.mean(pr == np.array(y(te)))
-            print(f'  test night {key[0]} {name:8} acc={acc:.0%} pred={dict(Counter(str(p) for p in pr))} truth={dict(Counter(y(te)))}')
+            print(f'  test night {night} {name:8} acc={acc:.0%} pred={dict(Counter(str(p) for p in pr))} truth={dict(Counter(y(te)))}')
 
 
 if __name__ == '__main__':

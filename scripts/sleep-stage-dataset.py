@@ -442,7 +442,7 @@ def main(argv=None):
     if not segments:
         raise SystemExit('error: no Watch sleep-stage samples found')
 
-    wanted = set(args.nights.split(',')) if args.nights else None
+    wanted = {n.strip() for n in args.nights.split(',') if n.strip()} if args.nights else None
     nights = build(conn, segments, watch_hr, args.side, args.pad_min, args.max_hr_mad, wanted)
 
     if args.out:

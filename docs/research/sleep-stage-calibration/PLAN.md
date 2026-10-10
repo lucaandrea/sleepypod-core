@@ -19,7 +19,7 @@ Usable nights: 2026-10-08/09 and 2026-10-09/10, left side, 587 labeled minutes.
 | Variant | 10-08 | 10-09 |
 |---|---|---|
 | Server as deployed (movement-only, `calibrationQuality` defaults to 0) | 53% | 55% |
-| iOS rule set (`calibrationQuality`=1) | 33% | 31% |
+| iOS rule set (offline simulation, `calibrationQuality`=1) | 33% | 31% |
 | Always "light" | 69% | 57% |
 | Best of 720 threshold combos (pooled) | 55% | 57% |
 
