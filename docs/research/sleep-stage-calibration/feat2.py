@@ -39,7 +39,8 @@ def windowed(rows):
     hr = np.array([num(r['hr']) for r in rows])
     hrv = np.array([num(r['hrv']) for r in rows])
     br = np.array([num(r['br']) for r in rows])
-    medhr, medhrv = np.nanmedian(hr), np.nanmedian(hrv)
+    # A nonpositive median would make the ratios infinite; treat it as missing.
+    medhr, medhrv = (m if m > 0 else np.nan for m in (np.nanmedian(hr), np.nanmedian(hrv)))
     lo = np.searchsorted(ts, ts - 450, side='left')
     hi = np.searchsorted(ts, ts + 450, side='right')
     span = max(ts[-1] - ts[0], 1)
@@ -65,7 +66,8 @@ def main(path):
     groups = defaultdict(list)
     for (n, side), rows in nights.items():
         f = [x for x in windowed(rows) if x['w']]
-        groups[n].extend(f)
+        if f:
+            groups[n].extend(f)
         print(f'  night {n} {side}')
         for s in STAGES:
             g = [x for x in f if x['w'] == s]
@@ -75,7 +77,7 @@ def main(path):
                       f"hrv_rel={m['hrv_rel']:.2f} br_std={m['br_std']:.2f} tso={m['tso']:.2f}")
 
     if len(groups) < 2:
-        print('\nleave-one-night-out needs >= 2 nights')
+        print('\nleave-one-night-out needs >= 2 Watch-labeled nights')
         return
     try:
         from sklearn.ensemble import RandomForestClassifier
@@ -85,7 +87,7 @@ def main(path):
         return
 
     def X(g):
-        return np.nan_to_num(np.array([[x[k] for k in KEYS] for x in g]))
+        return np.nan_to_num(np.array([[x[k] for k in KEYS] for x in g]), nan=0.0, posinf=0.0, neginf=0.0)
 
     def y(g):
         return [x['w'] for x in g]
