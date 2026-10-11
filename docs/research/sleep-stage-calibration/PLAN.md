@@ -62,14 +62,15 @@ Acceptance:
 - Unit test with a synthetic still-then-roll sequence produces nonzero scores for the roll and a nonzero floor during stillness.
 - One live night on Pod 5 shows ≥ 30% nonzero epochs and ≥ 1 epoch > 200 per bed exit.
 
-### C. Dataset builder  (scripts/, typescript or python)
-Why: calibration needs ≥ 20 labeled nights; today the join lives in three scratch scripts.
-What: `scripts/sleep-stage-dataset.py <export.xml|export dir> <biometrics.db> --side left --out dataset.csv` emitting one row per pod vitals sample (about one per minute): `night, side, ts, watch_stage, hr, hrv, br, movement, hr_quality` plus `watch_hr` when within 60 s. Reuse `parse.py`/`eval.py` logic. Also `--summary` printing per-night agreement for the current classifier and the always-light baseline.
+### C. Dataset builder  (scripts/, python) — shipped in PR #802
+Why: calibration needs ≥ 20 labeled nights; the join originally lived in three scratch scripts (now removed).
+What (done): `scripts/sleep-stage-dataset.py <export.xml|export dir> <biometrics.db> --side left --out dataset.csv` emitting one row per pod vitals sample (about one per minute): `night, side, ts, watch_stage, hr, hrv, br, movement, hr_quality` plus `watch_hr` when within 60 s. Also `--summary` printing per-night agreement for the current classifier and the always-light baseline.
 Acceptance:
 - Reproduces the first three rows of the table in §1 for the two nights (±1 point).
 - Rejects nights where pod-vs-Watch HR MAD > 8 bpm with a warning (side mismatch guard).
-- README in this folder documents how to pull a consistent copy of the DB (SQLite backup API on the pod, or `scp -P 8822 root@<pod>:/persistent/sleepypod-data/biometrics.db{,-wal}` while the writers are quiet).
+- README in this folder documents how to pull a consistent copy of the DB (SQLite backup API on the pod, or `scp -P 8822 root@<pod>:/persistent/sleepypod-data/biometrics.db{,-wal} .` while the writers are quiet).
 - Python tests run in CI (Python Modules workflow).
+Remaining: accrue ≥ 20 Watch-labeled nights; confirm `--from-db` parity against the export for 10-09 once the app has posted that night (D is merged).
 
 ### D. Comparison-data ingestion from the app  (src/server, tRPC + iOS stub)
 Why: manual Health exports do not scale to 20 nights.
