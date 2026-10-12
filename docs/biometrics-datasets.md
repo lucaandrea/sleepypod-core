@@ -69,3 +69,29 @@ parity. The shared driver does not itself discover or retain RAW files, capture
 historical context, or authorize a public waveform job. Those integration and
 resource checks are required before dataset capabilities may advertise raw
 signal replay.
+
+`modules/common/biometrics/raw_artifacts.py` supplies retained-byte storage for
+that integration. It accepts a selected `.RAW.gz` filename under a server-owned
+archive directory, rejects path traversal, symlinks and non-regular files, and
+copies into a private temporary file. It detects source changes, verifies gzip
+expansion within a byte limit, hashes the exact compressed bytes, fsyncs the
+copy, and atomically publishes a content-addressed artifact. Repeated retention
+of identical bytes reuses the verified artifact. Deleting the rolling archive
+thereafter does not remove the retained input.
+
+A process lock serializes publication/quota checks and verified reads. Crash
+staging files are reclaimed only while holding that lock. Published artifacts
+are immutable and private (0600 files, 0700 directory); readers check their
+size and SHA-256 before exposing a bounded decompression stream. A changed or
+missing artifact fails rather than substituting an archive file with the same
+original name. Gzip validation is not CBOR/frame or timestamp validation: the
+record inventory must still establish those properties before advertising
+waveform coverage.
+
+The injectable retention limits default to 256 MiB compressed per artifact,
+512 MiB expanded, 1 GiB and 1,024 published artifacts total, and a 512 MiB free-space
+reserve. One additional compressed staging copy can exist while publication
+is serialized, including during an idempotent retry at the published quota.
+These are provisional storage limits, not a measured production replay policy.
+Dataset references, release/garbage collection, record inventory, and job
+admission must be integrated before this storage helper is exposed publicly.
