@@ -7,10 +7,12 @@ import { Button, InlineError, Skeleton } from '@/src/components/ds'
 import { reportViewSchema, numericReportViewSchema, stageReportViewSchema } from './report-view'
 import { NumericReport } from './NumericReport'
 import { StageReport } from './StageReport'
+import { StageTrace } from './StageTrace'
 
 export function BacktestReport({ id }: { id: string }) {
   const { t, i18n } = useLingui()
   const [confirmRelease, setConfirmRelease] = useState(false)
+  const [showTrace, setShowTrace] = useState(false)
   const result = trpc.biometricTuning.getBacktestResult.useQuery({ id }, { staleTime: 60000 })
   const release = trpc.biometricTuning.releaseBacktestResult.useMutation()
   const utils = trpc.useUtils()
@@ -86,6 +88,14 @@ export function BacktestReport({ id }: { id: string }) {
       ))}
       {report.protocol.mode === 'stage_replay' ? (stages.success ? <StageReport key={descriptor.contentHash} report={stages.data} /> : <InlineError><Trans>Stage details are unavailable or incompatible.</Trans></InlineError>) : null}
       {numeric.success ? <NumericReport key={descriptor.contentHash} report={numeric.data} /> : <InlineError><Trans>Numerical details are unavailable or incompatible.</Trans></InlineError>}
+      {report.protocol.mode === 'stage_replay' && numeric.success
+        ? (
+            <div>
+              <Button onClick={() => setShowTrace(!showTrace)} aria-expanded={showTrace}><Trans>Inspect stage traces</Trans></Button>
+              {showTrace ? <StageTrace key={descriptor.contentHash} id={id} hash={descriptor.contentHash} nights={numeric.data.nights} /> : null}
+            </div>
+          )
+        : null}
       <details>
         <summary><Trans>Report identity</Trans></summary>
         <dl className="break-all text-xs">
