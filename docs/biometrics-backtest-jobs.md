@@ -169,3 +169,22 @@ validated activation. Numeric waveform candidates still require raw replay.
 This comparison adds evaluator work and report bytes. Earlier target benchmark
 numbers apply only to their recorded worker hash; repeat qualification with the
 final worker before enabling production admission defaults.
+
+## Whole-night stage summaries
+
+`stageNightSummary` groups comparisons by baseline/candidate labels and exact
+configuration hashes. It first sums confusion durations across each cohort's
+nonoverlapping windows, then computes nightly agreement and per-stage
+precision/recall/F1. It does not average window F1 values. Both full-window
+output coverage and eligible-reference coverage remain available per night.
+Duplicate cohorts/comparisons and overlapping windows are rejected.
+
+Each comparison reports scored and unscored night counts, nights with positive,
+negative or zero agreement differences, and nights with any coverage reduction.
+The equal-night mean agreement difference gives every scored whole-night cohort
+one vote. Pooled duration confusion and agreement are reported separately and
+can differ substantially when night lengths differ. Missing reference support
+remains null and is counted as unscored, not converted to a zero difference.
+The observed nightly minimum/maximum is explicitly a descriptive range, not a
+confidence interval. Seeded uncertainty and the frozen promotion policy remain
+required before a report can establish validated improvement.

@@ -20,6 +20,7 @@ describe('retained-data evaluator', () => {
     expect(windows[0].stage).toMatchObject({ pairedDurationMs: 600000, agreement: 1 })
     expect(windows[0].numeric[0]).toMatchObject({ metrics: { mae: 2 }, pairedCount: 1 })
     expect(report.status).toBe('insufficient_evidence')
+    expect(report.stageNightSummary).toMatchObject([{ totalNights: 1, scoredNights: 1, equalNightMeanAgreementDifference: 0 }])
     expect(report.nights[0].comparisons).toMatchObject([{ baseline: 'default', candidate: 'current', windows: [{ coverageReduced: false, differences: { commonAgreement: 0 } }] }])
   })
   it('rejects changed retained inputs and engine snapshots before evaluation', () => {
