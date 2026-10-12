@@ -8,6 +8,7 @@ import argparse
 import json
 import os
 import resource
+import re
 import sys
 
 MAX_INPUT_BYTES = 8 * 1024 * 1024
@@ -32,8 +33,14 @@ def run(input_stream, output_stream, retained_directory):
     if len(payload) > MAX_INPUT_BYTES:
         raise ValueError('Waveform work input exceeds byte budget')
     work = json.loads(payload, object_pairs_hook=_unique_object, parse_constant=_invalid_constant)
-    if not isinstance(work, dict) or set(work) != {'version', 'input', 'configs'} or work['version'] != 'retained-waveform-work-v1':
+    if not isinstance(work, dict) or set(work) not in ({'version', 'input', 'configs'}, {'version', 'input', 'configs', 'expected_build_hash'}) or work['version'] != 'retained-waveform-work-v1':
         raise ValueError('Invalid waveform work envelope')
+    from .build_identity import replay_build_identity
+    build = replay_build_identity()
+    if 'expected_build_hash' in work and (not isinstance(work['expected_build_hash'], str)
+            or not re.fullmatch(r'[a-f0-9]{64}', work['expected_build_hash'])
+            or work['expected_build_hash'] != build['hash']):
+        raise ValueError('Replay build identity changed')
     # Import numerical dependencies after CLI resource/BLAS setup.
     from .raw_artifacts import RawArtifactStore
     from .retained_replay import replay_retained
@@ -62,7 +69,10 @@ def run(input_stream, output_stream, retained_directory):
         }})
 
     result = replay_retained(store, work['input'], work['configs'], reading)
-    emit({'type': 'result', 'result': result})
+    # Detect source/dependency metadata changes during this process as well.
+    if replay_build_identity()['hash'] != build['hash']:
+        raise ValueError('Replay build identity changed during execution')
+    emit({'type': 'result', 'result': {**result, 'build_hash': build['hash']}})
 
 
 def configure_process_limits():
@@ -78,11 +88,17 @@ def configure_process_limits():
 
 def main():
     parser = argparse.ArgumentParser(description='Replay fixed retained waveform inputs')
-    parser.add_argument('--retained-directory', required=True)
+    target = parser.add_mutually_exclusive_group(required=True)
+    target.add_argument('--retained-directory')
+    target.add_argument('--describe-build', action='store_true')
     args = parser.parse_args()
     try:
         configure_process_limits()
-        run(sys.stdin.buffer, sys.stdout.buffer, args.retained_directory)
+        if args.describe_build:
+            from .build_identity import replay_build_identity
+            sys.stdout.write(json.dumps(replay_build_identity(), allow_nan=False, separators=(',', ':')) + '\n')
+        else:
+            run(sys.stdin.buffer, sys.stdout.buffer, args.retained_directory)
         return 0
     except Exception:
         # Never echo reference exports, frame values, paths or tracebacks.

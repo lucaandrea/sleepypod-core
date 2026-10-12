@@ -10,7 +10,7 @@ let executable: string
 const hash = 'a'.repeat(64)
 const reading = { side: 'left', timestampMs: 1000, heartRate: 60, hrvIndex: null, hrvMetric: 'window_ibi_variability_v1',
   breathingRate: 12, qualityScore: 0.8, flags: null, hrRaw: 60, sourceSide: 'left', configHash: hash, limitations: [] }
-const result = { version: 'retained-waveform-run-v1', decoded_records: 1, raw_records: 1,
+const result = { version: 'retained-waveform-run-v1', build_hash: hash, decoded_records: 1, raw_records: 1,
   counts: { records: 1, accepted_frames: 1, empty_channel_frames: 0, pump_gated_frames: 0, preroll_outputs: 0, scored_outputs: 1 },
   limitations: [], config_hashes: { left: hash, right: hash }, artifact_hashes: [hash] }
 const events = [{ type: 'reading', reading }, { type: 'result', result }]
@@ -131,4 +131,12 @@ it('bounds aggregate output even when every event is valid and small enough', as
   await worker(`for (let i=0; i<2500; i++) { ${emit(large)} }
     ${emit({ type: 'result', result: { ...result, counts: { ...result.counts, scored_outputs: 2500 } } })}`)
   await expect(runWaveformChild(location(), {})).rejects.toThrow('output exceeds 16 MiB')
+})
+
+it('pins the requested Python build in the envelope and rejects mismatched completion', async () => {
+  await writeFile(executable, `#!${process.execPath}\nlet input='';process.stdin.on('data',chunk=>input+=chunk);process.stdin.on('end',()=>{if(JSON.parse(input).expected_build_hash!==${JSON.stringify(hash)})process.exitCode=1;${events.map(emit).join('')}});`, { mode: 0o700 })
+  expect((await runWaveformChild(location(), {}, { expectedBuildHash: hash })).run.build_hash).toBe(hash)
+  await worker(events.map(emit).join(''))
+  await expect(runWaveformChild(location(), {}, { expectedBuildHash: 'b'.repeat(64) })).rejects.toThrow('incomplete result')
+  expect(() => runWaveformChild(location(), {}, { expectedBuildHash: 'invalid' })).toThrow()
 })

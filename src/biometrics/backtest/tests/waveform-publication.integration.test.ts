@@ -13,6 +13,7 @@ import { DatasetStore } from '../datasets'
 import { datasetManifestSchema } from '../contracts'
 import { prepareSelectedWaveformDataset } from '../waveform-selection'
 import { RawSourceCatalog } from '../raw-catalog'
+import { waveformEvaluatorBuildIdentity } from '../waveform-build'
 import { runCoordinatorTask } from '../coordinator'
 import { runWaveformChild } from '../waveform-child'
 import type { z } from 'zod'
@@ -106,10 +107,12 @@ print(json.dumps({'start':start,'artifacts':artifacts,'inspections':inspections}
     const retryWithoutAdmission = await runCoordinatorTask(options, { type: 'createWaveformDataset', input: { ...request, cohorts: request.cohorts.map(item => ({ ...item, sourceIds: [...item.sourceIds].reverse() })) } })
     expect(retryWithoutAdmission).toMatchObject({ status: 'published', dataset: { id: published.id } })
     if (frozen.snapshot.version !== 'waveform-dataset-v1') throw new Error('Missing waveform inputs')
+    const build = await waveformEvaluatorBuildIdentity(options.coordinatorPath, options.workerPath, options.rawLocation)
     const replay = await runWaveformChild({ pythonPath: python, modulesPath: resolve('modules'), retainedDirectory: retained }, {
       version: 'retained-waveform-work-v1', input: frozen.snapshot.waveformInputs[0].input,
       configs: { left: defaultConfig, right: defaultConfig },
-    })
+    }, { expectedBuildHash: build.python.hash })
+    expect(replay.run.build_hash).toBe(build.python.hash)
     expect(replay.readings.length).toBeGreaterThan(0)
     expect(replay.run.raw_records).toBe(151)
     expect(sqlite.prepare('SELECT heart_rate FROM vitals').all()).toEqual([{ heart_rate: 65 }])

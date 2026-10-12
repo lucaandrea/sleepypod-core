@@ -15,7 +15,7 @@ export const waveformReadingSchema = z.object({
   sourceSide: side, configHash: hash, limitations,
 }).strict()
 export const waveformRunSchema = z.object({
-  version: z.literal('retained-waveform-run-v1'), decoded_records: count, raw_records: count,
+  version: z.literal('retained-waveform-run-v1'), build_hash: hash, decoded_records: count, raw_records: count,
   counts: z.object({ records: count, accepted_frames: count, empty_channel_frames: count,
     pump_gated_frames: count, preroll_outputs: count, scored_outputs: count }).strict(),
   limitations, config_hashes: z.object({ left: hash, right: hash }).strict(), artifact_hashes: z.array(hash).min(1).max(64),
@@ -34,8 +34,10 @@ export interface WaveformWorkerLocation {
 export function runWaveformChild(location: WaveformWorkerLocation, work: unknown, options: {
   signal?: AbortSignal
   timeoutMs?: number
+  expectedBuildHash?: string
 } = {}): Promise<{ readings: z.infer<typeof waveformReadingSchema>[], run: z.infer<typeof waveformRunSchema> }> {
-  const serialized = JSON.stringify(work)
+  if (options.expectedBuildHash !== undefined) hash.parse(options.expectedBuildHash)
+  const serialized = JSON.stringify(options.expectedBuildHash === undefined ? work : { ...z.record(z.string(), z.unknown()).parse(work), expected_build_hash: options.expectedBuildHash })
   if (!serialized || Buffer.byteLength(serialized) > 8 * 1024 * 1024) return Promise.reject(new Error('Waveform input exceeds 8 MiB'))
   const timeoutMs = options.timeoutMs ?? 120000
   if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 10 || timeoutMs > 1800000) return Promise.reject(new Error('Invalid waveform time budget'))
@@ -97,7 +99,7 @@ export function runWaveformChild(location: WaveformWorkerLocation, work: unknown
       if (killTimer) clearTimeout(killTimer)
       options.signal?.removeEventListener('abort', abort)
       if (failure) reject(failure)
-      else if (code !== 0 || !result || pending.length || result.counts.scored_outputs !== readings.length
+      else if (code !== 0 || !result || (options.expectedBuildHash !== undefined && result.build_hash !== options.expectedBuildHash) || pending.length || result.counts.scored_outputs !== readings.length
         || result.raw_records < result.decoded_records || result.decoded_records < result.counts.records
         || readings.some(reading => reading.configHash !== result?.config_hashes[reading.side])) {
         reject(new Error('Waveform worker failed or returned an incomplete result'))

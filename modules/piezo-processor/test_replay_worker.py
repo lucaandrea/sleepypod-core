@@ -36,7 +36,8 @@ def test_real_worker_streams_provisional_readings_then_one_success_result(tmp_pa
     assert completed.stderr == b''
     events = [json.loads(line) for line in completed.stdout.splitlines()]
     assert len(events) == len(expected_rows) + 1
-    assert events[-1] == {'type': 'result', 'result': expected}
+    from common.biometrics.build_identity import replay_build_identity
+    assert events[-1] == {'type': 'result', 'result': {**expected, 'build_hash': replay_build_identity()['hash']}}
     for event, row in zip(events[:-1], expected_rows):
         assert event['type'] == 'reading'
         value = event['reading']
@@ -80,3 +81,37 @@ def test_worker_byte_limits_do_not_emit_an_oversize_input_or_result(tmp_path, mo
     with pytest.raises(ValueError, match='output exceeds'):
         replay_worker.run(BytesIO(payload), output, store.directory)
     assert output.getvalue() == b''
+
+
+def test_build_probe_and_pinned_execution_reject_runtime_changes_before_reading(tmp_path):
+    from common.biometrics.build_identity import replay_build_identity
+    build = replay_build_identity()
+    probe = subprocess.run([sys.executable, '-B', '-m', 'common.biometrics.replay_worker', '--describe-build'],
+        capture_output=True, cwd=tmp_path,
+        env={'PYTHONPATH': str(Path(__file__).resolve().parent.parent), 'LANG': 'C.UTF-8', 'TZ': 'UTC'}, timeout=20)
+    assert probe.returncode == 0 and not probe.stderr
+    assert json.loads(probe.stdout) == build
+    store, snapshot, _ = fixture(tmp_path)
+    payload = {**work(snapshot), 'expected_build_hash': build['hash']}
+    success = child(tmp_path, store.directory, json.dumps(payload).encode())
+    assert success.returncode == 0
+    assert json.loads(success.stdout.splitlines()[-1])['result']['build_hash'] == build['hash']
+    for bad in ('0' * 64, None, 42, 'bad'):
+        output = BytesIO()
+        with pytest.raises(ValueError, match='build identity changed'):
+            replay_worker.run(BytesIO(json.dumps({**payload, 'expected_build_hash': bad}).encode()), output, tmp_path / 'missing')
+        assert output.getvalue() == b''
+        assert not (tmp_path / 'missing').exists()
+
+
+def test_changed_build_during_execution_never_emits_success(tmp_path, monkeypatch):
+    from common.biometrics import build_identity
+    store, snapshot, _ = fixture(tmp_path)
+    before = build_identity.replay_build_identity()
+    identities = iter([before, {**before, 'hash': '0' * 64}])
+    monkeypatch.setattr(build_identity, 'replay_build_identity', lambda: next(identities))
+    output = BytesIO()
+    with pytest.raises(ValueError, match='changed during execution'):
+        replay_worker.run(BytesIO(json.dumps(work(snapshot)).encode()), output, store.directory)
+    events = [json.loads(line) for line in output.getvalue().splitlines()]
+    assert events and all(event['type'] == 'reading' for event in events)
