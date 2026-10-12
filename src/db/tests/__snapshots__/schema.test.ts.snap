@@ -105,6 +105,7 @@ exports[`complete Drizzle schema contracts > pins every biometrics table, column
       "snapshot | sql:text | logical:json/SQLiteTextJson | not-null | default:none | not-primary-key | not-unique | not-autoincrement | enum:none",
       "byte_length | sql:integer | logical:number/SQLiteInteger | not-null | default:none | not-primary-key | not-unique | not-autoincrement | enum:none",
       "created_at_ms | sql:integer | logical:number/SQLiteInteger | not-null | default:none | not-primary-key | not-unique | not-autoincrement | enum:none",
+      "released_at_ms | sql:integer | logical:number/SQLiteInteger | nullable | default:none | not-primary-key | not-unique | not-autoincrement | enum:none",
     ],
     "exportName": "biometricDatasets",
     "foreignKeys": [],
@@ -119,6 +120,8 @@ exports[`complete Drizzle schema contracts > pins every biometrics table, column
     "checks": 0,
     "columns": [
       "id | sql:text | logical:string/SQLiteText | not-null | default:none | primary-key | not-unique | not-autoincrement | enum:none",
+      "idempotency_key | sql:text | logical:string/SQLiteText | nullable | default:none | not-primary-key | unique:biometric_experiments_idempotency_key_unique | not-autoincrement | enum:none",
+      "request_hash | sql:text | logical:string/SQLiteText | nullable | default:none | not-primary-key | not-unique | not-autoincrement | enum:none",
       "dataset_id | sql:text | logical:string/SQLiteText | not-null | default:none | not-primary-key | not-unique | not-autoincrement | enum:none",
       "side | sql:text | logical:string/SQLiteText | not-null | default:none | not-primary-key | not-unique | not-autoincrement | enum:left,right",
       "protocol | sql:text | logical:json/SQLiteTextJson | not-null | default:none | not-primary-key | not-unique | not-autoincrement | enum:none",

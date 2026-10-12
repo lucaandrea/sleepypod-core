@@ -26,24 +26,47 @@ function numberToken(value: number): string {
   return value < 0 ? `-${token}` : token
 }
 
-export function canonicalJson(value: unknown): string {
-  let nodes = 0
+function canonicalWithLimit(value: unknown, maxNodes: number, maxBytes = Infinity): string {
+  let nodes = 0, bytes = 0
+  const token = (text: string) => {
+    bytes += Buffer.byteLength(text)
+    if (bytes > maxBytes) throw new Error('Canonical data byte limit')
+    return text
+  }
   function visit(item: unknown, depth: number): string {
-    if (++nodes > 20000 || depth > 32) throw new Error('JSON resource limit')
-    if (item === null) return 'null'
-    if (typeof item === 'number') return numberToken(item)
-    if (typeof item === 'boolean') return String(item)
+    if (++nodes > maxNodes || depth > 32) throw new Error('JSON resource limit')
+    if (item === null) return token('null')
+    if (typeof item === 'number') return token(numberToken(item))
+    if (typeof item === 'boolean') return token(String(item))
     if (typeof item === 'string') {
       if (item.length > 65536 || /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/u.test(item)) throw new Error('Invalid JSON string')
-      return JSON.stringify(item)
+      return token(JSON.stringify(item))
     }
-    if (Array.isArray(item)) return `[${Array.from(item, child => visit(child, depth + 1)).join(',')}]`
+    if (Array.isArray(item)) {
+      if (item.length > maxNodes - nodes) throw new Error('JSON resource limit')
+      token('[' + ','.repeat(Math.max(0, item.length - 1)) + ']')
+      return `[${Array.from(item, child => visit(child, depth + 1)).join(',')}]`
+    }
     if (typeof item === 'object' && (Object.getPrototypeOf(item) === Object.prototype || Object.getPrototypeOf(item) === null)) {
-      return `{${Object.keys(item).sort().map(key => `${visit(key, depth + 1)}:${visit((item as Record<string, unknown>)[key], depth + 1)}`).join(',')}}`
+      const keys = Object.keys(item)
+      if (keys.length * 2 > maxNodes - nodes) throw new Error('JSON resource limit')
+      keys.sort()
+      token('{' + ':'.repeat(keys.length) + ','.repeat(Math.max(0, keys.length - 1)) + '}')
+      return `{${keys.map(key => `${visit(key, depth + 1)}:${visit((item as Record<string, unknown>)[key], depth + 1)}`).join(',')}}`
     }
     throw new Error('Expected finite JSON data')
   }
   return visit(value, 0)
+}
+
+export function canonicalJson(value: unknown): string {
+  return canonicalWithLimit(value, 20000)
+}
+
+/** Same canonical encoding; larger bounded budget for retained rows/reports. */
+export function dataHash(value: unknown): string {
+  const encoded = canonicalWithLimit(value, 2000000, 32 * 1024 * 1024)
+  return createHash('sha256').update(encoded).digest('hex')
 }
 
 export function configHash(value: unknown): string {

@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { classifySleepStages, type SleepStageBlock } from '@/src/lib/sleep-stages'
-import { configHash } from '../algorithms/canonical'
+import { configHash, dataHash } from '../algorithms/canonical'
 import { manifestHash, validateConfig } from '../algorithms/registry'
 import { alignReferences, DEFAULT_ALIGNMENT } from '../references/alignment'
 import { scoreStageDurations } from '../references/stage-scoring'
@@ -30,7 +30,7 @@ function mergeWindows(windows: Array<{ startMs: number, endMs: number }>) {
 /** Pure retained-data evaluator. No DB, network, filesystem or hardware writes. */
 export function evaluateBacktest(raw: z.input<typeof backtestWorkSchema>, progress: (completed: number, total: number) => void = () => {}) {
   const { job, dataset } = backtestWorkSchema.parse(raw)
-  if (configHash(dataset) !== job.datasetHash || configHash(job.protocol) !== job.protocolHash) throw new Error('Evaluation input integrity mismatch')
+  if (dataHash(dataset) !== job.datasetHash || configHash(job.protocol) !== job.protocolHash) throw new Error('Evaluation input integrity mismatch')
   const assignments = assignmentsSchema.parse(dataset.manifest).splitProtocol.assignments.filter(row => row.split === job.split)
   if (!assignments.length) throw new Error('No nights in selected split')
   const configs = job.configs.map((config) => {

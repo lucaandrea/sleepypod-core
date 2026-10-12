@@ -1,12 +1,27 @@
 import { z } from 'zod'
 import { TRPCError } from '@trpc/server'
 import { publicProcedure, router } from '@/src/server/trpc'
-import { biometricsDb } from '@/src/db'
+import { biometricsDb, db } from '@/src/db'
 import { sideSchema } from '@/src/server/validation-schemas'
 import { normalizedMeasurementSchema, previewSummarySchema, referenceImportDescriptorSchema, referenceImportSchema } from '@/src/biometrics/references/contracts'
 import { previewReferenceImport } from '@/src/biometrics/references/normalize'
 import { commitReferenceSchema, ReferenceStore } from '@/src/biometrics/references/store'
 import { compareReadingsSchema, comparisonReportSchema, compareStoredReadings } from '@/src/biometrics/references/comparison'
+import { biometricManifest, manifestHash, resolveConfig } from '@/src/biometrics/algorithms/registry'
+import { ProfileStore, revisionInput } from '@/src/biometrics/profiles/store'
+import { biometricConfigSchema, overrideSchema, profileOverviewSchema, revisionSchema } from '@/src/biometrics/profiles/contracts'
+import { diffProfiles } from '@/src/biometrics/profiles/diff'
+import { profileOverview } from '@/src/biometrics/profiles/overview'
+import { DatasetStore, createDatasetSchema } from '@/src/biometrics/backtest/datasets'
+import { listReplaySessions, sessionCapabilities, sessionPageSchema, sessionCapabilitiesSchema } from '@/src/biometrics/backtest/discovery'
+import { workerBuildHash } from '@/src/biometrics/backtest/child'
+import { packagedWorkerPath } from '@/src/biometrics/backtest/location'
+import { submitBacktest, submitBacktestSchema } from '@/src/biometrics/backtest/submission'
+import { BacktestJobStore } from '@/src/biometrics/backtest/jobs'
+import { describeJob, jobDescriptorSchema } from '@/src/biometrics/backtest/descriptors'
+import { experimentProtocolSchema } from '@/src/biometrics/backtest/contracts'
+import { datasetDescriptorSchema } from '@/src/biometrics/backtest/contracts'
+import { deviceSettings } from '@/src/db/schema'
 import { ReferenceInputError } from '@/src/biometrics/references/time'
 
 /** UI and MCP call this shared service surface under the existing LAN trust model. */
@@ -16,19 +31,208 @@ function references<T>(action: (store: ReferenceStore) => T): T {
   }
   catch (error) {
     if (error instanceof ReferenceInputError) {
-      const code = error.code === 'NOT_FOUND' || error.code === 'REFERENCE_DELETED'
-        ? 'NOT_FOUND'
-        : error.code === 'STALE_PREVIEW' || error.code === 'REVISION_CONFLICT'
-          ? 'CONFLICT'
-          : error.code === 'RESOURCE_LIMIT' ? 'PAYLOAD_TOO_LARGE' : 'BAD_REQUEST'
+      const code = error.code === 'WORKER_UNAVAILABLE'
+        ? 'SERVICE_UNAVAILABLE'
+        : error.code === 'NOT_FOUND' || error.code === 'REFERENCE_DELETED' || error.code === 'DATASET_RELEASED'
+          ? 'NOT_FOUND'
+          : error.code === 'STALE_PREVIEW' || error.code === 'REVISION_CONFLICT'
+            ? 'CONFLICT'
+            : error.code === 'RESOURCE_LIMIT' ? 'PAYLOAD_TOO_LARGE' : 'BAD_REQUEST'
       throw new TRPCError({ code, message: `${error.code}: ${error.message}`, cause: error })
     }
     throw error
   }
 }
+function profiles<T>(action: (store: ProfileStore) => T): T {
+  try {
+    return action(new ProfileStore(db))
+  }
+  catch (error) {
+    if (error instanceof z.ZodError) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Invalid profile request', cause: error })
+    if (error instanceof Error && /^(NOT_FOUND|PROFILE_INCOMPATIBLE|IDEMPOTENCY_CONFLICT|RESOURCE_LIMIT|Invalid |Unknown |Duplicate |Override |Non-finite|JSON resource limit|Expected finite JSON)/.test(error.message)) {
+      const code = error.message.startsWith('NOT_FOUND')
+        ? 'NOT_FOUND'
+        : error.message.startsWith('IDEMPOTENCY_CONFLICT') ? 'CONFLICT' : 'BAD_REQUEST'
+      throw new TRPCError({ code, message: error.message, cause: error })
+    }
+    throw error
+  }
+}
+const profileCursorSchema = z.object({ side: sideSchema, familyId: z.string().uuid().optional(), beforeId: z.string().uuid().optional(), beforeCreatedAtMs: z.number().int().nonnegative().optional() })
+  .strict().refine(input => (input.beforeId === undefined) === (input.beforeCreatedAtMs === undefined), { message: 'Supply both cursor fields' })
 const importIdSchema = z.object({ id: z.string().uuid() }).strict()
 
+const experimentDescriptorSchema = z.object({ id: z.string().uuid(), datasetId: z.string().uuid(), side: sideSchema, protocol: experimentProtocolSchema,
+  protocolHash: z.string(), holdoutAccesses: z.number(), createdAtMs: z.number() })
+
 export const biometricTuningRouter = router({
+  listSessions: publicProcedure
+    .meta({ openapi: { method: 'GET', path: '/biometric-tuning/sessions', protect: false, tags: ['Biometric tuning'] } })
+    .input(z.object({ side: sideSchema, beforeStartMs: z.number().int().nonnegative().optional(), beforeId: z.number().int().positive().optional() }).strict()
+      .refine(input => (input.beforeStartMs === undefined) === (input.beforeId === undefined), { message: 'Supply both cursor fields' }))
+    .output(sessionPageSchema)
+    .query(({ input }) => references(() => listReplaySessions(biometricsDb, input.side,
+      input.beforeId !== undefined && input.beforeStartMs !== undefined ? { startMs: input.beforeStartMs, id: input.beforeId } : undefined))),
+
+  getSessionCapabilities: publicProcedure
+    .meta({ openapi: { method: 'GET', path: '/biometric-tuning/sessions/{id}/capabilities', protect: false, tags: ['Biometric tuning'] } })
+    .input(z.object({ id: z.number().int().positive(), side: sideSchema }).strict())
+    .output(sessionCapabilitiesSchema)
+    .query(({ input }) => references(() => sessionCapabilities(biometricsDb, input.side, input.id))),
+
+  createExperiment: publicProcedure
+    .meta({ openapi: { method: 'POST', path: '/biometric-tuning/experiments', protect: false, tags: ['Biometric tuning'] } })
+    .input(z.object({ datasetId: z.string().uuid(), protocol: experimentProtocolSchema, idempotencyKey: z.string().min(1).max(200) }).strict())
+    .output(experimentDescriptorSchema)
+    .mutation(({ input }) => references(() => {
+      const experiment = new BacktestJobStore(biometricsDb).createExperiment(input.datasetId, input.protocol, input.idempotencyKey)
+      return { ...experiment, protocol: experimentProtocolSchema.parse(experiment.protocol) }
+    })),
+
+  getExperiment: publicProcedure
+    .meta({ openapi: { method: 'GET', path: '/biometric-tuning/experiments/{id}', protect: false, tags: ['Biometric tuning'] } })
+    .input(importIdSchema)
+    .output(experimentDescriptorSchema)
+    .query(({ input }) => references(() => new BacktestJobStore(biometricsDb).getExperiment(input.id))),
+
+  listExperiments: publicProcedure
+    .meta({ openapi: { method: 'GET', path: '/biometric-tuning/experiments', protect: false, tags: ['Biometric tuning'] } })
+    .input(z.object({ side: sideSchema, beforeId: z.string().uuid().optional(), beforeCreatedAtMs: z.number().int().nonnegative().optional() }).strict()
+      .refine(input => (input.beforeId === undefined) === (input.beforeCreatedAtMs === undefined), { message: 'Supply both cursor fields' }))
+    .output(z.object({ items: z.array(experimentDescriptorSchema), nextCursor: z.object({ createdAtMs: z.number(), id: z.string().uuid() }).nullable() }))
+    .query(({ input }) => references(() => new BacktestJobStore(biometricsDb).pageExperiments(input.side,
+      input.beforeId !== undefined && input.beforeCreatedAtMs !== undefined ? { id: input.beforeId, createdAtMs: input.beforeCreatedAtMs } : undefined))),
+
+  enqueueBacktest: publicProcedure
+    .meta({ openapi: { method: 'POST', path: '/biometric-tuning/backtests', protect: false, tags: ['Biometric tuning'] } })
+    .input(submitBacktestSchema)
+    .output(jobDescriptorSchema)
+    .mutation(async ({ input }) => {
+      const path = references(() => packagedWorkerPath())
+      const buildHash = await workerBuildHash(path).catch(() => {
+        throw new TRPCError({ code: 'SERVICE_UNAVAILABLE', message: 'Packaged replay worker cannot be read' })
+      })
+      return references(() => profiles(() => describeJob(submitBacktest(db, biometricsDb, buildHash, input))))
+    }),
+
+  listBacktests: publicProcedure
+    .meta({ openapi: { method: 'GET', path: '/biometric-tuning/backtests', protect: false, tags: ['Biometric tuning'] } })
+    .input(z.object({ side: sideSchema, beforeId: z.string().uuid().optional(), beforeCreatedAtMs: z.number().int().nonnegative().optional() }).strict()
+      .refine(input => (input.beforeId === undefined) === (input.beforeCreatedAtMs === undefined), { message: 'Supply both cursor fields' }))
+    .output(z.object({ items: z.array(jobDescriptorSchema), nextCursor: z.object({ createdAtMs: z.number(), id: z.string().uuid() }).nullable() }))
+    .query(({ input }) => references(() => {
+      const page = new BacktestJobStore(biometricsDb).page(input.side,
+        input.beforeId !== undefined && input.beforeCreatedAtMs !== undefined ? { id: input.beforeId, createdAtMs: input.beforeCreatedAtMs } : undefined)
+      return { ...page, items: page.items.map(describeJob) }
+    })),
+
+  getBacktest: publicProcedure
+    .meta({ openapi: { method: 'GET', path: '/biometric-tuning/backtests/{id}', protect: false, tags: ['Biometric tuning'] } })
+    .input(importIdSchema)
+    .output(jobDescriptorSchema)
+    .query(({ input }) => references(() => describeJob(new BacktestJobStore(biometricsDb).get(input.id)))),
+
+  cancelBacktest: publicProcedure
+    .meta({ openapi: { method: 'POST', path: '/biometric-tuning/backtests/{id}/cancel', protect: false, tags: ['Biometric tuning'] } })
+    .input(importIdSchema)
+    .output(jobDescriptorSchema)
+    .mutation(({ input }) => references(() => describeJob(new BacktestJobStore(biometricsDb).cancel(input.id)))),
+
+  getBacktestResult: publicProcedure
+    .meta({ openapi: { method: 'GET', path: '/biometric-tuning/backtests/{id}/result', protect: false, tags: ['Biometric tuning'] } })
+    .input(importIdSchema)
+    .output(z.object({ jobId: z.string(), fencingToken: z.number(), report: z.unknown(), contentHash: z.string(), completedAtMs: z.number(), currentHoldoutUseCount: z.number() }).nullable())
+    .query(({ input }) => references(() => new BacktestJobStore(biometricsDb).result(input.id))),
+
+  createDataset: publicProcedure
+    .meta({ openapi: { method: 'POST', path: '/biometric-tuning/datasets', protect: false, tags: ['Biometric tuning'] } })
+    .input(createDatasetSchema.omit({ timezone: true }))
+    .output(datasetDescriptorSchema)
+    .mutation(({ input }) => references(() => {
+      const timezone = db.select({ timezone: deviceSettings.timezone }).from(deviceSettings).get()?.timezone ?? 'America/Los_Angeles'
+      return datasetDescriptorSchema.parse(new DatasetStore(biometricsDb).create({ ...input, timezone }))
+    })),
+
+  releaseDataset: publicProcedure
+    .meta({ openapi: { method: 'POST', path: '/biometric-tuning/datasets/{id}/release', protect: false, tags: ['Biometric tuning'] } })
+    .input(importIdSchema)
+    .output(datasetDescriptorSchema)
+    .mutation(({ input }) => references(() => datasetDescriptorSchema.parse(new DatasetStore(biometricsDb).release(input.id)))),
+
+  getDataset: publicProcedure
+    .meta({ openapi: { method: 'GET', path: '/biometric-tuning/datasets/{id}', protect: false, tags: ['Biometric tuning'] } })
+    .input(importIdSchema)
+    .output(datasetDescriptorSchema)
+    .query(({ input }) => references(() => datasetDescriptorSchema.parse(new DatasetStore(biometricsDb).descriptor(input.id)))),
+
+  listDatasets: publicProcedure
+    .meta({ openapi: { method: 'GET', path: '/biometric-tuning/datasets', protect: false, tags: ['Biometric tuning'] } })
+    .input(z.object({ side: sideSchema, beforeId: z.string().uuid().optional(), beforeCreatedAtMs: z.number().int().nonnegative().optional() }).strict()
+      .refine(input => (input.beforeId === undefined) === (input.beforeCreatedAtMs === undefined), { message: 'Supply both cursor fields' }))
+    .output(z.object({ items: z.array(datasetDescriptorSchema), nextCursor: z.object({ createdAtMs: z.number(), id: z.string().uuid() }).nullable() }))
+    .query(({ input }) => references(() => {
+      const page = new DatasetStore(biometricsDb).page(input.side,
+        input.beforeId !== undefined && input.beforeCreatedAtMs !== undefined ? { id: input.beforeId, createdAtMs: input.beforeCreatedAtMs } : undefined)
+      return { ...page, items: page.items.map(row => datasetDescriptorSchema.parse(row)) }
+    })),
+
+  getManifest: publicProcedure
+    .meta({ openapi: { method: 'GET', path: '/biometric-tuning/manifest', protect: false, tags: ['Biometric tuning'] } })
+    .input(z.object({}).strict())
+    .output(z.object({ manifestHash: z.string(), manifest: z.unknown(), activationAvailable: z.boolean() }))
+    .query(() => ({ manifestHash, manifest: biometricManifest, activationAvailable: false })),
+
+  getProfileOverview: publicProcedure
+    .meta({ openapi: { method: 'GET', path: '/biometric-tuning/profiles/overview', protect: false, tags: ['Biometric tuning'] } })
+    .input(z.object({ side: sideSchema }).strict())
+    .output(profileOverviewSchema)
+    .query(({ input }) => profiles(() => profileOverview(db, biometricsDb, input.side))),
+
+  resolveProfile: publicProcedure
+    .meta({ openapi: { method: 'POST', path: '/biometric-tuning/profiles/resolve', protect: false, tags: ['Biometric tuning'] } })
+    .input(z.object({ overrides: revisionInput.shape.overrides, baseManifestHash: revisionInput.shape.baseManifestHash }).strict())
+    .output(z.object({ resolved: biometricConfigSchema, hash: z.string(), manifestHash: z.string(), overrides: z.array(overrideSchema), provenance: z.record(z.string(), z.literal('override')) }))
+    .mutation(({ input }) => profiles(() => resolveConfig(input.overrides, input.baseManifestHash))),
+
+  createProfileRevision: publicProcedure
+    .meta({ openapi: { method: 'POST', path: '/biometric-tuning/profiles', protect: false, tags: ['Biometric tuning'] } })
+    .input(revisionInput.extend({ origin: z.enum(['manual', 'agent']) }))
+    .output(revisionSchema)
+    .mutation(({ input }) => revisionSchema.parse(profiles(store => store.createRevision(input)))),
+
+  diffProfileRevision: publicProcedure
+    .meta({ openapi: { method: 'POST', path: '/biometric-tuning/profiles/diff', protect: false, tags: ['Biometric tuning'] } })
+    .input(z.object({ side: sideSchema, revisionId: z.string().uuid().nullable(), againstRevisionId: z.string().uuid().nullable() }).strict())
+    .output(z.object({ revisionId: z.string().uuid().nullable(), againstRevisionId: z.string().uuid().nullable(), beforeHash: z.string(), afterHash: z.string(),
+      changes: z.array(z.object({ path: z.string(), before: z.unknown(), after: z.unknown() })), intentChangedPaths: z.array(z.string()) }))
+    .mutation(({ input }) => profiles(store => diffProfiles(store, input.side, input.revisionId, input.againstRevisionId))),
+
+  validateProfileRevision: publicProcedure
+    .meta({ openapi: { method: 'POST', path: '/biometric-tuning/profiles/{id}/validate', protect: false, tags: ['Biometric tuning'] } })
+    .input(importIdSchema.extend({ side: sideSchema }))
+    .output(z.object({ id: z.string().uuid(), resolvedHash: z.string(), compatible: z.literal(true), evidence: z.literal('not_checked'), limitations: z.array(z.string()) }))
+    .mutation(({ input }) => profiles((store) => {
+      const valid = store.validateRevision(input.id, input.side)
+      return { id: input.id, resolvedHash: valid.hash, compatible: true as const, evidence: 'not_checked' as const,
+        limitations: ['Schema and engine compatibility do not establish improved biometric agreement.'] }
+    })),
+
+  getProfileRevision: publicProcedure
+    .meta({ openapi: { method: 'GET', path: '/biometric-tuning/profiles/{id}', protect: false, tags: ['Biometric tuning'] } })
+    .input(importIdSchema)
+    .output(revisionSchema)
+    .query(({ input }) => revisionSchema.parse(profiles(store => store.getRevision(input.id)))),
+
+  listProfileRevisions: publicProcedure
+    .meta({ openapi: { method: 'GET', path: '/biometric-tuning/profiles', protect: false, tags: ['Biometric tuning'] } })
+    .input(profileCursorSchema)
+    .output(z.object({ items: z.array(revisionSchema), nextCursor: z.object({ createdAtMs: z.number(), id: z.string().uuid() }).nullable() }))
+    .query(({ input }) => {
+      const page = profiles(store => store.listRevisions(input.side,
+        input.beforeId !== undefined && input.beforeCreatedAtMs !== undefined ? { id: input.beforeId, createdAtMs: input.beforeCreatedAtMs } : undefined, input.familyId))
+      return { ...page, items: page.items.map(row => revisionSchema.parse(row)) }
+    }),
+
   compareReadings: publicProcedure
     .meta({ openapi: { method: 'POST', path: '/biometric-tuning/compare', protect: false, tags: ['Biometric tuning'] } })
     .input(compareReadingsSchema)

@@ -10,7 +10,7 @@ import { configHash } from '../algorithms/canonical'
 
 const sideSchema = z.enum(['left', 'right'])
 const keySchema = z.string().min(1).max(200)
-const revisionInput = z.object({
+export const revisionInput = z.object({
   side: sideSchema,
   parentRevisionId: z.string().uuid().optional(),
   baseManifestHash: z.string().length(64).default(manifestHash),

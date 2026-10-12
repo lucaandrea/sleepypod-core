@@ -1,0 +1,1 @@
+ALTER TABLE `biometric_datasets` ADD `released_at_ms` integer;

@@ -64,6 +64,22 @@ describe('retained processed datasets', () => {
     expect(datasets.list('left')).toHaveLength(1)
     expect(datasets.list('right')).toEqual([])
   })
+  it('retains and verifies realistic multi-night rows beyond the configuration hash node budget', () => {
+    db.delete(schema.vitals).run()
+    db.delete(schema.sleepRecords).run()
+    const insert = sqlite.prepare('INSERT INTO vitals (side, timestamp, heart_rate) VALUES (?, ?, ?)')
+    sqlite.transaction(() => {
+      for (let night = 1; night <= 3; night++) {
+        const entered = startMs + night * 86400000
+        db.insert(schema.sleepRecords).values({ id: night, side: 'left', enteredBedAt: new Date(entered), leftBedAt: new Date(entered + 43200000), sleepDurationSeconds: 43200, timesExitedBed: 0 }).run()
+        for (let minute = 0; minute < 720; minute++) insert.run('left', entered / 1000 + minute * 60, 60 + (minute % 10) / 10)
+      }
+    })()
+    const dataset = datasets.create({ ...request, sessionIds: [1, 2, 3] })
+    expect(datasets.read(dataset.id).snapshot.sessions.reduce((total, session) => total + session.vitals.length, 0)).toBe(2160)
+    expect(datasets.descriptor(dataset.id).contentHash).toBe(dataset.contentHash)
+  })
+
   it('records exact processing bundles when available and keeps missing provenance explicit', () => {
     db.insert(schema.biometricProcessingRuns).values({ id: 'run-1', side: 'left', kind: 'live', bundle: { version: 'fixture' },
       configHash: 'fixture-hash', inputIdentity: { origin: 'fixture' }, startedAtMs: startMs }).run()

@@ -429,10 +429,13 @@ export const biometricDatasets = sqliteTable('biometric_datasets', {
   snapshot: text('snapshot', { mode: 'json' }).notNull(),
   byteLength: integer('byte_length').notNull(),
   createdAtMs: integer('created_at_ms').notNull(),
+  releasedAtMs: integer('released_at_ms'),
 }, t => [index('idx_biometric_dataset_side_created').on(t.side, t.createdAtMs, t.id)])
 
 export const biometricExperiments = sqliteTable('biometric_experiments', {
   id: text('id').primaryKey(),
+  idempotencyKey: text('idempotency_key').unique(), // null on pre-idempotency experiments
+  requestHash: text('request_hash'),
   datasetId: text('dataset_id').notNull().references(() => biometricDatasets.id),
   side: text('side', { enum: ['left', 'right'] }).notNull(),
   protocol: text('protocol', { mode: 'json' }).notNull(),

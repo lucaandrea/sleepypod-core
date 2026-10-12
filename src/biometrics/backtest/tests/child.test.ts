@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { dataHash } from '../../algorithms/canonical'
 import { runBacktestChild } from '../child'
 import { backtestFixture } from './fixtures/backtest'
 let directory: string
@@ -25,6 +26,18 @@ describe('shipped worker process', () => {
     const dependencies = await readFile(join(directory, 'dependencies.json'), 'utf8')
     expect(dependencies).not.toMatch(/src\/db\/|src\/hardware\/|drizzle-orm|better-sqlite3/)
   })
+  it('processes a retained twelve-hour window beyond the configuration hash size limit', async () => {
+    const input = backtestFixture()
+    const start = input.dataset.snapshot.sessions[0].startMs
+    for (const session of input.dataset.snapshot.sessions) {
+      session.endMs = start + 43200000
+      session.vitals = Array.from({ length: 720 }, (_, id) => ({ id, timestampMs: start + id * 60000, heartRate: 60.1, hrv: 30, breathingRate: 14, processingRunId: null }))
+    }
+    input.dataset.manifest.splitProtocol.assignments[0].endMs = start + 43200000
+    input.job.datasetHash = dataHash(input.dataset)
+    expect(await runBacktestChild(worker, input)).toMatchObject({ nights: [{ uniqueObservationCount: 720 }] })
+  })
+
   it('terminates stalled work on time budget and cancellation, including ignored SIGTERM', async () => {
     const stalled = join(directory, 'stalled.cjs')
     await writeFile(stalled, 'process.on(\'SIGTERM\', () => {}); process.stdin.resume(); setInterval(() => {}, 1000)')

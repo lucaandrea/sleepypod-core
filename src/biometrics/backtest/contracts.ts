@@ -11,7 +11,7 @@ export const experimentProtocolSchema = z.object({
   clockOffsetMs: z.number().int().min(-3600000).max(3600000),
 }).strict()
 export const enqueueBacktestSchema = z.object({
-  experimentId: z.string().uuid(), idempotencyKey: key, evaluatorBuildHash: hash,
+  experimentId: z.string().uuid(), idempotencyKey: key, evaluatorBuildHash: hash, submissionHash: hash.optional(),
   split: z.enum(['tuning', 'validation', 'holdout']),
   configs: z.array(z.object({ label: z.enum(['default', 'current', 'candidate']), revisionId: z.string().uuid().nullable(),
     manifestHash: hash, resolvedHash: hash, resolved: z.unknown() }).strict()).min(1).max(3),
@@ -33,3 +33,19 @@ export const datasetSnapshotSchema = z.object({
 })
 export type DatasetSnapshot = z.infer<typeof datasetSnapshotSchema>
 
+export const coverageSchema = z.object({ count: z.number(), duplicateTimestamps: z.number(), firstMs: z.number().nullable(), lastMs: z.number().nullable(),
+  expectedCadenceMs: z.number(), gaps: z.array(z.object({ startMs: z.number(), endMs: z.number() })), gapDurationMs: z.number(),
+  interpretation: z.literal('cadence_availability_not_measured_support') })
+export const datasetManifestSchema = z.object({
+  version: z.literal('processed-dataset-manifest-v1'),
+  splitProtocol: z.object({ version: z.literal('chronological-whole-night-v1'), timezone: z.string(),
+    timezoneRuntime: z.object({ icu: z.string(), tz: z.string() }), grouping: z.literal('local_noon_connected_sessions'),
+    assignments: z.array(z.object({ cohortId: z.string(), nightLabels: z.array(z.string()), sessionIds: z.array(z.number()),
+      startMs: z.number(), endMs: z.number(), split: z.enum(['tuning', 'validation', 'holdout']) })),
+    evidence: z.enum(['partitioned_not_validated', 'descriptive_only']), limitations: z.array(z.string()),
+  }),
+  coverage: z.array(z.object({ sessionId: z.number(), vitals: coverageSchema, movement: coverageSchema })),
+  capabilities: z.object({ comparison: z.boolean(), stageReplay: z.boolean(), signalReplay: z.boolean() }), limitations: z.array(z.string()),
+})
+export const datasetDescriptorSchema = z.object({ id: z.string().uuid(), side: z.enum(['left', 'right']), subjectId: z.string(),
+  contentHash: z.string(), manifest: datasetManifestSchema, byteLength: z.number(), createdAtMs: z.number(), releasedAtMs: z.number().nullable(), available: z.boolean() })

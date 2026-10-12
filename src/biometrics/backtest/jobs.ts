@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto'
-import { and, asc, eq, gt, inArray, lt, lte, or, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, gt, inArray, lt, lte, or, sql } from 'drizzle-orm'
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3'
 import { z } from 'zod'
 import * as schema from '@/src/db/biometrics-schema'
-import { configHash } from '../algorithms/canonical'
+import { configHash, dataHash } from '../algorithms/canonical'
 import { manifestHash, validateConfig } from '../algorithms/registry'
 import { ReferenceInputError } from '../references/time'
 import { DatasetStore } from './datasets'
@@ -25,15 +25,38 @@ export type JobLease = z.infer<typeof leaseSchema>
 export class BacktestJobStore {
   constructor(private readonly db: BetterSQLite3Database<typeof schema>, private readonly now = Date.now) {}
 
-  createExperiment(datasetId: string, rawProtocol: z.input<typeof experimentProtocolSchema>) {
+  createExperiment(datasetId: string, rawProtocol: z.input<typeof experimentProtocolSchema>, idempotencyKey: string = randomUUID()) {
     const protocol = experimentProtocolSchema.parse(rawProtocol)
+    key.parse(idempotencyKey)
+    const requestHash = configHash({ datasetId, protocol })
     const dataset = new DatasetStore(this.db).read(datasetId)
     return this.db.transaction((tx) => {
+      const existing = tx.select().from(experiments).where(eq(experiments.idempotencyKey, idempotencyKey)).get()
+      if (existing) {
+        if (existing.requestHash !== requestHash) throw new ReferenceInputError('REVISION_CONFLICT', 'Experiment idempotency key changed')
+        return existing
+      }
       const total = tx.select({ count: sql<number>`count(*)` }).from(experiments).get()?.count ?? 0
       if (total >= 1000) throw new ReferenceInputError('RESOURCE_LIMIT', 'Experiment history has reached its 1000-entry bound')
-      return tx.insert(experiments).values({ id: randomUUID(), datasetId, side: dataset.side,
+      return tx.insert(experiments).values({ id: randomUUID(), datasetId, idempotencyKey, requestHash, side: dataset.side,
         protocol, protocolHash: configHash(protocol), createdAtMs: this.now() }).returning().get()
     }, { behavior: 'immediate' })
+  }
+
+  getExperiment(id: string) {
+    const experiment = this.db.select().from(experiments).where(eq(experiments.id, id)).get()
+    if (!experiment) throw new ReferenceInputError('NOT_FOUND', 'Experiment not found')
+    return { ...experiment, protocol: experimentProtocolSchema.parse(experiment.protocol) }
+  }
+
+  pageExperiments(side: 'left' | 'right', cursor?: { createdAtMs: number, id: string }) {
+    const rows = this.db.select().from(experiments).where(and(eq(experiments.side, side), cursor
+      ? or(lt(experiments.createdAtMs, cursor.createdAtMs), and(eq(experiments.createdAtMs, cursor.createdAtMs), lt(experiments.id, cursor.id)))
+      : undefined))
+      .orderBy(desc(experiments.createdAtMs), desc(experiments.id)).limit(51).all()
+    const items = rows.slice(0, 50).map(row => ({ ...row, protocol: experimentProtocolSchema.parse(row.protocol) }))
+    const last = items.at(-1)
+    return { items, nextCursor: rows.length > 50 && last ? { createdAtMs: last.createdAtMs, id: last.id } : null }
   }
 
   holdoutUseCount(datasetId: string) {
@@ -66,9 +89,10 @@ export class BacktestJobStore {
       if (total >= 1000) throw new ReferenceInputError('RESOURCE_LIMIT', 'Job history has reached its 1000-entry bound')
       const experiment = tx.select().from(experiments).where(eq(experiments.id, input.experimentId)).get()
       if (!experiment) throw new ReferenceInputError('NOT_FOUND', 'Experiment not found')
-      const dataset = tx.select({ contentHash: schema.biometricDatasets.contentHash, manifest: schema.biometricDatasets.manifest })
+      const dataset = tx.select({ contentHash: schema.biometricDatasets.contentHash, releasedAtMs: schema.biometricDatasets.releasedAtMs, manifest: schema.biometricDatasets.manifest })
         .from(schema.biometricDatasets).where(eq(schema.biometricDatasets.id, experiment.datasetId)).get()
       if (!dataset) throw new ReferenceInputError('NOT_FOUND', 'Dataset unavailable')
+      if (dataset.releasedAtMs !== null) throw new ReferenceInputError('DATASET_RELEASED', 'Retained dataset inputs were explicitly released')
       const manifest = manifestSchema.parse(dataset.manifest)
       const totalNights = manifest.splitProtocol.assignments.filter(group => group.split === input.split).length
       if (!totalNights) throw new ReferenceInputError('INSUFFICIENT_NIGHTS', 'The frozen dataset has no nights assigned to this split')
@@ -93,6 +117,17 @@ export class BacktestJobStore {
     }, { behavior: 'immediate' })
   }
 
+  page(side: 'left' | 'right', cursor?: { createdAtMs: number, id: string }) {
+    const rows = this.db.select({ job: jobs }).from(jobs).innerJoin(experiments, eq(jobs.experimentId, experiments.id))
+      .where(and(eq(experiments.side, side), cursor
+        ? or(lt(jobs.createdAtMs, cursor.createdAtMs), and(eq(jobs.createdAtMs, cursor.createdAtMs), lt(jobs.id, cursor.id)))
+        : undefined))
+      .orderBy(desc(jobs.createdAtMs), desc(jobs.id)).limit(51).all().map(row => row.job)
+    const items = rows.slice(0, 50)
+    const last = items.at(-1)
+    return { items, nextCursor: rows.length > 50 && last ? { createdAtMs: last.createdAtMs, id: last.id } : null }
+  }
+
   get(id: string) {
     const job = this.db.select().from(jobs).where(eq(jobs.id, id)).get()
     if (!job) throw new ReferenceInputError('NOT_FOUND', 'Backtest job not found')
@@ -103,7 +138,7 @@ export class BacktestJobStore {
     const job = this.get(id)
     if (job.state !== 'succeeded') return null
     const result = this.db.select().from(results).where(eq(results.jobId, id)).get()
-    if (!result || result.fencingToken !== job.fencingToken || configHash(result.report) !== result.contentHash) throw new ReferenceInputError('RESULT_CORRUPT', 'Backtest result integrity check failed')
+    if (!result || result.fencingToken !== job.fencingToken || dataHash(result.report) !== result.contentHash) throw new ReferenceInputError('RESULT_CORRUPT', 'Backtest result integrity check failed')
     const input = z.object({ datasetId: z.string() }).parse(job.input)
     return { ...result, currentHoldoutUseCount: this.holdoutUseCount(input.datasetId) }
   }
@@ -198,7 +233,7 @@ export class BacktestJobStore {
     // Concrete evaluator schemas validate reports before calling this sink.
     const serialized = JSON.stringify(report)
     if (!serialized || Buffer.byteLength(serialized) > 2 * 1024 * 1024) throw new ReferenceInputError('RESOURCE_LIMIT', 'Backtest summary exceeds 2 MiB')
-    const contentHash = configHash(report)
+    const contentHash = dataHash(report)
     return this.db.transaction((tx) => {
       const job = this.owned(lease)
       if (job.state !== 'running') throw new ReferenceInputError('INVALID_STATE', 'Cancelled work cannot publish a result')

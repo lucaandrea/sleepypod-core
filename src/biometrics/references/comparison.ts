@@ -2,7 +2,7 @@ import { and, eq, gte, lt } from 'drizzle-orm'
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3'
 import { z } from 'zod'
 import * as schema from '@/src/db/biometrics-schema'
-import { configHash } from '@/src/biometrics/algorithms/canonical'
+import { dataHash } from '@/src/biometrics/algorithms/canonical'
 import { sideSchema } from '@/src/server/validation-schemas'
 import { timestampMsSchema } from './contracts'
 import { alignReferences, DEFAULT_ALIGNMENT } from './alignment'
@@ -79,7 +79,7 @@ export function compareStoredReadings(db: BetterSQLite3Database<typeof schema>, 
     { ...DEFAULT_ALIGNMENT, pointToleranceMs: input.pointToleranceMs, clockOffsetMs: input.clockOffsetMs })
   const provenance = new Map<string | null, number>()
   for (const row of snapshot.rows) provenance.set(row.processingRunId, (provenance.get(row.processingRunId) ?? 0) + 1)
-  const inputHash = configHash({ input, referenceHash: snapshot.reference.summary.contentHash,
+  const inputHash = dataHash({ input, referenceHash: snapshot.reference.summary.contentHash,
     observations: snapshot.rows.map(row => ({ ...row, timestamp: row.timestamp.getTime() })) })
   return comparisonReportSchema.parse({ ...alignment, requestedMetric: input.metric, version: 'stored-readings-comparison-v1', inputHash,
     side: input.side, subjectId: input.subjectId, startMs: input.startMs, endMs: input.endMs,

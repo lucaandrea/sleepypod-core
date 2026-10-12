@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto'
-import { and, desc, eq, gte, inArray, lt, sql } from 'drizzle-orm'
+import { and, desc, eq, gte, inArray, lt, or, sql } from 'drizzle-orm'
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3'
 import { z } from 'zod'
 import * as schema from '@/src/db/biometrics-schema'
-import { configHash } from '../algorithms/canonical'
+import { configHash, dataHash } from '../algorithms/canonical'
 import { normalizedMeasurementSchema } from '../references/contracts'
 import { ReferenceStore } from '../references/store'
 import { ReferenceInputError } from '../references/time'
@@ -108,7 +108,7 @@ export class DatasetStore {
     }
     const byteLength = snapshotBytes + Buffer.byteLength(JSON.stringify(manifest))
     if (byteLength > LIMITS.datasetBytes) throw new ReferenceInputError('RESOURCE_LIMIT', 'Dataset and manifest exceed the 8 MiB snapshot limit')
-    const contentHash = configHash({ manifest, snapshot: captured.snapshot })
+    const contentHash = dataHash({ manifest, snapshot: captured.snapshot })
     return this.db.transaction((tx) => {
       const raced = tx.select().from(schema.biometricDatasets).where(eq(schema.biometricDatasets.idempotencyKey, input.idempotencyKey)).get()
       if (raced) {
@@ -125,21 +125,62 @@ export class DatasetStore {
 
   private describe(row: typeof schema.biometricDatasets.$inferSelect) {
     return { id: row.id, side: row.side, subjectId: row.subjectId, contentHash: row.contentHash,
-      manifest: row.manifest, byteLength: row.byteLength, createdAtMs: row.createdAtMs }
+      manifest: row.manifest, byteLength: row.byteLength, createdAtMs: row.createdAtMs, releasedAtMs: row.releasedAtMs, available: row.releasedAtMs === null }
   }
 
   read(id: string) {
     const row = this.db.select().from(schema.biometricDatasets).where(eq(schema.biometricDatasets.id, id)).get()
     if (!row) throw new ReferenceInputError('NOT_FOUND', 'Dataset is unavailable')
+    if (row.releasedAtMs !== null) throw new ReferenceInputError('DATASET_RELEASED', 'Retained dataset inputs were explicitly released')
     const snapshot = datasetSnapshotSchema.parse(row.snapshot)
-    if (configHash({ manifest: row.manifest, snapshot }) !== row.contentHash) throw new ReferenceInputError('DATASET_CORRUPT', 'Retained dataset integrity check failed')
+    if (dataHash({ manifest: row.manifest, snapshot }) !== row.contentHash) throw new ReferenceInputError('DATASET_CORRUPT', 'Retained dataset integrity check failed')
     return { ...this.describe(row), snapshot }
+  }
+
+  release(id: string) {
+    return this.db.transaction((tx) => {
+      const dataset = tx.select().from(schema.biometricDatasets).where(eq(schema.biometricDatasets.id, id)).get()
+      if (!dataset) throw new ReferenceInputError('NOT_FOUND', 'Dataset not found')
+      if (dataset.releasedAtMs !== null) return this.describe(dataset)
+      const active = tx.select({ id: schema.biometricBacktestJobs.id }).from(schema.biometricBacktestJobs)
+        .innerJoin(schema.biometricExperiments, eq(schema.biometricBacktestJobs.experimentId, schema.biometricExperiments.id))
+        .where(and(eq(schema.biometricExperiments.datasetId, id), inArray(schema.biometricBacktestJobs.state, ['queued', 'running', 'cancel_requested', 'interrupted']))).get()
+      if (active) throw new ReferenceInputError('REVISION_CONFLICT', 'Cancel or finish jobs using this dataset before releasing its inputs')
+      const tombstone = { released: true }
+      const byteLength = Buffer.byteLength(JSON.stringify(dataset.manifest)) + Buffer.byteLength(JSON.stringify(tombstone))
+      const released = tx.update(schema.biometricDatasets).set({ snapshot: tombstone, byteLength, releasedAtMs: this.now() })
+        .where(eq(schema.biometricDatasets.id, id)).returning().get()
+      return this.describe(released)
+    }, { behavior: 'immediate' })
+  }
+
+  descriptor(id: string) {
+    const row = this.db.select().from(schema.biometricDatasets).where(eq(schema.biometricDatasets.id, id)).get()
+    if (!row) throw new ReferenceInputError('NOT_FOUND', 'Dataset not found')
+    if (row.releasedAtMs === null) {
+      const snapshot = datasetSnapshotSchema.parse(row.snapshot)
+      if (dataHash({ manifest: row.manifest, snapshot }) !== row.contentHash) throw new ReferenceInputError('DATASET_CORRUPT', 'Retained dataset integrity check failed')
+    }
+    return this.describe(row)
+  }
+
+  page(side: 'left' | 'right', cursor?: { createdAtMs: number, id: string }) {
+    const rows = this.db.select({ id: schema.biometricDatasets.id, side: schema.biometricDatasets.side,
+      subjectId: schema.biometricDatasets.subjectId, contentHash: schema.biometricDatasets.contentHash,
+      manifest: schema.biometricDatasets.manifest, byteLength: schema.biometricDatasets.byteLength, createdAtMs: schema.biometricDatasets.createdAtMs, releasedAtMs: schema.biometricDatasets.releasedAtMs,
+    }).from(schema.biometricDatasets).where(and(eq(schema.biometricDatasets.side, side), cursor
+      ? or(lt(schema.biometricDatasets.createdAtMs, cursor.createdAtMs), and(eq(schema.biometricDatasets.createdAtMs, cursor.createdAtMs), lt(schema.biometricDatasets.id, cursor.id)))
+      : undefined))
+      .orderBy(desc(schema.biometricDatasets.createdAtMs), desc(schema.biometricDatasets.id)).limit(51).all()
+    const items = rows.slice(0, 50).map(row => ({ ...row, available: row.releasedAtMs === null }))
+    const last = items.at(-1)
+    return { items, nextCursor: rows.length > 50 && last ? { createdAtMs: last.createdAtMs, id: last.id } : null }
   }
 
   list(side: 'left' | 'right') {
     return this.db.select({ id: schema.biometricDatasets.id, side: schema.biometricDatasets.side,
       subjectId: schema.biometricDatasets.subjectId, contentHash: schema.biometricDatasets.contentHash,
-      manifest: schema.biometricDatasets.manifest, byteLength: schema.biometricDatasets.byteLength, createdAtMs: schema.biometricDatasets.createdAtMs,
+      manifest: schema.biometricDatasets.manifest, byteLength: schema.biometricDatasets.byteLength, createdAtMs: schema.biometricDatasets.createdAtMs, releasedAtMs: schema.biometricDatasets.releasedAtMs,
     }).from(schema.biometricDatasets).where(eq(schema.biometricDatasets.side, side))
       .orderBy(desc(schema.biometricDatasets.createdAtMs), desc(schema.biometricDatasets.id)).limit(100).all()
   }
