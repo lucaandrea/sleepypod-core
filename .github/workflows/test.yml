@@ -51,6 +51,23 @@ jobs:
       - name: Install Dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Setup Python for runtime integration
+        if: matrix.task.name == 'Unit Tests'
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.10'
+
+      - name: Setup uv for runtime integration
+        if: matrix.task.name == 'Unit Tests'
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+
+      - name: Install locked runtime integration dependencies
+        if: matrix.task.name == 'Unit Tests'
+        working-directory: modules/piezo-processor
+        run: uv sync --locked --no-install-project
+
       - name: Cache Assets (Vitest)
         id: asset-cache
         uses: actions/cache@v5

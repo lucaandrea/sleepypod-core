@@ -30,8 +30,10 @@ changes while reconciling.
 The Node startup hook starts one `globalThis` coordinator after migrations.
 Every five seconds it migrates legacy stage personalization, repairs delivered
 projections, delivers pending intents and reconciles receipts. Shutdown stops
-its timer. General public activation remains unavailable pending the public
-mutation endpoints and final end-to-end gates.
+its timer. Public manual activation, reset and rollback submit exact intent;
+status polling remains read-only. Availability does not assert processor health
+or adoption. The cross-runtime fixture verifies the public request → Python
+boundary → stage receipt → restart → rollback handoff.
 There are no hardware-command paths in these services.
 
 The Python `common.biometrics.runtime` reader independently validates the latest

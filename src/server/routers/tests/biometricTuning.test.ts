@@ -99,7 +99,7 @@ describe('shared biometric reference API', () => {
 
   it('resolves and saves an exact candidate without activation, preserves explicit values and exposes revisions', async () => {
     const manifest = await caller.getManifest({})
-    expect(manifest.activationAvailable).toBe(false)
+    expect(manifest.activationAvailable).toBe(true)
     const overrides = [{ path: 'heart_rate.trackingToleranceBpm', value: 20 }]
     const resolved = await caller.resolveProfile({ overrides })
     expect(resolved.resolved.heart_rate.trackingToleranceBpm).toBe(20)
@@ -113,11 +113,36 @@ describe('shared biometric reference API', () => {
     expect((await caller.listProfileRevisions({ side: 'left' })).items[0].id).toBe(revision.id)
     expect((await caller.listProfileRevisions({ side: 'right' })).items).toEqual([])
     expect(await caller.getProfileOverview({ side: 'left' })).toMatchObject({
-      desired: { isDefault: true, binding: { generation: 0 } }, runtimeStatus: 'unreported', runtimeHealth: { state: 'unreported' }, activationAvailable: false,
+      desired: { isDefault: true, binding: { generation: 0 } }, runtimeStatus: 'unreported', runtimeHealth: { state: 'unreported' }, activationAvailable: true,
     })
     expect(configSqlite.prepare('SELECT count(*) AS total FROM biometric_config_outbox').get()).toEqual({ total: 0 })
     await expect(caller.createProfileRevision({ ...request, overrides: [] })).rejects.toMatchObject({ code: 'CONFLICT' })
     await expect(caller.resolveProfile({ overrides: [{ path: 'heart_rate.madeUp', value: 1 }] })).rejects.toMatchObject({ code: 'BAD_REQUEST' })
+  })
+
+  it('queues exact manual activation, rejects stale updates, and distinguishes reset from rollback', async () => {
+    const defaults = await caller.resolveProfile({ overrides: [] })
+    const revision = await caller.createProfileRevision({ side: 'left', overrides: [{ path: 'heart_rate.trackingToleranceBpm', value: 20 }],
+      origin: 'manual', requester: 'fixture', idempotencyKey: 'revision' })
+    const request = { side: 'left' as const, revisionId: revision.id, expectedGeneration: 0, expectedResolvedHash: revision.resolvedHash,
+      boundary: 'next_session' as const, requester: 'fixture', idempotencyKey: 'activate', allowUnvalidated: true as const }
+    await expect(caller.activateProfile({ ...request, allowUnvalidated: false as true })).rejects.toMatchObject({ code: 'BAD_REQUEST' })
+    const event = await caller.activateProfile(request)
+    expect(event).toMatchObject({ action: 'activate', generation: 1, state: 'pending_delivery', evidence: { status: 'manual_unvalidated' } })
+    expect(await caller.activateProfile(request)).toEqual(event)
+    expect(await caller.getActivationStatus({ side: 'left', id: event.id })).toMatchObject({ observedState: 'pending_delivery', receipts: [], isCurrent: true })
+    await expect(caller.activateProfile({ ...request, idempotencyKey: 'stale' })).rejects.toMatchObject({ code: 'CONFLICT' })
+    await expect(caller.activateProfile({ ...request, side: 'right', idempotencyKey: 'wrong-side' })).rejects.toMatchObject({ code: 'BAD_REQUEST' })
+    await expect(caller.getActivationStatus({ side: 'right', id: event.id })).rejects.toMatchObject({ code: 'NOT_FOUND' })
+    await expect(caller.activateProfile({ ...request, expectedGeneration: 1, expectedResolvedHash: '0'.repeat(64), idempotencyKey: 'wrong-hash' }))
+      .rejects.toMatchObject({ code: 'CONFLICT' })
+    const reset = await caller.resetProfile({ side: 'left', expectedGeneration: 1, expectedResolvedHash: defaults.hash,
+      boundary: 'immediate', requester: 'fixture', idempotencyKey: 'reset', allowUnvalidated: true })
+    expect(reset.action).toBe('reset')
+    const rollback = await caller.rollbackProfile({ ...request, expectedGeneration: 2, idempotencyKey: 'rollback' })
+    expect(rollback).toMatchObject({ action: 'rollback', generation: 3, nextRevisionId: revision.id })
+    expect(await caller.getActivationStatus({ side: 'left', id: event.id })).toMatchObject({ isCurrent: false, desiredGeneration: 3 })
+    expect(sqlite.prepare('SELECT count(*) AS count FROM vitals').get()).toEqual({ count: 0 })
   })
 
   it('returns side-scoped activation history and rejects malformed cursors', async () => {

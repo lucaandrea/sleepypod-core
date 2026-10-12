@@ -12,7 +12,9 @@ import { ProfileStore, revisionInput } from '@/src/biometrics/profiles/store'
 import { biometricConfigSchema, overrideSchema, profileOverviewSchema, revisionSchema } from '@/src/biometrics/profiles/contracts'
 import { diffProfiles } from '@/src/biometrics/profiles/diff'
 import { profileOverview } from '@/src/biometrics/profiles/overview'
-import { activationHistorySchema, listActivationHistory } from '@/src/biometrics/profiles/history'
+import { activationIntentSchema, requestManualActivation } from '@/src/biometrics/profiles/activation'
+import { activationStatus, activationStatusSchema } from '@/src/biometrics/profiles/status'
+import { activationEventSchema, activationHistorySchema, listActivationHistory } from '@/src/biometrics/profiles/history'
 import { DatasetStore, createDatasetSchema } from '@/src/biometrics/backtest/datasets'
 import { listReplaySessions, sessionCapabilities, sessionPageSchema, sessionCapabilitiesSchema } from '@/src/biometrics/backtest/discovery'
 import { workerBuildHash } from '@/src/biometrics/backtest/child'
@@ -36,7 +38,7 @@ function references<T>(action: (store: ReferenceStore) => T): T {
         ? 'SERVICE_UNAVAILABLE'
         : error.code === 'NOT_FOUND' || error.code === 'REFERENCE_DELETED' || error.code === 'DATASET_RELEASED'
           ? 'NOT_FOUND'
-          : error.code === 'STALE_PREVIEW' || error.code === 'REVISION_CONFLICT'
+          : error.code === 'STALE_PREVIEW' || error.code === 'REVISION_CONFLICT' || error.code === 'STALE_BINDING'
             ? 'CONFLICT'
             : error.code === 'RESOURCE_LIMIT' ? 'PAYLOAD_TOO_LARGE' : 'BAD_REQUEST'
       throw new TRPCError({ code, message: `${error.code}: ${error.message}`, cause: error })
@@ -67,6 +69,30 @@ const experimentDescriptorSchema = z.object({ id: z.string().uuid(), datasetId: 
   protocolHash: z.string(), holdoutAccesses: z.number(), createdAtMs: z.number() })
 
 export const biometricTuningRouter = router({
+  activateProfile: publicProcedure
+    .meta({ openapi: { method: 'POST', path: '/biometric-tuning/activate', protect: false, tags: ['Biometric tuning'] } })
+    .input(activationIntentSchema.omit({ action: true }).extend({ revisionId: z.string().uuid() }))
+    .output(activationEventSchema)
+    .mutation(({ input }) => references(() => profiles(() => requestManualActivation(db, { ...input, action: 'activate' })))),
+
+  resetProfile: publicProcedure
+    .meta({ openapi: { method: 'POST', path: '/biometric-tuning/reset', protect: false, tags: ['Biometric tuning'] } })
+    .input(activationIntentSchema.omit({ action: true, revisionId: true }))
+    .output(activationEventSchema)
+    .mutation(({ input }) => references(() => profiles(() => requestManualActivation(db, { ...input, action: 'reset', revisionId: null })))),
+
+  rollbackProfile: publicProcedure
+    .meta({ openapi: { method: 'POST', path: '/biometric-tuning/rollback', protect: false, tags: ['Biometric tuning'] } })
+    .input(activationIntentSchema.omit({ action: true }))
+    .output(activationEventSchema)
+    .mutation(({ input }) => references(() => profiles(() => requestManualActivation(db, { ...input, action: 'rollback' })))),
+
+  getActivationStatus: publicProcedure
+    .meta({ openapi: { method: 'GET', path: '/biometric-tuning/activation-status', protect: false, tags: ['Biometric tuning'] } })
+    .input(z.object({ side: sideSchema, id: z.string().uuid().optional() }).strict())
+    .output(activationStatusSchema)
+    .query(({ input }) => references(() => activationStatus(db, biometricsDb, input.side, input.id))),
+
   listActivationHistory: publicProcedure
     .meta({ openapi: { method: 'GET', path: '/biometric-tuning/activations', protect: false, tags: ['Biometric tuning'] } })
     .input(z.object({ side: sideSchema, beforeGeneration: z.number().int().positive().optional() }).strict())
@@ -187,7 +213,7 @@ export const biometricTuningRouter = router({
     .meta({ openapi: { method: 'GET', path: '/biometric-tuning/manifest', protect: false, tags: ['Biometric tuning'] } })
     .input(z.object({}).strict())
     .output(z.object({ manifestHash: z.string(), manifest: z.unknown(), activationAvailable: z.boolean() }))
-    .query(() => ({ manifestHash, manifest: biometricManifest, activationAvailable: false })),
+    .query(() => ({ manifestHash, manifest: biometricManifest, activationAvailable: true })),
 
   getProfileOverview: publicProcedure
     .meta({ openapi: { method: 'GET', path: '/biometric-tuning/profiles/overview', protect: false, tags: ['Biometric tuning'] } })

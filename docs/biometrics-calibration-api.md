@@ -20,9 +20,9 @@ requester names are attribution, not authenticated identities.
   write an activation outbox event. Public origins are manual or agent;
   migration/system origins are reserved for server workflows.
 
-Activation is deliberately reported unavailable until processor projection,
-acknowledgment and rollback are integrated. Desired profile state must not be
-presented as actual runtime adoption.
+Manual activation is available. Desired profile state must not be presented as
+actual runtime adoption; availability means requests can be queued, not that a
+processor is currently healthy or has adopted a particular revision.
 
 ## Retain data and submit work
 
@@ -58,9 +58,8 @@ not a completed result or an activation. Result reads include the current
 holdout exposure count. Existing successful retries return the original job
 when the same public submission key and payload are supplied.
 
-The host loop, measured resource admission, richer promotion reports, live
-activation, and client UI/MCP integration are still separate implementation
-steps. The API does not claim that these are enabled merely because job
+The backtest host loop, measured resource admission, richer promotion reports,
+and full client UI/MCP integration remain separate implementation steps. The API does not claim that these are enabled merely because job
 submission exists.
 
 Profile diffs report both changed resolved values and changed override intent,
@@ -90,6 +89,37 @@ Activation history is available through `listActivationHistory` (side and
 optional `beforeGeneration` cursor). Pages contain at most fifty events and
 include fallback/default-update evidence. Profile overview separates its
 historical receipts from `runtimeHealth`, which reports current numerical
-heartbeat freshness and configuration consistency. General profile activation
-mutations remain unavailable; legacy stage settings already use the versioned
-intent and acknowledgment protocol.
+heartbeat freshness and configuration consistency. General and legacy stage
+settings use the same versioned intent and acknowledgment protocol.
+
+## Manual activation and observation
+
+- `activateProfile` / `POST /biometric-tuning/activate` selects an exact revision.
+- `resetProfile` / `POST /biometric-tuning/reset` selects current shipped defaults
+  without deleting revisions or audit history.
+- `rollbackProfile` / `POST /biometric-tuning/rollback` selects the previous
+  binding, including its exact revision identity (null means the default binding).
+
+All three require side, expected binding generation, expected resolved hash,
+immediate/next-session boundary, requester, idempotency key, and explicit
+`allowUnvalidated: true`. These are deliberate manual changes, recorded as
+`manual_unvalidated`. They do not assert that a backtest established improvement.
+A stale binding, changed idempotent request or mismatched hash is a conflict.
+Creating or evaluating a candidate never calls these mutations implicitly.
+
+`getActivationStatus` / `GET /biometric-tuning/activation-status` accepts a side
+and optional event ID. It returns the persisted audit event, observed delivery
+and matching-receipt state, receipt freshness and whether the event still
+belongs to the desired generation. Polling is read-only and cannot acknowledge
+the stage consumer. The persisted event can lag observed receipts until the
+five-second reconciliation pass. An applied old event is history, not proof it
+is still selected; check `isCurrent` and the overview's current runtime health.
+
+The cross-runtime integration test uses temporary fixture databases and the
+locked piezo environment. Prepare it with
+`cd modules/piezo-processor && uv sync --locked --no-install-project`, then run
+`pnpm exec vitest run src/biometrics/profiles/tests/runtime-integration.test.ts`
+from the repository root. The JS unit-test CI job installs that same environment.
+The test runs the shipped Python adapter with a synthetic frame, verifies the
+next-session boundary, TypeScript stage receipt, restart restoration and rollback;
+it neither starts a sensor follower nor accesses hardware.

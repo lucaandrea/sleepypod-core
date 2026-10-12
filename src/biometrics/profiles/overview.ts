@@ -27,8 +27,8 @@ export function profileOverview(configDb: BetterSQLite3Database<typeof configSch
       migrationPending: legacy?.classifier != null && desired.binding.generation === 0 },
     runtimeHealth: runtimeHealth(latest, now),
     runtimeStatus: latest.length ? 'receipts_available' as const : 'unreported' as const, receipts: latest, sensorCalibration,
-    activationAvailable: false,
+    activationAvailable: true,
     limitations: ['Desired configuration is not proof of runtime adoption.', 'Measured sensor calibration is independent of algorithm personalization.',
-      'General profile activation is not yet available.'],
+      'Manual changes are unvalidated; applied status requires matching component receipts.'],
   }
 }
