@@ -5,26 +5,37 @@ import { Trans, useLingui } from '@lingui/react/macro'
 import { trpc } from '@/src/utils/trpc'
 import { Button, InlineError, Skeleton } from '@/src/components/ds'
 
-interface Intent { side: 'left' | 'right', revisionId: string, expectedGeneration: number, expectedResolvedHash: string, boundary: 'immediate' | 'next_session', requester: string, idempotencyKey: string, allowUnvalidated: true }
-export function ManualProfileActivation({ side, revisionId, review }: { side: 'left' | 'right', revisionId: string, review?: { generation: number, hash: string } }) {
+export type ProfileAction = 'activate' | 'reset' | 'rollback'
+interface Intent { action: ProfileAction, side: 'left' | 'right', revisionId: string | null, expectedGeneration: number, expectedResolvedHash: string, boundary: 'immediate' | 'next_session', requester: string, idempotencyKey: string, allowUnvalidated: true }
+export function ManualProfileActivation({ side, revisionId, review, action = 'activate' }: { side: 'left' | 'right', action?: ProfileAction, revisionId: string | null, review?: { generation: number, hash: string } }) {
   const { t } = useLingui()
   const [acknowledgedReview, setAcknowledgedReview] = useState<string>()
   const [boundary, setBoundary] = useState<'immediate' | 'next_session'>('next_session')
   const [intent, setIntent] = useState<Intent>()
-  const reviewKey = review ? `${revisionId}:${review.generation}:${review.hash}` : undefined
+  const reviewKey = review ? `${action}:${revisionId}:${review.generation}:${review.hash}` : undefined
   const acknowledged = Boolean(acknowledgedReview && (intent || acknowledgedReview === reviewKey))
   const [eventId, setEventId] = useState<string>()
   const activation = trpc.biometricTuning.activateProfile.useMutation()
+  const reset = trpc.biometricTuning.resetProfile.useMutation()
+  const rollback = trpc.biometricTuning.rollbackProfile.useMutation()
+  const busy = activation.isPending || reset.isPending || rollback.isPending
+  const error = activation.error ?? reset.error ?? rollback.error
   const utils = trpc.useUtils()
   async function apply() {
     if (!acknowledged || (!review && !intent)) return
     const request: Intent | undefined = intent ?? (review
-      ? { side, revisionId, expectedGeneration: review.generation, expectedResolvedHash: review.hash, boundary,
+      ? { action, side, revisionId, expectedGeneration: review.generation, expectedResolvedHash: review.hash, boundary,
           requester: 'web-calibration', idempotencyKey: Array.from(crypto.getRandomValues(new Uint8Array(24)), byte => byte.toString(16).padStart(2, '0')).join(''), allowUnvalidated: true }
       : undefined)
     if (!request) return
     setIntent(request)
-    const event = await activation.mutateAsync(request)
+    const { action: requestAction, revisionId: target, ...common } = request
+    if (requestAction === 'activate' && target === null) return
+    const event = requestAction === 'reset'
+      ? await reset.mutateAsync(common)
+      : requestAction === 'rollback'
+        ? await rollback.mutateAsync({ ...common, revisionId: target })
+        : await activation.mutateAsync({ ...common, revisionId: target as string })
     setEventId(event.id)
     void utils.biometricTuning.getProfileOverview.invalidate({ side })
     void utils.biometricTuning.listActivationHistory.invalidate({ side })
@@ -37,22 +48,22 @@ export function ManualProfileActivation({ side, revisionId, review }: { side: 'l
             <>
               <label className="block">
                 <Trans>Activation timing</Trans>
-                <select disabled={activation.isPending || Boolean(intent)} className="ml-2 rounded border p-2" value={boundary} onChange={event => setBoundary(event.target.value as typeof boundary)}>
+                <select disabled={busy || Boolean(intent)} className="ml-2 rounded border p-2" value={boundary} onChange={event => setBoundary(event.target.value as typeof boundary)}>
                   <option value="next_session">{t`Next session boundary`}</option>
                   <option value="immediate">{t`Immediate processing boundary`}</option>
                 </select>
               </label>
               <p className="text-sm text-fg-2"><Trans>Next session waits for a known empty-bed boundary. Immediate application still waits for a safe processing boundary.</Trans></p>
               <label className="block">
-                <input type="checkbox" checked={acknowledged} disabled={activation.isPending || Boolean(intent)} onChange={event => setAcknowledgedReview(event.target.checked ? reviewKey : undefined)} />
+                <input type="checkbox" checked={acknowledged} disabled={busy || Boolean(intent)} onChange={event => setAcknowledgedReview(event.target.checked ? reviewKey : undefined)} />
                 {' '}
-                <Trans>I intend to apply this exact revision without validation evidence.</Trans>
+                {action === 'reset' ? <Trans>I intend to restore system defaults without validation evidence.</Trans> : action === 'rollback' ? <Trans>I intend to restore the exact previous profile without validation evidence.</Trans> : <Trans>I intend to apply this exact revision without validation evidence.</Trans>}
               </label>
-              <Button disabled={activation.isPending || !acknowledged || (!review && !intent)} onClick={() => void apply().catch(() => {})}>{intent ? <Trans>Retry exact activation request</Trans> : <Trans>Apply unvalidated revision</Trans>}</Button>
+              <Button disabled={busy || !acknowledged || (!review && !intent)} onClick={() => void apply().catch(() => {})}>{intent ? <Trans>Retry exact activation request</Trans> : action === 'reset' ? <Trans>Restore system defaults</Trans> : action === 'rollback' ? <Trans>Restore previous profile</Trans> : <Trans>Apply unvalidated revision</Trans>}</Button>
             </>
           )
         : <ActivationReceipt side={side} id={eventId} />}
-      {activation.error ? <InlineError>{activation.error.message}</InlineError> : null}
+      {error ? <InlineError>{error.message}</InlineError> : null}
     </section>
   )
 }

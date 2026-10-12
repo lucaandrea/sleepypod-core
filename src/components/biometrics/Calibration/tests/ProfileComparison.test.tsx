@@ -51,3 +51,10 @@ it('retains intent-only changes without inventing numerical differences', async 
   expect(screen.getByText('hrv_index.minimumWindows')).toBeTruthy()
   expect(screen.queryByRole('table')).toBeNull()
 })
+
+it('requires a new recovery selection if the binding changed before comparison', () => {
+  render(<I18nProvider i18n={i18n}><ProfileComparison side="right" revisionId={null} action="reset" selectionGeneration={1} /></I18nProvider>)
+  expect(screen.getByText('The saved profile changed. Select a recovery action again to make a new request.')).toBeTruthy()
+  expect((screen.getByRole('button', { name: 'Compare with saved profile' }) as HTMLButtonElement).disabled).toBe(true)
+  expect(mock.compare).not.toHaveBeenCalled()
+})

@@ -2,11 +2,11 @@
 
 import { useState } from 'react'
 import { Trans } from '@lingui/react/macro'
-import { ManualProfileActivation } from './ManualProfileActivation'
+import { ManualProfileActivation, type ProfileAction } from './ManualProfileActivation'
 import { trpc } from '@/src/utils/trpc'
 import { Button, Card, CardHeader, InlineError, Skeleton } from '@/src/components/ds'
 
-export function ProfileComparison({ side, revisionId }: { side: 'left' | 'right', revisionId: string }) {
+export function ProfileComparison({ side, revisionId, action = 'activate', selectionGeneration }: { side: 'left' | 'right', revisionId: string | null, action?: ProfileAction, selectionGeneration?: number }) {
   const overview = trpc.biometricTuning.getProfileOverview.useQuery({ side }, { refetchInterval: 5000 })
   const diff = trpc.biometricTuning.diffProfileRevision.useMutation()
   const [reviewedGeneration, setReviewedGeneration] = useState<number>()
@@ -20,16 +20,17 @@ export function ProfileComparison({ side, revisionId }: { side: 'left' | 'right'
   }
   if (overview.error) return <InlineError>{overview.error.message}</InlineError>
   if (!current) return <Skeleton className="h-32" />
+  const selectionStale = selectionGeneration !== undefined && selectionGeneration !== current.binding.generation
   const reviewed = diff.data && reviewedGeneration !== undefined
-  const stale = reviewed && (reviewedGeneration !== current.binding.generation || diff.data.beforeHash !== current.hash || diff.data.revisionId !== revisionId)
+  const stale = selectionStale || (reviewed && (reviewedGeneration !== current.binding.generation || diff.data.beforeHash !== current.hash || diff.data.revisionId !== revisionId))
   return (
     <Card className="space-y-3">
-      <CardHeader title={<Trans>Candidate changes</Trans>} subtitle={<Trans>Compare against the saved profile. This is a configuration comparison, not validation evidence.</Trans>} />
-      <p className="break-all font-mono text-xs">{revisionId}</p>
+      <CardHeader title={action === 'reset' ? <Trans>Restore system defaults</Trans> : action === 'rollback' ? <Trans>Restore previous profile</Trans> : <Trans>Candidate changes</Trans>} subtitle={<Trans>Compare against the saved profile. This is a configuration comparison, not validation evidence.</Trans>} />
+      <p className="break-all font-mono text-xs">{revisionId ?? <Trans>System defaults</Trans>}</p>
       {current.warning ? <InlineError>{current.warning}</InlineError> : null}
-      <Button disabled={diff.isPending || Boolean(current.warning)} onClick={() => void compare().catch(() => {})}><Trans>Compare with saved profile</Trans></Button>
+      <Button disabled={selectionStale || diff.isPending || Boolean(current.warning)} onClick={() => void compare().catch(() => {})}><Trans>Compare with saved profile</Trans></Button>
       {diff.error ? <InlineError>{diff.error.message}</InlineError> : null}
-      {stale ? <p role="status"><Trans>The saved profile changed. Compare again before reviewing these changes.</Trans></p> : null}
+      {selectionStale ? <p role="status"><Trans>The saved profile changed. Select a recovery action again to make a new request.</Trans></p> : stale ? <p role="status"><Trans>The saved profile changed. Compare again before reviewing these changes.</Trans></p> : null}
       {reviewed && !stale
         ? (
             <>
@@ -69,7 +70,7 @@ export function ProfileComparison({ side, revisionId }: { side: 'left' | 'right'
             </>
           )
         : null}
-      <ManualProfileActivation side={side} revisionId={revisionId} review={reviewed && !stale && !current.warning ? { generation: reviewedGeneration, hash: diff.data.afterHash } : undefined} />
+      <ManualProfileActivation action={action} side={side} revisionId={revisionId} review={reviewed && !stale && !current.warning ? { generation: reviewedGeneration, hash: diff.data.afterHash } : undefined} />
     </Card>
   )
 }

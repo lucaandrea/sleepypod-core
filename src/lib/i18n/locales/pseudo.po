@@ -34,25 +34,25 @@ msgstr ""
 msgid "Activation history"
 msgstr ""
 
-#: src/components/biometrics/Calibration/ManualProfileActivation.tsx:62
+#: src/components/biometrics/Calibration/ManualProfileActivation.tsx:76
 msgid "Activation request saved. Processor acknowledgement is reported separately below."
 msgstr ""
 
-#: src/components/biometrics/Calibration/ManualProfileActivation.tsx:36
+#: src/components/biometrics/Calibration/ManualProfileActivation.tsx:50
 msgid "Activation timing"
 msgstr ""
 
-#: src/components/biometrics/Calibration/ProfileComparison.tsx:52
+#: src/components/biometrics/Calibration/ProfileComparison.tsx:53
 msgid "After"
 msgstr ""
 
-#: src/components/biometrics/Calibration/ProfileComparison.tsx:39
+#: src/components/biometrics/Calibration/ProfileComparison.tsx:40
 msgid "After configuration hash"
 msgstr ""
 
 #: src/components/biometrics/Calibration/CalibrationHistory.tsx:18
 #: src/components/biometrics/Calibration/CalibrationOverview.tsx:17
-#: src/components/biometrics/Calibration/ManualProfileActivation.tsx:59
+#: src/components/biometrics/Calibration/ManualProfileActivation.tsx:73
 msgid "Applied"
 msgstr ""
 
@@ -60,19 +60,19 @@ msgstr ""
 msgid "Apply profile"
 msgstr ""
 
-#: src/components/biometrics/Calibration/ManualProfileActivation.tsx:48
+#: src/components/biometrics/Calibration/ManualProfileActivation.tsx:62
 msgid "Apply unvalidated revision"
 msgstr ""
 
-#: src/components/biometrics/Calibration/ProfileComparison.tsx:51
+#: src/components/biometrics/Calibration/ProfileComparison.tsx:52
 msgid "Before"
 msgstr ""
 
-#: src/components/biometrics/Calibration/ProfileComparison.tsx:37
+#: src/components/biometrics/Calibration/ProfileComparison.tsx:38
 msgid "Before configuration hash"
 msgstr ""
 
-#: src/components/biometrics/Calibration/BiometricCalibration.tsx:21
+#: src/components/biometrics/Calibration/BiometricCalibration.tsx:22
 msgid "Biometric calibration"
 msgstr ""
 
@@ -80,11 +80,11 @@ msgstr ""
 msgid "Breathing rate"
 msgstr ""
 
-#: src/components/biometrics/Calibration/BiometricCalibration.tsx:22
+#: src/components/biometrics/Calibration/BiometricCalibration.tsx:23
 msgid "Calibration views"
 msgstr ""
 
-#: src/components/biometrics/Calibration/ProfileComparison.tsx:27
+#: src/components/biometrics/Calibration/ProfileComparison.tsx:28
 msgid "Candidate changes"
 msgstr ""
 
@@ -100,7 +100,7 @@ msgstr ""
 msgid "Candidate saved: {saved}"
 msgstr ""
 
-#: src/components/biometrics/Calibration/ManualProfileActivation.tsx:72
+#: src/components/biometrics/Calibration/ManualProfileActivation.tsx:86
 msgid "Check Overview for current processor health; a past acknowledgement does not prove current health."
 msgstr ""
 
@@ -108,11 +108,11 @@ msgstr ""
 msgid "Clock mismatch"
 msgstr ""
 
-#: src/components/biometrics/Calibration/ProfileComparison.tsx:27
+#: src/components/biometrics/Calibration/ProfileComparison.tsx:28
 msgid "Compare against the saved profile. This is a configuration comparison, not validation evidence."
 msgstr ""
 
-#: src/components/biometrics/Calibration/ProfileComparison.tsx:30
+#: src/components/biometrics/Calibration/ProfileComparison.tsx:31
 msgid "Compare with saved profile"
 msgstr ""
 
@@ -162,7 +162,7 @@ msgstr ""
 msgid "Different versions reported"
 msgstr ""
 
-#: src/components/biometrics/Calibration/BiometricCalibration.tsx:43
+#: src/components/biometrics/Calibration/BiometricCalibration.tsx:49
 msgid "Direct sleep-stage changes are unvalidated manual settings. Saving requests a profile change; processor adoption is reported separately in Overview."
 msgstr ""
 
@@ -204,7 +204,7 @@ msgstr ""
 
 #: src/components/biometrics/Calibration/CalibrationHistory.tsx:18
 #: src/components/biometrics/Calibration/CalibrationOverview.tsx:15
-#: src/components/biometrics/Calibration/ManualProfileActivation.tsx:59
+#: src/components/biometrics/Calibration/ManualProfileActivation.tsx:73
 msgid "Failed"
 msgstr ""
 
@@ -235,7 +235,7 @@ msgstr ""
 msgid "Historical sleep stages are recomputed with the current classifier. Original stored vitals remain separate from replay results."
 msgstr ""
 
-#: src/components/biometrics/Calibration/BiometricCalibration.tsx:26
+#: src/components/biometrics/Calibration/BiometricCalibration.tsx:27
 msgid "History"
 msgstr ""
 
@@ -243,11 +243,19 @@ msgstr ""
 msgid "HRV index"
 msgstr ""
 
-#: src/components/biometrics/Calibration/ManualProfileActivation.tsx:46
+#: src/components/biometrics/Calibration/ManualProfileActivation.tsx:60
 msgid "I intend to apply this exact revision without validation evidence."
 msgstr ""
 
-#: src/components/biometrics/Calibration/ManualProfileActivation.tsx:39
+#: src/components/biometrics/Calibration/ManualProfileActivation.tsx:60
+msgid "I intend to restore system defaults without validation evidence."
+msgstr ""
+
+#: src/components/biometrics/Calibration/ManualProfileActivation.tsx:60
+msgid "I intend to restore the exact previous profile without validation evidence."
+msgstr ""
+
+#: src/components/biometrics/Calibration/ManualProfileActivation.tsx:53
 msgid "Immediate processing boundary"
 msgstr ""
 
@@ -279,11 +287,11 @@ msgstr ""
 msgid "Keep import"
 msgstr ""
 
-#: src/components/biometrics/Calibration/ManualProfileActivation.tsx:30
+#: src/components/biometrics/Calibration/ManualProfileActivation.tsx:44
 msgid "Manual activation"
 msgstr ""
 
-#: src/components/biometrics/Calibration/ManualProfileActivation.tsx:31
+#: src/components/biometrics/Calibration/ManualProfileActivation.tsx:45
 msgid "Manual application is unvalidated. It can change heart rate, breathing rate, the HRV index, and dependent sleep stages."
 msgstr ""
 
@@ -320,11 +328,11 @@ msgstr ""
 msgid "Next records"
 msgstr ""
 
-#: src/components/biometrics/Calibration/ManualProfileActivation.tsx:38
+#: src/components/biometrics/Calibration/ManualProfileActivation.tsx:52
 msgid "Next session boundary"
 msgstr ""
 
-#: src/components/biometrics/Calibration/ManualProfileActivation.tsx:42
+#: src/components/biometrics/Calibration/ManualProfileActivation.tsx:56
 msgid "Next session waits for a known empty-bed boundary. Immediate application still waits for a safe processing boundary."
 msgstr ""
 
@@ -336,7 +344,7 @@ msgstr ""
 msgid "No activation history for this side."
 msgstr ""
 
-#: src/components/biometrics/Calibration/ProfileComparison.tsx:68
+#: src/components/biometrics/Calibration/ProfileComparison.tsx:69
 msgid "No override intent changes."
 msgstr ""
 
@@ -344,7 +352,7 @@ msgstr ""
 msgid "No reference imports for this side."
 msgstr ""
 
-#: src/components/biometrics/Calibration/ProfileComparison.tsx:43
+#: src/components/biometrics/Calibration/ProfileComparison.tsx:44
 msgid "No resolved value changes."
 msgstr ""
 
@@ -366,7 +374,7 @@ msgstr ""
 
 #: src/components/biometrics/Calibration/CalibrationOverview.tsx:15
 #: src/components/biometrics/Calibration/CalibrationOverview.tsx:26
-#: src/components/biometrics/Calibration/ManualProfileActivation.tsx:59
+#: src/components/biometrics/Calibration/ManualProfileActivation.tsx:73
 msgid "Not reported"
 msgstr ""
 
@@ -386,15 +394,15 @@ msgstr ""
 msgid "Overridden"
 msgstr ""
 
-#: src/components/biometrics/Calibration/ProfileComparison.tsx:67
+#: src/components/biometrics/Calibration/ProfileComparison.tsx:68
 msgid "Override intent can change even when the resolved value stays the same."
 msgstr ""
 
-#: src/components/biometrics/Calibration/BiometricCalibration.tsx:23
+#: src/components/biometrics/Calibration/BiometricCalibration.tsx:24
 msgid "Overview"
 msgstr ""
 
-#: src/components/biometrics/Calibration/ProfileComparison.tsx:50
+#: src/components/biometrics/Calibration/ProfileComparison.tsx:51
 msgid "Parameter"
 msgstr ""
 
@@ -438,7 +446,7 @@ msgstr ""
 msgid "Profile resolution failed."
 msgstr ""
 
-#: src/components/biometrics/Calibration/BiometricCalibration.tsx:25
+#: src/components/biometrics/Calibration/BiometricCalibration.tsx:26
 msgid "Profiles"
 msgstr ""
 
@@ -470,7 +478,7 @@ msgstr ""
 msgid "Reference source"
 msgstr ""
 
-#: src/components/biometrics/Calibration/BiometricCalibration.tsx:24
+#: src/components/biometrics/Calibration/BiometricCalibration.tsx:25
 msgid "References"
 msgstr ""
 
@@ -491,20 +499,43 @@ msgstr ""
 msgid "Resolved configuration hash"
 msgstr ""
 
-#: src/components/biometrics/Calibration/ProfileComparison.tsx:47
+#: src/components/biometrics/Calibration/ProfileComparison.tsx:48
 msgid "Resolved parameter changes"
 msgstr ""
 
+#: src/components/biometrics/Calibration/ProfileRecovery.tsx:15
+msgid "Restore a profile"
+msgstr ""
+
 #: src/components/biometrics/Calibration/CalibrationHistory.tsx:17
+#: src/components/biometrics/Calibration/ManualProfileActivation.tsx:62
+#: src/components/biometrics/Calibration/ProfileComparison.tsx:28
 msgid "Restore previous profile"
 msgstr ""
 
-#: src/components/biometrics/Calibration/ManualProfileActivation.tsx:48
+#: src/components/biometrics/Calibration/ManualProfileActivation.tsx:62
+#: src/components/biometrics/Calibration/ProfileComparison.tsx:28
+msgid "Restore system defaults"
+msgstr ""
+
+#: src/components/biometrics/Calibration/ManualProfileActivation.tsx:62
 msgid "Retry exact activation request"
 msgstr ""
 
 #: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:90
 msgid "Review candidate"
+msgstr ""
+
+#: src/components/biometrics/Calibration/ProfileRecovery.tsx:15
+msgid "Review changes before requesting system defaults or the exact previous profile."
+msgstr ""
+
+#: src/components/biometrics/Calibration/ProfileRecovery.tsx:19
+msgid "Review previous profile"
+msgstr ""
+
+#: src/components/biometrics/Calibration/ProfileRecovery.tsx:18
+msgid "Review system defaults"
 msgstr ""
 
 #. placeholder {0}: profile.revision
@@ -588,6 +619,7 @@ msgid "Start from the saved profile. Existing sleep-stage overrides are preserve
 msgstr ""
 
 #: src/components/biometrics/Calibration/CalibrationOverview.tsx:25
+#: src/components/biometrics/Calibration/ProfileComparison.tsx:29
 msgid "System defaults"
 msgstr ""
 
@@ -595,8 +627,12 @@ msgstr ""
 msgid "The HRV index measures window IBI variability. It is not clinical beat-to-beat RMSSD, and incompatible reference metrics cannot validate it."
 msgstr ""
 
-#: src/components/biometrics/Calibration/ProfileComparison.tsx:32
+#: src/components/biometrics/Calibration/ProfileComparison.tsx:33
 msgid "The saved profile changed. Compare again before reviewing these changes."
+msgstr ""
+
+#: src/components/biometrics/Calibration/ProfileComparison.tsx:33
+msgid "The saved profile changed. Select a recovery action again to make a new request."
 msgstr ""
 
 #: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:28
@@ -607,7 +643,7 @@ msgstr ""
 msgid "This is the first-to-last record span, not continuous coverage or overlap with pod readings."
 msgstr ""
 
-#: src/components/biometrics/Calibration/ManualProfileActivation.tsx:71
+#: src/components/biometrics/Calibration/ManualProfileActivation.tsx:85
 msgid "This request has been superseded by another profile change."
 msgstr ""
 
@@ -642,13 +678,13 @@ msgstr ""
 
 #: src/components/biometrics/Calibration/CalibrationHistory.tsx:18
 #: src/components/biometrics/Calibration/CalibrationOverview.tsx:17
-#: src/components/biometrics/Calibration/ManualProfileActivation.tsx:59
+#: src/components/biometrics/Calibration/ManualProfileActivation.tsx:73
 msgid "Waiting for a processing boundary"
 msgstr ""
 
 #: src/components/biometrics/Calibration/CalibrationHistory.tsx:18
 #: src/components/biometrics/Calibration/CalibrationOverview.tsx:16
-#: src/components/biometrics/Calibration/ManualProfileActivation.tsx:59
+#: src/components/biometrics/Calibration/ManualProfileActivation.tsx:73
 msgid "Waiting for delivery"
 msgstr ""
 

@@ -9,6 +9,7 @@ import { CalibrationOverview } from './CalibrationOverview'
 import { CalibrationReferences } from './CalibrationReferences'
 import { ReferenceLibrary } from './ReferenceLibrary'
 import { ProfileLibrary } from './ProfileLibrary'
+import { ProfileRecovery } from './ProfileRecovery'
 import { CalibrationHistory } from './CalibrationHistory'
 
 type Side = 'left' | 'right'
@@ -27,7 +28,12 @@ export function BiometricCalibration({ side, onSideChange }: { side: Side, onSid
         </nav>
       </Card>
       {view === 'overview'
-        ? <CalibrationOverview side={side} />
+        ? (
+            <div key={side} className="space-y-4">
+              <CalibrationOverview side={side} />
+              <ProfileRecovery side={side} />
+            </div>
+          )
         : view === 'references'
           ? (
               <div key={side} className="space-y-4">
