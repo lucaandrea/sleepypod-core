@@ -12,6 +12,7 @@ import { ProfileStore, revisionInput } from '@/src/biometrics/profiles/store'
 import { biometricConfigSchema, overrideSchema, profileOverviewSchema, revisionSchema } from '@/src/biometrics/profiles/contracts'
 import { diffProfiles } from '@/src/biometrics/profiles/diff'
 import { profileOverview } from '@/src/biometrics/profiles/overview'
+import { activationHistorySchema, listActivationHistory } from '@/src/biometrics/profiles/history'
 import { DatasetStore, createDatasetSchema } from '@/src/biometrics/backtest/datasets'
 import { listReplaySessions, sessionCapabilities, sessionPageSchema, sessionCapabilitiesSchema } from '@/src/biometrics/backtest/discovery'
 import { workerBuildHash } from '@/src/biometrics/backtest/child'
@@ -66,6 +67,12 @@ const experimentDescriptorSchema = z.object({ id: z.string().uuid(), datasetId: 
   protocolHash: z.string(), holdoutAccesses: z.number(), createdAtMs: z.number() })
 
 export const biometricTuningRouter = router({
+  listActivationHistory: publicProcedure
+    .meta({ openapi: { method: 'GET', path: '/biometric-tuning/activations', protect: false, tags: ['Biometric tuning'] } })
+    .input(z.object({ side: sideSchema, beforeGeneration: z.number().int().positive().optional() }).strict())
+    .output(activationHistorySchema)
+    .query(({ input }) => listActivationHistory(db, input.side, input.beforeGeneration)),
+
   listSessions: publicProcedure
     .meta({ openapi: { method: 'GET', path: '/biometric-tuning/sessions', protect: false, tags: ['Biometric tuning'] } })
     .input(z.object({ side: sideSchema, beforeStartMs: z.number().int().nonnegative().optional(), beforeId: z.number().int().positive().optional() }).strict()

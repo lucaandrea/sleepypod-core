@@ -85,3 +85,11 @@ configuration hashing, with a separate bounded budget for realistic multi-night
 rows. Configuration limits remain unchanged. Dataset hashes are checked when
 reading retained input data, and metadata reads verify available snapshots;
 released metadata remains readable without pretending inputs still exist.
+
+Activation history is available through `listActivationHistory` (side and
+optional `beforeGeneration` cursor). Pages contain at most fifty events and
+include fallback/default-update evidence. Profile overview separates its
+historical receipts from `runtimeHealth`, which reports current numerical
+heartbeat freshness and configuration consistency. General profile activation
+mutations remain unavailable; legacy stage settings already use the versioned
+intent and acknowledgment protocol.

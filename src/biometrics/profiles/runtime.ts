@@ -70,7 +70,16 @@ export function repairCurrentRuntimeProjections(configDb: BetterSQLite3Database<
     if (row) {
       const payload = runtimePayloadSchema.parse(row.payload)
       if (payload.side !== row.side || payload.generation !== row.generation || payload.resolvedHash !== row.resolvedHash) throw new ReferenceInputError('PROFILE_INCOMPATIBLE', 'Stored runtime envelope and payload disagree')
-      if (!projectRuntimeConfig(bioDb, payload, now).alreadyProjected) restored++
+      try {
+        if (!projectRuntimeConfig(bioDb, payload, now).alreadyProjected) restored++
+      }
+      catch (error) {
+        if (!(error instanceof ReferenceInputError) || error.code !== 'REVISION_CONFLICT') throw error
+        // Preserve the conflicting immutable row for diagnosis. Recovery will
+        // publish a fresh audited generation on its next pass.
+        configDb.update(configSchema.biometricConfigOutbox).set({ state: 'failed', lastError: 'Runtime projection conflicts with authoritative intent' })
+          .where(eq(configSchema.biometricConfigOutbox.id, row.id)).run()
+      }
     }
   }
   return restored
@@ -95,7 +104,7 @@ export function reconcileActivation(configDb: BetterSQLite3Database<typeof confi
   return configDb.transaction((tx) => {
     const current = tx.select().from(configSchema.biometricProfileBindings).where(eq(configSchema.biometricProfileBindings.side, side)).get()
     if (current?.generation !== binding.generation) return null
-    tx.update(configSchema.biometricActivationEvents).set({ state, reason: rejected ? 'Runtime component rejected configuration' : delivery?.state === 'failed' ? event.reason : null,
+    tx.update(configSchema.biometricActivationEvents).set({ state, reason: rejected ? 'Runtime component rejected configuration' : delivery?.state === 'failed' || event.action === 'fallback' ? event.reason : null,
       updatedAtMs: state === event.state ? event.updatedAtMs : now }).where(eq(configSchema.biometricActivationEvents.id, event.id)).run()
     return { side, generation: binding.generation, state, resolvedHash: event.nextHash, receipts }
   }, { behavior: 'immediate' })

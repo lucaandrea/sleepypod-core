@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { stageViewSchema } from './stage-view'
+import { runtimeHealthSchema } from './health'
 import { stageClassifierSchema } from '@/src/lib/sleep-stage-rules'
 import { biometricManifest, validateConfig, type BiometricConfig } from '../algorithms/registry'
 
@@ -28,6 +29,7 @@ export const profileOverviewSchema = z.object({
   stageView: stageViewSchema,
   desired: z.object({ binding: bindingSchema, resolved: biometricConfigSchema, hash: z.string(), isDefault: z.boolean(), warning: z.string().nullable() }),
   legacyStageView: z.object({ classifier: stageClassifierSchema, personalized: z.boolean(), migrationPending: z.boolean() }),
+  runtimeHealth: runtimeHealthSchema,
   runtimeStatus: z.enum(['unreported', 'receipts_available']),
   receipts: z.array(z.object({ component: z.string(), generation: z.number(), appliedHash: z.string(), effectiveSampleTimeMs: z.number().nullable(),
     state: z.enum(['pending_boundary', 'applied', 'failed']), error: z.string().nullable(), heartbeatAtMs: z.number() })),

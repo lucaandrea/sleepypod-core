@@ -2,6 +2,7 @@ import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3'
 import type * as configSchema from '@/src/db/schema'
 import type * as bioSchema from '@/src/db/biometrics-schema'
 import { ProfileStore } from './store'
+import { recoverRuntimeIntent } from './recovery'
 import { deliverRuntimeOutbox, reconcileActivation, repairCurrentRuntimeProjections } from './runtime'
 
 type ConfigDB = BetterSQLite3Database<typeof configSchema>
@@ -21,6 +22,7 @@ export function tickBiometricRuntime(configDb: ConfigDB, bioDb: BioDB, now = Dat
   }
   const profiles = new ProfileStore(configDb, () => now)
   for (const side of ['left', 'right'] as const) attempt(`migration:${side}`, () => profiles.migrateLegacy(side))
+  for (const side of ['left', 'right'] as const) attempt(`intent-recovery:${side}`, () => recoverRuntimeIntent(configDb, side, now))
   attempt('projection-repair', () => repairCurrentRuntimeProjections(configDb, bioDb, now))
   attempt('outbox-delivery', () => deliverRuntimeOutbox(configDb, bioDb, now))
   for (const side of ['left', 'right'] as const) attempt(`reconcile:${side}`, () => reconcileActivation(configDb, bioDb, side, now))

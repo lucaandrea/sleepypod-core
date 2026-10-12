@@ -30,8 +30,8 @@ changes while reconciling.
 The Node startup hook starts one `globalThis` coordinator after migrations.
 Every five seconds it migrates legacy stage personalization, repairs delivered
 projections, delivers pending intents and reconciles receipts. Shutdown stops
-its timer. General public activation remains unavailable pending default-update
-and incompatible-engine fallback auditing, freshness reporting and final gates.
+its timer. General public activation remains unavailable pending the public
+mutation endpoints and final end-to-end gates.
 There are no hardware-command paths in these services.
 
 The Python `common.biometrics.runtime` reader independently validates the latest
@@ -71,8 +71,8 @@ by all three numerical components, with fresh estimator warmup. Pending
 next-session requests still require known empty occupancy. Invalid projections
 retain the actual compatible configuration and report degraded module health;
 an incompatible restored configuration falls back to defaults. Missing schema
-prevents custom adoption and preserves legacy writes. Persisted fallback audit
-and automatic default-update projection remain outstanding.
+prevents custom adoption and preserves legacy writes. The coordinator records
+fallback intent separately from the consumer receipts proving its adoption.
 
 The stage reader selects the newest projection for which all three numerical
 components acknowledged the exact bundle hash and an effective boundary. Partial
@@ -95,3 +95,30 @@ The response retains classifier/isDefault fields and adds pending activation
 identity. Existing legacy columns remain migration baselines, never a second
 writable authority. These changes are manual/unvalidated. Demo responses label
 simulated adoption explicitly.
+
+`recoverRuntimeIntent` handles obsolete defaults, missing intent and unavailable
+pinned engines. It publishes a new generation and audit event atomically with
+its outbox payload. Fallback preserves the desired pinned revision, immutable
+revision history and the previous rollback target. Repeated recovery passes are
+idempotent. If that same pinned engine becomes compatible again, restoration
+waits for the next session. Repair of a lost custom boundary also defaults to the
+next session. The fallback explanation survives acknowledgment and remains
+visible in the stage view and desired-profile warning.
+
+A conflicting biometric projection is retained for diagnosis and its delivery
+marked failed. The next recovery pass creates a new generation; it does not
+rewrite the conflicting immutable snapshot. Missing projections after history
+reset are simply redelivered with their original identity.
+
+Profile overview includes numerical processor health separately from historical
+adoption. All three components must report the same generation/hash and a
+heartbeat no more than 120 seconds old to be current. Missing components,
+incomplete adoption, failures, future timestamps and mixed generations are
+reported explicitly. The retrospective stage consumer is on demand and is not
+subject to that continuous heartbeat test. This reports health; it does not
+claim an old activation was never applied or automatically switch algorithms.
+
+`biometricTuning.listActivationHistory` / `GET /biometric-tuning/activations`
+returns side-scoped audit events, fifty per page using a generation cursor.
+Results include exact hashes, revision identities, evidence and fallback reason;
+internal request hashes and idempotency keys are omitted.

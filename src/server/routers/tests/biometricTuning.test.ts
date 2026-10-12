@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as schema from '@/src/db/biometrics-schema'
 import * as configSchema from '@/src/db/schema'
 import { DEFAULT_STAGE_CLASSIFIER } from '@/src/lib/sleep-stage-rules'
+import { ProfileStore } from '@/src/biometrics/profiles/store'
 
 const holder = vi.hoisted(() => ({ bio: null as unknown, config: null as unknown }))
 vi.mock('@/src/db', () => ({
@@ -112,11 +113,23 @@ describe('shared biometric reference API', () => {
     expect((await caller.listProfileRevisions({ side: 'left' })).items[0].id).toBe(revision.id)
     expect((await caller.listProfileRevisions({ side: 'right' })).items).toEqual([])
     expect(await caller.getProfileOverview({ side: 'left' })).toMatchObject({
-      desired: { isDefault: true, binding: { generation: 0 } }, runtimeStatus: 'unreported', activationAvailable: false,
+      desired: { isDefault: true, binding: { generation: 0 } }, runtimeStatus: 'unreported', runtimeHealth: { state: 'unreported' }, activationAvailable: false,
     })
     expect(configSqlite.prepare('SELECT count(*) AS total FROM biometric_config_outbox').get()).toEqual({ total: 0 })
     await expect(caller.createProfileRevision({ ...request, overrides: [] })).rejects.toMatchObject({ code: 'CONFLICT' })
     await expect(caller.resolveProfile({ overrides: [{ path: 'heart_rate.madeUp', value: 1 }] })).rejects.toMatchObject({ code: 'BAD_REQUEST' })
+  })
+
+  it('returns side-scoped activation history and rejects malformed cursors', async () => {
+    const configDb = holder.config as ReturnType<typeof drizzle<typeof configSchema>>
+    configDb.insert(configSchema.sideSettings).values({ side: 'left', name: 'Left', stageClassifier: DEFAULT_STAGE_CLASSIFIER }).run()
+    new ProfileStore(configDb).migrateLegacy('left')
+    const history = await caller.listActivationHistory({ side: 'left' })
+    expect(history.items).toHaveLength(1)
+    expect(history.items[0]).toMatchObject({ action: 'migration', generation: 1, state: 'pending_delivery' })
+    expect(history.items[0]).not.toHaveProperty('requestHash')
+    expect((await caller.listActivationHistory({ side: 'right' })).items).toEqual([])
+    await expect(caller.listActivationHistory({ side: 'left', beforeGeneration: -1 })).rejects.toMatchObject({ code: 'BAD_REQUEST' })
   })
 
   it('reports legacy stage personalization and expired sensor calibration without fabricating runtime adoption', async () => {

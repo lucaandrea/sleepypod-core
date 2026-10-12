@@ -5,6 +5,7 @@ import * as bioSchema from '@/src/db/biometrics-schema'
 import { resolveStageClassifier } from '@/src/lib/sleep-stage-rules'
 import { ProfileStore } from './store'
 import { resolveStageView } from './stage-view'
+import { runtimeHealth } from './health'
 
 /** Read-only inspection keeps desired intent separate from runtime evidence. */
 export function profileOverview(configDb: BetterSQLite3Database<typeof configSchema>, bioDb: BetterSQLite3Database<typeof bioSchema>, side: 'left' | 'right', now = Date.now()) {
@@ -24,9 +25,10 @@ export function profileOverview(configDb: BetterSQLite3Database<typeof configSch
   return { desired, stageView: resolveStageView(configDb, bioDb, side),
     legacyStageView: { classifier: resolveStageClassifier(legacy?.classifier), personalized: legacy?.classifier != null,
       migrationPending: legacy?.classifier != null && desired.binding.generation === 0 },
+    runtimeHealth: runtimeHealth(latest, now),
     runtimeStatus: latest.length ? 'receipts_available' as const : 'unreported' as const, receipts: latest, sensorCalibration,
     activationAvailable: false,
     limitations: ['Desired configuration is not proof of runtime adoption.', 'Measured sensor calibration is independent of algorithm personalization.',
-      'Runtime activation remains unavailable until projection and processor acknowledgment are enabled.'],
+      'General profile activation is not yet available.'],
   }
 }

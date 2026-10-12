@@ -8,6 +8,7 @@ import { resolveStageClassifier, stageClassifierSchema } from '@/src/lib/sleep-s
 import { configHash } from '../algorithms/canonical'
 import { defaultConfig, manifestHash, validateConfig } from '../algorithms/registry'
 import { runtimePayloadSchema } from './runtime'
+import { ProfileStore } from './store'
 
 export const stageViewSchema = z.object({
   classifier: stageClassifierSchema,
@@ -43,7 +44,8 @@ export function resolveStageView(configDb: ConfigDB, bioDb: BioDB, side: Side): 
     .innerJoin(breathing, match(breathing, 'breathing_rate'))
     .innerJoin(hrv, match(hrv, 'hrv_index'))
     .where(eq(projection.side, side)).orderBy(desc(projection.generation)).limit(1).get()
-  let warning: string | null = null
+  const desiredWarning = new ProfileStore(configDb).effective(side).warning
+  let warning: string | null = desiredWarning
   if (eligible) {
     try {
       if (eligible.heartTime === null || eligible.breathingTime === null || eligible.hrvTime === null) throw new Error('Missing runtime boundary')
@@ -57,7 +59,7 @@ export function resolveStageView(configDb: ConfigDB, bioDb: BioDB, side: Side): 
       return { classifier: resolved.sleep_stages, isDefault: configHash(resolved.sleep_stages) === configHash(defaultConfig.sleep_stages),
         provenance: { interpretation: 'current_classifier_view', source: 'runtime', generation: row.generation,
           revisionId: payload.revisionId, bundleHash: row.resolvedHash, stageHash: configHash(resolved.sleep_stages), manifestHash,
-          effectiveSampleTimeMs: Math.max(eligible.heartTime, eligible.breathingTime, eligible.hrvTime), warning: null } }
+          effectiveSampleTimeMs: Math.max(eligible.heartTime, eligible.breathingTime, eligible.hrvTime), warning: payload.revisionId === null ? desiredWarning : null } }
     }
     catch {
       warning = 'Applied profile is incompatible with this build; stage view uses system defaults'
