@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { Trans, useLingui } from '@lingui/react/macro'
+import { BacktestReport } from './BacktestReport'
 import { trpc } from '@/src/utils/trpc'
 import { Button, Card, CardHeader, InlineError, Skeleton } from '@/src/components/ds'
 
@@ -46,6 +47,7 @@ export function BacktestJobs({ side }: { side: 'left' | 'right' }) {
 export function BacktestJobDetails({ id }: { id: string }) {
   const { t } = useLingui()
   const labels = useJobLabels()
+  const [showReport, setShowReport] = useState(false)
   const job = trpc.biometricTuning.getBacktest.useQuery({ id }, { refetchInterval: query => query.state.data && ['succeeded', 'failed', 'cancelled'].includes(query.state.data.state) ? false : 5000 })
   const cancel = trpc.biometricTuning.cancelBacktest.useMutation()
   const utils = trpc.useUtils()
@@ -75,6 +77,8 @@ export function BacktestJobDetails({ id }: { id: string }) {
       {data.state === 'succeeded' ? <p><Trans>Execution completed. Review the report before drawing conclusions about agreement or improvement.</Trans></p> : null}
       {['queued', 'running', 'interrupted'].includes(data.state) ? <Button disabled={cancel.isPending} onClick={() => void requestCancellation().catch(() => {})}><Trans>Cancel backtest</Trans></Button> : null}
       {cancel.error ? <InlineError>{cancel.error.message}</InlineError> : null}
+      {data.state === 'succeeded' ? <Button aria-expanded={showReport} onClick={() => setShowReport(!showReport)}><Trans>Review report</Trans></Button> : null}
+      {showReport && data.state === 'succeeded' ? <BacktestReport id={id} /> : null}
       <details>
         <summary><Trans>Pinned job inputs</Trans></summary>
         <dl className="break-all text-xs">

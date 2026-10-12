@@ -61,6 +61,10 @@ msgstr "Después"
 msgid "After configuration hash"
 msgstr "Hash de configuración posterior"
 
+#: src/components/biometrics/Calibration/BacktestReport.tsx:60
+msgid "Agreement"
+msgstr "Concordancia"
+
 #: src/components/biometrics/Calibration/DatasetBuilder.tsx:104
 msgid "Another revision from this reference family is selected."
 msgstr "Se ha seleccionado otra revisión de esta familia de referencias."
@@ -83,8 +87,13 @@ msgstr "Aplicar revisión sin validar"
 msgid "Assumed calibration quality (0–1)"
 msgstr "Calidad de calibración asumida (0–1)"
 
+#. placeholder {0}: report.calibration.quality
+#: src/components/biometrics/Calibration/BacktestReport.tsx:43
+msgid "Assumed stage calibration quality: {0}"
+msgstr "Calidad de calibración de fases asumida: {0}"
+
 #. placeholder {0}: job.attempt
-#: src/components/biometrics/Calibration/BacktestJobs.tsx:33
+#: src/components/biometrics/Calibration/BacktestJobs.tsx:34
 msgid "Attempt {0}"
 msgstr "Intento {0}"
 
@@ -92,7 +101,7 @@ msgstr "Intento {0}"
 msgid "Available reference records by metric (across revisions)"
 msgstr "Registros de referencia disponibles por métrica (entre revisiones)"
 
-#: src/components/biometrics/Calibration/BacktestJobs.tsx:20
+#: src/components/biometrics/Calibration/BacktestJobs.tsx:21
 msgid "Backtest jobs"
 msgstr "Trabajos de evaluación retrospectiva"
 
@@ -129,19 +138,20 @@ msgstr "Frecuencia respiratoria"
 msgid "Calibration views"
 msgstr "Vistas de calibración"
 
-#: src/components/biometrics/Calibration/BacktestJobs.tsx:76
+#: src/components/biometrics/Calibration/BacktestJobs.tsx:78
 msgid "Cancel backtest"
 msgstr "Cancelar evaluación retrospectiva"
 
-#: src/components/biometrics/Calibration/BacktestJobs.tsx:10
+#: src/components/biometrics/Calibration/BacktestJobs.tsx:11
 msgid "Cancellation requested"
 msgstr "Cancelación solicitada"
 
-#: src/components/biometrics/Calibration/BacktestJobs.tsx:10
+#: src/components/biometrics/Calibration/BacktestJobs.tsx:11
 msgid "Cancelled"
 msgstr "Cancelado"
 
-#: src/components/biometrics/Calibration/BacktestJobs.tsx:61
+#: src/components/biometrics/Calibration/BacktestJobs.tsx:63
+#: src/components/biometrics/Calibration/BacktestReport.tsx:28
 msgid "Candidate"
 msgstr "Candidato"
 
@@ -216,9 +226,13 @@ msgstr "Configuración alternativa compatible"
 msgid "Complete the required fields within their stated bounds."
 msgstr "Complete los campos obligatorios dentro de los límites indicados."
 
-#: src/components/biometrics/Calibration/BacktestJobs.tsx:71
+#: src/components/biometrics/Calibration/BacktestJobs.tsx:73
 msgid "Completed nights"
 msgstr "Noches completadas"
+
+#: src/components/biometrics/Calibration/BacktestReport.tsx:59
+msgid "Configuration"
+msgstr "Configuración"
 
 #: src/components/biometrics/Calibration/CalibrationOverview.tsx:36
 msgid "Configuration identity"
@@ -246,7 +260,13 @@ msgstr "Las estimaciones de cobertura usan la cadencia nominal de registro; no d
 msgid "Current"
 msgstr "Actual"
 
-#: src/components/biometrics/Calibration/BacktestJobs.tsx:61
+#. placeholder {0}: descriptor.currentHoldoutUseCount
+#: src/components/biometrics/Calibration/BacktestReport.tsx:41
+msgid "Current holdout exposure count: {0}"
+msgstr "Número actual de exposiciones al conjunto reservado: {0}"
+
+#: src/components/biometrics/Calibration/BacktestJobs.tsx:63
+#: src/components/biometrics/Calibration/BacktestReport.tsx:28
 msgid "Current stage view"
 msgstr "Vista de fases actual"
 
@@ -254,11 +274,12 @@ msgstr "Vista de fases actual"
 msgid "Data format"
 msgstr "Formato de datos"
 
-#: src/components/biometrics/Calibration/BacktestJobs.tsx:81
+#: src/components/biometrics/Calibration/BacktestJobs.tsx:85
 msgid "Dataset"
 msgstr "Conjunto de datos"
 
-#: src/components/biometrics/Calibration/BacktestJobs.tsx:83
+#: src/components/biometrics/Calibration/BacktestJobs.tsx:87
+#: src/components/biometrics/Calibration/BacktestReport.tsx:88
 msgid "Dataset hash"
 msgstr "Hash del conjunto de datos"
 
@@ -319,6 +340,15 @@ msgstr "Fin (UTC)"
 msgid "Engine manifest hash"
 msgstr "Hash del manifiesto del motor"
 
+#: src/components/biometrics/Calibration/BacktestReport.tsx:77
+msgid "Equal-night differences and pooled duration scores use different weighting. Coverage loss must be considered alongside score changes."
+msgstr "Las diferencias con igual peso por noche y las puntuaciones agrupadas por duración usan ponderaciones diferentes. La pérdida de cobertura debe considerarse junto con los cambios de puntuación."
+
+#. placeholder {0}: percent(summary.equalNightMeanAgreementDifference)
+#: src/components/biometrics/Calibration/BacktestReport.tsx:54
+msgid "Equal-night mean agreement difference: {0}"
+msgstr "Diferencia media de concordancia con igual peso por noche: {0}"
+
 #: src/components/biometrics/Calibration/ExperimentBuilder.tsx:68
 msgid "Estimate exploratory whole-night uncertainty"
 msgstr "Estimar incertidumbre exploratoria por noches completas"
@@ -331,11 +361,16 @@ msgstr "Modo de evaluación"
 msgid "Evaluation protocol"
 msgstr "Protocolo de evaluación"
 
+#: src/components/biometrics/Calibration/BacktestReport.tsx:38
+msgid "Evaluation report"
+msgstr "Informe de evaluación"
+
 #: src/components/biometrics/Calibration/BacktestSubmission.tsx:71
 msgid "Evaluation split"
 msgstr "Partición de evaluación"
 
-#: src/components/biometrics/Calibration/BacktestJobs.tsx:85
+#: src/components/biometrics/Calibration/BacktestJobs.tsx:89
+#: src/components/biometrics/Calibration/BacktestReport.tsx:92
 msgid "Evaluator build hash"
 msgstr "Hash de la compilación del evaluador"
 
@@ -355,15 +390,15 @@ msgstr "Cobertura exacta de los datos procesados"
 msgid "Exact profile transition"
 msgstr "Cambio exacto de perfil"
 
-#: src/components/biometrics/Calibration/BacktestJobs.tsx:10
+#: src/components/biometrics/Calibration/BacktestJobs.tsx:11
 msgid "Execution completed"
 msgstr "Ejecución completada"
 
-#: src/components/biometrics/Calibration/BacktestJobs.tsx:75
+#: src/components/biometrics/Calibration/BacktestJobs.tsx:77
 msgid "Execution completed. Review the report before drawing conclusions about agreement or improvement."
 msgstr "Ejecución completada. Revise el informe antes de sacar conclusiones sobre concordancia o mejora."
 
-#: src/components/biometrics/Calibration/BacktestJobs.tsx:20
+#: src/components/biometrics/Calibration/BacktestJobs.tsx:21
 msgid "Execution state is separate from the strength of biometric evidence."
 msgstr "El estado de ejecución es independiente de la solidez de la evidencia biométrica."
 
@@ -380,7 +415,17 @@ msgstr "Caducada"
 msgid "Explicit stage overrides"
 msgstr "Personalizaciones explícitas de fases"
 
-#: src/components/biometrics/Calibration/BacktestJobs.tsx:10
+#. placeholder {0}: percent(summary.uncertainty.interval.lower)
+#. placeholder {1}: percent(summary.uncertainty.interval.upper)
+#: src/components/biometrics/Calibration/BacktestReport.tsx:79
+msgid "Exploratory 95% interval: {0} to {1}"
+msgstr "Intervalo exploratorio del 95 %: de {0} a {1}"
+
+#: src/components/biometrics/Calibration/BacktestReport.tsx:30
+msgid "Exploratory interval estimated"
+msgstr "Intervalo exploratorio estimado"
+
+#: src/components/biometrics/Calibration/BacktestJobs.tsx:11
 #: src/components/biometrics/Calibration/CalibrationHistory.tsx:18
 #: src/components/biometrics/Calibration/CalibrationOverview.tsx:15
 #: src/components/biometrics/Calibration/ManualProfileActivation.tsx:73
@@ -443,6 +488,13 @@ msgstr "Umbral de picos de frecuencia cardíaca (desviaciones estándar)"
 msgid "Hello, tRPC test page!"
 msgstr "¡Hola, tRPC test page!"
 
+#. placeholder {0}: summary.improvedAgreementNights
+#. placeholder {1}: summary.regressedAgreementNights
+#. placeholder {2}: summary.unchangedAgreementNights
+#: src/components/biometrics/Calibration/BacktestReport.tsx:53
+msgid "Higher agreement: {0}; lower: {1}; unchanged: {2}"
+msgstr "Mayor concordancia: {0}; menor: {1}; sin cambios: {2}"
+
 #: src/components/biometrics/Calibration/CalibrationOverview.tsx:46
 msgid "Historical sleep stages are recomputed with the current classifier. Original stored vitals remain separate from replay results."
 msgstr "Las fases históricas del sueño se recalculan con el clasificador actual. Los signos vitales originales almacenados se mantienen separados de los resultados del reprocesamiento."
@@ -451,7 +503,8 @@ msgstr "Las fases históricas del sueño se recalculan con el clasificador actua
 msgid "History"
 msgstr "Historial"
 
-#: src/components/biometrics/Calibration/BacktestJobs.tsx:60
+#: src/components/biometrics/Calibration/BacktestJobs.tsx:62
+#: src/components/biometrics/Calibration/BacktestReport.tsx:29
 #: src/components/biometrics/Calibration/BacktestSubmission.tsx:75
 #: src/components/biometrics/Calibration/DatasetBuilder.tsx:20
 #: src/components/biometrics/Calibration/DatasetLibrary.tsx:62
@@ -532,7 +585,7 @@ msgstr "Inspeccionar conjunto de datos"
 msgid "Inspect frozen inputs and whole-night partitions, or release their retained storage."
 msgstr "Inspeccione los datos fijados y las particiones de noches completas, o libere su almacenamiento."
 
-#: src/components/biometrics/Calibration/BacktestJobs.tsx:34
+#: src/components/biometrics/Calibration/BacktestJobs.tsx:35
 msgid "Inspect job"
 msgstr "Inspeccionar trabajo"
 
@@ -545,17 +598,29 @@ msgstr "Inspeccionar mediciones"
 msgid "Inspect session {0}"
 msgstr "Inspeccionar sesión {0}"
 
-#: src/components/biometrics/Calibration/BacktestJobs.tsx:10
+#: src/components/biometrics/Calibration/BacktestReport.tsx:39
+msgid "Insufficient evidence for validated improvement"
+msgstr "Evidencia insuficiente para una mejora validada"
+
+#: src/components/biometrics/Calibration/BacktestReport.tsx:30
+msgid "Insufficient paired nights"
+msgstr "Noches emparejadas insuficientes"
+
+#: src/components/biometrics/Calibration/BacktestJobs.tsx:11
 msgid "Interrupted"
 msgstr "Interrumpido"
 
-#: src/components/biometrics/Calibration/BacktestJobs.tsx:63
+#: src/components/biometrics/Calibration/BacktestJobs.tsx:65
 msgid "Job details"
 msgstr "Detalles del trabajo"
 
 #: src/components/biometrics/Calibration/ReferenceLibrary.tsx:61
 msgid "Keep import"
 msgstr "Conservar importación"
+
+#: src/components/biometrics/Calibration/BacktestReport.tsx:101
+msgid "Keep report"
+msgstr "Conservar informe"
 
 #: src/components/biometrics/Calibration/DatasetLibrary.tsx:94
 msgid "Keep retained inputs"
@@ -564,6 +629,10 @@ msgstr "Conservar los datos retenidos"
 #: src/components/biometrics/Calibration/CandidateStageFields.tsx:30
 msgid "Low-signal calibration quality threshold"
 msgstr "Umbral de calidad de calibración para señal baja"
+
+#: src/components/biometrics/Calibration/BacktestReport.tsx:61
+msgid "Macro F1"
+msgstr "F1 macro"
 
 #: src/components/biometrics/Calibration/ManualProfileActivation.tsx:44
 msgid "Manual activation"
@@ -611,7 +680,7 @@ msgstr "Experimentos recientes"
 msgid "Newest imports"
 msgstr "Importaciones recientes"
 
-#: src/components/biometrics/Calibration/BacktestJobs.tsx:39
+#: src/components/biometrics/Calibration/BacktestJobs.tsx:40
 msgid "Newest jobs"
 msgstr "Trabajos recientes"
 
@@ -636,7 +705,7 @@ msgstr "Límite de la próxima sesión"
 msgid "Next session waits for a known empty-bed boundary. Immediate application still waits for a safe processing boundary."
 msgstr "La próxima sesión espera un límite con la cama vacía confirmada. La aplicación inmediata también espera un límite seguro de procesamiento."
 
-#: src/components/biometrics/Calibration/BacktestJobs.tsx:71
+#: src/components/biometrics/Calibration/BacktestJobs.tsx:73
 msgid "Night progress is not available yet."
 msgstr "El progreso por noches aún no está disponible."
 
@@ -648,9 +717,17 @@ msgstr "No hay un intervalo de tiempo aceptado."
 msgid "No activation history for this side."
 msgstr "No hay historial de activación para este lado."
 
-#: src/components/biometrics/Calibration/BacktestJobs.tsx:27
+#: src/components/biometrics/Calibration/BacktestJobs.tsx:28
 msgid "No backtest jobs for this side."
 msgstr "No hay trabajos de evaluación retrospectiva para este lado."
+
+#: src/components/biometrics/Calibration/BacktestReport.tsx:17
+msgid "No committed report is available yet."
+msgstr "Todavía no hay ningún informe guardado disponible."
+
+#: src/components/biometrics/Calibration/BacktestReport.tsx:30
+msgid "No estimable variation"
+msgstr "Sin variación estimable"
 
 #: src/components/biometrics/Calibration/ReplaySessionPicker.tsx:77
 msgid "No overlapping reference records."
@@ -712,6 +789,14 @@ msgstr "Mediciones de referencia normalizadas"
 msgid "Not reported"
 msgstr "Sin información"
 
+#: src/components/biometrics/Calibration/BacktestReport.tsx:30
+msgid "Not requested"
+msgstr "No solicitado"
+
+#: src/components/biometrics/Calibration/BacktestReport.tsx:31
+msgid "Not scored"
+msgstr "Sin puntuación"
+
 #: src/components/biometrics/Calibration/CalibrationHistory.tsx:63
 msgid "Older changes"
 msgstr "Cambios anteriores"
@@ -729,7 +814,7 @@ msgstr "Experimentos anteriores"
 msgid "Older imports"
 msgstr "Importaciones anteriores"
 
-#: src/components/biometrics/Calibration/BacktestJobs.tsx:40
+#: src/components/biometrics/Calibration/BacktestJobs.tsx:41
 msgid "Older jobs"
 msgstr "Trabajos anteriores"
 
@@ -742,7 +827,11 @@ msgstr "Noches anteriores"
 msgid "Older profiles"
 msgstr "Perfiles anteriores"
 
-#: src/components/biometrics/Calibration/BacktestJobs.tsx:68
+#: src/components/biometrics/Calibration/BacktestReport.tsx:43
+msgid "Original stored readings were compared; numerical parameter changes were not replayed."
+msgstr "Se compararon las lecturas originales almacenadas; no se reprocesaron los cambios de parámetros numéricos."
+
+#: src/components/biometrics/Calibration/BacktestJobs.tsx:70
 msgid "Original stored-reading comparison"
 msgstr "Comparación de lecturas originales almacenadas"
 
@@ -783,6 +872,10 @@ msgstr "Eliminar importación permanentemente"
 msgid "Permanently release inputs"
 msgstr "Liberar datos permanentemente"
 
+#: src/components/biometrics/Calibration/BacktestReport.tsx:100
+msgid "Permanently release report"
+msgstr "Liberar informe permanentemente"
+
 #: src/components/biometrics/Calibration/CalibrationOverview.tsx:25
 msgid "Personalized profile"
 msgstr "Perfil personalizado"
@@ -795,13 +888,17 @@ msgstr "Configuración fijada y personalizaciones"
 msgid "Pinned evaluation protocol"
 msgstr "Protocolo de evaluación fijado"
 
-#: src/components/biometrics/Calibration/BacktestJobs.tsx:79
+#: src/components/biometrics/Calibration/BacktestJobs.tsx:83
 msgid "Pinned job inputs"
 msgstr "Datos de entrada fijados del trabajo"
 
 #: src/components/biometrics/Calibration/ExperimentBuilder.tsx:58
 msgid "Point matching tolerance (ms, 0–300000)"
 msgstr "Tolerancia de coincidencia de puntos (ms, 0–300000)"
+
+#: src/components/biometrics/Calibration/BacktestReport.tsx:56
+msgid "Pooled common-support stage scores"
+msgstr "Puntuaciones de fases agrupadas en intervalos compartidos"
 
 #: src/components/biometrics/Calibration/BacktestSubmission.tsx:69
 msgid "Prepare a new request with the current baseline"
@@ -841,15 +938,19 @@ msgstr "Perfiles"
 
 #. placeholder {0}: data.progress.completedNights
 #. placeholder {1}: data.progress.totalNights
-#: src/components/biometrics/Calibration/BacktestJobs.tsx:70
+#: src/components/biometrics/Calibration/BacktestJobs.tsx:72
 msgid "Progress: {0} / {1} nights"
 msgstr "Progreso: {0} / {1} noches"
+
+#: src/components/biometrics/Calibration/BacktestReport.tsx:90
+msgid "Protocol hash"
+msgstr "Hash del protocolo"
 
 #: src/components/biometrics/Calibration/BacktestSubmission.tsx:87
 msgid "Queue backtest"
 msgstr "Poner evaluación retrospectiva en cola"
 
-#: src/components/biometrics/Calibration/BacktestJobs.tsx:10
+#: src/components/biometrics/Calibration/BacktestJobs.tsx:11
 msgid "Queued"
 msgstr "En cola"
 
@@ -889,6 +990,14 @@ msgstr "Fuente de referencia"
 msgid "References"
 msgstr "Referencias"
 
+#: src/components/biometrics/Calibration/BacktestReport.tsx:104
+msgid "Release detailed report"
+msgstr "Liberar informe detallado"
+
+#: src/components/biometrics/Calibration/BacktestReport.tsx:99
+msgid "Release detailed results permanently? The report hash, job history, and holdout exposure audit remain."
+msgstr "¿Liberar permanentemente los resultados detallados? Se conservan el hash del informe, el historial del trabajo y la auditoría de exposición al conjunto reservado."
+
 #: src/components/biometrics/Calibration/DatasetLibrary.tsx:97
 msgid "Release retained inputs"
 msgstr "Liberar datos conservados"
@@ -914,10 +1023,22 @@ msgstr "Quitar sesión {id}"
 msgid "Remove stage override"
 msgstr "Quitar personalización de fases"
 
+#: src/components/biometrics/Calibration/BacktestReport.tsx:42
+msgid "Repeated holdout exposure weakens independent evidence. Treat reused holdout results as validation, not untouched holdout evidence."
+msgstr "La exposición repetida al conjunto reservado debilita la evidencia independiente. Trate los resultados reutilizados como validación, no como evidencia de un conjunto reservado intacto."
+
 #: src/components/biometrics/Calibration/ExperimentBuilder.tsx:45
 #: src/components/biometrics/Calibration/ExperimentLibrary.tsx:28
 msgid "Replay sleep stages"
 msgstr "Reprocesar fases del sueño"
+
+#: src/components/biometrics/Calibration/BacktestReport.tsx:86
+msgid "Report hash"
+msgstr "Hash del informe"
+
+#: src/components/biometrics/Calibration/BacktestReport.tsx:84
+msgid "Report identity"
+msgstr "Identidad del informe"
 
 #: src/components/biometrics/Calibration/ExperimentBuilder.tsx:74
 msgid "Reproducible sampling seed"
@@ -992,6 +1113,10 @@ msgstr "Revise los cambios antes de solicitar los valores predeterminados del si
 msgid "Review previous profile"
 msgstr "Revisar perfil anterior"
 
+#: src/components/biometrics/Calibration/BacktestJobs.tsx:80
+msgid "Review report"
+msgstr "Revisar informe"
+
 #: src/components/biometrics/Calibration/ProfileRecovery.tsx:20
 msgid "Review system defaults"
 msgstr "Revisar valores predeterminados del sistema"
@@ -1016,7 +1141,7 @@ msgstr "Revisión {0}; aceptados {1}; no evaluables {2}"
 msgid "Row {0}: {1}"
 msgstr "Fila {0}: {1}"
 
-#: src/components/biometrics/Calibration/BacktestJobs.tsx:10
+#: src/components/biometrics/Calibration/BacktestJobs.tsx:11
 msgid "Running"
 msgstr "En ejecución"
 
@@ -1059,6 +1184,13 @@ msgstr "Los ajustes guardados y los informes del procesador son independientes."
 #: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:109
 msgid "Schema checks passed. Agreement with reference measurements has not been evaluated."
 msgstr "La validación del esquema se completó. No se ha evaluado la concordancia con las mediciones de referencia."
+
+#. placeholder {0}: summary.scoredNights
+#. placeholder {1}: summary.unscoredNights
+#. placeholder {2}: summary.coverageReducedNights
+#: src/components/biometrics/Calibration/BacktestReport.tsx:52
+msgid "Scored nights: {0}; unscored: {1}; coverage reduced: {2}"
+msgstr "Noches puntuadas: {0}; sin puntuar: {1}; cobertura reducida: {2}"
 
 #. placeholder {0}: selected.length
 #: src/components/biometrics/Calibration/DatasetBuilder.tsx:83
@@ -1107,7 +1239,7 @@ msgstr "Reprocesamiento de fases disponible"
 msgid "Stage replay unavailable"
 msgstr "Reprocesamiento de fases no disponible"
 
-#: src/components/biometrics/Calibration/BacktestJobs.tsx:68
+#: src/components/biometrics/Calibration/BacktestJobs.tsx:70
 msgid "Stage rules on original readings"
 msgstr "Reglas de fases sobre lecturas originales"
 
@@ -1137,7 +1269,8 @@ msgstr "Signos vitales almacenados: {0}; registros de movimiento: {1}"
 msgid "Stored-reading comparison available"
 msgstr "Comparación de lecturas almacenadas disponible"
 
-#: src/components/biometrics/Calibration/BacktestJobs.tsx:61
+#: src/components/biometrics/Calibration/BacktestJobs.tsx:63
+#: src/components/biometrics/Calibration/BacktestReport.tsx:28
 #: src/components/biometrics/Calibration/CalibrationOverview.tsx:25
 #: src/components/biometrics/Calibration/ProfileComparison.tsx:29
 msgid "System defaults"
@@ -1185,6 +1318,14 @@ msgstr "Estos cambios pertenecen solo al candidato. El orden importa: se aplica 
 msgid "This is the first-to-last record span, not continuous coverage or overlap with pod readings."
 msgstr "Este intervalo abarca del primer al último registro; no indica cobertura continua ni coincidencia con las lecturas del pod."
 
+#: src/components/biometrics/Calibration/BacktestReport.tsx:26
+msgid "This report version or structure is not supported by this view."
+msgstr "Esta vista no admite la versión o estructura de este informe."
+
+#: src/components/biometrics/Calibration/BacktestReport.tsx:21
+msgid "This report was released. Its audit hash remains, but detailed results are unavailable."
+msgstr "Este informe se ha liberado. Su hash de auditoría se conserva, pero los resultados detallados no están disponibles."
+
 #: src/components/biometrics/Calibration/ExperimentBuilder.tsx:85
 msgid "This reporting threshold is not a validated sample-size requirement. Too few or degenerate nights yield no interval."
 msgstr "Este umbral de informe no es un requisito validado de tamaño de muestra. Si hay pocas noches o no permiten estimar variación, no se genera un intervalo."
@@ -1206,7 +1347,8 @@ msgstr "Horas mostradas en {timezone}"
 msgid "Too few independent nights for a validation split; descriptive evaluation only."
 msgstr "No hay suficientes noches independientes para una división de validación; solo se permite una evaluación descriptiva."
 
-#: src/components/biometrics/Calibration/BacktestJobs.tsx:60
+#: src/components/biometrics/Calibration/BacktestJobs.tsx:62
+#: src/components/biometrics/Calibration/BacktestReport.tsx:29
 #: src/components/biometrics/Calibration/BacktestSubmission.tsx:73
 #: src/components/biometrics/Calibration/DatasetBuilder.tsx:20
 #: src/components/biometrics/Calibration/DatasetLibrary.tsx:62
@@ -1234,7 +1376,8 @@ msgstr "Use fechas ISO con desplazamiento horario o milisegundos Unix. Cada regi
 msgid "Use system defaults"
 msgstr "Usar los valores predeterminados del sistema"
 
-#: src/components/biometrics/Calibration/BacktestJobs.tsx:60
+#: src/components/biometrics/Calibration/BacktestJobs.tsx:62
+#: src/components/biometrics/Calibration/BacktestReport.tsx:29
 #: src/components/biometrics/Calibration/BacktestSubmission.tsx:74
 #: src/components/biometrics/Calibration/DatasetBuilder.tsx:20
 #: src/components/biometrics/Calibration/DatasetLibrary.tsx:62
@@ -1260,7 +1403,7 @@ msgstr "Signos vitales con procedencia de procesamiento original desconocida: {0
 msgid "Waiting for a processing boundary"
 msgstr "Esperando un límite de procesamiento"
 
-#: src/components/biometrics/Calibration/BacktestJobs.tsx:74
+#: src/components/biometrics/Calibration/BacktestJobs.tsx:76
 msgid "Waiting for a worker and resource admission. No execution is implied by a queued request."
 msgstr "Esperando un ejecutor y recursos disponibles. Una solicitud en cola no implica que se esté ejecutando."
 
