@@ -1,6 +1,9 @@
 // @vitest-environment node
 import { mkdtempSync, readFileSync, readdirSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
+import { spawn } from 'node:child_process'
+import { once } from 'node:events'
+import { createRequire } from 'node:module'
 import { join } from 'node:path'
 import Database from 'better-sqlite3'
 import { drizzle } from 'drizzle-orm/better-sqlite3'
@@ -22,7 +25,7 @@ it('atomically retains complete data, verifies bytes and rejects traversal and c
   const report = { traces: Array.from({ length: 1100 }, () => 'x'.repeat(2048)) }
   const descriptor = store.write(id, 1, JSON.stringify(report), 0)
   expect(store.read(descriptor)).toEqual(report)
-  expect(readdirSync(directory)).toEqual([descriptor.name])
+  expect(readdirSync(directory).filter(name => !name.startsWith('.publication.sqlite'))).toEqual([descriptor.name])
   expect(() => store.read({ ...descriptor, name: '../private.json' })).toThrow('descriptor')
   writeFileSync(join(directory, descriptor.name), 'corrupt')
   expect(() => store.read(descriptor)).toThrow('corrupt')
@@ -37,7 +40,7 @@ it('counts staged storage against quota and only collects old unreferenced owned
   for (const name of [committed.name, orphan.name]) utimesSync(join(directory, name), old, old)
   writeFileSync(join(directory, 'unrelated.txt'), 'keep')
   expect(store.collect(new Set([committed.name]))).toBe(1)
-  expect(readdirSync(directory).sort()).toEqual([committed.name, fresh.name, 'unrelated.txt'].sort())
+  expect(readdirSync(directory).filter(name => !name.startsWith('.publication.sqlite')).sort()).toEqual([committed.name, fresh.name, 'unrelated.txt'].sort())
 })
 it('publishes a descriptor under the lease, resolves it after reopening, and retains an orphan after failed DB commit', () => {
   const databasePath = join(directory, 'biometrics.db')
@@ -73,8 +76,8 @@ it('publishes a descriptor under the lease, resolves it after reopening, and ret
     expect(store.get(second.id).state).toBe('running')
     expect(store.result(second.id)).toBeNull()
     const root = join(directory, 'biometric-report-artifacts')
-    expect(readdirSync(root)).toHaveLength(2)
-    for (const name of readdirSync(root)) {
+    expect(readdirSync(root).filter(name => !name.startsWith('.publication.sqlite'))).toHaveLength(2)
+    for (const name of readdirSync(root).filter(name => !name.startsWith('.publication.sqlite'))) {
       expect(JSON.parse(readFileSync(join(root, name), 'utf8'))).toEqual(report)
       utimesSync(join(root, name), new Date(0), new Date(0))
     }
@@ -82,4 +85,44 @@ it('publishes a descriptor under the lease, resolves it after reopening, and ret
     expect(store.result(job.id)?.report).toEqual(report)
   }
   finally { raw.close() }
+})
+
+it('reuses an identical staged artifact near quota and serializes other publishers', () => {
+  const store = new ReportArtifactStore(directory)
+  const text = JSON.stringify({ value: 'data' })
+  const descriptor = store.write(id, 1, text, 0)
+  expect(store.write(id, 1, text, REPORT_BUDGET_BYTES - descriptor.byteLength)).toEqual(descriptor)
+  const contender = new ReportArtifactStore(directory)
+  store.withPublication(() => {
+    expect(() => contender.write(id, 2, '{}', 0)).toThrow(/locked/)
+  })
+  expect(contender.write(id, 2, '{}', 0).byteLength).toBe(2)
+})
+
+it('releases the publication lock after a process dies without committing', async () => {
+  const sqliteModule = createRequire(import.meta.url).resolve('better-sqlite3')
+  const child = spawn(process.execPath, ['-e', `
+    const Database = require(process.argv[1]);
+    const db = new Database(process.argv[2]);
+    db.exec('BEGIN IMMEDIATE');
+    process.send('locked');
+    setInterval(() => {}, 1000);
+  `, sqliteModule, join(directory, '.publication.sqlite')], { stdio: ['ignore', 'ignore', 'pipe', 'ipc'] })
+  const exited = once(child, 'exit')
+  try {
+    await Promise.race([
+      once(child, 'message'),
+      exited.then(() => { throw new Error('Lock holder exited before readiness') }),
+    ])
+    const store = new ReportArtifactStore(directory)
+    expect(() => store.write(id, 1, '{}', 0)).toThrow(/locked/)
+    child.kill('SIGKILL')
+    await exited
+    const descriptor = store.write(id, 1, '{}', 0)
+    expect(store.read(descriptor)).toEqual({})
+  }
+  finally {
+    child.kill('SIGKILL')
+    await exited
+  }
 })

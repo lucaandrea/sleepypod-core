@@ -41,13 +41,15 @@ export class BacktestJobStore {
   }
 
   collectOrphanedArtifacts() {
-    const referenced = new Set(this.db.select({ report: results.report }).from(results).all().flatMap((row) => {
-      // Preserve future-version descriptors during downgrade; cleanup must
-      // not erase a file merely because this build cannot interpret it.
-      const artifact = z.object({ name: z.string() }).safeParse(row.report)
-      return artifact.success ? [artifact.data.name] : []
-    }))
-    return this.artifacts().collect(referenced, this.now())
+    const store = this.artifacts()
+    return store.withPublication(() => {
+      const referenced = new Set(this.db.select({ report: results.report }).from(results).all().flatMap((row) => {
+        // Preserve named future-version descriptors during downgrade.
+        const artifact = z.object({ name: z.string() }).safeParse(row.report)
+        return artifact.success ? [artifact.data.name] : []
+      }))
+      return store.collect(referenced, this.now())
+    })
   }
 
   createExperiment(datasetId: string, rawProtocol: z.input<typeof experimentProtocolSchema>, idempotencyKey: string = randomUUID()) {
@@ -262,27 +264,32 @@ export class BacktestJobStore {
     const serialized = JSON.stringify(report)
     if (!serialized || Buffer.byteLength(serialized) > MAX_REPORT_BYTES) throw new ReferenceInputError('RESOURCE_LIMIT', 'Backtest report exceeds 16 MiB')
     const contentHash = dataHash(report)
-    const owned = this.owned(lease)
-    if (owned.state !== 'running') throw new ReferenceInputError('INVALID_STATE', 'Cancelled work cannot publish a result')
-    let stored: unknown = report
-    const inlineBytes = this.db.select({ bytes: sql<number>`coalesce(sum(case when json_extract(${results.report}, '$.kind') = 'biometric-report-artifact-v1' then 0 else length(cast(${results.report} as blob)) end), 0)` }).from(results).get()?.bytes ?? 0
-    if (Buffer.byteLength(serialized) > 2 * 1024 * 1024) {
-      stored = this.artifacts().write(lease.id, lease.token, serialized, inlineBytes)
+    const artifacts = this.storage()
+    const publish = () => {
+      const owned = this.owned(lease)
+      if (owned.state !== 'running') throw new ReferenceInputError('INVALID_STATE', 'Cancelled work cannot publish a result')
+      let stored: unknown = report
+      const inlineBytes = this.db.select({ bytes: sql<number>`coalesce(sum(case when json_extract(${results.report}, '$.kind') = 'biometric-report-artifact-v1' then 0 else length(cast(${results.report} as blob)) end), 0)` }).from(results).get()?.bytes ?? 0
+      if (Buffer.byteLength(serialized) > 2 * 1024 * 1024) {
+        if (!artifacts) throw new ReferenceInputError('RESOURCE_LIMIT', 'Large reports require a persistent artifact directory')
+        stored = artifacts.write(lease.id, lease.token, serialized, inlineBytes)
+      }
+      else if (inlineBytes + (artifacts?.usage() ?? 0) + Buffer.byteLength(serialized) > REPORT_BUDGET_BYTES) {
+        throw new ReferenceInputError('RESOURCE_LIMIT', 'Reports and staged artifacts reached the 64 MiB storage budget')
+      }
+      return this.db.transaction((tx) => {
+        const job = this.owned(lease)
+        if (job.state !== 'running') throw new ReferenceInputError('INVALID_STATE', 'Cancelled work cannot publish a result')
+        const retained = tx.select({ bytes: sql<number>`coalesce(sum(case when json_extract(${results.report}, '$.kind') = 'biometric-report-artifact-v1' then json_extract(${results.report}, '$.byteLength') else length(cast(${results.report} as blob)) end), 0)` }).from(results).get()?.bytes ?? 0
+        if (retained + Buffer.byteLength(serialized) > REPORT_BUDGET_BYTES) throw new ReferenceInputError('RESOURCE_LIMIT', 'Backtest summaries have reached their 64 MiB storage budget')
+        const now = this.now()
+        tx.insert(results).values({ jobId: job.id, fencingToken: lease.token, report: stored, contentHash, completedAtMs: now }).run()
+        const progress = progressSchema.parse(job.progress)
+        tx.update(jobs).set({ state: 'succeeded', progress: { ...progress, phase: 'complete', completedNights: progress.totalNights },
+          leaseOwner: null, leaseExpiresAtMs: null, updatedAtMs: now }).where(eq(jobs.id, job.id)).run()
+        return { jobId: job.id, contentHash }
+      }, { behavior: 'immediate' })
     }
-    else if (inlineBytes + (this.storage()?.usage() ?? 0) + Buffer.byteLength(serialized) > REPORT_BUDGET_BYTES) {
-      throw new ReferenceInputError('RESOURCE_LIMIT', 'Reports and staged artifacts reached the 64 MiB storage budget')
-    }
-    return this.db.transaction((tx) => {
-      const job = this.owned(lease)
-      if (job.state !== 'running') throw new ReferenceInputError('INVALID_STATE', 'Cancelled work cannot publish a result')
-      const retained = tx.select({ bytes: sql<number>`coalesce(sum(case when json_extract(${results.report}, '$.kind') = 'biometric-report-artifact-v1' then json_extract(${results.report}, '$.byteLength') else length(cast(${results.report} as blob)) end), 0)` }).from(results).get()?.bytes ?? 0
-      if (retained + Buffer.byteLength(serialized) > REPORT_BUDGET_BYTES) throw new ReferenceInputError('RESOURCE_LIMIT', 'Backtest summaries have reached their 64 MiB storage budget')
-      const now = this.now()
-      tx.insert(results).values({ jobId: job.id, fencingToken: lease.token, report: stored, contentHash, completedAtMs: now }).run()
-      const progress = progressSchema.parse(job.progress)
-      tx.update(jobs).set({ state: 'succeeded', progress: { ...progress, phase: 'complete', completedNights: progress.totalNights },
-        leaseOwner: null, leaseExpiresAtMs: null, updatedAtMs: now }).where(eq(jobs.id, job.id)).run()
-      return { jobId: job.id, contentHash }
-    }, { behavior: 'immediate' })
+    return artifacts ? artifacts.withPublication(publish) : publish()
   }
 }

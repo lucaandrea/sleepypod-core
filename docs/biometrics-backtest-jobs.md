@@ -98,6 +98,14 @@ A failed database commit can leave an unpublished file, but cannot expose a
 partial result. Staged files count toward storage checks. The collector removes
 only owned files that are unreferenced and older than one hour; it preserves
 committed descriptors and conservatively retains future-version named references
-during downgrade. Automatic collection and the production host loop are still
-pending. The quota checks rely on the single-active-worker lease protocol;
-strict cross-process filesystem reservation is not yet implemented.
+during downgrade. A separate SQLite publication lock serializes quota checks,
+file publication, and collection across processes. File writes hold only this
+sidecar lock; the live database transaction remains limited to fenced publication.
+A terminated process releases the lock automatically. Identical staged retries
+reuse the verified file without counting its bytes twice.
+
+`BacktestHost` provides a serialized, recoverable five-second polling loop and
+orphan collection every thirty minutes. Shutdown aborts and awaits the current
+attempt before database closure. Its global singleton requires an explicit
+admission callback. Production startup and measured resource admission remain
+pending; merely importing the host does not start replay.

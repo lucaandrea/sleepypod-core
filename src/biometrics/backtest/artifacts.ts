@@ -1,3 +1,4 @@
+import Database from 'better-sqlite3'
 import { createHash, randomUUID } from 'node:crypto'
 import { closeSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -18,7 +19,31 @@ const ownedName = /^[a-f0-9-]{36}\.[1-9][0-9]*\.[a-f0-9]{64}\.json(?:\.[a-f0-9-]
  * descriptor only after fsync + atomic rename. Failed publication leaves an
  * unreferenced artifact for bounded cleanup, never a partially visible result. */
 export class ReportArtifactStore {
+  private publishing = false
   constructor(private readonly root: string) {}
+
+  /** A separate SQLite file provides an OS-released cross-process lock. Long
+   * file writes never hold the live biometrics DB transaction. All publishers
+   * and collectors take this lock before reading live descriptor/quota state. */
+  withPublication<T>(operation: () => T): T {
+    if (this.publishing) return operation()
+    mkdirSync(this.root, { recursive: true, mode: 0o700 })
+    const lock = new Database(join(this.root, '.publication.sqlite'), { timeout: 1000 })
+    try {
+      return lock.transaction(() => {
+        this.publishing = true
+        try {
+          return operation()
+        }
+        finally {
+          this.publishing = false
+        }
+      }).immediate()
+    }
+    finally {
+      lock.close()
+    }
+  }
 
   usage() {
     mkdirSync(this.root, { recursive: true, mode: 0o700 })
@@ -35,39 +60,56 @@ export class ReportArtifactStore {
   }
 
   write(jobId: string, token: number, serialized: string, inlineBytes: number): ReportArtifact {
-    z.string().uuid().parse(jobId)
-    z.number().int().positive().parse(token)
-    const byteLength = Buffer.byteLength(serialized)
-    if (!byteLength || byteLength > MAX_REPORT_BYTES) throw new ReferenceInputError('RESOURCE_LIMIT', 'Report exceeds 16 MiB')
-    const sha256 = createHash('sha256').update(serialized).digest('hex')
-    const name = `${jobId}.${token}.${sha256}.json`
-    const descriptor = reportArtifactSchema.parse({ kind: 'biometric-report-artifact-v1', name, byteLength, sha256 })
-    if (this.usage() + byteLength + inlineBytes > REPORT_BUDGET_BYTES) throw new ReferenceInputError('RESOURCE_LIMIT', 'Reports reached the 64 MiB storage budget')
-    const temporary = join(this.root, `${name}.${randomUUID()}.tmp`)
-    let fd: number | undefined
-    try {
-      fd = openSync(temporary, 'wx', 0o600)
-      writeFileSync(fd, serialized)
-      fsyncSync(fd)
-      closeSync(fd)
-      fd = undefined
-      renameSync(temporary, join(this.root, name))
-      const directory = openSync(this.root, 'r')
+    return this.withPublication(() => {
+      z.string().uuid().parse(jobId)
+      z.number().int().positive().parse(token)
+      z.number().int().nonnegative().parse(inlineBytes)
+      const byteLength = Buffer.byteLength(serialized)
+      if (!byteLength || byteLength > MAX_REPORT_BYTES) throw new ReferenceInputError('RESOURCE_LIMIT', 'Report exceeds 16 MiB')
+      const sha256 = createHash('sha256').update(serialized).digest('hex')
+      const name = `${jobId}.${token}.${sha256}.json`
+      const descriptor = reportArtifactSchema.parse({ kind: 'biometric-report-artifact-v1', name, byteLength, sha256 })
+      const used = this.usage()
       try {
-        fsyncSync(directory)
+        const stat = lstatSync(join(this.root, name))
+        if (stat.isFile() && stat.size === byteLength) {
+          const bytes = readFileSync(join(this.root, name))
+          if (createHash('sha256').update(bytes).digest('hex') === sha256) {
+            if (used + inlineBytes > REPORT_BUDGET_BYTES) throw new ReferenceInputError('RESOURCE_LIMIT', 'Reports reached the 64 MiB storage budget')
+            return descriptor
+          }
+        }
+      }
+      catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+      }
+      if (used + byteLength + inlineBytes > REPORT_BUDGET_BYTES) throw new ReferenceInputError('RESOURCE_LIMIT', 'Reports reached the 64 MiB storage budget')
+      const temporary = join(this.root, `${name}.${randomUUID()}.tmp`)
+      let fd: number | undefined
+      try {
+        fd = openSync(temporary, 'wx', 0o600)
+        writeFileSync(fd, serialized)
+        fsyncSync(fd)
+        closeSync(fd)
+        fd = undefined
+        renameSync(temporary, join(this.root, name))
+        const directory = openSync(this.root, 'r')
+        try {
+          fsyncSync(directory)
+        }
+        finally {
+          closeSync(directory)
+        }
+        return descriptor
       }
       finally {
-        closeSync(directory)
+        if (fd !== undefined) closeSync(fd)
+        try {
+          unlinkSync(temporary)
+        }
+        catch { /* Atomic rename or cleanup after a failed write. */ }
       }
-      return descriptor
-    }
-    finally {
-      if (fd !== undefined) closeSync(fd)
-      try {
-        unlinkSync(temporary)
-      }
-      catch { /* Atomic rename or cleanup after a failed write. */ }
-    }
+    })
   }
 
   read(raw: unknown): unknown {
@@ -90,17 +132,19 @@ export class ReportArtifactStore {
   /** Protect freshly staged files from a concurrent publisher. Only files
    * outside the committed descriptor set and older than one hour are removed. */
   collect(referenced: ReadonlySet<string>, now = Date.now()) {
-    this.usage()
-    let removed = 0
-    for (const name of readdirSync(this.root)) {
-      if (!ownedName.test(name) || referenced.has(name)) continue
-      const path = join(this.root, name)
-      const stat = lstatSync(path)
-      if (stat.isFile() && now - stat.mtimeMs > 3600000) {
-        unlinkSync(path)
-        removed++
+    return this.withPublication(() => {
+      this.usage()
+      let removed = 0
+      for (const name of readdirSync(this.root)) {
+        if (!ownedName.test(name) || referenced.has(name)) continue
+        const path = join(this.root, name)
+        const stat = lstatSync(path)
+        if (stat.isFile() && now - stat.mtimeMs > 3600000) {
+          unlinkSync(path)
+          removed++
+        }
       }
-    }
-    return removed
+      return removed
+    })
   }
 }
