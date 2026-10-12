@@ -20,6 +20,10 @@ msgstr ""
 msgid "{0} · {1} · revision {2}"
 msgstr "{0} · {1} · revisión {2}"
 
+#: src/components/biometrics/Calibration/BacktestSubmission.tsx:91
+msgid "A saved request does not mean execution has started or succeeded. Inspect the job for its current state."
+msgstr "Una solicitud guardada no significa que la ejecución haya comenzado o finalizado correctamente. Inspeccione el trabajo para conocer su estado actual."
+
 #: src/components/biometrics/Calibration/ProfileLibrary.tsx:19
 msgid "A saved revision is not evidence of validation or processor adoption."
 msgstr "Una revisión guardada no demuestra validación ni adopción por el procesador."
@@ -83,6 +87,15 @@ msgstr "Calidad de calibración asumida (0–1)"
 msgid "Available reference records by metric (across revisions)"
 msgstr "Registros de referencia disponibles por métrica (entre revisiones)"
 
+#. placeholder {0}: enqueue.data.id
+#: src/components/biometrics/Calibration/BacktestSubmission.tsx:90
+msgid "Backtest request saved: {0}"
+msgstr "Solicitud de evaluación retrospectiva guardada: {0}"
+
+#: src/components/biometrics/Calibration/BacktestSubmission.tsx:39
+msgid "Backtest submission"
+msgstr "Envío de evaluación retrospectiva"
+
 #: src/components/biometrics/Calibration/BiometricCalibration.tsx:28
 msgid "Backtests"
 msgstr "Evaluaciones retrospectivas"
@@ -123,6 +136,12 @@ msgstr "Umbral de señal baja del candidato"
 msgid "Candidate parameters"
 msgstr "Parámetros del candidato"
 
+#. placeholder {0}: profile.revision
+#. placeholder {1}: profile.id
+#: src/components/biometrics/Calibration/BacktestSubmission.tsx:50
+msgid "Candidate revision {0}: {1}"
+msgstr "Revisión candidata {0}: {1}"
+
 #: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:80
 msgid "Candidate save failed."
 msgstr "Error al guardar el candidato."
@@ -156,6 +175,7 @@ msgid "Compare against the saved profile. This is a configuration comparison, no
 msgstr "Compare con el perfil guardado. Esta comparación de configuración no demuestra validación."
 
 #: src/components/biometrics/Calibration/ExperimentBuilder.tsx:44
+#: src/components/biometrics/Calibration/ExperimentLibrary.tsx:28
 msgid "Compare stored readings"
 msgstr "Comparar lecturas almacenadas"
 
@@ -270,6 +290,10 @@ msgstr "Modo de evaluación"
 msgid "Evaluation protocol"
 msgstr "Protocolo de evaluación"
 
+#: src/components/biometrics/Calibration/BacktestSubmission.tsx:68
+msgid "Evaluation split"
+msgstr "Partición de evaluación"
+
 #: src/components/biometrics/Calibration/CalibrationReferences.tsx:91
 msgid "Exact import identity"
 msgstr "Identidad exacta de la importación"
@@ -369,10 +393,16 @@ msgstr "Las fases históricas del sueño se recalculan con el clasificador actua
 msgid "History"
 msgstr "Historial"
 
+#: src/components/biometrics/Calibration/BacktestSubmission.tsx:72
 #: src/components/biometrics/Calibration/DatasetBuilder.tsx:20
 #: src/components/biometrics/Calibration/DatasetLibrary.tsx:62
 msgid "Holdout"
 msgstr "Reserva"
+
+#. placeholder {0}: experiment.holdoutAccesses
+#: src/components/biometrics/Calibration/ExperimentLibrary.tsx:29
+msgid "Holdout accesses recorded for this experiment: {0}"
+msgstr "Accesos a la reserva registrados para este experimento: {0}"
 
 #: src/components/biometrics/Calibration/CalibrationOverview.tsx:18
 msgid "HRV index"
@@ -381,6 +411,10 @@ msgstr "Índice de VFC"
 #: src/components/biometrics/Calibration/ManualProfileActivation.tsx:60
 msgid "I intend to apply this exact revision without validation evidence."
 msgstr "Quiero aplicar esta revisión exacta sin evidencia de validación."
+
+#: src/components/biometrics/Calibration/BacktestSubmission.tsx:80
+msgid "I intend to expose this holdout. Repeated use, including overlapping datasets, weakens held-out evidence."
+msgstr "Quiero acceder a esta reserva. Su uso repetido, incluso en conjuntos de datos superpuestos, debilita la evidencia independiente."
 
 #: src/components/biometrics/Calibration/ManualProfileActivation.tsx:60
 msgid "I intend to restore system defaults without validation evidence."
@@ -497,6 +531,10 @@ msgstr "Más recientes"
 msgid "Newest datasets"
 msgstr "Conjuntos de datos recientes"
 
+#: src/components/biometrics/Calibration/ExperimentLibrary.tsx:40
+msgid "Newest experiments"
+msgstr "Experimentos recientes"
+
 #: src/components/biometrics/Calibration/DatasetBuilder.tsx:109
 #: src/components/biometrics/Calibration/ReferenceLibrary.tsx:71
 msgid "Newest imports"
@@ -506,6 +544,7 @@ msgstr "Importaciones recientes"
 msgid "Newest nights"
 msgstr "Noches recientes"
 
+#: src/components/biometrics/Calibration/BacktestSubmission.tsx:55
 #: src/components/biometrics/Calibration/ProfileLibrary.tsx:53
 msgid "Newest profiles"
 msgstr "Perfiles recientes"
@@ -563,9 +602,14 @@ msgstr "No hay conjuntos de datos conservados para este lado."
 msgid "No retained measurements."
 msgstr "No hay mediciones conservadas."
 
+#: src/components/biometrics/Calibration/BacktestSubmission.tsx:43
 #: src/components/biometrics/Calibration/ProfileLibrary.tsx:28
 msgid "No saved candidate revisions."
 msgstr "No hay revisiones de candidatos guardadas."
+
+#: src/components/biometrics/Calibration/ExperimentLibrary.tsx:23
+msgid "No saved experiments for this side."
+msgstr "No hay experimentos guardados para este lado."
 
 #: src/components/biometrics/Calibration/CalibrationOverview.tsx:55
 msgid "No sensor calibration has been reported for this side."
@@ -593,6 +637,10 @@ msgstr "Cambios anteriores"
 msgid "Older datasets"
 msgstr "Conjuntos de datos anteriores"
 
+#: src/components/biometrics/Calibration/ExperimentLibrary.tsx:41
+msgid "Older experiments"
+msgstr "Experimentos anteriores"
+
 #: src/components/biometrics/Calibration/DatasetBuilder.tsx:110
 #: src/components/biometrics/Calibration/ReferenceLibrary.tsx:72
 msgid "Older imports"
@@ -602,6 +650,7 @@ msgstr "Importaciones anteriores"
 msgid "Older nights"
 msgstr "Noches anteriores"
 
+#: src/components/biometrics/Calibration/BacktestSubmission.tsx:56
 #: src/components/biometrics/Calibration/ProfileLibrary.tsx:54
 msgid "Older profiles"
 msgstr "Perfiles anteriores"
@@ -651,9 +700,21 @@ msgstr "Perfil personalizado"
 msgid "Pinned configuration and overrides"
 msgstr "Configuración fijada y personalizaciones"
 
+#: src/components/biometrics/Calibration/ExperimentLibrary.tsx:31
+msgid "Pinned evaluation protocol"
+msgstr "Protocolo de evaluación fijado"
+
 #: src/components/biometrics/Calibration/ExperimentBuilder.tsx:58
 msgid "Point matching tolerance (ms, 0–300000)"
 msgstr "Tolerancia de coincidencia de puntos (ms, 0–300000)"
+
+#: src/components/biometrics/Calibration/BacktestSubmission.tsx:66
+msgid "Prepare a new request with the current baseline"
+msgstr "Preparar una nueva solicitud con la referencia actual"
+
+#: src/components/biometrics/Calibration/ExperimentLibrary.tsx:35
+msgid "Prepare backtest"
+msgstr "Preparar evaluación retrospectiva"
 
 #: src/components/biometrics/Calibration/ProfileRecovery.tsx:29
 msgid "Preserved incompatible revision"
@@ -682,6 +743,10 @@ msgstr "Error al resolver el perfil."
 #: src/components/biometrics/Calibration/BiometricCalibration.tsx:27
 msgid "Profiles"
 msgstr "Perfiles"
+
+#: src/components/biometrics/Calibration/BacktestSubmission.tsx:84
+msgid "Queue backtest"
+msgstr "Poner evaluación retrospectiva en cola"
 
 #: src/components/biometrics/Calibration/ReplaySessionPicker.tsx:24
 msgid "Recorded nights"
@@ -745,6 +810,7 @@ msgid "Remove stage override"
 msgstr "Quitar personalización de fases"
 
 #: src/components/biometrics/Calibration/ExperimentBuilder.tsx:45
+#: src/components/biometrics/Calibration/ExperimentLibrary.tsx:28
 msgid "Replay sleep stages"
 msgstr "Reprocesar fases del sueño"
 
@@ -865,6 +931,10 @@ msgstr "Guardar la importación revisada"
 msgid "Saved"
 msgstr "Guardado"
 
+#: src/components/biometrics/Calibration/ExperimentLibrary.tsx:16
+msgid "Saved experiments"
+msgstr "Experimentos guardados"
+
 #: src/components/biometrics/Calibration/CalibrationOverview.tsx:25
 msgid "Saved profile"
 msgstr "Perfil guardado"
@@ -967,6 +1037,7 @@ msgstr "El índice de VFC mide la variabilidad de los intervalos entre latidos d
 msgid "The pinned profile is incompatible. Its revision will be preserved, but a valid before-and-after comparison is unavailable."
 msgstr "El perfil fijado es incompatible. Se conservará su revisión, pero no se puede realizar una comparación válida del antes y el después."
 
+#: src/components/biometrics/Calibration/BacktestSubmission.tsx:24
 #: src/components/biometrics/Calibration/DatasetLibrary.tsx:66
 msgid "The retained inputs are unavailable for new evaluations."
 msgstr "Los datos conservados no están disponibles para nuevas evaluaciones."
@@ -983,6 +1054,10 @@ msgstr "El perfil guardado ha cambiado. Seleccione de nuevo una acción de resta
 #: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:30
 msgid "The saved profile or parameter definitions are incompatible with this editor."
 msgstr "El perfil guardado o las definiciones de parámetros son incompatibles con este editor."
+
+#: src/components/biometrics/Calibration/BacktestSubmission.tsx:40
+msgid "The server captures default, current stage-view, and candidate configurations at submission. Stored readings cannot validate numerical parameter changes."
+msgstr "El servidor captura las configuraciones predeterminada, de la vista de fases actual y candidata al enviar la solicitud. Las lecturas almacenadas no pueden validar cambios en parámetros numéricos."
 
 #: src/components/biometrics/Calibration/DatasetBuilder.tsx:48
 msgid "The server groups connected sessions into whole nights in the device timezone before assigning tuning, validation, and holdout sets. A split is not evidence of improvement."
@@ -1017,6 +1092,7 @@ msgstr "Horas mostradas en {timezone}"
 msgid "Too few independent nights for a validation split; descriptive evaluation only."
 msgstr "No hay suficientes noches independientes para una división de validación; solo se permite una evaluación descriptiva."
 
+#: src/components/biometrics/Calibration/BacktestSubmission.tsx:70
 #: src/components/biometrics/Calibration/DatasetBuilder.tsx:20
 #: src/components/biometrics/Calibration/DatasetLibrary.tsx:62
 msgid "Tuning"
@@ -1043,6 +1119,7 @@ msgstr "Use fechas ISO con desplazamiento horario o milisegundos Unix. Cada regi
 msgid "Use system defaults"
 msgstr "Usar los valores predeterminados del sistema"
 
+#: src/components/biometrics/Calibration/BacktestSubmission.tsx:71
 #: src/components/biometrics/Calibration/DatasetBuilder.tsx:20
 #: src/components/biometrics/Calibration/DatasetLibrary.tsx:62
 msgid "Validation"
