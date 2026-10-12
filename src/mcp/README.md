@@ -22,7 +22,7 @@ claude mcp add --transport http sleepypod http://192.168.1.88:3000/api/mcp
 
 ## Design rules
 
-- **Intent-shaped, not endpoint-shaped.** 22 tools cover ~110 procedures. A tool is one thing a person would ask for.
+- **Intent-shaped, not endpoint-shaped.** 29 intent tools cover the main user workflows. A tool is one thing a person would ask for.
 - **CRUD collapses into an `action` enum** (`manage_schedule`, `manage_alarm`, `manage_automation`, `pod_maintenance`).
 - **Temperatures accept the caller's unit** (`unit: "F" | "C"`, default = device setting) and are converted to the 55-110°F hardware setpoint in `units.ts`.
 - **Errors come back as `isError` text** with the TRPC code, so the model can explain "pump stall guard tripped" instead of retrying blindly.
@@ -101,8 +101,8 @@ claude mcp add --transport http sleepypod http://192.168.1.88:3000/api/mcp
 ## Deliberately not exposed
 
 Developer and installer surfaces stay REST-only: raw hardware opcodes (`device.execute`), raw sensor files,
-database row browsing, calibration triggers, MQTT/HomeKit/archive-push configuration, backtests and
-cap-zone replays, and vitals ingestion endpoints. They are either dangerous without context or useless to a
+database row browsing, sensor calibration triggers, MQTT/HomeKit/archive-push configuration, automation backtests,
+cap-zone replays, and canonical vitals ingestion endpoints. They are either dangerous without context or useless to a
 sleeper. Add a tool only when a person would say the sentence.
 
 ## Layout
@@ -124,3 +124,45 @@ app/api/mcp/route.ts   Next.js route handler (stateless Streamable HTTP)
 2. Register it in the matching `tools/*.ts` with `title`, a description that says when to use it and when not to, and truthful `annotations`.
 3. Call procedures through `getCaller()` inside `runTool`.
 4. Add a case to `tests/server.test.ts` and a row to the catalogue above.
+
+## Biometric calibration
+
+| Tool | Shared procedures / purpose |
+| --- | --- |
+| `inspect_biometric_calibration` | Manifest, effective profile/runtime state, sessions/capabilities, reference/profile lists, stored-reading comparison, activation status/history |
+| `import_biometric_reference` | Preview and commit normalized references using the exact preview hash |
+| `propose_biometric_profile` | Save an immutable agent-origin candidate; never activate |
+| `manage_biometric_experiment` | Freeze datasets and create/list/read experiments with pinned protocols |
+| `backtest_biometrics` | Enqueue/status/list/cancel and compact report summaries |
+| `apply_biometric_profile` | Explicitly authorized manual activation, reset or rollback; exact revision/hash/generation and unvalidated acknowledgement required |
+| `release_biometric_artifacts` | Explicit reference deletion or dataset/report release; report release requires its content hash |
+
+Tools use shared input contracts and call `biometricTuning` through `getCaller()`;
+they do not implement a separate calibration or activation service. Mutation
+tools use the underlying idempotency contracts. `inspect_biometric_calibration`
+is read-only; activation, cancellation and cleanup tools carry destructive
+hints. Hints guide hosts and are not authorization enforcement.
+
+`backtest_biometrics` report responses identify that traces and per-night detail
+were omitted and provide the local REST path for full results. Numerical
+comparison provenance is limited to fifty entries with explicit total/truncation
+metadata; scores still use all bounded source rows. Released reports remain
+unavailable, rather than appearing successful with fabricated empty traces.
+
+Resources `sleepypod://biometrics/algorithms` and
+`sleepypod://biometrics/profiles/{left,right}` expose metric definitions and
+actual profile/runtime state. Prompts `calibrate_biometrics` and
+`explain_biometric_difference` provide versioned workflows. Prompts are host
+workflow templates, not privileged instructions: bounded inputs, hash checks,
+metric compatibility, concurrency and runtime receipts remain server concerns.
+The calibration prompt treats import annotations as untrusted data, distinguishes
+original readings from retrospective stages, and separates proposals from
+explicitly authorized application without demanding repeat confirmations.
+
+Only normalized reference ingestion and the scoped biometric replay workflow are
+exposed. Arbitrary files, shell commands, executable algorithm uploads and
+canonical-vitals writes remain excluded. Pod processing stays local, but an
+external MCP host may send returned data to its model provider. These tools do
+not authorize off-pod waveform transfer. Current replay evidence remains
+descriptive; the full validated-promotion and production worker qualification
+work is still pending in this implementation branch.
