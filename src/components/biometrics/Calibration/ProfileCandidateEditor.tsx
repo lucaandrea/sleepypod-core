@@ -15,17 +15,17 @@ const numericManifestSchema = z.object({ parameters: z.object({ properties: z.ob
 type Overrides = { path: string, value: unknown }[]
 type Parameter = z.infer<typeof parameterSchema> & { path: string }
 
-export function ProfileCandidateEditor({ side }: { side: 'left' | 'right' }) {
+export function ProfileCandidateEditor({ side, revisionId }: { side: 'left' | 'right', revisionId?: string }) {
   const manifest = trpc.biometricTuning.getManifest.useQuery({})
   const overview = trpc.biometricTuning.getProfileOverview.useQuery({ side })
-  const parentId = overview.data?.desired.binding.desiredRevisionId
+  const parentId = revisionId ?? overview.data?.desired.binding.desiredRevisionId
   const parent = trpc.biometricTuning.getProfileRevision.useQuery({ id: parentId ?? '00000000-0000-0000-0000-000000000000' }, { enabled: Boolean(parentId) })
   const error = manifest.error ?? overview.error ?? (parentId ? parent.error : null)
   if (error) return <InlineError>{error.message}</InlineError>
   if (!manifest.data || !overview.data || (parentId && !parent.data)) return <Skeleton className="h-48" />
   const parsed = numericManifestSchema.safeParse(manifest.data.manifest)
   const overrides = z.array(z.object({ path: z.string(), value: z.unknown() })).safeParse(parentId ? parent.data?.overrides : [])
-  if (!parsed.success || !overrides.success || overview.data.desired.warning) return <InlineError><Trans>The saved profile or parameter definitions are incompatible with this editor.</Trans></InlineError>
+  if (!parsed.success || !overrides.success || (!revisionId && overview.data.desired.warning) || (parentId && (parent.data?.side !== side || parent.data.baseManifestHash !== manifest.data.manifestHash))) return <InlineError><Trans>The saved profile or parameter definitions are incompatible with this editor.</Trans></InlineError>
   const parameters = Object.entries(parsed.data.parameters.properties).flatMap(([component, group]) => Object.entries(group.properties).map(([name, spec]) => ({ ...spec, path: `${component}.${name}` })))
   return <CandidateForm key={`${side}:${manifest.data.manifestHash}:${parentId ?? 'default'}`} side={side} manifestHash={manifest.data.manifestHash} parentId={parentId ?? undefined} initial={overrides.data} parameters={parameters} />
 }

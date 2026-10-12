@@ -13,6 +13,10 @@ msgstr ""
 "Language-Team: \n"
 "Plural-Forms: \n"
 
+#: src/components/biometrics/Calibration/ProfileLibrary.tsx:17
+msgid "A saved revision is not evidence of validation or processor adoption."
+msgstr ""
+
 #: src/components/biometrics/Calibration/CalibrationReferences.tsx:87
 msgid "Accepted records are not necessarily usable for validation. Incompatible HRV definitions remain unscorable."
 msgstr ""
@@ -117,8 +121,24 @@ msgstr ""
 msgid "Direct sleep-stage changes are unvalidated manual settings. Saving requests a profile change; processor adoption is reported separately in Overview."
 msgstr ""
 
+#: src/components/biometrics/Calibration/ProfileLibrary.tsx:32
+msgid "Edit a new candidate from this revision"
+msgstr ""
+
+#: src/components/biometrics/Calibration/ProfileLibrary.tsx:18
+msgid "Editing from revision {revisionId}"
+msgstr ""
+
+#: src/components/biometrics/Calibration/ProfileLibrary.tsx:18
+msgid "Editing from the currently saved profile."
+msgstr ""
+
 #: src/components/biometrics/Calibration/ReferenceLibrary.tsx:97
 msgid "End (UTC)"
+msgstr ""
+
+#: src/components/biometrics/Calibration/ProfileLibrary.tsx:38
+msgid "Engine manifest hash"
 msgstr ""
 
 #: src/components/biometrics/Calibration/CalibrationReferences.tsx:91
@@ -226,6 +246,10 @@ msgstr ""
 msgid "Newest imports"
 msgstr ""
 
+#: src/components/biometrics/Calibration/ProfileLibrary.tsx:49
+msgid "Newest profiles"
+msgstr ""
+
 #: src/components/biometrics/Calibration/ReferenceLibrary.tsx:120
 msgid "Next records"
 msgstr ""
@@ -244,6 +268,10 @@ msgstr ""
 
 #: src/components/biometrics/Calibration/ReferenceLibrary.tsx:118
 msgid "No retained measurements."
+msgstr ""
+
+#: src/components/biometrics/Calibration/ProfileLibrary.tsx:26
+msgid "No saved candidate revisions."
 msgstr ""
 
 #: src/components/biometrics/Calibration/CalibrationOverview.tsx:55
@@ -267,12 +295,20 @@ msgstr ""
 msgid "Older imports"
 msgstr ""
 
+#: src/components/biometrics/Calibration/ProfileLibrary.tsx:50
+msgid "Older profiles"
+msgstr ""
+
 #: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:84
 msgid "Overridden"
 msgstr ""
 
 #: src/components/biometrics/Calibration/BiometricCalibration.tsx:23
 msgid "Overview"
+msgstr ""
+
+#: src/components/biometrics/Calibration/ProfileLibrary.tsx:40
+msgid "Parent revision"
 msgstr ""
 
 #: src/components/biometrics/Calibration/CalibrationHistory.tsx:21
@@ -285,6 +321,10 @@ msgstr ""
 
 #: src/components/biometrics/Calibration/CalibrationOverview.tsx:25
 msgid "Personalized profile"
+msgstr ""
+
+#: src/components/biometrics/Calibration/ProfileLibrary.tsx:34
+msgid "Pinned configuration and overrides"
 msgstr ""
 
 #: src/components/biometrics/Calibration/CalibrationReferences.tsx:78
@@ -356,12 +396,23 @@ msgstr ""
 msgid "Requested change"
 msgstr ""
 
+#: src/components/biometrics/Calibration/ProfileLibrary.tsx:36
+msgid "Resolved configuration hash"
+msgstr ""
+
 #: src/components/biometrics/Calibration/CalibrationHistory.tsx:17
 msgid "Restore previous profile"
 msgstr ""
 
 #: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:90
 msgid "Review candidate"
+msgstr ""
+
+#. placeholder {0}: profile.revision
+#. placeholder {1}: profile.origin
+#. placeholder {2}: profile.requester
+#: src/components/biometrics/Calibration/ProfileLibrary.tsx:30
+msgid "Revision {0} · {1} · {2}"
 msgstr ""
 
 #. placeholder {0}: item.revision
@@ -397,6 +448,10 @@ msgstr ""
 msgid "Saved profile"
 msgstr ""
 
+#: src/components/biometrics/Calibration/ProfileLibrary.tsx:17
+msgid "Saved profile revisions"
+msgstr ""
+
 #: src/components/biometrics/Calibration/CalibrationOverview.tsx:24
 msgid "Saved settings and processor reports are separate."
 msgstr ""
@@ -423,6 +478,10 @@ msgstr ""
 
 #: src/components/biometrics/Calibration/ReferenceLibrary.tsx:96
 msgid "Start (UTC)"
+msgstr ""
+
+#: src/components/biometrics/Calibration/ProfileLibrary.tsx:19
+msgid "Start from current profile"
 msgstr ""
 
 #: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:71

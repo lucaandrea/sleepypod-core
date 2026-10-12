@@ -8,7 +8,7 @@ import { SleepStageRules } from '@/src/components/Settings/SleepStageRules'
 import { CalibrationOverview } from './CalibrationOverview'
 import { CalibrationReferences } from './CalibrationReferences'
 import { ReferenceLibrary } from './ReferenceLibrary'
-import { ProfileCandidateEditor } from './ProfileCandidateEditor'
+import { ProfileLibrary } from './ProfileLibrary'
 import { CalibrationHistory } from './CalibrationHistory'
 
 type Side = 'left' | 'right'
@@ -39,7 +39,7 @@ export function BiometricCalibration({ side, onSideChange }: { side: Side, onSid
             ? <CalibrationHistory key={side} side={side} />
             : (
                 <>
-                  <ProfileCandidateEditor side={side} />
+                  <ProfileLibrary key={side} side={side} />
                   <p className="text-sm text-fg-2"><Trans>Direct sleep-stage changes are unvalidated manual settings. Saving requests a profile change; processor adoption is reported separately in Overview.</Trans></p>
                   <SleepStageRules side={side} onSideChange={onSideChange} />
                 </>

@@ -3,7 +3,7 @@ import { setupI18n } from '@lingui/core'
 import { I18nProvider } from '@lingui/react'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { ProfileCandidateEditor } from '../ProfileCandidateEditor'
-const mock = vi.hoisted(() => ({ resolve: vi.fn(), create: vi.fn(), invalidate: vi.fn() }))
+const mock = vi.hoisted(() => ({ resolve: vi.fn(), create: vi.fn(), invalidate: vi.fn(), parentHash: 'a'.repeat(64), parentSide: 'right' }))
 const manifestHash = 'a'.repeat(64)
 vi.mock('@/src/utils/trpc', () => ({ trpc: {
   useUtils: () => ({ biometricTuning: { listProfileRevisions: { invalidate: mock.invalidate } } }),
@@ -13,7 +13,7 @@ vi.mock('@/src/utils/trpc', () => ({ trpc: {
       breathing_rate: { properties: {} }, hrv_index: { properties: {} },
     } } } } }) },
     getProfileOverview: { useQuery: () => ({ data: { desired: { binding: { desiredRevisionId: 'parent' }, warning: null } } }) },
-    getProfileRevision: { useQuery: () => ({ data: { overrides: [{ path: 'heart_rate.trackingToleranceBpm', value: 18 }, { path: 'sleep_stages.ruleset.lowSignalBelow', value: 0.2 }] } }) },
+    getProfileRevision: { useQuery: () => ({ data: { side: mock.parentSide, baseManifestHash: mock.parentHash, overrides: [{ path: 'heart_rate.trackingToleranceBpm', value: 18 }, { path: 'sleep_stages.ruleset.lowSignalBelow', value: 0.2 }] } }) },
     resolveProfile: { useMutation: () => ({ mutateAsync: mock.resolve, isPending: false }) },
     createProfileRevision: { useMutation: () => ({ mutateAsync: mock.create, isPending: false }) },
   },
@@ -21,6 +21,8 @@ vi.mock('@/src/utils/trpc', () => ({ trpc: {
 const i18n = setupI18n({ locale: 'en', messages: {} })
 beforeEach(() => {
   vi.clearAllMocks()
+  mock.parentHash = manifestHash
+  mock.parentSide = 'right'
   mock.resolve.mockImplementation(async input => ({ hash: 'resolved-hash', overrides: input.overrides }))
   mock.create.mockResolvedValue({ id: 'candidate-id' })
 })
@@ -57,4 +59,15 @@ it('keeps the exact idempotency key when a failed save is retried', async () => 
   fireEvent.click(screen.getByRole('button', { name: 'Save candidate without applying' }))
   await screen.findByText('Candidate saved: candidate-id')
   expect(mock.create.mock.calls[0][0]).toEqual(mock.create.mock.calls[1][0])
+})
+
+it('refuses to rebase an old-engine or wrong-side candidate silently', () => {
+  mock.parentHash = 'old-engine'
+  const result = view()
+  expect(screen.getByText('The saved profile or parameter definitions are incompatible with this editor.')).toBeTruthy()
+  expect(screen.queryByRole('button', { name: 'Review candidate' })).toBeNull()
+  mock.parentHash = manifestHash
+  mock.parentSide = 'left'
+  result.rerender(<I18nProvider i18n={i18n}><ProfileCandidateEditor side="right" revisionId="other-candidate" /></I18nProvider>)
+  expect(screen.getByText('The saved profile or parameter definitions are incompatible with this editor.')).toBeTruthy()
 })
