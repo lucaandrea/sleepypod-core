@@ -64,6 +64,14 @@ msgstr "Apply profile"
 msgid "Apply unvalidated revision"
 msgstr "Apply unvalidated revision"
 
+#: src/components/biometrics/Calibration/ReplaySessionPicker.tsx:75
+msgid "Available reference records by metric (across revisions)"
+msgstr "Available reference records by metric (across revisions)"
+
+#: src/components/biometrics/Calibration/BiometricCalibration.tsx:28
+msgid "Backtests"
+msgstr "Backtests"
+
 #: src/components/biometrics/Calibration/ProfileComparison.tsx:52
 msgid "Before"
 msgstr "Before"
@@ -72,7 +80,7 @@ msgstr "Before"
 msgid "Before configuration hash"
 msgstr "Before configuration hash"
 
-#: src/components/biometrics/Calibration/BiometricCalibration.tsx:22
+#: src/components/biometrics/Calibration/BiometricCalibration.tsx:23
 msgid "Biometric calibration"
 msgstr "Biometric calibration"
 
@@ -80,7 +88,7 @@ msgstr "Biometric calibration"
 msgid "Breathing rate"
 msgstr "Breathing rate"
 
-#: src/components/biometrics/Calibration/BiometricCalibration.tsx:23
+#: src/components/biometrics/Calibration/BiometricCalibration.tsx:24
 msgid "Calibration views"
 msgstr "Calibration views"
 
@@ -153,6 +161,10 @@ msgstr "Correct import"
 msgid "Correcting import {0}. Supply the complete replacement export; the original revision and frozen datasets remain unchanged."
 msgstr "Correcting import {0}. Supply the complete replacement export; the original revision and frozen datasets remain unchanged."
 
+#: src/components/biometrics/Calibration/ReplaySessionPicker.tsx:70
+msgid "Coverage estimates use nominal recording cadence; they do not prove continuous signal support."
+msgstr "Coverage estimates use nominal recording cadence; they do not prove continuous signal support."
+
 #: src/components/biometrics/Calibration/CalibrationOverview.tsx:15
 #: src/components/biometrics/Calibration/CalibrationOverview.tsx:58
 msgid "Current"
@@ -182,7 +194,7 @@ msgstr "Deleting an import removes its source measurements. Previously frozen da
 msgid "Different versions reported"
 msgstr "Different versions reported"
 
-#: src/components/biometrics/Calibration/BiometricCalibration.tsx:49
+#: src/components/biometrics/Calibration/BiometricCalibration.tsx:53
 msgid "Direct sleep-stage changes are unvalidated manual settings. Saving requests a profile change; processor adoption is reported separately in Overview."
 msgstr "Direct sleep-stage changes are unvalidated manual settings. Saving requests a profile change; processor adoption is reported separately in Overview."
 
@@ -213,6 +225,10 @@ msgstr "Exact import identity"
 #: src/components/biometrics/Calibration/ReferenceLibrary.tsx:88
 msgid "Exact normalized timestamps are shown in UTC. Values are not interpolated."
 msgstr "Exact normalized timestamps are shown in UTC. Values are not interpolated."
+
+#: src/components/biometrics/Calibration/ReplaySessionPicker.tsx:72
+msgid "Exact processed-data coverage"
+msgstr "Exact processed-data coverage"
 
 #: src/components/biometrics/Calibration/CalibrationHistory.tsx:45
 msgid "Exact profile transition"
@@ -268,7 +284,7 @@ msgstr "Hello, tRPC test page!"
 msgid "Historical sleep stages are recomputed with the current classifier. Original stored vitals remain separate from replay results."
 msgstr "Historical sleep stages are recomputed with the current classifier. Original stored vitals remain separate from replay results."
 
-#: src/components/biometrics/Calibration/BiometricCalibration.tsx:27
+#: src/components/biometrics/Calibration/BiometricCalibration.tsx:29
 msgid "History"
 msgstr "History"
 
@@ -304,10 +320,18 @@ msgstr "Import preview"
 msgid "Import reference measurements"
 msgstr "Import reference measurements"
 
+#: src/components/biometrics/Calibration/ReplaySessionPicker.tsx:93
+msgid "Include this session"
+msgstr "Include this session"
+
 #: src/components/biometrics/Calibration/CandidateStageFields.tsx:36
 #: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:98
 msgid "Inherited default"
 msgstr "Inherited default"
+
+#: src/components/biometrics/Calibration/ReplaySessionPicker.tsx:24
+msgid "Inspect available data before selecting nights for a retained dataset."
+msgstr "Inspect available data before selecting nights for a retained dataset."
 
 #: src/components/biometrics/Calibration/ProfileLibrary.tsx:35
 msgid "Inspect candidate changes"
@@ -316,6 +340,11 @@ msgstr "Inspect candidate changes"
 #: src/components/biometrics/Calibration/ReferenceLibrary.tsx:50
 msgid "Inspect measurements"
 msgstr "Inspect measurements"
+
+#. placeholder {0}: session.id
+#: src/components/biometrics/Calibration/ReplaySessionPicker.tsx:43
+msgid "Inspect session {0}"
+msgstr "Inspect session {0}"
 
 #: src/components/biometrics/Calibration/ReferenceLibrary.tsx:61
 msgid "Keep import"
@@ -358,6 +387,10 @@ msgstr "Newest"
 msgid "Newest imports"
 msgstr "Newest imports"
 
+#: src/components/biometrics/Calibration/ReplaySessionPicker.tsx:49
+msgid "Newest nights"
+msgstr "Newest nights"
+
 #: src/components/biometrics/Calibration/ProfileLibrary.tsx:53
 msgid "Newest profiles"
 msgstr "Newest profiles"
@@ -382,9 +415,17 @@ msgstr "No accepted time range."
 msgid "No activation history for this side."
 msgstr "No activation history for this side."
 
+#: src/components/biometrics/Calibration/ReplaySessionPicker.tsx:77
+msgid "No overlapping reference records."
+msgstr "No overlapping reference records."
+
 #: src/components/biometrics/Calibration/ProfileComparison.tsx:69
 msgid "No override intent changes."
 msgstr "No override intent changes."
+
+#: src/components/biometrics/Calibration/ReplaySessionPicker.tsx:34
+msgid "No recorded nights for this side."
+msgstr "No recorded nights for this side."
 
 #: src/components/biometrics/Calibration/ReferenceLibrary.tsx:35
 msgid "No reference imports for this side."
@@ -406,6 +447,10 @@ msgstr "No saved candidate revisions."
 msgid "No sensor calibration has been reported for this side."
 msgstr "No sensor calibration has been reported for this side."
 
+#: src/components/biometrics/Calibration/ReplaySessionPicker.tsx:65
+msgid "No stored vitals for comparison"
+msgstr "No stored vitals for comparison"
+
 #: src/components/biometrics/Calibration/ReferenceLibrary.tsx:91
 msgid "Normalized reference measurements"
 msgstr "Normalized reference measurements"
@@ -424,6 +469,10 @@ msgstr "Older changes"
 msgid "Older imports"
 msgstr "Older imports"
 
+#: src/components/biometrics/Calibration/ReplaySessionPicker.tsx:50
+msgid "Older nights"
+msgstr "Older nights"
+
 #: src/components/biometrics/Calibration/ProfileLibrary.tsx:54
 msgid "Older profiles"
 msgstr "Older profiles"
@@ -436,7 +485,7 @@ msgstr "Overridden"
 msgid "Override intent can change even when the resolved value stays the same."
 msgstr "Override intent can change even when the resolved value stays the same."
 
-#: src/components/biometrics/Calibration/BiometricCalibration.tsx:24
+#: src/components/biometrics/Calibration/BiometricCalibration.tsx:25
 msgid "Overview"
 msgstr "Overview"
 
@@ -488,9 +537,13 @@ msgstr "Profile and processor"
 msgid "Profile resolution failed."
 msgstr "Profile resolution failed."
 
-#: src/components/biometrics/Calibration/BiometricCalibration.tsx:26
+#: src/components/biometrics/Calibration/BiometricCalibration.tsx:27
 msgid "Profiles"
 msgstr "Profiles"
+
+#: src/components/biometrics/Calibration/ReplaySessionPicker.tsx:24
+msgid "Recorded nights"
+msgstr "Recorded nights"
 
 #: src/components/biometrics/Calibration/ReferenceTimeSpan.tsx:25
 msgid "Reference extent: {start} to {end} ({timezone})"
@@ -520,13 +573,17 @@ msgstr "Reference records"
 msgid "Reference source"
 msgstr "Reference source"
 
-#: src/components/biometrics/Calibration/BiometricCalibration.tsx:25
+#: src/components/biometrics/Calibration/BiometricCalibration.tsx:26
 msgid "References"
 msgstr "References"
 
 #: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:99
 msgid "Remove override"
 msgstr "Remove override"
+
+#: src/components/biometrics/Calibration/ReplaySessionPicker.tsx:27
+msgid "Remove session {id}"
+msgstr "Remove session {id}"
 
 #: src/components/biometrics/Calibration/CandidateStageFields.tsx:43
 msgid "Remove stage override"
@@ -636,9 +693,18 @@ msgstr "Saved settings and processor reports are separate."
 msgid "Schema checks passed. Agreement with reference measurements has not been evaluated."
 msgstr "Schema checks passed. Agreement with reference measurements has not been evaluated."
 
+#. placeholder {0}: selected.length
+#: src/components/biometrics/Calibration/ReplaySessionPicker.tsx:26
+msgid "Selected sessions: {0} / 60"
+msgstr "Selected sessions: {0} / 60"
+
 #: src/components/biometrics/Calibration/CalibrationOverview.tsx:53
 msgid "Sensor measurements are separate from algorithm personalization."
 msgstr "Sensor measurements are separate from algorithm personalization."
+
+#: src/components/biometrics/Calibration/ReplaySessionPicker.tsx:67
+msgid "Signal replay unavailable: raw waveforms and processing context have not been retained by this service."
+msgstr "Signal replay unavailable: raw waveforms and processing context have not been retained by this service."
 
 #: src/components/biometrics/Calibration/CalibrationReferences.tsx:59
 msgid "Sleeper identifier"
@@ -651,6 +717,14 @@ msgstr "Smooth isolated epochs"
 #: src/components/biometrics/Calibration/ReferenceLibrary.tsx:55
 msgid "Source measurements deleted"
 msgstr "Source measurements deleted"
+
+#: src/components/biometrics/Calibration/ReplaySessionPicker.tsx:66
+msgid "Stage replay available"
+msgstr "Stage replay available"
+
+#: src/components/biometrics/Calibration/ReplaySessionPicker.tsx:66
+msgid "Stage replay unavailable"
+msgstr "Stage replay unavailable"
 
 #: src/components/biometrics/Calibration/CalibrationOverview.tsx:15
 msgid "Stale"
@@ -667,6 +741,16 @@ msgstr "Start from current profile"
 #: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:85
 msgid "Start from the saved profile. Existing sleep-stage overrides are preserved. Removing a numerical override follows the shipped default."
 msgstr "Start from the saved profile. Existing sleep-stage overrides are preserved. Removing a numerical override follows the shipped default."
+
+#. placeholder {0}: data.processed.vitals.count
+#. placeholder {1}: data.processed.movement.count
+#: src/components/biometrics/Calibration/ReplaySessionPicker.tsx:69
+msgid "Stored vitals: {0}; movement records: {1}"
+msgstr "Stored vitals: {0}; movement records: {1}"
+
+#: src/components/biometrics/Calibration/ReplaySessionPicker.tsx:65
+msgid "Stored-reading comparison available"
+msgstr "Stored-reading comparison available"
 
 #: src/components/biometrics/Calibration/CalibrationOverview.tsx:25
 #: src/components/biometrics/Calibration/ProfileComparison.tsx:29
@@ -706,6 +790,11 @@ msgstr "This is the first-to-last record span, not continuous coverage or overla
 msgid "This request has been superseded by another profile change."
 msgstr "This request has been superseded by another profile change."
 
+#. placeholder {0}: dates.resolvedOptions().timeZone
+#: src/components/biometrics/Calibration/ReplaySessionPicker.tsx:25
+msgid "Times shown in {0}"
+msgstr "Times shown in {0}"
+
 #: src/components/biometrics/Calibration/CalibrationHistory.tsx:23
 msgid "Times shown in {timezone}"
 msgstr "Times shown in {timezone}"
@@ -734,6 +823,11 @@ msgstr "Validation exclusions"
 #: src/components/biometrics/Calibration/ReferenceLibrary.tsx:95
 msgid "Value"
 msgstr "Value"
+
+#. placeholder {0}: data.processed.legacyUnknownProvenanceCount
+#: src/components/biometrics/Calibration/ReplaySessionPicker.tsx:68
+msgid "Vitals with unknown original processing provenance: {0}"
+msgstr "Vitals with unknown original processing provenance: {0}"
 
 #: src/components/biometrics/Calibration/CalibrationHistory.tsx:18
 #: src/components/biometrics/Calibration/CalibrationOverview.tsx:17
