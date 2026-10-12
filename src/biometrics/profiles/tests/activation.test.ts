@@ -1,0 +1,71 @@
+// @vitest-environment node
+import Database from 'better-sqlite3'
+import { drizzle } from 'drizzle-orm/better-sqlite3'
+import { migrate } from 'drizzle-orm/better-sqlite3/migrator'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import * as schema from '@/src/db/schema'
+import { ProfileStore } from '../store'
+import { requestManualActivation } from '../activation'
+import { configHash } from '../../algorithms/canonical'
+import { defaultConfig } from '../../algorithms/registry'
+let sqlite: Database.Database
+let db: ReturnType<typeof drizzle<typeof schema>>
+let profiles: ProfileStore
+beforeEach(() => {
+  sqlite = new Database(':memory:')
+  db = drizzle(sqlite, { schema })
+  migrate(db, { migrationsFolder: 'src/db/migrations' })
+  profiles = new ProfileStore(db)
+})
+afterEach(() => sqlite.close())
+const candidate = () => profiles.createRevision({ side: 'left', overrides: [{ path: 'heart_rate.trackingToleranceBpm', value: 20 }], origin: 'manual', requester: 'fixture', idempotencyKey: 'candidate' })
+const request = () => {
+  const revision = candidate()
+  return { side: 'left' as const, action: 'activate' as const, revisionId: revision.id, expectedGeneration: 0,
+    expectedResolvedHash: revision.resolvedHash, boundary: 'next_session' as const, requester: 'fixture', idempotencyKey: 'activation', allowUnvalidated: true as const }
+}
+describe('atomic activation intent', () => {
+  it('writes one binding, audit event and immutable outbox payload, without claiming adoption', () => {
+    const input = request()
+    const event = requestManualActivation(db, input)
+    expect(event).toMatchObject({ generation: 1, state: 'pending_delivery', nextHash: input.expectedResolvedHash })
+    expect(requestManualActivation(db, input)).toEqual(event)
+    expect(profiles.binding('left')).toMatchObject({ generation: 1, desiredRevisionId: input.revisionId, previousRevisionId: null })
+    expect(profiles.binding('right').generation).toBe(0)
+    expect(db.select().from(schema.biometricConfigOutbox).all()).toHaveLength(1)
+    expect(() => requestManualActivation(db, { ...input, idempotencyKey: 'stale' })).toThrow('Binding changed')
+  })
+  it('distinguishes rollback from reset and verifies exact target hashes', () => {
+    const input = request()
+    requestManualActivation(db, input)
+    expect(() => requestManualActivation(db, { ...input, action: 'rollback', expectedGeneration: 1, idempotencyKey: 'wrong' })).toThrow('previous binding')
+    const rollback = requestManualActivation(db, { ...input, action: 'rollback', revisionId: null, expectedGeneration: 1,
+      expectedResolvedHash: configHash(defaultConfig), idempotencyKey: 'rollback' })
+    expect(rollback).toMatchObject({ action: 'rollback', generation: 2, nextRevisionId: null })
+    const reset = requestManualActivation(db, { ...input, action: 'reset', revisionId: null, expectedGeneration: 2,
+      expectedResolvedHash: configHash(defaultConfig), idempotencyKey: 'reset' })
+    expect(reset).toMatchObject({ action: 'reset', generation: 3 })
+  })
+  it('rolls back all intent writes when outbox insertion fails', () => {
+    const input = request()
+    sqlite.exec('CREATE TRIGGER reject_outbox BEFORE INSERT ON biometric_config_outbox BEGIN SELECT RAISE(ABORT, \'fixture failure\'); END;')
+    expect(() => requestManualActivation(db, input)).toThrow('fixture failure')
+    expect(profiles.binding('left').generation).toBe(0)
+    expect(db.select().from(schema.biometricActivationEvents).all()).toEqual([])
+  })
+  it('requires legacy personalization to be preserved before a new binding can replace it', () => {
+    db.insert(schema.sideSettings).values({ side: 'left', name: 'Left', stageClassifier: defaultConfig.sleep_stages }).run()
+    expect(() => requestManualActivation(db, request())).toThrow('Preserve the existing stage profile')
+    expect(profiles.binding('left').generation).toBe(0)
+    profiles.migrateLegacy('left')
+    const input = request()
+    expect(requestManualActivation(db, { ...input, expectedGeneration: 1 }).generation).toBe(2)
+  })
+
+  it('rejects incorrect hashes and changed idempotency payloads', () => {
+    const input = request()
+    expect(() => requestManualActivation(db, { ...input, expectedResolvedHash: '0'.repeat(64) })).toThrow('Resolved configuration changed')
+    requestManualActivation(db, input)
+    expect(() => requestManualActivation(db, { ...input, boundary: 'immediate' })).toThrow('idempotency key changed')
+  })
+})
