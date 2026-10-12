@@ -13,6 +13,13 @@ msgstr ""
 "Language-Team: \n"
 "Plural-Forms: \n"
 
+#. placeholder {0}: item.summary.source
+#. placeholder {1}: item.summary.subjectId
+#. placeholder {2}: item.revision
+#: src/components/biometrics/Calibration/DatasetBuilder.tsx:102
+msgid "{0} · {1} · revision {2}"
+msgstr ""
+
 #: src/components/biometrics/Calibration/ProfileLibrary.tsx:19
 msgid "A saved revision is not evidence of validation or processor adoption."
 msgstr ""
@@ -48,6 +55,10 @@ msgstr ""
 
 #: src/components/biometrics/Calibration/ProfileComparison.tsx:40
 msgid "After configuration hash"
+msgstr ""
+
+#: src/components/biometrics/Calibration/DatasetBuilder.tsx:104
+msgid "Another revision from this reference family is selected."
 msgstr ""
 
 #: src/components/biometrics/Calibration/CalibrationHistory.tsx:18
@@ -174,6 +185,15 @@ msgstr ""
 msgid "Data format"
 msgstr ""
 
+#. placeholder {0}: create.data.id
+#: src/components/biometrics/Calibration/DatasetBuilder.tsx:57
+msgid "Dataset saved: {0}"
+msgstr ""
+
+#: src/components/biometrics/Calibration/DatasetBuilder.tsx:35
+msgid "Dataset sleeper identifier"
+msgstr ""
+
 #: src/components/biometrics/Calibration/ProfileRecovery.tsx:31
 msgid "Default recovery configuration hash"
 msgstr ""
@@ -257,8 +277,20 @@ msgstr ""
 msgid "First records"
 msgstr ""
 
+#: src/components/biometrics/Calibration/DatasetBuilder.tsx:33
+msgid "Freeze evaluation inputs"
+msgstr ""
+
+#: src/components/biometrics/Calibration/DatasetBuilder.tsx:49
+msgid "Freeze selected inputs"
+msgstr ""
+
 #: src/components/biometrics/Calibration/CalibrationOverview.tsx:58
 msgid "Freshness unknown"
+msgstr ""
+
+#: src/components/biometrics/Calibration/DatasetBuilder.tsx:56
+msgid "Frozen dataset"
 msgstr ""
 
 #. placeholder {0}: data.desired.binding.generation
@@ -286,6 +318,10 @@ msgstr ""
 
 #: src/components/biometrics/Calibration/BiometricCalibration.tsx:29
 msgid "History"
+msgstr ""
+
+#: src/components/biometrics/Calibration/DatasetBuilder.tsx:20
+msgid "Holdout"
 msgstr ""
 
 #: src/components/biometrics/Calibration/CalibrationOverview.tsx:18
@@ -383,6 +419,7 @@ msgstr ""
 msgid "Newest"
 msgstr ""
 
+#: src/components/biometrics/Calibration/DatasetBuilder.tsx:109
 #: src/components/biometrics/Calibration/ReferenceLibrary.tsx:71
 msgid "Newest imports"
 msgstr ""
@@ -427,8 +464,13 @@ msgstr ""
 msgid "No recorded nights for this side."
 msgstr ""
 
+#: src/components/biometrics/Calibration/DatasetBuilder.tsx:91
 #: src/components/biometrics/Calibration/ReferenceLibrary.tsx:35
 msgid "No reference imports for this side."
+msgstr ""
+
+#: src/components/biometrics/Calibration/DatasetBuilder.tsx:47
+msgid "No references selected. This dataset cannot establish agreement with reference measurements."
 msgstr ""
 
 #: src/components/biometrics/Calibration/ProfileComparison.tsx:44
@@ -465,6 +507,7 @@ msgstr ""
 msgid "Older changes"
 msgstr ""
 
+#: src/components/biometrics/Calibration/DatasetBuilder.tsx:110
 #: src/components/biometrics/Calibration/ReferenceLibrary.tsx:72
 msgid "Older imports"
 msgstr ""
@@ -581,6 +624,11 @@ msgstr ""
 msgid "Remove override"
 msgstr ""
 
+#. placeholder {0}: item.id
+#: src/components/biometrics/Calibration/DatasetBuilder.tsx:84
+msgid "Remove reference {0}"
+msgstr ""
+
 #: src/components/biometrics/Calibration/ReplaySessionPicker.tsx:27
 msgid "Remove session {id}"
 msgstr ""
@@ -619,6 +667,10 @@ msgstr ""
 #: src/components/biometrics/Calibration/ManualProfileActivation.tsx:62
 #: src/components/biometrics/Calibration/ProfileComparison.tsx:28
 msgid "Restore system defaults"
+msgstr ""
+
+#: src/components/biometrics/Calibration/DatasetBuilder.tsx:33
+msgid "Retain a copy of the selected nights and reference revisions. Future edits or source deletion do not alter this dataset."
 msgstr ""
 
 #: src/components/biometrics/Calibration/ManualProfileActivation.tsx:62
@@ -691,6 +743,11 @@ msgstr ""
 
 #: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:109
 msgid "Schema checks passed. Agreement with reference measurements has not been evaluated."
+msgstr ""
+
+#. placeholder {0}: selected.length
+#: src/components/biometrics/Calibration/DatasetBuilder.tsx:83
+msgid "Selected reference revisions: {0} / 20"
 msgstr ""
 
 #. placeholder {0}: selected.length
@@ -778,6 +835,10 @@ msgstr ""
 msgid "The saved profile or parameter definitions are incompatible with this editor."
 msgstr ""
 
+#: src/components/biometrics/Calibration/DatasetBuilder.tsx:48
+msgid "The server groups connected sessions into whole nights in the device timezone before assigning tuning, validation, and holdout sets. A split is not evidence of improvement."
+msgstr ""
+
 #: src/components/biometrics/Calibration/CandidateStageFields.tsx:15
 msgid "These edits belong only to the candidate. Rule order matters: the first matching rule wins."
 msgstr ""
@@ -799,6 +860,18 @@ msgstr ""
 msgid "Times shown in {timezone}"
 msgstr ""
 
+#: src/components/biometrics/Calibration/DatasetBuilder.tsx:59
+msgid "Too few independent nights for a validation split; descriptive evaluation only."
+msgstr ""
+
+#: src/components/biometrics/Calibration/DatasetBuilder.tsx:20
+msgid "Tuning"
+msgstr ""
+
+#: src/components/biometrics/Calibration/DatasetBuilder.tsx:104
+msgid "Unavailable or belongs to a different sleeper."
+msgstr ""
+
 #. placeholder {0}: parameter.unit
 #. placeholder {1}: parameter.minimum
 #. placeholder {2}: parameter.maximum
@@ -814,6 +887,10 @@ msgstr ""
 
 #: src/components/biometrics/Calibration/CalibrationHistory.tsx:17
 msgid "Use system defaults"
+msgstr ""
+
+#: src/components/biometrics/Calibration/DatasetBuilder.tsx:20
+msgid "Validation"
 msgstr ""
 
 #: src/components/biometrics/Calibration/ReferenceLibrary.tsx:98
@@ -843,4 +920,8 @@ msgstr ""
 
 #: src/components/biometrics/Calibration/CalibrationOverview.tsx:44
 msgid "What these metrics mean"
+msgstr ""
+
+#: src/components/biometrics/Calibration/DatasetBuilder.tsx:59
+msgid "Whole-night partitions assigned; biometric performance is not yet validated."
 msgstr ""
