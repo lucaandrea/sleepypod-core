@@ -4,7 +4,7 @@ import { I18nProvider } from '@lingui/react'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { ReferenceLibrary } from '../ReferenceLibrary'
 const mock = vi.hoisted(() => ({ remove: vi.fn(), invalidate: vi.fn(), imports: vi.fn(), records: vi.fn() }))
-vi.mock('@/src/utils/trpc', () => ({ trpc: {
+vi.mock('@/src/utils/trpc', () => ({ trpc: { settings: { getAll: { useQuery: () => ({ data: { device: { timezone: 'UTC' } } }) } },
   useUtils: () => ({ biometricTuning: { listImports: { invalidate: mock.invalidate } } }),
   biometricTuning: {
     listImports: { useQuery: mock.imports }, getImportMeasurements: { useQuery: mock.records },

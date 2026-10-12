@@ -5,7 +5,7 @@ import { beforeEach, expect, it, vi } from 'vitest'
 import { CalibrationReferences } from '../CalibrationReferences'
 
 const mock = vi.hoisted(() => ({ preview: vi.fn(), commit: vi.fn() }))
-vi.mock('@/src/utils/trpc', () => ({ trpc: { useUtils: () => ({ biometricTuning: { listImports: { invalidate: vi.fn() } } }), biometricTuning: {
+vi.mock('@/src/utils/trpc', () => ({ trpc: { settings: { getAll: { useQuery: () => ({ data: { device: { timezone: 'UTC' } } }) } }, useUtils: () => ({ biometricTuning: { listImports: { invalidate: vi.fn() } } }), biometricTuning: {
   previewImport: { useMutation: () => ({ mutateAsync: mock.preview, isPending: false }) },
   commitImport: { useMutation: () => ({ mutateAsync: mock.commit, isPending: false }) },
 } } }))
@@ -59,5 +59,21 @@ it('rejects malformed files locally and surfaces commit failures without claimin
   fireEvent.click(screen.getByRole('checkbox'))
   fireEvent.click(screen.getByRole('button', { name: 'Save previewed import' }))
   await waitFor(() => expect(screen.getByText('Preview hash mismatch')).toBeTruthy())
+  expect(screen.queryByText(/Reference import saved:/)).toBeNull()
+})
+
+it('pins corrections to the selected parent while preserving mapping and stale-revision errors', async () => {
+  render(<I18nProvider i18n={i18n}><CalibrationReferences side="left" correction={{ id: 'parent-id', subjectId: 'original-sleeper', source: 'original-watch' }} /></I18nProvider>)
+  expect((screen.getByLabelText('Sleeper identifier') as HTMLInputElement).readOnly).toBe(true)
+  expect((screen.getByLabelText('Reference source') as HTMLInputElement).readOnly).toBe(true)
+  fireEvent.change(screen.getByLabelText('Data format'), { target: { value: 'json' } })
+  fireEvent.change(screen.getByLabelText('Reference records'), { target: { value: '[{}]' } })
+  mock.preview.mockResolvedValue({ ...summary, rejected: 0, startMs: 1791673200000, endMs: 1791673260000 })
+  mock.commit.mockRejectedValue(new Error('Another correction exists; use the latest import revision'))
+  fireEvent.click(screen.getByRole('button', { name: 'Preview import' }))
+  await screen.findByText(/This is the first-to-last record span/)
+  fireEvent.click(screen.getByRole('button', { name: 'Save previewed import' }))
+  await screen.findByText('Another correction exists; use the latest import revision')
+  expect(mock.commit).toHaveBeenCalledWith({ import: { side: 'left', subjectId: 'original-sleeper', source: 'original-watch', rows: [{}] }, previewHash: summary.contentHash, acceptRejectedRows: false, supersedesImportId: 'parent-id' })
   expect(screen.queryByText(/Reference import saved:/)).toBeNull()
 })

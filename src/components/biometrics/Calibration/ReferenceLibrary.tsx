@@ -2,6 +2,8 @@
 
 import { useState } from 'react'
 import { Trans, useLingui } from '@lingui/react/macro'
+import { CalibrationReferences } from './CalibrationReferences'
+import { ReferenceTimeSpan } from './ReferenceTimeSpan'
 import { trpc } from '@/src/utils/trpc'
 import { Button, Card, CardHeader, InlineError, Skeleton } from '@/src/components/ds'
 
@@ -9,6 +11,7 @@ export function ReferenceLibrary({ side }: { side: 'left' | 'right' }) {
   const { t } = useLingui()
   const [cursor, setCursor] = useState<{ createdAtMs: number, id: string }>()
   const [selected, setSelected] = useState<string>()
+  const [correcting, setCorrecting] = useState<string>()
   const [deleting, setDeleting] = useState<string>()
   const imports = trpc.biometricTuning.listImports.useQuery({ side, beforeCreatedAtMs: cursor?.createdAtMs, beforeId: cursor?.id })
   const remove = trpc.biometricTuning.deleteImport.useMutation()
@@ -16,6 +19,7 @@ export function ReferenceLibrary({ side }: { side: 'left' | 'right' }) {
   async function deleteSelected(id: string) {
     await remove.mutateAsync({ id })
     setDeleting(undefined)
+    if (correcting === id) setCorrecting(undefined)
     if (selected === id) setSelected(undefined)
     await utils.biometricTuning.listImports.invalidate()
   }
@@ -38,11 +42,13 @@ export function ReferenceLibrary({ side }: { side: 'left' | 'right' }) {
                           {item.summary.subjectId}
                         </p>
                         <p>{t`Revision ${item.revision}; accepted ${item.summary.accepted}; unscorable ${item.summary.unscorable}`}</p>
+                        <ReferenceTimeSpan startMs={item.summary.startMs} endMs={item.summary.endMs} />
                         <p className="break-all text-xs">{item.id}</p>
                         {item.available
                           ? (
                               <div className="flex flex-wrap gap-2">
                                 <Button onClick={() => setSelected(selected === item.id ? undefined : item.id)} aria-expanded={selected === item.id}><Trans>Inspect measurements</Trans></Button>
+                                <Button aria-expanded={correcting === item.id} onClick={() => setCorrecting(correcting === item.id ? undefined : item.id)}><Trans>Correct import</Trans></Button>
                                 <Button disabled={remove.isPending} onClick={() => setDeleting(item.id)}><Trans>Delete import</Trans></Button>
                               </div>
                             )
@@ -56,6 +62,7 @@ export function ReferenceLibrary({ side }: { side: 'left' | 'right' }) {
                               </div>
                             )
                           : null}
+                        {correcting === item.id && item.available ? <CalibrationReferences key={item.id} side={side} correction={{ id: item.id, subjectId: item.summary.subjectId, source: item.summary.source }} /> : null}
                         {selected === item.id && item.available ? <ReferenceMeasurements key={item.id} id={item.id} /> : null}
                       </li>
                     ))}

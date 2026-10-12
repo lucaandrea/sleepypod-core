@@ -13,7 +13,7 @@ msgstr ""
 "Language-Team: \n"
 "Plural-Forms: \n"
 
-#: src/components/biometrics/Calibration/CalibrationReferences.tsx:84
+#: src/components/biometrics/Calibration/CalibrationReferences.tsx:87
 msgid "Accepted records are not necessarily usable for validation. Incompatible HRV definitions remain unscorable."
 msgstr ""
 
@@ -22,7 +22,7 @@ msgstr ""
 #. placeholder {2}: preview.summary.duplicates
 #. placeholder {3}: preview.summary.unscorable
 #. placeholder {4}: preview.summary.conflicts
-#: src/components/biometrics/Calibration/CalibrationReferences.tsx:82
+#: src/components/biometrics/Calibration/CalibrationReferences.tsx:84
 msgid "Accepted: {0}; rejected: {1}; duplicates: {2}; unscorable: {3}; conflicts: {4}"
 msgstr ""
 
@@ -63,8 +63,17 @@ msgstr ""
 msgid "Configuration identity"
 msgstr ""
 
-#: src/components/biometrics/Calibration/ReferenceLibrary.tsx:52
+#: src/components/biometrics/Calibration/ReferenceLibrary.tsx:58
 msgid "Confirm import deletion"
+msgstr ""
+
+#: src/components/biometrics/Calibration/ReferenceLibrary.tsx:51
+msgid "Correct import"
+msgstr ""
+
+#. placeholder {0}: correction.id
+#: src/components/biometrics/Calibration/CalibrationReferences.tsx:55
+msgid "Correcting import {0}. Supply the complete replacement export; the original revision and frozen datasets remain unchanged."
 msgstr ""
 
 #: src/components/biometrics/Calibration/CalibrationOverview.tsx:15
@@ -72,19 +81,19 @@ msgstr ""
 msgid "Current"
 msgstr ""
 
-#: src/components/biometrics/Calibration/CalibrationReferences.tsx:65
+#: src/components/biometrics/Calibration/CalibrationReferences.tsx:67
 msgid "Data format"
 msgstr ""
 
-#: src/components/biometrics/Calibration/ReferenceLibrary.tsx:46
+#: src/components/biometrics/Calibration/ReferenceLibrary.tsx:52
 msgid "Delete import"
 msgstr ""
 
-#: src/components/biometrics/Calibration/ReferenceLibrary.tsx:53
+#: src/components/biometrics/Calibration/ReferenceLibrary.tsx:59
 msgid "Delete these source measurements permanently? Retained dataset copies must be released separately."
 msgstr ""
 
-#: src/components/biometrics/Calibration/ReferenceLibrary.tsx:24
+#: src/components/biometrics/Calibration/ReferenceLibrary.tsx:28
 msgid "Deleting an import removes its source measurements. Previously frozen datasets are separate retained copies."
 msgstr ""
 
@@ -96,15 +105,15 @@ msgstr ""
 msgid "Direct sleep-stage changes are unvalidated manual settings. Saving requests a profile change; processor adoption is reported separately in Overview."
 msgstr ""
 
-#: src/components/biometrics/Calibration/ReferenceLibrary.tsx:90
+#: src/components/biometrics/Calibration/ReferenceLibrary.tsx:97
 msgid "End (UTC)"
 msgstr ""
 
-#: src/components/biometrics/Calibration/CalibrationReferences.tsx:88
+#: src/components/biometrics/Calibration/CalibrationReferences.tsx:91
 msgid "Exact import identity"
 msgstr ""
 
-#: src/components/biometrics/Calibration/ReferenceLibrary.tsx:81
+#: src/components/biometrics/Calibration/ReferenceLibrary.tsx:88
 msgid "Exact normalized timestamps are shown in UTC. Values are not interpolated."
 msgstr ""
 
@@ -121,7 +130,7 @@ msgstr ""
 msgid "Failed"
 msgstr ""
 
-#: src/components/biometrics/Calibration/ReferenceLibrary.tsx:112
+#: src/components/biometrics/Calibration/ReferenceLibrary.tsx:119
 msgid "First records"
 msgstr ""
 
@@ -156,23 +165,23 @@ msgstr ""
 msgid "HRV index"
 msgstr ""
 
-#: src/components/biometrics/Calibration/CalibrationReferences.tsx:96
+#: src/components/biometrics/Calibration/CalibrationReferences.tsx:99
 msgid "Import accepted records and omit rejected records"
 msgstr ""
 
-#: src/components/biometrics/Calibration/CalibrationReferences.tsx:81
+#: src/components/biometrics/Calibration/CalibrationReferences.tsx:83
 msgid "Import preview"
 msgstr ""
 
-#: src/components/biometrics/Calibration/CalibrationReferences.tsx:52
+#: src/components/biometrics/Calibration/CalibrationReferences.tsx:53
 msgid "Import reference measurements"
 msgstr ""
 
-#: src/components/biometrics/Calibration/ReferenceLibrary.tsx:45
+#: src/components/biometrics/Calibration/ReferenceLibrary.tsx:50
 msgid "Inspect measurements"
 msgstr ""
 
-#: src/components/biometrics/Calibration/ReferenceLibrary.tsx:55
+#: src/components/biometrics/Calibration/ReferenceLibrary.tsx:61
 msgid "Keep import"
 msgstr ""
 
@@ -180,12 +189,12 @@ msgstr ""
 msgid "Measured sensor calibration"
 msgstr ""
 
-#: src/components/biometrics/Calibration/ReferenceLibrary.tsx:87
+#: src/components/biometrics/Calibration/ReferenceLibrary.tsx:94
 msgid "Metric"
 msgstr ""
 
 #. placeholder {0}: preview.summary.metrics.join(', ')
-#: src/components/biometrics/Calibration/CalibrationReferences.tsx:83
+#: src/components/biometrics/Calibration/CalibrationReferences.tsx:86
 msgid "Metrics: {0}"
 msgstr ""
 
@@ -197,23 +206,27 @@ msgstr ""
 msgid "Newest"
 msgstr ""
 
-#: src/components/biometrics/Calibration/ReferenceLibrary.tsx:64
+#: src/components/biometrics/Calibration/ReferenceLibrary.tsx:71
 msgid "Newest imports"
 msgstr ""
 
-#: src/components/biometrics/Calibration/ReferenceLibrary.tsx:113
+#: src/components/biometrics/Calibration/ReferenceLibrary.tsx:120
 msgid "Next records"
+msgstr ""
+
+#: src/components/biometrics/Calibration/ReferenceTimeSpan.tsx:21
+msgid "No accepted time range."
 msgstr ""
 
 #: src/components/biometrics/Calibration/CalibrationHistory.tsx:30
 msgid "No activation history for this side."
 msgstr ""
 
-#: src/components/biometrics/Calibration/ReferenceLibrary.tsx:31
+#: src/components/biometrics/Calibration/ReferenceLibrary.tsx:35
 msgid "No reference imports for this side."
 msgstr ""
 
-#: src/components/biometrics/Calibration/ReferenceLibrary.tsx:111
+#: src/components/biometrics/Calibration/ReferenceLibrary.tsx:118
 msgid "No retained measurements."
 msgstr ""
 
@@ -221,7 +234,7 @@ msgstr ""
 msgid "No sensor calibration has been reported for this side."
 msgstr ""
 
-#: src/components/biometrics/Calibration/ReferenceLibrary.tsx:84
+#: src/components/biometrics/Calibration/ReferenceLibrary.tsx:91
 msgid "Normalized reference measurements"
 msgstr ""
 
@@ -234,7 +247,7 @@ msgstr ""
 msgid "Older changes"
 msgstr ""
 
-#: src/components/biometrics/Calibration/ReferenceLibrary.tsx:65
+#: src/components/biometrics/Calibration/ReferenceLibrary.tsx:72
 msgid "Older imports"
 msgstr ""
 
@@ -246,7 +259,7 @@ msgstr ""
 msgid "Past acknowledgements do not establish which profile is running now."
 msgstr ""
 
-#: src/components/biometrics/Calibration/ReferenceLibrary.tsx:54
+#: src/components/biometrics/Calibration/ReferenceLibrary.tsx:60
 msgid "Permanently delete import"
 msgstr ""
 
@@ -254,11 +267,11 @@ msgstr ""
 msgid "Personalized profile"
 msgstr ""
 
-#: src/components/biometrics/Calibration/CalibrationReferences.tsx:76
+#: src/components/biometrics/Calibration/CalibrationReferences.tsx:78
 msgid "Preview import"
 msgstr ""
 
-#: src/components/biometrics/Calibration/CalibrationReferences.tsx:52
+#: src/components/biometrics/Calibration/CalibrationReferences.tsx:53
 msgid "Preview normalized records before saving them on the pod."
 msgstr ""
 
@@ -274,27 +287,31 @@ msgstr ""
 msgid "Profiles"
 msgstr ""
 
-#: src/components/biometrics/Calibration/CalibrationReferences.tsx:48
+#: src/components/biometrics/Calibration/ReferenceTimeSpan.tsx:25
+msgid "Reference extent: {start} to {end} ({timezone})"
+msgstr ""
+
+#: src/components/biometrics/Calibration/CalibrationReferences.tsx:49
 msgid "Reference import failed."
 msgstr ""
 
-#: src/components/biometrics/Calibration/CalibrationReferences.tsx:78
+#: src/components/biometrics/Calibration/CalibrationReferences.tsx:80
 msgid "Reference import saved: {saved}"
 msgstr ""
 
-#: src/components/biometrics/Calibration/ReferenceLibrary.tsx:24
+#: src/components/biometrics/Calibration/ReferenceLibrary.tsx:28
 msgid "Reference library"
 msgstr ""
 
-#: src/components/biometrics/Calibration/CalibrationReferences.tsx:37
+#: src/components/biometrics/Calibration/CalibrationReferences.tsx:38
 msgid "Reference preview failed."
 msgstr ""
 
-#: src/components/biometrics/Calibration/CalibrationReferences.tsx:72
+#: src/components/biometrics/Calibration/CalibrationReferences.tsx:74
 msgid "Reference records"
 msgstr ""
 
-#: src/components/biometrics/Calibration/CalibrationReferences.tsx:61
+#: src/components/biometrics/Calibration/CalibrationReferences.tsx:63
 msgid "Reference source"
 msgstr ""
 
@@ -318,17 +335,17 @@ msgstr ""
 #. placeholder {0}: item.revision
 #. placeholder {1}: item.summary.accepted
 #. placeholder {2}: item.summary.unscorable
-#: src/components/biometrics/Calibration/ReferenceLibrary.tsx:40
+#: src/components/biometrics/Calibration/ReferenceLibrary.tsx:44
 msgid "Revision {0}; accepted {1}; unscorable {2}"
 msgstr ""
 
 #. placeholder {0}: item.row
 #. placeholder {1}: item.message
-#: src/components/biometrics/Calibration/CalibrationReferences.tsx:86
+#: src/components/biometrics/Calibration/CalibrationReferences.tsx:89
 msgid "Row {0}: {1}"
 msgstr ""
 
-#: src/components/biometrics/Calibration/CalibrationReferences.tsx:100
+#: src/components/biometrics/Calibration/CalibrationReferences.tsx:103
 msgid "Save previewed import"
 msgstr ""
 
@@ -348,11 +365,11 @@ msgstr ""
 msgid "Sensor measurements are separate from algorithm personalization."
 msgstr ""
 
-#: src/components/biometrics/Calibration/CalibrationReferences.tsx:57
+#: src/components/biometrics/Calibration/CalibrationReferences.tsx:59
 msgid "Sleeper identifier"
 msgstr ""
 
-#: src/components/biometrics/Calibration/ReferenceLibrary.tsx:49
+#: src/components/biometrics/Calibration/ReferenceLibrary.tsx:55
 msgid "Source measurements deleted"
 msgstr ""
 
@@ -360,7 +377,7 @@ msgstr ""
 msgid "Stale"
 msgstr ""
 
-#: src/components/biometrics/Calibration/ReferenceLibrary.tsx:89
+#: src/components/biometrics/Calibration/ReferenceLibrary.tsx:96
 msgid "Start (UTC)"
 msgstr ""
 
@@ -372,11 +389,15 @@ msgstr ""
 msgid "The HRV index measures window IBI variability. It is not clinical beat-to-beat RMSSD, and incompatible reference metrics cannot validate it."
 msgstr ""
 
+#: src/components/biometrics/Calibration/ReferenceTimeSpan.tsx:26
+msgid "This is the first-to-last record span, not continuous coverage or overlap with pod readings."
+msgstr ""
+
 #: src/components/biometrics/Calibration/CalibrationHistory.tsx:23
 msgid "Times shown in {timezone}"
 msgstr ""
 
-#: src/components/biometrics/Calibration/CalibrationReferences.tsx:53
+#: src/components/biometrics/Calibration/CalibrationReferences.tsx:54
 msgid "Use offset-bearing ISO timestamps or Unix milliseconds. Each record needs recordKey, metric, value, unit, and timestamp (or start and end). JSON uses an array; CSV uses these field names as headers. Imports are limited to 2 MiB and 2000 records."
 msgstr ""
 
@@ -384,11 +405,11 @@ msgstr ""
 msgid "Use system defaults"
 msgstr ""
 
-#: src/components/biometrics/Calibration/ReferenceLibrary.tsx:91
+#: src/components/biometrics/Calibration/ReferenceLibrary.tsx:98
 msgid "Validation exclusions"
 msgstr ""
 
-#: src/components/biometrics/Calibration/ReferenceLibrary.tsx:88
+#: src/components/biometrics/Calibration/ReferenceLibrary.tsx:95
 msgid "Value"
 msgstr ""
 
