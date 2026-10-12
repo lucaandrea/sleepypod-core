@@ -210,6 +210,10 @@ msgstr "¿Eliminar estas mediciones de origen permanentemente? Las copias conser
 msgid "Deleting an import removes its source measurements. Previously frozen datasets are separate retained copies."
 msgstr "Eliminar una importación borra sus mediciones de origen. Los conjuntos de datos congelados anteriormente son copias conservadas por separado."
 
+#: src/components/biometrics/Calibration/DatasetLibrary.tsx:67
+msgid "Descriptive evaluation only"
+msgstr "Solo evaluación descriptiva"
+
 #: src/components/biometrics/Calibration/CalibrationOverview.tsx:16
 msgid "Different versions reported"
 msgstr "Se han informado versiones diferentes"
@@ -289,9 +293,17 @@ msgstr "Fijar datos seleccionados"
 msgid "Freshness unknown"
 msgstr "Vigencia desconocida"
 
+#: src/components/biometrics/Calibration/DatasetLibrary.tsx:82
+msgid "Frozen coverage and capabilities"
+msgstr "Cobertura y capacidades fijadas"
+
 #: src/components/biometrics/Calibration/DatasetBuilder.tsx:56
 msgid "Frozen dataset"
 msgstr "Conjunto de datos fijado"
+
+#: src/components/biometrics/Calibration/DatasetLibrary.tsx:63
+msgid "Frozen input details"
+msgstr "Detalles de los datos fijados"
 
 #. placeholder {0}: data.desired.binding.generation
 #. placeholder {0}: event.generation
@@ -321,6 +333,7 @@ msgid "History"
 msgstr "Historial"
 
 #: src/components/biometrics/Calibration/DatasetBuilder.tsx:20
+#: src/components/biometrics/Calibration/DatasetLibrary.tsx:61
 msgid "Holdout"
 msgstr "Reserva"
 
@@ -365,6 +378,14 @@ msgstr "Incluir esta sesión"
 msgid "Inherited default"
 msgstr "Valor predeterminado heredado"
 
+#: src/components/biometrics/Calibration/DatasetLibrary.tsx:29
+msgid "Inputs released; metadata retained"
+msgstr "Datos liberados; metadatos conservados"
+
+#: src/components/biometrics/Calibration/DatasetLibrary.tsx:29
+msgid "Inputs retained"
+msgstr "Datos conservados"
+
 #: src/components/biometrics/Calibration/ReplaySessionPicker.tsx:24
 msgid "Inspect available data before selecting nights for a retained dataset."
 msgstr "Inspeccione los datos disponibles antes de seleccionar noches para un conjunto de datos conservado."
@@ -372,6 +393,14 @@ msgstr "Inspeccione los datos disponibles antes de seleccionar noches para un co
 #: src/components/biometrics/Calibration/ProfileLibrary.tsx:35
 msgid "Inspect candidate changes"
 msgstr "Inspeccionar cambios del candidato"
+
+#: src/components/biometrics/Calibration/DatasetLibrary.tsx:33
+msgid "Inspect dataset"
+msgstr "Inspeccionar conjunto de datos"
+
+#: src/components/biometrics/Calibration/DatasetLibrary.tsx:15
+msgid "Inspect frozen inputs and whole-night partitions, or release their retained storage."
+msgstr "Inspeccione los datos fijados y las particiones de noches completas, o libere su almacenamiento."
 
 #: src/components/biometrics/Calibration/ReferenceLibrary.tsx:50
 msgid "Inspect measurements"
@@ -385,6 +414,10 @@ msgstr "Inspeccionar sesión {0}"
 #: src/components/biometrics/Calibration/ReferenceLibrary.tsx:61
 msgid "Keep import"
 msgstr "Conservar importación"
+
+#: src/components/biometrics/Calibration/DatasetLibrary.tsx:92
+msgid "Keep retained inputs"
+msgstr "Conservar los datos retenidos"
 
 #: src/components/biometrics/Calibration/CandidateStageFields.tsx:30
 msgid "Low-signal calibration quality threshold"
@@ -418,6 +451,10 @@ msgstr "Migrar ajustes"
 #: src/components/biometrics/Calibration/CalibrationHistory.tsx:62
 msgid "Newest"
 msgstr "Más recientes"
+
+#: src/components/biometrics/Calibration/DatasetLibrary.tsx:39
+msgid "Newest datasets"
+msgstr "Conjuntos de datos recientes"
 
 #: src/components/biometrics/Calibration/DatasetBuilder.tsx:109
 #: src/components/biometrics/Calibration/ReferenceLibrary.tsx:71
@@ -477,6 +514,10 @@ msgstr "No se han seleccionado referencias. Este conjunto de datos no puede demo
 msgid "No resolved value changes."
 msgstr "No hay cambios en los valores resueltos."
 
+#: src/components/biometrics/Calibration/DatasetLibrary.tsx:22
+msgid "No retained datasets for this side."
+msgstr "No hay conjuntos de datos conservados para este lado."
+
 #: src/components/biometrics/Calibration/ReferenceLibrary.tsx:118
 msgid "No retained measurements."
 msgstr "No hay mediciones conservadas."
@@ -506,6 +547,10 @@ msgstr "Sin información"
 #: src/components/biometrics/Calibration/CalibrationHistory.tsx:63
 msgid "Older changes"
 msgstr "Cambios anteriores"
+
+#: src/components/biometrics/Calibration/DatasetLibrary.tsx:40
+msgid "Older datasets"
+msgstr "Conjuntos de datos anteriores"
 
 #: src/components/biometrics/Calibration/DatasetBuilder.tsx:110
 #: src/components/biometrics/Calibration/ReferenceLibrary.tsx:72
@@ -540,6 +585,11 @@ msgstr "Parámetro"
 msgid "Parent revision"
 msgstr "Revisión de origen"
 
+#. placeholder {0}: data.manifest.splitProtocol.timezone
+#: src/components/biometrics/Calibration/DatasetLibrary.tsx:66
+msgid "Partition timezone: {0}"
+msgstr "Zona horaria de las particiones: {0}"
+
 #: src/components/biometrics/Calibration/CalibrationHistory.tsx:21
 msgid "Past acknowledgements do not establish which profile is running now."
 msgstr "Las confirmaciones anteriores no indican qué perfil se está ejecutando ahora."
@@ -547,6 +597,10 @@ msgstr "Las confirmaciones anteriores no indican qué perfil se está ejecutando
 #: src/components/biometrics/Calibration/ReferenceLibrary.tsx:60
 msgid "Permanently delete import"
 msgstr "Eliminar importación permanentemente"
+
+#: src/components/biometrics/Calibration/DatasetLibrary.tsx:91
+msgid "Permanently release inputs"
+msgstr "Liberar datos permanentemente"
 
 #: src/components/biometrics/Calibration/CalibrationOverview.tsx:25
 msgid "Personalized profile"
@@ -620,6 +674,14 @@ msgstr "Fuente de referencia"
 msgid "References"
 msgstr "Referencias"
 
+#: src/components/biometrics/Calibration/DatasetLibrary.tsx:95
+msgid "Release retained inputs"
+msgstr "Liberar datos conservados"
+
+#: src/components/biometrics/Calibration/DatasetLibrary.tsx:90
+msgid "Release these retained inputs permanently? Existing reports and audit metadata remain. Active jobs must finish or be cancelled first."
+msgstr "¿Liberar estos datos conservados permanentemente? Se mantienen los informes existentes y los metadatos de auditoría. Los trabajos activos deben finalizar o cancelarse primero."
+
 #: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:99
 msgid "Remove override"
 msgstr "Quitar personalización"
@@ -672,6 +734,19 @@ msgstr "Restaurar valores predeterminados del sistema"
 #: src/components/biometrics/Calibration/DatasetBuilder.tsx:33
 msgid "Retain a copy of the selected nights and reference revisions. Future edits or source deletion do not alter this dataset."
 msgstr "Conserve una copia de las noches y revisiones de referencia seleccionadas. Los cambios posteriores o la eliminación del origen no alteran este conjunto de datos."
+
+#. placeholder {0}: dataset.byteLength
+#: src/components/biometrics/Calibration/DatasetLibrary.tsx:32
+msgid "Retained bytes: {0}"
+msgstr "Bytes conservados: {0}"
+
+#: src/components/biometrics/Calibration/DatasetLibrary.tsx:15
+msgid "Retained datasets"
+msgstr "Conjuntos de datos conservados"
+
+#: src/components/biometrics/Calibration/DatasetLibrary.tsx:65
+msgid "Retained input integrity checked by the server."
+msgstr "El servidor ha verificado la integridad de los datos conservados."
 
 #: src/components/biometrics/Calibration/ManualProfileActivation.tsx:62
 msgid "Retry exact activation request"
@@ -759,6 +834,11 @@ msgstr "Sesiones seleccionadas: {0} / 60"
 msgid "Sensor measurements are separate from algorithm personalization."
 msgstr "Las mediciones de los sensores son independientes de la personalización del algoritmo."
 
+#. placeholder {0}: cohort.sessionIds.join(', ')
+#: src/components/biometrics/Calibration/DatasetLibrary.tsx:75
+msgid "Sessions: {0}"
+msgstr "Sesiones: {0}"
+
 #: src/components/biometrics/Calibration/ReplaySessionPicker.tsx:67
 msgid "Signal replay unavailable: raw waveforms and processing context have not been retained by this service."
 msgstr "Reprocesamiento de señales no disponible: este servicio no ha conservado las formas de onda originales ni el contexto de procesamiento."
@@ -822,6 +902,10 @@ msgstr "El índice de VFC mide la variabilidad de los intervalos entre latidos d
 msgid "The pinned profile is incompatible. Its revision will be preserved, but a valid before-and-after comparison is unavailable."
 msgstr "El perfil fijado es incompatible. Se conservará su revisión, pero no se puede realizar una comparación válida del antes y el después."
 
+#: src/components/biometrics/Calibration/DatasetLibrary.tsx:65
+msgid "The retained inputs are unavailable for new evaluations."
+msgstr "Los datos conservados no están disponibles para nuevas evaluaciones."
+
 #: src/components/biometrics/Calibration/ProfileComparison.tsx:33
 msgid "The saved profile changed. Compare again before reviewing these changes."
 msgstr "El perfil guardado ha cambiado. Vuelva a comparar antes de revisar estos cambios."
@@ -865,6 +949,7 @@ msgid "Too few independent nights for a validation split; descriptive evaluation
 msgstr "No hay suficientes noches independientes para una división de validación; solo se permite una evaluación descriptiva."
 
 #: src/components/biometrics/Calibration/DatasetBuilder.tsx:20
+#: src/components/biometrics/Calibration/DatasetLibrary.tsx:61
 msgid "Tuning"
 msgstr "Ajuste"
 
@@ -890,6 +975,7 @@ msgid "Use system defaults"
 msgstr "Usar los valores predeterminados del sistema"
 
 #: src/components/biometrics/Calibration/DatasetBuilder.tsx:20
+#: src/components/biometrics/Calibration/DatasetLibrary.tsx:61
 msgid "Validation"
 msgstr "Validación"
 
@@ -923,5 +1009,6 @@ msgid "What these metrics mean"
 msgstr "Qué significan estas métricas"
 
 #: src/components/biometrics/Calibration/DatasetBuilder.tsx:59
+#: src/components/biometrics/Calibration/DatasetLibrary.tsx:67
 msgid "Whole-night partitions assigned; biometric performance is not yet validated."
 msgstr "Se han asignado particiones de noches completas; el rendimiento biométrico aún no está validado."
