@@ -63,3 +63,19 @@ export const referenceHandlers: DemoHandlers<'biometricTuning'> = {
     return { id, deletedAtMs: record.descriptor.deletedAtMs }
   },
 }
+
+/** Frozen copies, independent of subsequent correction/deletion. */
+export function demoReferenceSnapshot(id: string) {
+  const record = get(id)
+  if (!record.descriptor.available) throw new Error('REFERENCE_DELETED: reference unavailable')
+  return structuredClone(record)
+}
+export function demoReferenceMetrics(side: 'left' | 'right', startMs: number, endMs: number) {
+  const counts = new Map<string, number>()
+  for (const record of imports.filter(row => row.descriptor.available && row.descriptor.summary.side === side)) {
+    for (const row of record.measurements) {
+      if (row.startMs < endMs && (row.endMs > startMs || (row.temporalKind === 'point' && row.startMs >= startMs))) counts.set(row.metric, (counts.get(row.metric) ?? 0) + 1)
+    }
+  }
+  return [...counts].map(([metric, count]) => ({ metric, count }))
+}

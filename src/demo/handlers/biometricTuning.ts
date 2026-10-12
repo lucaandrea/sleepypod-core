@@ -1,3 +1,4 @@
+import { datasetHandlers } from './biometric-datasets'
 import { hash, uuid } from './biometric-utils'
 import { referenceHandlers } from './biometric-references'
 import { biometricManifest, defaultConfig, resolveOverrides } from '@/src/biometrics/algorithms/registry-core'
@@ -70,6 +71,7 @@ function activate(input: RouterInputs['biometricTuning']['rollbackProfile'] & { 
 
 export const biometricTuning: DemoHandlers<'biometricTuning'> = {
   ...referenceHandlers,
+  ...datasetHandlers,
   getManifest: async () => ({ manifest: biometricManifest, manifestHash: await hash(biometricManifest), activationAvailable: true }),
   resolveProfile: input => resolve(input.overrides, input.baseManifestHash),
   createProfileRevision: async (input) => {

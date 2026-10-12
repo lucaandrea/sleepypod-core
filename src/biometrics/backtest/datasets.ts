@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { and, desc, eq, gte, inArray, lt, or, sql } from 'drizzle-orm'
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3'
-import { z } from 'zod'
+import type { z } from 'zod'
 import * as schema from '@/src/db/biometrics-schema'
 import { configHash, dataHash } from '../algorithms/canonical'
 import { normalizedMeasurementSchema } from '../references/contracts'
@@ -10,13 +10,8 @@ import { ReferenceInputError } from '../references/time'
 import { assignWholeNightSplits } from './splits'
 import { describeCoverage } from './coverage'
 
-export const createDatasetSchema = z.object({
-  side: z.enum(['left', 'right']), subjectId: z.string().min(1).max(200),
-  sessionIds: z.array(z.number().int().positive()).min(1).max(60),
-  referenceImportIds: z.array(z.string().uuid()).max(20),
-  timezone: z.string().min(1).max(100),
-  idempotencyKey: z.string().min(1).max(200),
-}).strict()
+import { createDatasetSchema } from './contracts'
+export { createDatasetSchema } from './contracts'
 
 export { datasetSnapshotSchema } from './contracts'
 import { datasetSnapshotSchema } from './contracts'

@@ -65,7 +65,7 @@ export function assignWholeNightSplits(raw: SessionWindow[], timezone: string) {
     split: (index < tuningCount ? 'tuning' : index < tuningCount + validationCount ? 'validation' : 'holdout') as EvaluationSplit,
   }))
   return { version: 'chronological-whole-night-v1' as const, timezone,
-    timezoneRuntime: { icu: process.versions.icu ?? 'unknown', tz: process.versions.tz ?? 'unknown' },
+    timezoneRuntime: { icu: typeof process !== 'undefined' ? process.versions?.icu ?? 'unknown' : 'unknown', tz: typeof process !== 'undefined' ? process.versions?.tz ?? 'unknown' : 'unknown' },
     grouping: 'local_noon_connected_sessions' as const, assignments,
     evidence: hasThreeSplits ? 'partitioned_not_validated' as const : 'descriptive_only' as const,
     limitations: ['Whole-night separation does not by itself establish sufficient reference support or improvement.',

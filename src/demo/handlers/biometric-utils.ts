@@ -1,4 +1,4 @@
-import { canonicalJson } from '@/src/biometrics/algorithms/canonical-json'
+import { canonicalJson, canonicalWithLimit } from '@/src/biometrics/algorithms/canonical-json'
 
 /** Real canonical SHA-256, with no Node modules in the browser demo bundle. */
 export async function hash(value: unknown): Promise<string> {
@@ -14,4 +14,8 @@ export function uuid() {
   bytes[8] = (bytes[8] & 63) | 128
   const hex = Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('')
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
+}
+
+export async function dataHash(value: unknown) {
+  return hashText(canonicalWithLimit(value, 2000000, 32 * 1024 * 1024))
 }

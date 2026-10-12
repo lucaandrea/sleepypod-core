@@ -51,3 +51,11 @@ export const datasetManifestSchema = z.object({
 })
 export const datasetDescriptorSchema = z.object({ id: z.string().uuid(), side: z.enum(['left', 'right']), subjectId: z.string(),
   contentHash: z.string(), manifest: datasetManifestSchema, byteLength: z.number(), createdAtMs: z.number(), releasedAtMs: z.number().nullable(), available: z.boolean() })
+
+export const createDatasetSchema = z.object({
+  side: z.enum(['left', 'right']), subjectId: z.string().min(1).max(200),
+  sessionIds: z.array(z.number().int().positive()).min(1).max(60),
+  referenceImportIds: z.array(z.string().uuid()).max(20),
+  timezone: z.string().min(1).max(100),
+  idempotencyKey: z.string().min(1).max(200),
+}).strict()
