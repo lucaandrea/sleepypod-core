@@ -2,6 +2,7 @@ import { base } from './base'
 import { archivePush } from './archivePush'
 import { automations } from './automations'
 import { biometrics } from './biometrics'
+import { biometricTuning } from './biometricTuning'
 import { calibration } from './calibration'
 import { databases } from './databases'
 import { device } from './device'
@@ -23,6 +24,7 @@ export const demoRouters = {
   archivePush,
   automations,
   biometrics,
+  biometricTuning,
   calibration,
   databases,
   device,
