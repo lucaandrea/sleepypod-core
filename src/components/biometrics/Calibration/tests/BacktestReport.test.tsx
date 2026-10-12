@@ -4,7 +4,9 @@ import { I18nProvider } from '@lingui/react'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { BacktestReport } from '../BacktestReport'
 const mock = vi.hoisted(() => ({ get: vi.fn(), release: vi.fn(), invalidate: vi.fn() }))
+vi.mock('@/src/providers/TimeFormatProvider', () => ({ useTimeFormat: () => '24h' }))
 vi.mock('@/src/utils/trpc', () => ({ trpc: {
+  settings: { getAll: { useQuery: () => ({ data: { device: { timezone: 'UTC' } } }) } },
   useUtils: () => ({ biometricTuning: { getBacktestResult: { invalidate: mock.invalidate } } }),
   biometricTuning: { getBacktestResult: { useQuery: mock.get }, releaseBacktestResult: { useMutation: () => ({ mutateAsync: mock.release, isPending: false }) } },
 } }))
@@ -23,6 +25,22 @@ beforeEach(() => {
   vi.clearAllMocks()
   mock.get.mockReturnValue({ data: descriptor })
   mock.release.mockResolvedValue({})
+})
+it('keeps one stage and numeric section after report controls rerender', () => {
+  const errors = vi.spyOn(console, 'error')
+  mock.get.mockReturnValue({ data: { ...descriptor, report: { ...report, stageNightSummary: [], nights: [] } } })
+  render(view())
+  const assertSections = () => {
+    expect(screen.getAllByRole('heading', { name: 'Stage coverage and confusion by night' })).toHaveLength(1)
+    expect(screen.getAllByRole('region', { name: 'Numerical errors by night' })).toHaveLength(1)
+  }
+  assertSections()
+  fireEvent.click(screen.getByRole('button', { name: 'Release detailed report' }))
+  assertSections()
+  fireEvent.click(screen.getByRole('button', { name: 'Keep report' }))
+  assertSections()
+  expect(errors.mock.calls.flat().join(' ')).not.toContain('same key')
+  errors.mockRestore()
 })
 it('keeps zero scores distinct from missing scores and reports current holdout reuse', () => {
   render(view())

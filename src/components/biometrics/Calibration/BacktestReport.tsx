@@ -86,8 +86,8 @@ export function BacktestReport({ id }: { id: string }) {
           {summary.uncertainty.limitations.map(limitation => <p key={limitation} className="text-xs text-fg-2">{limitation}</p>)}
         </div>
       ))}
-      {report.protocol.mode === 'stage_replay' ? (stages.success ? <StageReport key={descriptor.contentHash} report={stages.data} /> : <InlineError><Trans>Stage details are unavailable or incompatible.</Trans></InlineError>) : null}
-      {numeric.success ? <NumericReport key={descriptor.contentHash} report={numeric.data} /> : <InlineError><Trans>Numerical details are unavailable or incompatible.</Trans></InlineError>}
+      {report.protocol.mode === 'stage_replay' ? (stages.success ? <StageReport key={`stages:${descriptor.contentHash}`} report={stages.data} /> : <InlineError><Trans>Stage details are unavailable or incompatible.</Trans></InlineError>) : null}
+      {numeric.success ? <NumericReport key={`numeric:${descriptor.contentHash}`} report={numeric.data} /> : <InlineError><Trans>Numerical details are unavailable or incompatible.</Trans></InlineError>}
       {report.protocol.mode === 'stage_replay' && numeric.success
         ? (
             <div>
