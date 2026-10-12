@@ -17,6 +17,7 @@ export function CalibrationReferences({ side }: { side: 'left' | 'right' }) {
   const [acceptRejected, setAcceptRejected] = useState(false)
   const [error, setError] = useState<string>()
   const [saved, setSaved] = useState<string>()
+  const utils = trpc.useUtils()
   const previewImport = trpc.biometricTuning.previewImport.useMutation()
   const commitImport = trpc.biometricTuning.commitImport.useMutation()
   const busy = previewImport.isPending || commitImport.isPending
@@ -41,6 +42,7 @@ export function CalibrationReferences({ side }: { side: 'left' | 'right' }) {
     try {
       const result = await commitImport.mutateAsync({ import: preview.input, previewHash: preview.summary.contentHash, acceptRejectedRows: acceptRejected })
       setSaved(result.id)
+      void utils.biometricTuning.listImports.invalidate()
       setPreview(undefined)
     }
     catch (cause) { setError(cause instanceof Error ? cause.message : t`Reference import failed.`) }

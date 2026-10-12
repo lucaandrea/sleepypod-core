@@ -7,6 +7,7 @@ import { SideTabs } from '@/src/components/Settings/SettingsLayout'
 import { SleepStageRules } from '@/src/components/Settings/SleepStageRules'
 import { CalibrationOverview } from './CalibrationOverview'
 import { CalibrationReferences } from './CalibrationReferences'
+import { ReferenceLibrary } from './ReferenceLibrary'
 import { CalibrationHistory } from './CalibrationHistory'
 
 type Side = 'left' | 'right'
@@ -27,7 +28,12 @@ export function BiometricCalibration({ side, onSideChange }: { side: Side, onSid
       {view === 'overview'
         ? <CalibrationOverview side={side} />
         : view === 'references'
-          ? <CalibrationReferences key={side} side={side} />
+          ? (
+              <div key={side} className="space-y-4">
+                <CalibrationReferences side={side} />
+                <ReferenceLibrary side={side} />
+              </div>
+            )
           : view === 'history'
             ? <CalibrationHistory key={side} side={side} />
             : (

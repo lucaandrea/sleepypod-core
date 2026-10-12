@@ -5,7 +5,7 @@ import { beforeEach, expect, it, vi } from 'vitest'
 import { CalibrationReferences } from '../CalibrationReferences'
 
 const mock = vi.hoisted(() => ({ preview: vi.fn(), commit: vi.fn() }))
-vi.mock('@/src/utils/trpc', () => ({ trpc: { biometricTuning: {
+vi.mock('@/src/utils/trpc', () => ({ trpc: { useUtils: () => ({ biometricTuning: { listImports: { invalidate: vi.fn() } } }), biometricTuning: {
   previewImport: { useMutation: () => ({ mutateAsync: mock.preview, isPending: false }) },
   commitImport: { useMutation: () => ({ mutateAsync: mock.commit, isPending: false }) },
 } } }))
