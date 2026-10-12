@@ -3,7 +3,7 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "prebuild": "node scripts/generate-git-info.mjs && lingui compile",
+    "prebuild": "node scripts/generate-git-info.mjs && lingui compile && node scripts/build/demo-biometric-worker.mjs",
     "build": "next build && node scripts/strip-turbopack-external-hashes.mjs && cp -r .next/static .next/standalone/.next/static && { [ ! -d public ] || cp -r public .next/standalone/public || true; } && node scripts/build/biometrics-worker.mjs",
     "dev": "next dev",
     "db:generate": "drizzle-kit generate",

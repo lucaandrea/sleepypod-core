@@ -1,3 +1,4 @@
+import { createDemoBacktestHandlers } from './biometric-backtests'
 import { datasetHandlers } from './biometric-datasets'
 import { hash, uuid } from './biometric-utils'
 import { referenceHandlers } from './biometric-references'
@@ -72,6 +73,20 @@ function activate(input: RouterInputs['biometricTuning']['rollbackProfile'] & { 
 export const biometricTuning: DemoHandlers<'biometricTuning'> = {
   ...referenceHandlers,
   ...datasetHandlers,
+  ...createDemoBacktestHandlers(async (side, revisionId, generation) => {
+    const candidate = await selected(side, revisionId)
+    const defaults = await resolve([])
+    const adopted = events.find(row => row.event.side === side && row.readyAtMs <= Date.now())?.event
+    const stage = await selected(side, adopted?.nextRevisionId ?? null)
+    const current = { ...structuredClone(defaultConfig), sleep_stages: stage.resolved.sleep_stages }
+    const currentHash = await hash(current)
+    if (bindings[side].generation !== generation) throw new Error('REVISION_CONFLICT: profile binding changed')
+    return [
+      { label: 'default', revisionId: null, manifestHash: defaults.manifestHash, resolvedHash: defaults.hash, resolved: defaults.resolved },
+      { label: 'current', revisionId: null, manifestHash: defaults.manifestHash, resolvedHash: currentHash, resolved: current },
+      { label: 'candidate', revisionId, manifestHash: candidate.manifestHash, resolvedHash: candidate.hash, resolved: candidate.resolved },
+    ]
+  }),
   getManifest: async () => ({ manifest: biometricManifest, manifestHash: await hash(biometricManifest), activationAvailable: true }),
   resolveProfile: input => resolve(input.overrides, input.baseManifestHash),
   createProfileRevision: async (input) => {

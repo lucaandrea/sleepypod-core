@@ -1,6 +1,8 @@
 // @vitest-environment node
 import { expect, it } from 'vitest'
 import { build } from 'esbuild'
+import { createHash } from 'node:crypto'
+import workerBuild from '../biometrics/worker-build.json'
 import { sha256 } from '@noble/hashes/sha2.js'
 import { evaluateDemoBacktest } from '../biometrics/evaluator'
 import { evaluateBacktest } from '@/src/biometrics/backtest/evaluator'
@@ -27,5 +29,6 @@ it('preserves the seeded whole-night uncertainty stream across browser and nativ
 it('bundles a self-contained browser worker without database or hardware dependencies', async () => {
   const bundle = await build({ entryPoints: ['src/demo/biometrics/worker.ts'], bundle: true, write: false, platform: 'browser', format: 'esm', metafile: true })
   expect(Object.keys(bundle.metafile.inputs).filter(path => /src\/(hardware|db|automation|scheduler|homekit|streaming)\/|better-sqlite3|drizzle-orm/.test(path))).toEqual([])
+  expect(createHash('sha256').update(bundle.outputFiles[0].contents).digest('hex')).toBe(workerBuild.buildHash)
   expect(bundle.outputFiles[0].text).not.toMatch(/from ['"]node:/)
 })
