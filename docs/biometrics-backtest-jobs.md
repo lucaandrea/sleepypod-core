@@ -146,3 +146,26 @@ until collection can remove it. A failed database transaction never deletes the
 file. Referenced artifacts are retained conservatively, including future-format
 named references. There is no automatic age-based expiry of committed reports;
 release is an explicit user action through the shared API.
+
+## Paired stage support
+
+Each stage-replay night now includes comparisons of current versus default and,
+when supplied, candidate versus default and current. Each window preserves the
+configuration hashes and reports agreement, macro F1 and coverage on each
+configuration's own support and on the exact intersection of their predicted
+intervals. Conflicting or unknown reference intervals remain excluded by the
+shared duration scorer. Common-support confusion matrices are retained; absent
+paired support yields null metrics, never zero error. Fixed clock offsets apply
+to both outputs for scoring without modifying the original displayed traces.
+
+A separate coverage-reduction flag and duration/coverage differences expose
+candidates that omit difficult intervals. For example, omitting the incorrect
+half of a prediction may raise its own-support agreement from 50% to 100%, but
+cannot produce an agreement gain on the remaining common support when its
+labels are unchanged. This is descriptive reporting only. It does not yet
+implement the frozen promotion policy, per-night uncertainty aggregation, or
+validated activation. Numeric waveform candidates still require raw replay.
+
+This comparison adds evaluator work and report bytes. Earlier target benchmark
+numbers apply only to their recorded worker hash; repeat qualification with the
+final worker before enabling production admission defaults.

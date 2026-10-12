@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { compareStageOutputs } from './stage-comparison'
 import { classifySleepStages, type SleepStageBlock } from '@/src/lib/sleep-stages'
 import { configHash, dataHash } from '../algorithms/canonical'
 import { manifestHash, validateConfig } from '../algorithms/registry'
@@ -86,8 +87,22 @@ export function evaluateBacktest(raw: z.input<typeof backtestWorkSchema>, progre
       }
       return { label: config.label, revisionId: config.revisionId, configHash: config.resolvedHash, windows }
     })
+    const comparisons = job.protocol.mode === 'stage_replay'
+      ? evaluations.flatMap(candidate => evaluations
+          .filter(baseline => (candidate.label === 'candidate' && baseline.label !== 'candidate') || (candidate.label === 'current' && baseline.label === 'default'))
+          .map(baseline => ({ baseline: baseline.label, candidate: candidate.label,
+            baselineHash: baseline.configHash, candidateHash: candidate.configHash,
+            windows: candidate.windows.map((window, index) => {
+              const shift = (blocks: SleepStageBlock[]) => blocks.map(block => ({ ...block,
+                start: block.start + job.protocol.clockOffsetMs, end: block.end + job.protocol.clockOffsetMs }))
+              return { startMs: window.startMs, endMs: window.endMs,
+                ...compareStageOutputs(shift(baseline.windows[index].blocks), shift(window.blocks),
+                  references.filter(row => row.metric === 'sleep_stages'), window.startMs, window.endMs) }
+            }),
+          })))
+      : []
     progress(nightIndex + 1, assignments.length)
-    return { cohortId: assignment.cohortId, sessionIds: assignment.sessionIds, uniqueObservationCount: vitals.length, evaluations }
+    return { cohortId: assignment.cohortId, sessionIds: assignment.sessionIds, uniqueObservationCount: vitals.length, evaluations, comparisons }
   })
   return { version: 'processed-backtest-report-v1' as const, datasetId: job.datasetId, datasetHash: job.datasetHash,
     evaluatorBuildHash: job.evaluatorBuildHash, protocol: job.protocol, protocolHash: job.protocolHash, manifestHash, support: 'identical_retained_epoch_intervals' as const, split: job.split, holdoutUse: job.holdoutUse,

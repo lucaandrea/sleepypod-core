@@ -20,6 +20,7 @@ describe('retained-data evaluator', () => {
     expect(windows[0].stage).toMatchObject({ pairedDurationMs: 600000, agreement: 1 })
     expect(windows[0].numeric[0]).toMatchObject({ metrics: { mae: 2 }, pairedCount: 1 })
     expect(report.status).toBe('insufficient_evidence')
+    expect(report.nights[0].comparisons).toMatchObject([{ baseline: 'default', candidate: 'current', windows: [{ coverageReduced: false, differences: { commonAgreement: 0 } }] }])
   })
   it('rejects changed retained inputs and engine snapshots before evaluation', () => {
     const input = fixture()
@@ -35,6 +36,8 @@ describe('retained-data evaluator', () => {
     input.job.protocolHash = configHash(input.job.protocol)
     const report = evaluateBacktest(input)
     expect(report.nights[0].evaluations[0].windows[0].stage?.pairedDurationMs).toBe(540000)
+    expect(report.nights[0].comparisons[0].windows[0].commonSupport.baseline.pairedDurationMs).toBe(540000)
+    expect(report.nights[0].comparisons[0].windows[0].commonSupport.candidate.pairedDurationMs).toBe(540000)
     expect(report.nights[0].evaluations[0].windows[0].blocks[0].start).toBe(start)
   })
 })
