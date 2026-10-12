@@ -112,3 +112,23 @@ orphan collection every thirty minutes. Shutdown aborts and awaits the current
 attempt before database closure. Its global singleton requires an explicit
 admission callback. Production startup and measured resource admission remain
 pending; merely importing the host does not start replay.
+
+## Admission evidence
+
+`admission.ts` defines a deployment-policy contract with a qualification ID and
+explicit limits for memory reserve, free disk, one-minute load per available CPU,
+current event-loop delay, piezo age, temperature and sample age. It has no shipped
+threshold defaults yet. Missing or malformed policy yields `unqualified`; missing
+or malformed health evidence yields `health_unavailable`. Fresh evidence must
+meet every limit. Future timestamps and stale samples also defer replay, and the
+decision returns all applicable pressure reasons for later API/UI exposure.
+
+The Linux collector uses `MemAvailable`, filesystem `bavail`, normalized load,
+thermal zone zero and a twenty-millisecond scheduling probe in the Node host.
+The probe measures current scheduling delay rather than using the lifetime
+performance histogram. Its supplied timestamp callback must read specifically
+`getSensorFrameTimes()['piezo-dual']`, never the newest arbitrary sensor frame.
+Unknown piezo freshness, missing thermal data, read failures or unsupported
+platforms yield unavailable evidence. Collection makes no hardware commands or
+database queries. These helpers are not yet connected to production startup;
+measured thresholds and full publication-load qualification remain required.
