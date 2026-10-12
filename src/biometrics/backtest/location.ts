@@ -10,3 +10,11 @@ export function packagedWorkerPath() {
   }
   throw new ReferenceInputError('WORKER_UNAVAILABLE', 'Build the packaged biometrics worker before submitting a replay')
 }
+
+export function packagedCoordinatorPath() {
+  for (const relative of ['biometrics-worker/coordinator.cjs', '.next/standalone/biometrics-worker/coordinator.cjs']) {
+    const path = resolve(relative)
+    if (existsSync(path)) return path
+  }
+  throw new ReferenceInputError('WORKER_UNAVAILABLE', 'Build the packaged biometrics coordinator before accessing retained evaluation data')
+}

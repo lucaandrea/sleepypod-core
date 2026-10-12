@@ -21,3 +21,16 @@ const forbidden = Object.keys(result.metafile.inputs).filter(path =>
 )
 if (forbidden.length) throw new Error(`Replay worker has live dependencies: ${forbidden.join(', ')}`)
 await writeFile(`${output}/dependencies.json`, JSON.stringify(Object.keys(result.metafile.inputs).sort(), null, 2))
+
+// The coordinator owns SQLite and artifact I/O, but never live application services.
+const coordinator = await build({
+  entryPoints: ['src/biometrics/backtest/coordinator-entry.ts'],
+  outfile: `${output}/coordinator.cjs`, bundle: true, platform: 'node', target: 'node22',
+  format: 'cjs', metafile: true, external: ['better-sqlite3'],
+})
+const live = Object.keys(coordinator.metafile.inputs).filter(path =>
+  /src\/(hardware|automation|scheduler|homekit|streaming)\//.test(path)
+  || /src\/db\/(index|biometrics)\.ts$/.test(path),
+)
+if (live.length) throw new Error(`Coordinator has live entrypoints: ${live.join(', ')}`)
+await writeFile(`${output}/coordinator-dependencies.json`, JSON.stringify(Object.keys(coordinator.metafile.inputs).sort(), null, 2))

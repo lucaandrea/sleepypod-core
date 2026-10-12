@@ -1,9 +1,15 @@
 // @vitest-environment node
 import Database from 'better-sqlite3'
+import { execFile } from 'node:child_process'
+import { mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { promisify } from 'node:util'
+import { stopBiometricCoordinator } from '@/src/biometrics/backtest/coordinator-service'
 import { drizzle } from 'drizzle-orm/better-sqlite3'
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator'
 import { generateOpenApiDocument } from 'trpc-to-openapi'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as schema from '@/src/db/biometrics-schema'
 import * as configSchema from '@/src/db/schema'
 import { DEFAULT_STAGE_CLASSIFIER } from '@/src/lib/sleep-stage-rules'
@@ -12,12 +18,12 @@ import { backtestFixture } from '@/src/biometrics/backtest/tests/fixtures/backte
 import { BacktestJobStore } from '@/src/biometrics/backtest/jobs'
 import { ProfileStore } from '@/src/biometrics/profiles/store'
 
-const holder = vi.hoisted(() => ({ bio: null as unknown, config: null as unknown }))
+const holder = vi.hoisted(() => ({ bio: null as unknown, config: null as unknown, coordinator: '' }))
 vi.mock('@/src/db', () => ({
   get db() { return holder.config },
   get biometricsDb() { return holder.bio },
 }))
-vi.mock('@/src/biometrics/backtest/location', () => ({ packagedWorkerPath: () => '/server-owned/worker.cjs' }))
+vi.mock('@/src/biometrics/backtest/location', () => ({ packagedWorkerPath: () => '/server-owned/worker.cjs', packagedCoordinatorPath: () => holder.coordinator }))
 vi.mock('@/src/biometrics/backtest/child', () => ({ workerBuildHash: async () => 'f'.repeat(64) }))
 const { biometricTuningRouter } = await import('../biometricTuning')
 const caller = biometricTuningRouter.createCaller({})
@@ -27,8 +33,18 @@ const input = { side: 'left' as const, source: 'generic-test', subjectId: 'sleep
   { recordKey: 'hr-1', metric: 'heart_rate', value: 60, unit: 'bpm', timestampMs: 1791673200000 },
 ] }
 
-beforeEach(() => {
-  sqlite = new Database(':memory:')
+let bundleDirectory: string
+let databaseDirectory: string
+beforeAll(async () => {
+  bundleDirectory = await mkdtemp(join(tmpdir(), 'biometric-api-worker-'))
+  await promisify(execFile)(process.execPath, ['scripts/build/biometrics-worker.mjs', bundleDirectory])
+  holder.coordinator = join(bundleDirectory, 'coordinator.cjs')
+})
+afterAll(async () => rm(bundleDirectory, { recursive: true, force: true }))
+beforeEach(async () => {
+  databaseDirectory = await mkdtemp(join(tmpdir(), 'biometric-api-db-'))
+  sqlite = new Database(join(databaseDirectory, 'biometrics.db'))
+  sqlite.pragma('journal_mode = WAL')
   const db = drizzle(sqlite, { schema })
   migrate(db, { migrationsFolder: 'src/db/biometrics-migrations' })
   holder.bio = db
@@ -37,9 +53,11 @@ beforeEach(() => {
   migrate(configDb, { migrationsFolder: 'src/db/migrations' })
   holder.config = configDb
 })
-afterEach(() => {
+afterEach(async () => {
+  await stopBiometricCoordinator()
   sqlite.close()
   configSqlite.close()
+  await rm(databaseDirectory, { recursive: true, force: true })
 })
 
 describe('shared biometric reference API', () => {

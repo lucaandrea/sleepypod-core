@@ -23,6 +23,8 @@ import { closeDatabase, closeBiometricsDatabase } from '@/src/db'
 import { startBiometricsRetention, stopBiometricsRetention } from '@/src/db/retention'
 import { startAutomationRunsRetention, stopAutomationRunsRetention } from '@/src/db/automationRunsRetention'
 import { startHealthSampler, stopHealthSampler } from '@/src/lib/healthSampler'
+import { stopBacktestHost } from '@/src/biometrics/backtest/host'
+import { stopBiometricCoordinator } from '@/src/biometrics/backtest/coordinator-service'
 import { stopBiometricRuntime } from '@/src/biometrics/profiles/runtime-host'
 import { getDacMonitor, shutdownDacMonitor } from '@/src/hardware/dacMonitor.instance'
 import { startPiezoStreamServer, shutdownPiezoStreamServer } from '@/src/streaming/piezoStream'
@@ -144,6 +146,20 @@ async function gracefulShutdown(signal: string): Promise<void> {
   }
   catch (error) {
     console.error('Error stopping biometrics retention:', error)
+  }
+
+  // Drain replay work before closing its database connections.
+  try {
+    await stopBacktestHost()
+  }
+  catch (error) {
+    console.error('Error stopping biometric backtest host:', error)
+  }
+  try {
+    await stopBiometricCoordinator()
+  }
+  catch (error) {
+    console.error('Error stopping biometric coordinator:', error)
   }
 
   // Step 7: Close database connections

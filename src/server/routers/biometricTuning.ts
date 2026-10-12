@@ -21,7 +21,7 @@ import { workerBuildHash } from '@/src/biometrics/backtest/child'
 import { packagedWorkerPath } from '@/src/biometrics/backtest/location'
 import { submitBacktest, submitBacktestSchema } from '@/src/biometrics/backtest/submission'
 import { traceRequestSchema, tracePageSchema } from '@/src/biometrics/backtest/trace-contracts'
-import { readStageTraces } from '@/src/biometrics/backtest/traces'
+import { coordinatorRequest } from '@/src/biometrics/backtest/coordinator-service'
 import { BacktestJobStore } from '@/src/biometrics/backtest/jobs'
 import { describeJob, jobDescriptorSchema, resultDescriptorSchema } from '@/src/biometrics/backtest/descriptors'
 import { experimentProtocolSchema } from '@/src/biometrics/backtest/contracts'
@@ -30,9 +30,9 @@ import { deviceSettings } from '@/src/db/schema'
 import { ReferenceInputError } from '@/src/biometrics/references/time'
 
 /** UI and MCP call this shared service surface under the existing LAN trust model. */
-function references<T>(action: (store: ReferenceStore) => T): T {
+async function references<T>(action: (store: ReferenceStore) => T | Promise<T>): Promise<T> {
   try {
-    return action(new ReferenceStore(biometricsDb))
+    return await action(new ReferenceStore(biometricsDb))
   }
   catch (error) {
     if (error instanceof ReferenceInputError) {
@@ -119,10 +119,8 @@ export const biometricTuningRouter = router({
     .meta({ openapi: { method: 'POST', path: '/biometric-tuning/experiments', protect: false, tags: ['Biometric tuning'] } })
     .input(z.object({ datasetId: z.string().uuid(), protocol: experimentProtocolSchema, idempotencyKey: z.string().min(1).max(200) }).strict())
     .output(experimentDescriptorSchema)
-    .mutation(({ input }) => references(() => {
-      const experiment = new BacktestJobStore(biometricsDb).createExperiment(input.datasetId, input.protocol, input.idempotencyKey)
-      return { ...experiment, protocol: experimentProtocolSchema.parse(experiment.protocol) }
-    })),
+    .mutation(({ input }) => references(() => coordinatorRequest(biometricsDb, { type: 'createExperiment', input })
+      .then(experiment => ({ ...experiment, protocol: experimentProtocolSchema.parse(experiment.protocol) })))),
 
   getExperiment: publicProcedure
     .meta({ openapi: { method: 'GET', path: '/biometric-tuning/experiments/{id}', protect: false, tags: ['Biometric tuning'] } })
@@ -143,7 +141,7 @@ export const biometricTuningRouter = router({
     .input(submitBacktestSchema)
     .output(jobDescriptorSchema)
     .mutation(async ({ input }) => {
-      const path = references(() => packagedWorkerPath())
+      const path = await references(() => packagedWorkerPath())
       const buildHash = await workerBuildHash(path).catch(() => {
         throw new TRPCError({ code: 'SERVICE_UNAVAILABLE', message: 'Packaged replay worker cannot be read' })
       })
@@ -177,19 +175,19 @@ export const biometricTuningRouter = router({
     .meta({ openapi: { method: 'GET', path: '/biometric-tuning/backtests/{id}/result', protect: false, tags: ['Biometric tuning'] } })
     .input(importIdSchema)
     .output(resultDescriptorSchema.nullable())
-    .query(({ input }) => references(() => new BacktestJobStore(biometricsDb).result(input.id))),
+    .query(({ input }) => references(() => coordinatorRequest(biometricsDb, { type: 'readResult', input }))),
 
   getBacktestTrace: publicProcedure
     .meta({ openapi: { method: 'GET', path: '/biometric-tuning/backtests/{id}/trace', protect: false, tags: ['Biometric tuning'] } })
     .input(traceRequestSchema)
     .output(tracePageSchema)
-    .query(({ input }) => references(() => readStageTraces(biometricsDb, input))),
+    .query(({ input }) => references(() => coordinatorRequest(biometricsDb, { type: 'readTrace', input }))),
 
   releaseBacktestResult: publicProcedure
     .meta({ openapi: { method: 'POST', path: '/biometric-tuning/backtests/{id}/result/release', protect: false, tags: ['Biometric tuning'] } })
     .input(importIdSchema.extend({ expectedContentHash: z.string().regex(/^[a-f0-9]{64}$/) }))
     .output(resultDescriptorSchema.nullable())
-    .mutation(({ input }) => references(() => new BacktestJobStore(biometricsDb).releaseResult(input.id, input.expectedContentHash))),
+    .mutation(({ input }) => references(() => coordinatorRequest(biometricsDb, { type: 'releaseResult', input }))),
 
   createDataset: publicProcedure
     .meta({ openapi: { method: 'POST', path: '/biometric-tuning/datasets', protect: false, tags: ['Biometric tuning'] } })
@@ -197,20 +195,20 @@ export const biometricTuningRouter = router({
     .output(datasetDescriptorSchema)
     .mutation(({ input }) => references(() => {
       const timezone = db.select({ timezone: deviceSettings.timezone }).from(deviceSettings).get()?.timezone ?? 'America/Los_Angeles'
-      return datasetDescriptorSchema.parse(new DatasetStore(biometricsDb).create({ ...input, timezone }))
+      return coordinatorRequest(biometricsDb, { type: 'createDataset', input: { ...input, timezone } }).then(result => datasetDescriptorSchema.parse(result))
     })),
 
   releaseDataset: publicProcedure
     .meta({ openapi: { method: 'POST', path: '/biometric-tuning/datasets/{id}/release', protect: false, tags: ['Biometric tuning'] } })
     .input(importIdSchema)
     .output(datasetDescriptorSchema)
-    .mutation(({ input }) => references(() => datasetDescriptorSchema.parse(new DatasetStore(biometricsDb).release(input.id)))),
+    .mutation(({ input }) => references(() => coordinatorRequest(biometricsDb, { type: 'releaseDataset', input }).then(result => datasetDescriptorSchema.parse(result)))),
 
   getDataset: publicProcedure
     .meta({ openapi: { method: 'GET', path: '/biometric-tuning/datasets/{id}', protect: false, tags: ['Biometric tuning'] } })
     .input(importIdSchema)
     .output(datasetDescriptorSchema)
-    .query(({ input }) => references(() => datasetDescriptorSchema.parse(new DatasetStore(biometricsDb).descriptor(input.id)))),
+    .query(({ input }) => references(() => coordinatorRequest(biometricsDb, { type: 'datasetDescriptor', input }).then(result => datasetDescriptorSchema.parse(result)))),
 
   listDatasets: publicProcedure
     .meta({ openapi: { method: 'GET', path: '/biometric-tuning/datasets', protect: false, tags: ['Biometric tuning'] } })

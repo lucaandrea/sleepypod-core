@@ -1,9 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3'
 import type * as schema from '@/src/db/biometrics-schema'
-import { BacktestJobStore } from './jobs'
-import { executeNextBacktest } from './runner'
-import { packagedWorkerPath } from './location'
+import { coordinatorRequest } from './coordinator-service'
 
 interface HostOptions {
   execute: (signal: AbortSignal) => Promise<unknown>
@@ -86,8 +84,8 @@ export function startBacktestHost(db: BetterSQLite3Database<typeof schema>, admi
   if (shared.__biometricBacktestHost) return shared.__biometricBacktestHost
   const owner = `core:${process.pid}:${randomUUID()}`
   const host = new BacktestHost({
-    execute: signal => executeNextBacktest(db, { owner, signal, workerPath: packagedWorkerPath(), admit }),
-    collect: () => { new BacktestJobStore(db).collectOrphanedArtifacts() },
+    execute: signal => coordinatorRequest(db, { type: 'execute', owner }, { signal, admit }),
+    collect: () => coordinatorRequest(db, { type: 'collectArtifacts' }).then(() => {}),
     onError: phase => console.warn(`[biometrics] Backtest ${phase} failed; host will retry`),
   })
   shared.__biometricBacktestHost = host
