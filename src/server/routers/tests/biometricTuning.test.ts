@@ -7,6 +7,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as schema from '@/src/db/biometrics-schema'
 import * as configSchema from '@/src/db/schema'
 import { DEFAULT_STAGE_CLASSIFIER } from '@/src/lib/sleep-stage-rules'
+import { evaluateBacktest } from '@/src/biometrics/backtest/evaluator'
+import { backtestFixture } from '@/src/biometrics/backtest/tests/fixtures/backtest'
 import { BacktestJobStore } from '@/src/biometrics/backtest/jobs'
 import { ProfileStore } from '@/src/biometrics/profiles/store'
 
@@ -213,11 +215,17 @@ describe('shared biometric reference API', () => {
     const reports = new BacktestJobStore(drizzle(sqlite, { schema }))
     const claim = reports.claim('api-fixture')
     if (!claim) throw new Error('Missing claim')
-    const published = reports.complete({ id: claim.id, owner: 'api-fixture', token: claim.fencingToken }, { fixture: true })
+    const published = reports.complete({ id: claim.id, owner: 'api-fixture', token: claim.fencingToken }, evaluateBacktest(backtestFixture()))
     expect((await caller.getBacktestResult({ id: completed.id }))?.available).toBe(true)
+    const trace = await caller.getBacktestTrace({ id: completed.id, expectedContentHash: published.contentHash, configuration: 'default', limit: 2 })
+    expect(trace).toMatchObject({ contentHash: published.contentHash, downsampled: false, provenance: 'versioned_stage_replay' })
+    expect(trace.items.length).toBeGreaterThan(0)
+    expect(trace.items.length).toBeLessThanOrEqual(2)
+    await expect(caller.getBacktestTrace({ id: completed.id, expectedContentHash: '0'.repeat(64), configuration: 'default' })).rejects.toMatchObject({ code: 'CONFLICT' })
     await expect(caller.releaseBacktestResult({ id: completed.id, expectedContentHash: '0'.repeat(64) })).rejects.toMatchObject({ code: 'CONFLICT' })
     const releasedReport = await caller.releaseBacktestResult({ id: completed.id, expectedContentHash: published.contentHash })
     expect(releasedReport).toMatchObject({ available: false, report: null, contentHash: published.contentHash })
+    await expect(caller.getBacktestTrace({ id: completed.id, expectedContentHash: published.contentHash, configuration: 'default' })).rejects.toMatchObject({ code: 'NOT_FOUND' })
     expect(await caller.getBacktestResult({ id: completed.id })).toEqual(releasedReport)
     expect(await caller.releaseBacktestResult({ id: completed.id, expectedContentHash: published.contentHash })).toEqual(releasedReport)
     const released = await caller.releaseDataset({ id: dataset.id })

@@ -45,7 +45,7 @@ const callerMock = vi.hoisted(() => {
       getProfileRevision: fn(), listProfileRevisions: fn(), compareReadings: fn(), deleteImport: fn(), releaseDataset: fn(), releaseBacktestResult: fn(), getActivationStatus: fn(), listActivationHistory: fn(), previewImport: fn(), commitImport: fn(),
       createProfileRevision: fn(), createDataset: fn(), getDataset: fn(), listDatasets: fn(), createExperiment: fn(),
       getExperiment: fn(), listExperiments: fn(), enqueueBacktest: fn(), getBacktest: fn(), cancelBacktest: fn(), listBacktests: fn(),
-      getBacktestResult: fn(), activateProfile: fn(), rollbackProfile: fn(), resetProfile: fn(),
+      getBacktestResult: fn(), getBacktestTrace: fn(), activateProfile: fn(), rollbackProfile: fn(), resetProfile: fn(),
     },
   }
 })
@@ -142,6 +142,7 @@ describe('sleepypod MCP server', () => {
     }
     const { resources } = await client.listResources()
     expect(resources.map(r => r.uri).sort()).toEqual(['sleepypod://biometrics/algorithms', 'sleepypod://biometrics/profiles/left', 'sleepypod://biometrics/profiles/right', 'sleepypod://settings', 'sleepypod://status'])
+    expect((await client.listResourceTemplates()).resourceTemplates.map(template => template.uriTemplate)).toEqual(['sleepypod://biometrics/reports/{id}'])
     const { prompts } = await client.listPrompts()
     expect(prompts.map(p => p.name).sort()).toEqual(['bedtime', 'calibrate_biometrics', 'explain_biometric_difference', 'morning_report'])
   })
@@ -643,6 +644,12 @@ describe('sleepypod MCP server', () => {
     const report = await call('backtest_biometrics', { request: { action: 'report', input: { id } } })
     expect(text(report)).not.toContain('never-export-this-trace')
     expect(parse(report)).toMatchObject({ report: { status: 'insufficient_evidence' }, detailScope: 'summary_without_traces_or_per_night_rows' })
+    const reportResource = await client.readResource({ uri: `sleepypod://biometrics/reports/${id}` })
+    expect(JSON.stringify(reportResource)).not.toContain('never-export-this-trace')
+    api.getBacktestTrace.mockResolvedValue({ totalItems: 3, items: [{ stage: 'light' }], nextCursor: { offset: 2, contentHash: hash } })
+    const trace = await call('backtest_biometrics', { request: { action: 'trace', input: { id, expectedContentHash: hash, configuration: 'candidate', limit: 2 } } })
+    expect(parse(trace)).toMatchObject({ totalItems: 3, nextCursor: { offset: 2, contentHash: hash } })
+    expect(api.getBacktestTrace).toHaveBeenCalledWith({ id, expectedContentHash: hash, configuration: 'candidate', limit: 2, offset: 0 })
     expect(api.activateProfile).not.toHaveBeenCalled()
     expect(api.rollbackProfile).not.toHaveBeenCalled()
     const intent = { side: 'left', revisionId: id, expectedGeneration: 0, expectedResolvedHash: hash, boundary: 'next_session', requester: 'fixture', idempotencyKey: 'apply', allowUnvalidated: true }

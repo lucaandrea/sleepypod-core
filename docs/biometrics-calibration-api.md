@@ -147,3 +147,27 @@ existing reports with a null release timestamp. Older readers cannot validate
 a released payload against the original hash, so they report an unavailable or
 corrupt result rather than silently displaying different data. UI/MCP clients
 must use the explicit availability fields when presenting released evidence.
+
+## Paginated stage traces
+
+`getBacktestTrace` (`GET /biometric-tuning/backtests/{id}/trace`) requires
+`expectedContentHash` and `configuration` (`default`, `current`, or `candidate`).
+It accepts an optional `cohortId`, an `offset` (default zero), and `limit`
+(default 200, maximum 500). The hash must match the verified retained result.
+Unfinished jobs reject trace requests, changed hashes return a conflict, released
+reports return not found, and comparison-only runs report that no stage replay
+was produced. Missing cohorts/configurations and cursors beyond the selected
+trace are errors rather than fabricated empty results.
+
+The response includes exact intervals, configuration hashes/revisions, cohort
+and source-window identities, the total selected interval count, and
+`nextCursor: { offset, contentHash }` or null. Reuse that offset and hash as
+`offset` and `expectedContentHash`, keeping the selection unchanged. No
+intervals are downsampled or interpolated. Trace timestamps precede the fixed
+reference-alignment offset, which is returned separately as `clockOffsetMs`.
+The provenance is explicitly `versioned_stage_replay`, not original observed
+stages. Filtering/pagination never changes evaluation scores.
+
+This bounds response detail, not artifact-read cost: the service currently
+verifies the entire retained report before selecting a page. Parent-process
+artifact parsing and hashing remain part of the target performance qualification.

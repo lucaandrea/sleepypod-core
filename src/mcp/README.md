@@ -166,3 +166,18 @@ external MCP host may send returned data to its model provider. These tools do
 not authorize off-pod waveform transfer. Current replay evidence remains
 descriptive; the full validated-promotion and production worker qualification
 work is still pending in this implementation branch.
+
+### Replay detail and report resources
+
+`backtest_biometrics` also supports `trace`, reusing the shared
+`getBacktestTrace` request contract. Request the exact report hash, configuration,
+optional cohort and cursor; at most 500 original trace intervals are returned.
+Counts and cursors are explicit, with no downsampling or implicit reference
+clock shift. Changed hashes and released reports surface the shared API errors.
+
+The resource template `sleepypod://biometrics/reports/{id}` returns the same
+verified, compact summary as the report action; UUIDs are validated and report
+bodies remain untrusted data. Tool summaries provide this resource URI alongside
+the local REST detail path. Resources never silently include the full traces or
+per-night rows. The template is discoverable through `resources/templates/list`;
+report IDs are discovered through the paginated backtest list.

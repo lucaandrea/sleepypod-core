@@ -20,6 +20,8 @@ import { listReplaySessions, sessionCapabilities, sessionPageSchema, sessionCapa
 import { workerBuildHash } from '@/src/biometrics/backtest/child'
 import { packagedWorkerPath } from '@/src/biometrics/backtest/location'
 import { submitBacktest, submitBacktestSchema } from '@/src/biometrics/backtest/submission'
+import { traceRequestSchema, tracePageSchema } from '@/src/biometrics/backtest/trace-contracts'
+import { readStageTraces } from '@/src/biometrics/backtest/traces'
 import { BacktestJobStore } from '@/src/biometrics/backtest/jobs'
 import { describeJob, jobDescriptorSchema, resultDescriptorSchema } from '@/src/biometrics/backtest/descriptors'
 import { experimentProtocolSchema } from '@/src/biometrics/backtest/contracts'
@@ -36,7 +38,7 @@ function references<T>(action: (store: ReferenceStore) => T): T {
     if (error instanceof ReferenceInputError) {
       const code = error.code === 'WORKER_UNAVAILABLE'
         ? 'SERVICE_UNAVAILABLE'
-        : error.code === 'NOT_FOUND' || error.code === 'REFERENCE_DELETED' || error.code === 'DATASET_RELEASED'
+        : error.code === 'NOT_FOUND' || error.code === 'REFERENCE_DELETED' || error.code === 'DATASET_RELEASED' || error.code === 'RESULT_RELEASED'
           ? 'NOT_FOUND'
           : error.code === 'STALE_PREVIEW' || error.code === 'REVISION_CONFLICT' || error.code === 'STALE_BINDING'
             ? 'CONFLICT'
@@ -176,6 +178,12 @@ export const biometricTuningRouter = router({
     .input(importIdSchema)
     .output(resultDescriptorSchema.nullable())
     .query(({ input }) => references(() => new BacktestJobStore(biometricsDb).result(input.id))),
+
+  getBacktestTrace: publicProcedure
+    .meta({ openapi: { method: 'GET', path: '/biometric-tuning/backtests/{id}/trace', protect: false, tags: ['Biometric tuning'] } })
+    .input(traceRequestSchema)
+    .output(tracePageSchema)
+    .query(({ input }) => references(() => readStageTraces(biometricsDb, input))),
 
   releaseBacktestResult: publicProcedure
     .meta({ openapi: { method: 'POST', path: '/biometric-tuning/backtests/{id}/result/release', protect: false, tags: ['Biometric tuning'] } })

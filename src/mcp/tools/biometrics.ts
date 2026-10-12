@@ -1,4 +1,4 @@
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
+import { ResourceTemplate, type McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
 import { getCaller, jsonResult, runTool } from '../caller'
 import { compareReadingsSchema } from '@/src/biometrics/references/comparison'
@@ -8,6 +8,7 @@ import { revisionInput } from '@/src/biometrics/profiles/store'
 import { activationIntentSchema } from '@/src/biometrics/profiles/activation'
 import { createDatasetSchema } from '@/src/biometrics/backtest/datasets'
 import { experimentProtocolSchema } from '@/src/biometrics/backtest/contracts'
+import { traceRequestSchema } from '@/src/biometrics/backtest/trace-contracts'
 import { submitBacktestSchema } from '@/src/biometrics/backtest/submission'
 
 const side = z.enum(['left', 'right'])
@@ -21,6 +22,15 @@ const summarySchema = z.object({ version: z.string(), status: z.string(), split:
     coverageReducedNights: z.number(), equalNightMeanAgreementDifference: z.number().nullable(), uncertainty: z.unknown().optional(),
   })).max(3).optional(), operational: z.unknown().optional(),
 })
+
+async function getReportSummary(id: string) {
+  const result = await getCaller().biometricTuning.getBacktestResult({ id })
+  return result === null
+    ? null
+    : { ...result, report: result.available ? summarySchema.parse(result.report) : null,
+        resourceUri: `sleepypod://biometrics/reports/${id}`, detailsPath: `/api/biometric-tuning/backtests/${id}/result`,
+        detailScope: 'summary_without_traces_or_per_night_rows' }
+}
 
 export function registerBiometricTools(server: McpServer) {
   server.registerTool('inspect_biometric_calibration', {
@@ -99,12 +109,13 @@ export function registerBiometricTools(server: McpServer) {
 
   server.registerTool('backtest_biometrics', {
     title: 'Start, inspect or cancel a biometric evaluation',
-    description: 'Durable replay never applies a profile or changes hardware. Start pins the candidate and expected binding generation. Report returns compact evidence and a local API path for full details; descriptive or insufficient evidence is not validated improvement.',
+    description: 'Durable replay never applies a profile or changes hardware. Start pins the candidate and expected binding generation. Report returns compact evidence and a report resource; trace returns at most 500 exact intervals using a pinned report hash and cursor; descriptive or insufficient evidence is not validated improvement.',
     inputSchema: { request: z.discriminatedUnion('action', [
       z.object({ action: z.literal('start'), input: submitBacktestSchema }).strict(),
       z.object({ action: z.literal('status'), input: id }).strict(),
       z.object({ action: z.literal('cancel'), input: id }).strict(),
       z.object({ action: z.literal('report'), input: id }).strict(),
+      z.object({ action: z.literal('trace'), input: traceRequestSchema }).strict(),
       z.object({ action: z.literal('list'), input: page }).strict(),
     ]) }, annotations: { ...write, destructiveHint: true },
   }, ({ request }) => runTool(async () => {
@@ -112,15 +123,10 @@ export function registerBiometricTools(server: McpServer) {
     switch (request.action) {
       case 'start': return jsonResult(await api.enqueueBacktest(request.input))
       case 'status': return jsonResult(await api.getBacktest(request.input))
+      case 'trace': return jsonResult(await api.getBacktestTrace(request.input))
       case 'cancel': return jsonResult(await api.cancelBacktest(request.input))
       case 'list': return jsonResult(await api.listBacktests(request.input))
-      case 'report': {
-        const result = await api.getBacktestResult(request.input)
-        return jsonResult(result === null
-          ? null
-          : { ...result, report: result.available ? summarySchema.parse(result.report) : null,
-              detailsPath: `/api/biometric-tuning/backtests/${request.input.id}/result`, detailScope: 'summary_without_traces_or_per_night_rows' })
-      }
+      case 'report': return jsonResult(await getReportSummary(request.input.id))
     }
   }))
 
@@ -163,6 +169,10 @@ export function registerBiometricResourcesAndPrompts(server: McpServer) {
   server.registerResource('biometric_algorithms', 'sleepypod://biometrics/algorithms', {
     title: 'Biometric algorithms and metric definitions', mimeType: 'application/json',
   }, async uri => resource(uri.href, await getCaller().biometricTuning.getManifest({})))
+  server.registerResource('biometric_report', new ResourceTemplate('sleepypod://biometrics/reports/{id}', { list: undefined }), {
+    title: 'Biometric replay report summary', mimeType: 'application/json',
+    description: 'Verified summary; full traces require an explicit bounded trace tool request.',
+  }, async (uri, variables) => resource(uri.href, await getReportSummary(z.string().uuid().parse(variables.id))))
   for (const side of ['left', 'right'] as const) {
     server.registerResource(`biometric_profile_${side}`, `sleepypod://biometrics/profiles/${side}`, {
       title: `${side} biometric profile and runtime state`, mimeType: 'application/json',
