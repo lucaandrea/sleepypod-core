@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "prebuild": "node scripts/generate-git-info.mjs && lingui compile",
-    "build": "next build && node scripts/strip-turbopack-external-hashes.mjs && cp -r .next/static .next/standalone/.next/static && { [ ! -d public ] || cp -r public .next/standalone/public || true; }",
+    "build": "next build && node scripts/strip-turbopack-external-hashes.mjs && cp -r .next/static .next/standalone/.next/static && { [ ! -d public ] || cp -r public .next/standalone/public || true; } && node scripts/build/biometrics-worker.mjs",
     "dev": "next dev",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
@@ -27,7 +27,8 @@
     "test:mutation": "stryker run",
     "test:mutation:incremental": "stryker run --incremental",
     "tsc": "tsc --noEmit",
-    "prepare": "git rev-parse --git-dir >/dev/null 2>&1 && git config core.hooksPath .githooks || true"
+    "prepare": "git rev-parse --git-dir >/dev/null 2>&1 && git config core.hooksPath .githooks || true",
+    "build:biometrics-worker": "node scripts/build/biometrics-worker.mjs"
   },
   "lint-staged": {
     "*.{ts,tsx}": "eslint --fix",
@@ -114,6 +115,7 @@
     "@vitest/coverage-v8": "4.1.11",
     "conventional-changelog-conventionalcommits": "^9.1.0",
     "drizzle-kit": "^0.31.9",
+    "esbuild": "0.28.2",
     "eslint": "^9.39.3",
     "eslint-config-next": "^16.1.6",
     "eslint-plugin-react": "^7.37.5",

@@ -14,21 +14,8 @@ const results = schema.biometricBacktestResults
 const exposure = schema.biometricHoldoutAccesses
 const manifestSchema = z.object({ splitProtocol: z.object({ assignments: z.array(z.object({ split: z.string(), startMs: z.number(), endMs: z.number() })) }) })
 const key = z.string().min(1).max(200)
-const hash = z.string().regex(/^[a-f0-9]{64}$/)
-export const experimentProtocolSchema = z.object({
-  version: z.literal('descriptive-evaluation-v1'),
-  mode: z.enum(['comparison', 'stage_replay']),
-  // Explicit approximation, never represented as measured sensor calibration.
-  assumedStageCalibrationQuality: z.number().min(0).max(1),
-  pointToleranceMs: z.number().int().min(0).max(300000),
-  clockOffsetMs: z.number().int().min(-3600000).max(3600000),
-}).strict()
-export const enqueueBacktestSchema = z.object({
-  experimentId: z.string().uuid(), idempotencyKey: key,
-  split: z.enum(['tuning', 'validation', 'holdout']),
-  configs: z.array(z.object({ label: z.enum(['default', 'current', 'candidate']), revisionId: z.string().uuid().nullable(),
-    manifestHash: hash, resolvedHash: hash, resolved: z.unknown() }).strict()).min(1).max(3),
-}).strict()
+export { experimentProtocolSchema, enqueueBacktestSchema } from './contracts'
+import { experimentProtocolSchema, enqueueBacktestSchema } from './contracts'
 const progressSchema = z.object({ phase: z.enum(['queued', 'loading', 'evaluating', 'reporting', 'complete']),
   completedNights: z.number().int().min(0).max(60), totalNights: z.number().int().min(0).max(60) }).strict()
 const leaseSchema = z.object({ id: z.string().uuid(), owner: key, token: z.number().int().positive() }).strict()
@@ -112,6 +99,15 @@ export class BacktestJobStore {
     return job
   }
 
+  result(id: string) {
+    const job = this.get(id)
+    if (job.state !== 'succeeded') return null
+    const result = this.db.select().from(results).where(eq(results.jobId, id)).get()
+    if (!result || result.fencingToken !== job.fencingToken || configHash(result.report) !== result.contentHash) throw new ReferenceInputError('RESULT_CORRUPT', 'Backtest result integrity check failed')
+    const input = z.object({ datasetId: z.string() }).parse(job.input)
+    return { ...result, currentHoldoutUseCount: this.holdoutUseCount(input.datasetId) }
+  }
+
   /** Recover expired attempts without granting stale owners publication rights. */
   recover() {
     const now = this.now()
@@ -179,6 +175,14 @@ export class BacktestJobStore {
       const job = this.owned(lease)
       if (job.state !== 'cancel_requested') throw new ReferenceInputError('INVALID_STATE', 'Cancellation has not been requested')
       return tx.update(jobs).set({ state: 'cancelled', leaseOwner: null, leaseExpiresAtMs: null, updatedAtMs: this.now() }).where(eq(jobs.id, job.id)).returning().get()
+    }, { behavior: 'immediate' })
+  }
+
+  interrupt(lease: JobLease) {
+    return this.db.transaction((tx) => {
+      const job = this.owned(lease)
+      return tx.update(jobs).set({ state: job.state === 'cancel_requested' ? 'cancelled' : job.attempt >= 3 ? 'failed' : 'interrupted',
+        error: 'Worker host stopped', leaseOwner: null, leaseExpiresAtMs: null, updatedAtMs: this.now() }).where(eq(jobs.id, job.id)).returning().get()
     }, { behavior: 'immediate' })
   }
 

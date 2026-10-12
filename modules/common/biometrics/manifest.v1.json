@@ -630,7 +630,7 @@
   },
   "dependencyHashes": {
     "modules/piezo-processor/uv.lock": "2803397e553a32588071d6be84c2bce5326552da03076261f48afce0ba919869",
-    "pnpm-lock.yaml": "c2759776f923df62753fdbba112f174d39c0873c86fc87cbdb26566469f77318"
+    "pnpm-lock.yaml": "7b0b3b2f50f7e35399f0e09954a66e8b33261f3bd48a212751d66643bff687c8"
   },
   "legacySourceHashes": {
     "modules/piezo-processor/main.py": "c98bdb3d6ee38b5de5d36760238978a8fefe2153a0cdf3e82ea1872d2d0da34f",

@@ -16,7 +16,7 @@ let datasetId: string
 let experimentId: string
 const config = { label: 'default' as const, revisionId: null, resolved: defaultConfig, resolvedHash: configHash(defaultConfig), manifestHash }
 const protocol = { version: 'descriptive-evaluation-v1' as const, mode: 'stage_replay' as const, assumedStageCalibrationQuality: 0, pointToleranceMs: 30000, clockOffsetMs: 0 }
-const enqueue = (idempotencyKey = 'job-1', split: 'tuning' | 'validation' | 'holdout' = 'tuning') => store.enqueue({ experimentId, idempotencyKey, split, configs: [config] })
+const enqueue = (idempotencyKey = 'job-1', split: 'tuning' | 'validation' | 'holdout' = 'tuning') => store.enqueue({ experimentId, evaluatorBuildHash: 'f'.repeat(64), idempotencyKey, split, configs: [config] })
 const lease = (job: NonNullable<ReturnType<BacktestJobStore['claim']>>) => ({ id: job.id, owner: job.leaseOwner as string, token: job.fencingToken })
 beforeEach(() => {
   now = 1791673200000
@@ -103,7 +103,7 @@ describe('durable backtest leases and results', () => {
     expect(store.holdoutUseCount(datasetId)).toBe(3)
   })
   it('rejects forged engine hashes and invalid progress without changing the lease', () => {
-    expect(() => store.enqueue({ experimentId, idempotencyKey: 'bad', split: 'tuning', configs: [{ ...config, resolvedHash: '0'.repeat(64) }] })).toThrow('does not match')
+    expect(() => store.enqueue({ experimentId, evaluatorBuildHash: 'f'.repeat(64), idempotencyKey: 'bad', split: 'tuning', configs: [{ ...config, resolvedHash: '0'.repeat(64) }] })).toThrow('does not match')
     enqueue()
     const claimed = store.claim('worker')
     if (!claimed) throw new Error('Missing claim')
