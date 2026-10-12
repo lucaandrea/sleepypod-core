@@ -22,6 +22,7 @@ export default {
   // useful — leave those out until they grow real tests.
   mutate: [
     'src/services/**/*.ts',
+    'src/biometrics/**/*.ts',
     'src/scheduler/**/*.ts',
     'src/hardware/**/*.ts',
     'src/lib/**/*.ts',

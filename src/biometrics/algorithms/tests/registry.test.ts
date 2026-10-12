@@ -1,5 +1,7 @@
 // @vitest-environment node
 import { execFileSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { canonicalJson, configHash } from '../canonical'
 import { biometricManifest, defaultConfig, legacyStageOverrides, manifestHash, removeOverride, resolveConfig, validateConfig } from '../registry'
@@ -25,6 +27,12 @@ const fixtures = [
 ]
 
 describe('versioned biometric contract', () => {
+  it('pins the actual numerical source and locked dependency files', () => {
+    for (const [path, hash] of Object.entries({ ...biometricManifest.sourceHashes, ...biometricManifest.dependencyHashes })) {
+      expect(createHash('sha256').update(readFileSync(path)).digest('hex'), path).toBe(hash)
+    }
+  })
+
   it('preserves the shipped classifier and labels HRV correctly', () => {
     expect(resolveConfig([]).resolved.sleep_stages).toEqual(DEFAULT_STAGE_CLASSIFIER)
     expect(stageClassifierSchema.parse(defaultConfig.sleep_stages)).toEqual(defaultConfig.sleep_stages)

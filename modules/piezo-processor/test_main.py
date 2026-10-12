@@ -40,6 +40,7 @@ _spec = importlib.util.spec_from_file_location(
     "common.bed_presence", Path(__file__).resolve().parent.parent / "common" / "bed_presence.py")
 _stubs["common.bed_presence"] = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_stubs["common.bed_presence"])
+_stubs["common"].__path__ = [str(Path(__file__).resolve().parent.parent / "common")]
 sys.modules.update(_stubs)
 
 from main import (  # noqa: E402

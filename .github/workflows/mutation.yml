@@ -59,6 +59,8 @@ jobs:
             mutate: "src/streaming/**/*.ts,!src/**/tests/**,!src/**/*.test.ts,!src/**/*.test.tsx,!src/**/*.d.ts"
           - name: hooks
             mutate: "src/hooks/**/*.ts,src/hooks/**/*.tsx,!src/**/tests/**,!src/**/*.test.ts,!src/**/*.test.tsx,!src/**/*.d.ts"
+          - name: biometrics
+            mutate: "src/biometrics/**/*.ts,!src/**/tests/**,!src/**/*.test.ts,!src/**/*.test.tsx,!src/**/*.d.ts"
           - name: db
             mutate: "src/db/**/*.ts,!src/**/tests/**,!src/**/*.test.ts,!src/**/*.test.tsx,!src/**/*.d.ts"
     name: mutate (${{ matrix.shard.name }})

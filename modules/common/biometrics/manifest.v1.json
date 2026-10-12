@@ -624,11 +624,16 @@
     }
   },
   "sourceHashes": {
-    "modules/piezo-processor/main.py": "c98bdb3d6ee38b5de5d36760238978a8fefe2153a0cdf3e82ea1872d2d0da34f",
+    "modules/common/biometrics/signal.py": "fff73469815673c8daebba9e2c9e7bcf97708939ad7a5639a52f0a53c9d75c18",
+    "modules/piezo-processor/main.py": "1fa74234f8ce13a79466e5fac39f13a7579c94e45d0b13f2b9590163d2fb4f71",
     "src/lib/sleep-stages.ts": "853f6b1f14618fbac11da43d3246b95aac55af8b782b2cbb1be3f7627bf560b4"
   },
   "dependencyHashes": {
     "modules/piezo-processor/uv.lock": "2803397e553a32588071d6be84c2bce5326552da03076261f48afce0ba919869",
     "pnpm-lock.yaml": "c2759776f923df62753fdbba112f174d39c0873c86fc87cbdb26566469f77318"
+  },
+  "legacySourceHashes": {
+    "modules/piezo-processor/main.py": "c98bdb3d6ee38b5de5d36760238978a8fefe2153a0cdf3e82ea1872d2d0da34f",
+    "src/lib/sleep-stages.ts": "853f6b1f14618fbac11da43d3246b95aac55af8b782b2cbb1be3f7627bf560b4"
   }
 }
