@@ -96,7 +96,9 @@ settings use the same versioned intent and acknowledgment protocol.
 
 - `activateProfile` / `POST /biometric-tuning/activate` selects an exact revision.
 - `resetProfile` / `POST /biometric-tuning/reset` selects current shipped defaults
-  without deleting revisions or audit history.
+  without deleting revisions or audit history. Malformed unmigratable legacy
+  stage settings are retained in the legacy row and reset audit evidence; valid
+  unmigrated customizations must first be preserved as a revision.
 - `rollbackProfile` / `POST /biometric-tuning/rollback` selects the previous
   binding, including its exact revision identity (null means the default binding).
 

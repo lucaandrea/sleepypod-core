@@ -8,6 +8,15 @@ binding from discarding existing stage personalization. Reset selects the
 current shipped default; rollback selects the previous binding and remains a
 distinct audited action. Neither operation deletes revision history.
 
+An explicit reset can recover malformed legacy stage data that cannot pass the
+stage-classifier schema. The original legacy row remains untouched, and the
+reset event preserves its value as `evidence.preservedLegacyClassifier` with
+`recovery: "invalid_legacy_reset"`. This is audit data, never an executable
+profile revision. The binding, evidence and default outbox payload commit
+atomically; a publication failure leaves the original state intact. Valid
+legacy customizations still require migration before any new binding, including
+reset. Recovery does not claim processor adoption.
+
 `projectRuntimeConfig` validates the manifest/configuration identity and writes
 an immutable side/generation projection into the biometrics database. Duplicate
 identical delivery succeeds; a different payload for an existing generation

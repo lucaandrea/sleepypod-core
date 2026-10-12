@@ -57,6 +57,7 @@ describe('atomic activation intent', () => {
     db.insert(schema.sideSettings).values({ side: 'left', name: 'Left', stageClassifier: defaultConfig.sleep_stages }).run()
     expect(() => requestManualActivation(db, request())).toThrow('Preserve the existing stage profile')
     expect(profiles.binding('left').generation).toBe(0)
+    expect(() => requestManualActivation(db, { ...request(), action: 'reset', revisionId: null, expectedResolvedHash: configHash(defaultConfig) })).toThrow('Preserve the existing stage profile')
     profiles.migrateLegacy('left')
     const input = request()
     expect(requestManualActivation(db, { ...input, expectedGeneration: 1 }).generation).toBe(2)
@@ -68,4 +69,29 @@ describe('atomic activation intent', () => {
     requestManualActivation(db, input)
     expect(() => requestManualActivation(db, { ...input, boundary: 'immediate' })).toThrow('idempotency key changed')
   })
+})
+
+it('allows explicit reset of malformed legacy rules while preserving the original as audit evidence', () => {
+  const malformed = { engine: 'unknown-engine', ruleset: { cannotMigrate: true } }
+  db.insert(schema.sideSettings).values({ side: 'left', name: 'Left', stageClassifier: malformed as unknown as typeof defaultConfig.sleep_stages }).run()
+  expect(() => profiles.migrateLegacy('left')).toThrow()
+  const input = { ...request(), action: 'reset' as const, revisionId: null, expectedResolvedHash: configHash(defaultConfig), idempotencyKey: 'recover-invalid-legacy' }
+  expect(() => requestManualActivation(db, { ...input, expectedResolvedHash: '0'.repeat(64) })).toThrow('Resolved configuration changed')
+  expect(profiles.binding('left').generation).toBe(0)
+  const event = requestManualActivation(db, input)
+  expect(event).toMatchObject({ action: 'reset', generation: 1, state: 'pending_delivery', nextRevisionId: null,
+    evidence: { status: 'manual_unvalidated', recovery: 'invalid_legacy_reset', preservedLegacyClassifier: malformed } })
+  expect(db.select().from(schema.sideSettings).get()?.stageClassifier).toEqual(malformed)
+  expect(requestManualActivation(db, input).id).toBe(event.id)
+  expect(profiles.migrateLegacy('left')).toMatchObject({ generation: 1, desiredRevisionId: null })
+})
+
+it('does not use malformed legacy recovery to bypass preservation or atomic publication', () => {
+  db.insert(schema.sideSettings).values({ side: 'left', name: 'Left', stageClassifier: { broken: true } as unknown as typeof defaultConfig.sleep_stages }).run()
+  expect(() => requestManualActivation(db, request())).toThrow('Preserve the existing stage profile')
+  sqlite.exec('CREATE TRIGGER fail_reset_outbox BEFORE INSERT ON biometric_config_outbox BEGIN SELECT RAISE(ABORT, \'outbox failure\'); END;')
+  expect(() => requestManualActivation(db, { ...request(), action: 'reset', revisionId: null, expectedResolvedHash: configHash(defaultConfig) })).toThrow('outbox failure')
+  expect(profiles.binding('left').generation).toBe(0)
+  expect(db.select().from(schema.biometricActivationEvents).all()).toEqual([])
+  expect(db.select().from(schema.sideSettings).get()?.stageClassifier).toEqual({ broken: true })
 })

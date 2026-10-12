@@ -7,6 +7,7 @@ import { biometricActivationEvents as events, biometricConfigOutbox as outbox, b
 import { defaultConfig, manifestHash } from '../algorithms/registry'
 import { configHash } from '../algorithms/canonical'
 import { ReferenceInputError } from '../references/time'
+import { stageClassifierSchema } from '@/src/lib/sleep-stage-rules'
 import { ProfileStore } from './store'
 
 export const activationIntentSchema = z.object({
@@ -30,9 +31,18 @@ export function requestManualActivation(db: BetterSQLite3Database<typeof schema>
     const profiles = new ProfileStore(db)
     const storedBinding = tx.select().from(bindings).where(eq(bindings.side, input.side)).get()
     const binding = profiles.binding(input.side)
+    let invalidLegacy: unknown
     if (!storedBinding) {
       const legacy = tx.select({ classifier: sideSettings.stageClassifier }).from(sideSettings).where(eq(sideSettings.side, input.side)).get()
-      if (legacy?.classifier != null) throw new ReferenceInputError('LEGACY_MIGRATION_REQUIRED', 'Preserve the existing stage profile before activation')
+      if (legacy?.classifier != null) {
+        // Valid customizations must still migrate losslessly. Malformed legacy
+        // data cannot become a revision; an explicit reset preserves it as audit
+        // evidence and leaves the original legacy row untouched.
+        if (input.action !== 'reset' || stageClassifierSchema.safeParse(legacy.classifier).success) {
+          throw new ReferenceInputError('LEGACY_MIGRATION_REQUIRED', 'Preserve the existing stage profile before activation')
+        }
+        invalidLegacy = legacy.classifier
+      }
     }
     if (binding.generation !== input.expectedGeneration) throw new ReferenceInputError('STALE_BINDING', 'Binding changed; inspect the side before applying this revision')
     if (input.action === 'reset' && input.revisionId !== null) throw new ReferenceInputError('INVALID_SELECTION', 'Reset must select system defaults')
@@ -56,7 +66,8 @@ export function requestManualActivation(db: BetterSQLite3Database<typeof schema>
     }
     const event = tx.insert(events).values({ id: randomUUID(), side: input.side, generation, action: input.action,
       previousRevisionId: binding.desiredRevisionId, nextRevisionId: input.revisionId, previousHash: previous.hash, nextHash: selected.hash,
-      evidence: { status: 'manual_unvalidated', manifestHash, resolvedHash: selected.hash }, requester: input.requester,
+      evidence: { status: 'manual_unvalidated', manifestHash, resolvedHash: selected.hash,
+        ...(invalidLegacy === undefined ? {} : { recovery: 'invalid_legacy_reset', preservedLegacyClassifier: invalidLegacy }) }, requester: input.requester,
       state: 'pending_delivery', idempotencyKey: input.idempotencyKey, requestHash, createdAtMs: now, updatedAtMs: now }).returning().get()
     tx.insert(outbox).values({ id: randomUUID(), side: input.side, generation,
       payload: { schemaVersion: 1, side: input.side, generation, revisionId: input.revisionId, manifestHash,
