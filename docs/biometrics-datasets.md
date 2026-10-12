@@ -188,3 +188,31 @@ The returned run metadata includes consumed/decoded counts, exact artifact and
 configuration hashes, processing counters and limitations. The public durable
 worker still needs to capture this input contract, retain its references and
 publish the completed result through its fenced job lifecycle.
+
+The fixed Python entry point is `python -B -m common.biometrics.replay_worker
+--retained-directory <server-owned-directory>`. Its input is one bounded JSON
+`retained-waveform-work-v1` envelope containing `input` and both logical-side
+`configs`. It opens existing retained storage in read-only mode: missing storage
+or a missing lock fails, and it neither creates directories nor changes their
+permissions. RAW retention/collection methods reject calls on that reader.
+
+The worker emits bounded JSON-lines `reading` events and exactly one final
+`result` on success. Readings explicitly identify HRV as
+`window_ibi_variability_v1`; nonfinite output fails serialization. Input rejects
+duplicate JSON fields and nonfinite constants. Errors emit one fixed diagnostic
+without exporting inputs, paths or stack traces. CPU limits are 120 seconds
+(121 hard), file descriptors are capped at 64, core dumps are disabled, numerical
+thread counts are one, and process priority is reduced. These provisional caps
+are not a qualified memory or pod admission policy and do not sandbox uploaded
+code.
+
+`runWaveformChild` provides the coordinator-side transport with a clean child
+environment, 8 MiB input, 16 MiB output, 64 KiB event and 16 KiB diagnostic
+limits, a 20,000-reading bound, and timeout/cancellation with TERM/KILL escalation.
+It verifies event order, schema, final row counts and per-side configuration
+hashes, returning readings only after a final result and zero exit. A missing or
+failed worker never returns its provisional rows. Executable, module and retained
+storage locations are internal server configuration and must not be accepted
+from public requests. The transport is tested against the actual Python worker;
+it still needs the frozen dataset publisher and durable-job integration before
+public waveform capability can be enabled.

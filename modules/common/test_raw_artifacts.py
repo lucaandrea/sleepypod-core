@@ -162,3 +162,28 @@ def test_count_budget_applies_even_to_tiny_files_but_allows_idempotent_retry(tmp
         store.retain(archive, '2.RAW.gz')
     assert read_all(store, first) == b'one'
     assert not list(store.directory.glob('.part-*'))
+
+
+def test_read_only_store_does_not_create_or_change_storage_and_rejects_mutations(tmp_path):
+    archive, store, _ = fixture(tmp_path)
+    descriptor = store.retain(archive, '1.RAW.gz')
+    os.chmod(store.directory, 0o750)
+    reader = RawArtifactStore(store.directory, store.limits, read_only=True)
+    assert store.directory.stat().st_mode & 0o777 == 0o750
+    assert read_all(reader, descriptor) == b'synthetic waveform bytes' * 100
+    with pytest.raises(ValueError, match='read-only'):
+        reader.retain(archive, '1.RAW.gz')
+    with pytest.raises(ValueError, match='read-only'):
+        reader.collect_released(None, now_ms=1000)
+    missing = tmp_path / 'missing'
+    with pytest.raises(ValueError):
+        RawArtifactStore(missing, read_only=True)
+    assert not missing.exists()
+    (store.directory / '.lock').unlink()
+    with pytest.raises(FileNotFoundError):
+        read_all(reader, descriptor)
+    assert not (store.directory / '.lock').exists()
+
+    os.mkfifo(store.directory / '.lock')
+    with pytest.raises(ValueError, match='regular file'):
+        read_all(reader, descriptor)

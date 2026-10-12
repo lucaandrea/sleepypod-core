@@ -27,14 +27,14 @@ def encode(value):
     return b'\xfb' + struct.pack('>d', value)
 
 
-def fixture(tmp_path, records=None):
+def fixture(tmp_path, records=None, split_at=76):
     records = records if records is not None else [
         (START, {'type': 'frzHealth', 'left': {'pumpRpm': 0}, 'right': {'pumpRpm': 0}}), *frames()]
     archive = tmp_path / 'archive'
     archive.mkdir()
     store = RawArtifactStore(tmp_path / 'retained', RawLimits(1_000_000, 2_000_000, 4_000_000, 1))
     selected = []
-    for index, group in enumerate([records[:76], records[76:]]):
+    for index, group in enumerate([records[:split_at], records[split_at:]]):
         if not group:
             continue
         data = b''

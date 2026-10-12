@@ -80,17 +80,21 @@ class BoundedRawReader:
 
 
 class RawArtifactStore:
-    def __init__(self, directory, limits=RawLimits()):
+    def __init__(self, directory, limits=RawLimits(), *, read_only=False):
+        self.read_only = read_only
         self.directory = Path(directory)
         self.limits = limits
-        self.directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+        if not read_only:
+            self.directory.mkdir(mode=0o700, parents=True, exist_ok=True)
         if self.directory.is_symlink() or not self.directory.is_dir():
             raise ValueError('Retained RAW directory must not be a symlink')
-        os.chmod(self.directory, 0o700)
+        if not read_only:
+            os.chmod(self.directory, 0o700)
 
     @contextmanager
     def _lock(self):
-        fd = os.open(self.directory / '.lock', os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+        flags = os.O_RDONLY if self.read_only else os.O_CREAT | os.O_RDWR
+        fd = os.open(self.directory / '.lock', flags | os.O_NOFOLLOW | os.O_NONBLOCK, 0o600)
         try:
             _regular(fd)
             fcntl.flock(fd, fcntl.LOCK_EX)
@@ -124,6 +128,8 @@ class RawArtifactStore:
         calling retain: all lifecycle operations lock files before SQLite.
         Failed publication leaves an unreferenced file, never partial bytes.
         """
+        if self.read_only:
+            raise ValueError('Retained RAW store is read-only')
         if not isinstance(name, str) or not SOURCE_NAME.fullmatch(name):
             raise ValueError('Invalid RAW archive filename')
         if expected is not None and not isinstance(expected, RawArtifact):
@@ -244,6 +250,8 @@ class RawArtifactStore:
         Tombstones remain in SQLite; scanning present files avoids repeatedly
         selecting absent tombstones and starving later eligible files.
         """
+        if self.read_only:
+            raise ValueError('Retained RAW store is read-only')
         if (type(now_ms) is not int or now_ms < 0 or type(minimum_age_ms) is not int
                 or minimum_age_ms < 0 or type(maximum_entries) is not int
                 or maximum_entries <= 0):
