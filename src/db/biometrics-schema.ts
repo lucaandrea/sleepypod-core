@@ -430,3 +430,51 @@ export const biometricDatasets = sqliteTable('biometric_datasets', {
   byteLength: integer('byte_length').notNull(),
   createdAtMs: integer('created_at_ms').notNull(),
 }, t => [index('idx_biometric_dataset_side_created').on(t.side, t.createdAtMs, t.id)])
+
+export const biometricExperiments = sqliteTable('biometric_experiments', {
+  id: text('id').primaryKey(),
+  datasetId: text('dataset_id').notNull().references(() => biometricDatasets.id),
+  side: text('side', { enum: ['left', 'right'] }).notNull(),
+  protocol: text('protocol', { mode: 'json' }).notNull(),
+  protocolHash: text('protocol_hash').notNull(),
+  holdoutAccesses: integer('holdout_accesses').notNull().default(0),
+  createdAtMs: integer('created_at_ms').notNull(),
+}, t => [index('idx_biometric_experiment_dataset').on(t.datasetId)])
+
+export const biometricBacktestJobs = sqliteTable('biometric_backtest_jobs', {
+  id: text('id').primaryKey(),
+  experimentId: text('experiment_id').notNull().references(() => biometricExperiments.id),
+  idempotencyKey: text('idempotency_key').notNull().unique(),
+  requestHash: text('request_hash').notNull(),
+  input: text('input', { mode: 'json' }).notNull(),
+  state: text('state', { enum: ['queued', 'running', 'cancel_requested', 'cancelled', 'succeeded', 'failed', 'interrupted'] }).notNull(),
+  leaseOwner: text('lease_owner'),
+  leaseExpiresAtMs: integer('lease_expires_at_ms'),
+  fencingToken: integer('fencing_token').notNull().default(0),
+  attempt: integer('attempt').notNull().default(0),
+  heartbeatAtMs: integer('heartbeat_at_ms'),
+  progress: text('progress', { mode: 'json' }).notNull(),
+  cancellationRequestedAtMs: integer('cancellation_requested_at_ms'),
+  error: text('error'),
+  createdAtMs: integer('created_at_ms').notNull(),
+  updatedAtMs: integer('updated_at_ms').notNull(),
+}, t => [index('idx_biometric_job_state_created').on(t.state, t.createdAtMs), index('idx_biometric_job_experiment').on(t.experimentId)])
+
+export const biometricBacktestResults = sqliteTable('biometric_backtest_results', {
+  jobId: text('job_id').primaryKey().references(() => biometricBacktestJobs.id),
+  fencingToken: integer('fencing_token').notNull(),
+  report: text('report', { mode: 'json' }).notNull(),
+  contentHash: text('content_hash').notNull(),
+  completedAtMs: integer('completed_at_ms').notNull(),
+})
+
+// Exposure follows physical side and recorded time, not a recreatable dataset
+// identifier. Re-freezing the same nights cannot manufacture a fresh holdout.
+export const biometricHoldoutAccesses = sqliteTable('biometric_holdout_accesses', {
+  id: text('id').primaryKey(),
+  jobId: text('job_id').notNull().references(() => biometricBacktestJobs.id),
+  side: text('side', { enum: ['left', 'right'] }).notNull(),
+  startMs: integer('start_ms').notNull(),
+  endMs: integer('end_ms').notNull(),
+  accessedAtMs: integer('accessed_at_ms').notNull(),
+}, t => [index('idx_biometric_holdout_side_start').on(t.side, t.startMs)])
