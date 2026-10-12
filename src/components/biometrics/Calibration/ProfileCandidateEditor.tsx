@@ -72,7 +72,7 @@ function CandidateForm({ side, manifestHash, parentId, initial, parameters, stag
     if (!preview) return
     setError(undefined)
     try {
-      const result = await create.mutateAsync({ side, baseManifestHash: manifestHash, parentRevisionId: parentId, overrides: preview.overrides, origin: 'manual', requester: 'web-calibration', idempotencyKey: preview.key })
+      const result = await create.mutateAsync({ side, baseManifestHash: manifestHash, ...(parentId === undefined ? {} : { parentRevisionId: parentId }), overrides: preview.overrides, origin: 'manual', requester: 'web-calibration', idempotencyKey: preview.key })
       setSaved(result.id)
       setPreview(undefined)
       void utils.biometricTuning.listProfileRevisions.invalidate()

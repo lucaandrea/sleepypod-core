@@ -21,7 +21,7 @@ it('uses the real manifest, resolution and canonical hashes in the browser demo'
 it('saves immutable candidates idempotently, isolates sides and rejects changed retries', async () => {
   const input = { side: 'left' as const, origin: 'manual' as const, requester: 'demo-test', idempotencyKey: 'candidate-test', overrides: [{ path: 'heart_rate.trackingToleranceBpm', value: 20 }] }
   const create = required(handlers.createProfileRevision)
-  const candidate = revisionSchema.parse(await create(input))
+  const candidate = revisionSchema.parse(await create({ ...input, parentRevisionId: undefined }))
   expect(candidate.resolvedHash).toBe(resolveConfig(input.overrides).hash)
   expect(await create({ ...input, baseManifestHash: manifestHash })).toEqual(candidate)
   await expect(create({ ...input, overrides: [] })).rejects.toThrow('IDEMPOTENCY_CONFLICT')

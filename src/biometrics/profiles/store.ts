@@ -34,6 +34,9 @@ export class ProfileStore {
 
   createRevision(raw: z.input<typeof revisionInput>): Revision {
     const input = revisionInput.parse(raw)
+    // tRPC/SuperJSON can preserve an explicitly undefined optional field.
+    // Missing parent means a new family and has one canonical request identity.
+    if (input.parentRevisionId === undefined) delete input.parentRevisionId
     const requestHash = configHash(input)
     return this.db.transaction((tx) => {
       const existing = tx.select().from(revisions).where(eq(revisions.idempotencyKey, input.idempotencyKey)).get()

@@ -27,6 +27,7 @@ describe('immutable profile repository', () => {
   it('creates an idempotent candidate without activating it', () => {
     const first = store.createRevision(request)
     expect(store.createRevision(request)).toEqual(first)
+    expect(store.createRevision({ ...request, parentRevisionId: undefined })).toEqual(first)
     expect(first.revision).toBe(1)
     expect(store.effective('left')).toMatchObject({ isDefault: true, binding: { generation: 0 } })
     expect(store.validateRevision(first.id, 'left').resolved.heart_rate.trackingToleranceBpm).toBe(20)

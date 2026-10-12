@@ -91,7 +91,9 @@ export const biometricTuning: DemoHandlers<'biometricTuning'> = {
   resolveProfile: input => resolve(input.overrides, input.baseManifestHash),
   createProfileRevision: async (input) => {
     const result = await resolve(input.overrides, input.baseManifestHash)
-    const fingerprint = await hash({ ...input, baseManifestHash: result.manifestHash })
+    const normalized = { ...input, baseManifestHash: result.manifestHash }
+    if (normalized.parentRevisionId === undefined) delete normalized.parentRevisionId
+    const fingerprint = await hash(normalized)
     const key = input.idempotencyKey
     const previous = requests.get(key)
     if (previous) {
