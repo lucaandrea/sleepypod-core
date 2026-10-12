@@ -93,3 +93,100 @@ are selected. Node ran at nice 19 with a 128 MiB heap and a 45-second external
 timeout. Both services remained active afterward. Temporary synthetic input,
 worker, harness and output were removed from the pod; no live configuration,
 observations or hardware settings were changed.
+
+## Production runner and reference-heavy qualification
+
+A follow-up on October 12 used the production `DatasetStore`, `BacktestJobStore`,
+child driver, result publication, and integrity-checked result reader against a
+new synthetic SQLite database on the pod's persistent storage. The application
+service and its databases were left untouched. The reusable harness is
+`scripts/benchmarks/biometrics-runner.ts`; bundle it with esbuild for Node, leaving
+`better-sqlite3` external, and pass a **new** directory, copied migration
+folder, packaged worker path, and `mixed` or `dense` fixture name. Directory
+creation is exclusive so an existing database cannot be selected accidentally.
+
+The tested worker SHA-256 was
+`45547553cd456cba5051fe6e60e8562b5510ae32bbf8b92cfeb62c59cdeb59d1`.
+The coordinator used Node's 384 MiB heap limit; its evaluator child retained
+nice 19 and the 128 MiB heap limit. These are measurement settings, not yet an
+approved deployment policy.
+
+The mixed fixture retained 20 twelve-hour nights, 14,400 vital readings,
+3,600 movement rows, and 1,600 heart-rate/stage reference records. It includes
+periodic missing HR readings, motion, and varying HR/HRV/breathing. Chronological
+splitting evaluated 12 tuning nights. The three configurations have distinct
+deep-stage HR-ratio thresholds; assumed calibration quality is explicitly one.
+This synthetic fixture measures execution and does not validate biometrics.
+
+| Measurement | Run 1 | Run 2 | Run 3 |
+| --- | --- | --- | --- |
+| Coordinator execution through publication | 12,007.73 ms | 11,543.85 ms | 11,673.61 ms |
+| Evaluator runtime | 5,202.12 ms | 4,962.23 ms | 5,048.52 ms |
+| Evaluator peak RSS | 168,392 KiB | 167,180 KiB | 174,336 KiB |
+| Integrity-checked result read | 2,286.37 ms | 2,256.85 ms | 2,267.35 ms |
+| Coordinator event-loop maximum | 2,386.56 ms | 2,300.58 ms | 2,365.59 ms |
+| Coordinator event-loop p95 | 22.64 ms | 22.95 ms | 20.92 ms |
+| Coordinator process peak RSS (cumulative) | 257,564 KiB | 261,296 KiB | 262,292 KiB |
+
+All three attempts succeeded, produced 1,813,618-byte reports, and left the
+synthetic canonical vitals unchanged. Dataset creation took 4,322.13 ms. These
+reports remain below the 2 MiB inline threshold, so this workload does not
+qualify the artifact path. Minimum available system memory during the replay
+phase was 1,140,300 KiB and maximum zone-zero temperature was 39.457 °C.
+
+**Admission is not qualified by these results.** The coordinator's multi-second
+synchronous work would block the application if wired into its main event loop.
+Dataset construction and result reads have the same issue. Move these operations
+into a bounded coordinator worker before enabling production execution, then
+repeat the benchmark. A favorable p95 conceals the long individual stalls.
+
+The harness's own HTTP requests and piezo receipt callbacks run on that same
+coordinator event loop. Their delays therefore cannot be attributed solely to
+the application server or sensor ingestion. The separate standard-library probe
+`scripts/benchmarks/biometrics-probe.py` measures loopback API latency from another
+process. Neither probe retains API bodies or raw sensor samples. The Node
+probe retains only sensor timing and resource measurements. This remains
+synthetic, non-production-database testing: it does not establish live SQLite
+contention, hardware-write responsiveness, waveform replay, or untrusted-code
+isolation.
+
+### Large artifacts and independent API probe
+
+The dense fixture used the same worker with 19,000 synthetic vitals, no movement
+rows, and 800 reference records across 20 nights. Twelve tuning nights produced
+reports of 2,301,040, 2,301,041, and 2,301,034 bytes. All three stored result
+descriptors were verified as `biometric-report-artifact-v1`, all result reads
+passed integrity checks, and canonical synthetic vitals were unchanged.
+
+| Measurement | Run 1 | Run 2 | Run 3 |
+| --- | --- | --- | --- |
+| Coordinator execution through publication | 13,236.50 ms | 12,901.88 ms | 13,064.22 ms |
+| Evaluator runtime | 5,501.95 ms | 5,455.62 ms | 5,499.04 ms |
+| Integrity-checked artifact result read | 2,803.76 ms | 2,933.55 ms | 2,973.02 ms |
+| Coordinator event-loop maximum | 2,961.18 ms | 2,780.82 ms | 2,885.68 ms |
+| Evaluator peak RSS | 166,692 KiB | 161,240 KiB | 162,472 KiB |
+
+Dataset creation took 4,477.81 ms. Coordinator peak RSS reached 262,456 KiB;
+minimum available system memory during replay was 1,105,904 KiB; zone-zero
+maximum temperature was 40.274 °C. Piezo source-timestamp age seen by the
+coordinator peaked at 4,728 ms during replay versus 2,584 ms in its baseline.
+Because this callback shares the blocked coordinator loop, that measurement
+still combines actual frame age with callback delay.
+
+The independent Python probe made 12 baseline samples, 251 samples spanning
+fixture setup and all three attempts, and 9 afterward. Every GET returned 200.
+
+| Maximum HTTP latency | Baseline | Entire benchmark | After |
+| --- | --- | --- | --- |
+| Performance | 36.88 ms | 57.52 ms | 22.48 ms |
+| Sensor source | 93.53 ms | 72.37 ms | 22.72 ms |
+| Device status | 66.74 ms | 80.61 ms | 52.32 ms |
+
+The production service remained active after the benchmark. These observations
+support keeping heavy coordination separate from the application event loop;
+they do not approve running it on that loop. The harness's configuration labels
+are synthetic comparison roles (thresholds 0.90, 0.92, 0.94), not a promotion
+comparison against an asserted shipped-default profile. Repeat qualification
+after coordinator isolation and again for the final deployed worker. The
+measurements do not yet select universal admission thresholds or qualify live
+SQLite contention and closed-loop control responsiveness.
