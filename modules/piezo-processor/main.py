@@ -36,7 +36,6 @@ import sqlite3
 import threading
 from pathlib import Path
 from datetime import datetime, timezone
-from collections import deque
 from dataclasses import dataclass
 from typing import Callable, Optional
 
@@ -49,6 +48,10 @@ from common.side_mode import SingleSleeperMode
 from common.bed_presence import BedPresence
 import numpy as np
 from runtime_adapter import RuntimeCoordinator, RunContext
+from common.biometrics.processing import (
+    StatefulSideProcessor, HR_WINDOW_S, BREATHING_WINDOW_S, HRV_WINDOW_S,
+)
+from common.biometrics.routing import SingleSleeperRouter, VITALS_INTERVAL_S
 from common.biometrics.gates import (
     FrzHealthPumpState as _FrzHealthPumpState, PumpGate as _PumpGate,
     PresenceDetector, PUMP_ENERGY_MULTIPLIER, PUMP_CORRELATION_MIN,
@@ -73,10 +76,6 @@ SLEEP_DETECTOR_STATE = Path(os.environ.get(
     "SLEEP_DETECTOR_STATE_PATH", str(BIOMETRICS_DB.parent / "sleep-detector-state.json")))
 
 SAMPLE_RATE = 500          # Hz — piezo sensor sample rate
-VITALS_INTERVAL_S = 60     # write a vitals row every N seconds
-HR_WINDOW_S = 30           # seconds of data for heart rate calculation
-BREATHING_WINDOW_S = 60    # seconds of data for breathing rate calculation
-HRV_WINDOW_S = 300         # seconds of data for the window-level HRV index
 
 # HR band: 0.8 Hz preserves fundamental of 48+ BPM; 8.5 Hz per PMC7582983
 HR_BAND = (0.8, 8.5)
@@ -238,83 +237,13 @@ class VitalsCandidate:
                             hr_raw=self.hr_raw, **kwargs)
 
 
-class SingleSleeperVitals:
-    """Routes vitals rows when one side is in away mode (single sleeper).
-
-    A solo sleeper who rolls onto the away side is picked up by that side's
-    piezo too — the same heartbeat, within a few bpm. Each cycle's
-    candidates from the two sides are paired and
-    only the higher-quality one is written, under the home side, so the
-    home session shows one heart-rate series with no gaps or duplicates.
-    A candidate whose partner doesn't arrive within VITALS_INTERVAL_S (the
-    other side saw no one) is written alone under the home side.
-
-    Outside single-sleeper mode rows are written under their own side.
-    """
-
+class SingleSleeperVitals(SingleSleeperRouter[VitalsCandidate]):
+    """Bind shared arbitration to the live database/provenance writer."""
     def __init__(self, holder: "DBHolder", mode: SingleSleeperMode,
                  clock: Callable[[], float] = time.monotonic):
         self._holder = holder
-        self._mode = mode
-        self._clock = clock
-        self._pending: Optional[VitalsCandidate] = None
-        self._retry: Optional[VitalsCandidate] = None
-        self._retry_home: Optional[str] = None
-        self._pending_home: Optional[str] = None
-        self._pending_at = 0.0
-
-    def submit(self, cand: VitalsCandidate) -> bool:
-        """Accept one side's candidate. True means the side may advance its
-        write cursor: the row was written, or is held (for pairing or a
-        write retry). A held candidate is only dropped once written."""
-        # Completed intervals must never pair with a later candidate.
-        if self._retry is not None and not self.flush():
-            return False
-        home = self._mode.home_side()
-        if not self._mode.active_sides():
-            self._pending = self._retry = None
-            return True
-        if home is None:
-            if not self.flush():
-                return False
-            return cand.write(self._holder)
-        pending = self._pending
-        if pending is not None and pending.side != cand.side and self._pending_home == home:
-            best = cand if cand.quality_score > pending.quality_score else pending
-            self._pending = best
-            self.flush()
-            return True
-        # A same-side repeat means its partner never arrived: write the
-        # older one first. If that fails, refuse the new candidate so its
-        # side keeps it and resubmits, rather than dropping the older row.
-        if not self.flush():
-            return False
-        self._pending, self._pending_home, self._pending_at = cand, home, self._clock()
-        return True
-
-    def tick(self) -> None:
-        """Write a held candidate whose partner didn't arrive in time."""
-        if not self._mode.active_sides():
-            self._pending = self._retry = None
-            return
-        held = self._pending is not None or self._retry is not None
-        if held and self._clock() - self._pending_at >= VITALS_INTERVAL_S:
-            self.flush()
-
-    def flush(self) -> bool:
-        """Write the held candidate, if any. On failure it stays held and
-        idle retries wait VITALS_INTERVAL_S; a new submission retries first.
-        True when nothing is left held."""
-        if self._retry is None:
-            self._retry, self._retry_home = self._pending, self._pending_home
-            self._pending = None
-        if self._retry is None:
-            return True
-        if self._retry.write(self._holder, side=self._retry_home):
-            self._retry = None
-            return True
-        self._pending_at = self._clock()
-        return False
+        super().__init__(mode, lambda candidate, side: candidate.write(holder, side=side),
+                         clock=clock)
 
 
 def report_health(status: str, message: str) -> None:
@@ -357,197 +286,17 @@ class PumpGate(_PumpGate):
 # Per-side processor
 # ---------------------------------------------------------------------------
 
-class SideProcessor:
+class SideProcessor(StatefulSideProcessor):
+    """Live adapter binds shared state to wall time and canonical DB writes."""
     def __init__(self, side: str, db_holder: DBHolder,
                  pump_state: Optional[FrzHealthPumpState] = None,
                  parameters: ProcessingParameters = DEFAULT_PARAMETERS):
-        self.side = side
         self.db_holder = db_holder
-        self._hr_buf: deque = deque(maxlen=HR_WINDOW_S * SAMPLE_RATE)
-        self._hrv_buf: deque = deque(maxlen=HRV_WINDOW_S * SAMPLE_RATE)
-        self._br_buf: deque = deque(maxlen=BREATHING_WINDOW_S * SAMPLE_RATE)
-        self._last_write = 0.0
-        self._presence = PresenceDetector()
-        self.parameters = parameters
-        self.run_context: Optional[RunContext] = None
-        self._estimator = WindowEstimator(parameters)
-        self._hr_tracker = self._estimator.hr_tracker
-        self._other: Optional['SideProcessor'] = None  # set after both sides created
-        self._last_med_std: float = 0.0  # cached for cross-channel comparison
-        self._last_acr_qual: float = 0.0
-        self._pump_state = pump_state
-        # Where computed vitals go; None writes them under this side.
-        # main() routes both sides through SingleSleeperVitals.submit.
-        self.sink: Optional[Callable[[VitalsCandidate], bool]] = None
-        # The bed's own answer to "is anyone here" (sleep-detector presence):
-        # False vetoes piezo presence, None (unknown) leaves it alone.
-        self.bed_occupied: Optional[Callable[[], Optional[bool]]] = None
-        # Single-sleeper home side (None in per-side mode). The sleep-detector
-        # merges both zones into the home side, so only the home side's
-        # processor may treat `bed_occupied() is True` as its own evidence.
-        self.home_side: Optional[Callable[[], Optional[str]]] = None
-
-    def install_runtime(self, parameters, run_context, reset_side=False):
-        if parameters != self.parameters or reset_side:
-            self._hr_buf.clear()
-            self._hrv_buf.clear()
-            self._br_buf.clear()
-            self._estimator = WindowEstimator(parameters)
-            self._hr_tracker = self._estimator.hr_tracker
-            self._last_write = 0.0
-            self._last_med_std = self._last_acr_qual = 0.0
-            self._presence = PresenceDetector()
-        self.parameters = parameters
-        self.run_context = run_context
-
-    def ingest(self, samples: np.ndarray) -> None:
-        self._hr_buf.extend(samples)
-        self._hrv_buf.extend(samples)
-        self._br_buf.extend(samples)
-        self._maybe_write()
-
-    def _maybe_write(self) -> None:
-        now = time.time()
-        if now - self._last_write < VITALS_INTERVAL_S:
-            return
-
-        hr_arr = np.array(self._hr_buf)
-        if len(hr_arr) < int(10 * SAMPLE_RATE):
-            return  # Not enough data yet
-
-        # --- Presence detection (hysteresis + autocorrelation quality) ---
-        filt = _bandpass(hr_arr, 1.0, 10.0, SAMPLE_RATE)
-        w = int(5 * SAMPLE_RATE)
-        stds = [np.std(filt[j:j + w])
-                for j in range(0, len(filt) - w + 1, w)]
-        med_std = float(np.median(stds)) if stds else 0.0
-        acr_qual = _autocorr_quality(hr_arr)
-        cross_channel_rejected = False
-
-        # Cross-channel rejection: if the other side has stronger or similar
-        # signal AND strong autocorrelation (someone is actually there), this
-        # side's signal is likely vibration coupling, not a person.
-        # A real person produces ~3-5x stronger signal on their side.
-        #
-        # Note: due to sequential processing in main() (left before right),
-        # left sees right's values from the previous cycle (~60s stale).
-        # This is acceptable — coupling produces similar energy regardless
-        # of which side checks first.
-        if self._other is not None and self._other._last_med_std > 0:
-            other_std = self._other._last_med_std
-            other_acr = self._other._last_acr_qual
-            # Only suppress if: other side has real periodicity (someone there),
-            # other side's energy is >= ours, and our energy is below threshold
-            if (other_acr > 0.3
-                    and other_std > med_std * 0.7
-                    and med_std < self._presence.enter_threshold):
-                acr_qual = 0.0
-                cross_channel_rejected = True
-
-        # Cache AFTER suppression so the other side sees post-suppression values
-        self._last_med_std = med_std
-        self._last_acr_qual = acr_qual
-
-        # The bed's own answer to "is anyone here" (sleep-detector capacitance
-        # presence), read once per cycle: True relaxes re-entry below, False
-        # vetoes piezo presence, None (unknown) leaves the piezo alone.
-        bed = self.bed_occupied() if self.bed_occupied is not None else None
-        # Only occupancy measured on this side may relax the piezo. With one
-        # side away the reading is merged under the home side, so the away
-        # side inherits a True it cannot attribute to its own zone and keeps
-        # the strict path. A side whose energy cross-channel rejection has
-        # already attributed to the other sleeper keeps it too.
-        own_side = self.home_side is None or self.home_side() in (None, self.side)
-        relaxed = bed is True and own_side and not cross_channel_rejected
-
-        # Pump-coupling guard. PumpGate handles symmetric spikes (ramps)
-        # but misses two steady-state modes: asymmetric (own-pump-on with
-        # opposite idle — vibration couples into same-side piezo, no
-        # competing signal for cross-channel rejection) and symmetric
-        # (both pumps on at mismatched RPMs — beat frequency lands in the
-        # cardiac band, both sides look "real"). In both, require elevated
-        # energy AND strong autocorrelation to enter PRESENT; coupling
-        # rarely produces both, only a real person does.
-        #
-        # The guard answers "is this vibration a person or the pump". When
-        # the capacitance sensor says a person is in bed on this side and
-        # the energy is not the other sleeper's, that question is settled;
-        # on Pod 5 both pumps run all night, so without this bypass a
-        # sleeper who drifted to a weak-signal position stayed ABSENT for
-        # an hour at a time (05:57-07:01 on 2026-10-11) until a hard
-        # movement cleared the raised bar.
-        if (self._pump_state is not None and not relaxed
-                and self._presence.state == PresenceDetector.ABSENT):
-            symmetric = self._pump_state.is_symmetric_active()
-            asymmetric = self._pump_state.is_asymmetric_for(self.side)
-            if symmetric or asymmetric:
-                std_threshold = self._presence.enter_threshold * PUMP_COUPLING_STD_FACTOR
-                if not (med_std > std_threshold and acr_qual > PUMP_COUPLING_ACR_THRESHOLD):
-                    log.debug(
-                        "%s: pump-coupling guard suppressed presence "
-                        "(med_std=%.0f, acr=%.2f, mode=%s)",
-                        self.side, med_std, acr_qual,
-                        "symmetric" if symmetric else "asymmetric",
-                    )
-                    return
-
-        if relaxed and self._presence.state == PresenceDetector.ABSENT:
-            log.debug("%s: bed reads occupied, relaxed piezo re-entry (med_std=%.0f, acr=%.2f)",
-                      self.side, med_std, acr_qual)
-        if cross_channel_rejected:
-            # The other side owns this energy. Zeroing acr alone cannot end
-            # presence (exit needs weak energy too), so count the window as
-            # weak and let the normal hysteresis exit instead of latching,
-            # and never submit vitals computed from it meanwhile.
-            self._presence.update(0.0, 0.0)
-            present = False
-        else:
-            present = self._presence.update(med_std, acr_qual, relaxed=relaxed)
-        # Piezo presence is vibration energy and rhythm; a prime or the pump
-        # shaking an empty bed passes it. Trust the capacitance-based
-        # presence when the sleep-detector says nobody is there.
-        if present and bed is False:
-            present = False
-
-        if not present:
-            # Reset the interval cursor so a return from extended absence
-            # doesn't trigger burst processing on every ingest until the
-            # first write completes (#325).
-            self._last_write = now
-            return  # No user detected — skip
-
-        # Shared numerical estimator. Gating and live sinks remain in this adapter.
-        estimate = self._estimator.estimate(now, hr_arr, np.array(self._br_buf),
-                                             np.array(self._hrv_buf))
-        hr, hrv, br = estimate.heart_rate, estimate.hrv_index, estimate.breathing_rate
-        hr_raw, hr_score = estimate.hr_raw, estimate.hr_score
-
-        if hr is not None or hrv is not None or br is not None:
-            ts = datetime.now(timezone.utc)
-            snr = max(0.0, min(1.0, acr_qual))
-            hr_conf = max(0.0, min(1.0, hr_score)) if hr is not None else 0.0
-            quality = round(0.55 * snr + 0.45 * hr_conf, 3)
-            flags = []
-            if hr is None:
-                flags.append("no_hr")
-            if hrv is None:
-                flags.append("no_hrv")
-            if br is None:
-                flags.append("no_br")
-            if med_std < self._presence.enter_threshold:
-                flags.append("low_signal")
-            cand = VitalsCandidate(self.side, ts, hr, hrv, br, quality, flags or None, hr_raw, self.run_context)
-            wrote = self.sink(cand) if self.sink is not None else cand.write(self.db_holder)
-            log.info("vitals %s — HR=%.1f HRV=%.1f BR=%.1f q=%.2f", self.side,
-                     hr or 0, hrv or 0, br or 0, quality)
-            # Only advance the downsample cursor when the write actually
-            # committed — otherwise a transient sqlite error would skip
-            # VITALS_INTERVAL_S of valid samples.
-            if wrote:
-                self._last_write = now
-        else:
-            # No metric to write — advance so we don't recompute on every ingest.
-            self._last_write = now
+        super().__init__(side, clock=lambda: time.time(),
+                         writer=lambda candidate: candidate.write(db_holder),
+                         candidate_factory=VitalsCandidate, pump_state=pump_state,
+                         parameters=parameters,
+                         autocorr_quality=lambda samples: _autocorr_quality(samples))
 
 # ---------------------------------------------------------------------------
 # Main loop
