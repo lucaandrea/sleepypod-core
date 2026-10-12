@@ -4,11 +4,13 @@ import { useState } from 'react'
 import { Trans, useLingui } from '@lingui/react/macro'
 import { trpc } from '@/src/utils/trpc'
 import { Button, Card, CardHeader, InlineError, Skeleton } from '@/src/components/ds'
+import { ProfileComparison } from './ProfileComparison'
 import { ProfileCandidateEditor } from './ProfileCandidateEditor'
 
 export function ProfileLibrary({ side }: { side: 'left' | 'right' }) {
   const { t } = useLingui()
   const [cursor, setCursor] = useState<{ createdAtMs: number, id: string }>()
+  const [comparedId, setComparedId] = useState<string>()
   const [revisionId, setRevisionId] = useState<string>()
   const profiles = trpc.biometricTuning.listProfileRevisions.useQuery({ side, beforeCreatedAtMs: cursor?.createdAtMs, beforeId: cursor?.id })
   return (
@@ -30,6 +32,8 @@ export function ProfileLibrary({ side }: { side: 'left' | 'right' }) {
                           <p>{t`Revision ${profile.revision} · ${profile.origin} · ${profile.requester}`}</p>
                           <p className="break-all font-mono text-xs">{profile.id}</p>
                           <Button onClick={() => setRevisionId(profile.id)} aria-pressed={revisionId === profile.id}><Trans>Edit a new candidate from this revision</Trans></Button>
+                          <Button onClick={() => setComparedId(comparedId === profile.id ? undefined : profile.id)} aria-expanded={comparedId === profile.id}><Trans>Inspect candidate changes</Trans></Button>
+                          {comparedId === profile.id ? <ProfileComparison key={profile.id} side={side} revisionId={profile.id} /> : null}
                           <details>
                             <summary><Trans>Pinned configuration and overrides</Trans></summary>
                             <dl className="break-all text-xs">

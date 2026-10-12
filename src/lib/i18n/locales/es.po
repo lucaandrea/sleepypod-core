@@ -13,7 +13,7 @@ msgstr ""
 "Language-Team: \n"
 "Plural-Forms: \n"
 
-#: src/components/biometrics/Calibration/ProfileLibrary.tsx:17
+#: src/components/biometrics/Calibration/ProfileLibrary.tsx:19
 msgid "A saved revision is not evidence of validation or processor adoption."
 msgstr "Una revisión guardada no demuestra validación ni adopción por el procesador."
 
@@ -34,6 +34,14 @@ msgstr "Aceptados: {0}; rechazados: {1}; duplicados: {2}; no evaluables: {3}; co
 msgid "Activation history"
 msgstr "Historial de activación"
 
+#: src/components/biometrics/Calibration/ProfileComparison.tsx:51
+msgid "After"
+msgstr "Después"
+
+#: src/components/biometrics/Calibration/ProfileComparison.tsx:38
+msgid "After configuration hash"
+msgstr "Hash de configuración posterior"
+
 #: src/components/biometrics/Calibration/CalibrationHistory.tsx:18
 #: src/components/biometrics/Calibration/CalibrationOverview.tsx:17
 msgid "Applied"
@@ -42,6 +50,14 @@ msgstr "Aplicado"
 #: src/components/biometrics/Calibration/CalibrationHistory.tsx:17
 msgid "Apply profile"
 msgstr "Aplicar perfil"
+
+#: src/components/biometrics/Calibration/ProfileComparison.tsx:50
+msgid "Before"
+msgstr "Antes"
+
+#: src/components/biometrics/Calibration/ProfileComparison.tsx:36
+msgid "Before configuration hash"
+msgstr "Hash de configuración anterior"
 
 #: src/components/biometrics/Calibration/BiometricCalibration.tsx:21
 msgid "Biometric calibration"
@@ -54,6 +70,10 @@ msgstr "Frecuencia respiratoria"
 #: src/components/biometrics/Calibration/BiometricCalibration.tsx:22
 msgid "Calibration views"
 msgstr "Vistas de calibración"
+
+#: src/components/biometrics/Calibration/ProfileComparison.tsx:26
+msgid "Candidate changes"
+msgstr "Cambios del candidato"
 
 #: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:70
 msgid "Candidate parameters"
@@ -70,6 +90,14 @@ msgstr "Candidato guardado: {saved}"
 #: src/components/biometrics/Calibration/CalibrationOverview.tsx:16
 msgid "Clock mismatch"
 msgstr "Desajuste de reloj"
+
+#: src/components/biometrics/Calibration/ProfileComparison.tsx:26
+msgid "Compare against the saved profile. This is a configuration comparison, not validation evidence."
+msgstr "Compare con el perfil guardado. Esta comparación de configuración no demuestra validación."
+
+#: src/components/biometrics/Calibration/ProfileComparison.tsx:29
+msgid "Compare with saved profile"
+msgstr "Comparar con el perfil guardado"
 
 #: src/components/biometrics/Calibration/CalibrationHistory.tsx:17
 msgid "Compatibility fallback"
@@ -121,15 +149,15 @@ msgstr "Se han informado versiones diferentes"
 msgid "Direct sleep-stage changes are unvalidated manual settings. Saving requests a profile change; processor adoption is reported separately in Overview."
 msgstr "Los cambios directos de las fases del sueño son ajustes manuales sin validar. Al guardar se solicita un cambio de perfil; su adopción por el procesador se informa por separado en Resumen."
 
-#: src/components/biometrics/Calibration/ProfileLibrary.tsx:32
+#: src/components/biometrics/Calibration/ProfileLibrary.tsx:34
 msgid "Edit a new candidate from this revision"
 msgstr "Editar un nuevo candidato a partir de esta revisión"
 
-#: src/components/biometrics/Calibration/ProfileLibrary.tsx:18
+#: src/components/biometrics/Calibration/ProfileLibrary.tsx:20
 msgid "Editing from revision {revisionId}"
 msgstr "Editando a partir de la revisión {revisionId}"
 
-#: src/components/biometrics/Calibration/ProfileLibrary.tsx:18
+#: src/components/biometrics/Calibration/ProfileLibrary.tsx:20
 msgid "Editing from the currently saved profile."
 msgstr "Editando a partir del perfil guardado actualmente."
 
@@ -137,7 +165,7 @@ msgstr "Editando a partir del perfil guardado actualmente."
 msgid "End (UTC)"
 msgstr "Fin (UTC)"
 
-#: src/components/biometrics/Calibration/ProfileLibrary.tsx:38
+#: src/components/biometrics/Calibration/ProfileLibrary.tsx:42
 msgid "Engine manifest hash"
 msgstr "Hash del manifiesto del motor"
 
@@ -213,6 +241,10 @@ msgstr "Importar mediciones de referencia"
 msgid "Inherited default"
 msgstr "Valor predeterminado heredado"
 
+#: src/components/biometrics/Calibration/ProfileLibrary.tsx:35
+msgid "Inspect candidate changes"
+msgstr "Inspeccionar cambios del candidato"
+
 #: src/components/biometrics/Calibration/ReferenceLibrary.tsx:50
 msgid "Inspect measurements"
 msgstr "Inspeccionar mediciones"
@@ -246,7 +278,7 @@ msgstr "Más recientes"
 msgid "Newest imports"
 msgstr "Importaciones recientes"
 
-#: src/components/biometrics/Calibration/ProfileLibrary.tsx:49
+#: src/components/biometrics/Calibration/ProfileLibrary.tsx:53
 msgid "Newest profiles"
 msgstr "Perfiles recientes"
 
@@ -262,15 +294,23 @@ msgstr "No hay un intervalo de tiempo aceptado."
 msgid "No activation history for this side."
 msgstr "No hay historial de activación para este lado."
 
+#: src/components/biometrics/Calibration/ProfileComparison.tsx:67
+msgid "No override intent changes."
+msgstr "No hay cambios en la intención de personalización."
+
 #: src/components/biometrics/Calibration/ReferenceLibrary.tsx:35
 msgid "No reference imports for this side."
 msgstr "No hay importaciones de referencia para este lado."
+
+#: src/components/biometrics/Calibration/ProfileComparison.tsx:42
+msgid "No resolved value changes."
+msgstr "No hay cambios en los valores resueltos."
 
 #: src/components/biometrics/Calibration/ReferenceLibrary.tsx:118
 msgid "No retained measurements."
 msgstr "No hay mediciones conservadas."
 
-#: src/components/biometrics/Calibration/ProfileLibrary.tsx:26
+#: src/components/biometrics/Calibration/ProfileLibrary.tsx:28
 msgid "No saved candidate revisions."
 msgstr "No hay revisiones de candidatos guardadas."
 
@@ -295,7 +335,7 @@ msgstr "Cambios anteriores"
 msgid "Older imports"
 msgstr "Importaciones anteriores"
 
-#: src/components/biometrics/Calibration/ProfileLibrary.tsx:50
+#: src/components/biometrics/Calibration/ProfileLibrary.tsx:54
 msgid "Older profiles"
 msgstr "Perfiles anteriores"
 
@@ -303,11 +343,19 @@ msgstr "Perfiles anteriores"
 msgid "Overridden"
 msgstr "Personalizado"
 
+#: src/components/biometrics/Calibration/ProfileComparison.tsx:66
+msgid "Override intent can change even when the resolved value stays the same."
+msgstr "La intención de personalización puede cambiar aunque el valor resuelto sea el mismo."
+
 #: src/components/biometrics/Calibration/BiometricCalibration.tsx:23
 msgid "Overview"
 msgstr "Resumen"
 
-#: src/components/biometrics/Calibration/ProfileLibrary.tsx:40
+#: src/components/biometrics/Calibration/ProfileComparison.tsx:49
+msgid "Parameter"
+msgstr "Parámetro"
+
+#: src/components/biometrics/Calibration/ProfileLibrary.tsx:44
 msgid "Parent revision"
 msgstr "Revisión de origen"
 
@@ -323,7 +371,7 @@ msgstr "Eliminar importación permanentemente"
 msgid "Personalized profile"
 msgstr "Perfil personalizado"
 
-#: src/components/biometrics/Calibration/ProfileLibrary.tsx:34
+#: src/components/biometrics/Calibration/ProfileLibrary.tsx:38
 msgid "Pinned configuration and overrides"
 msgstr "Configuración fijada y personalizaciones"
 
@@ -396,9 +444,13 @@ msgstr "Solicitado por {0}"
 msgid "Requested change"
 msgstr "Cambio solicitado"
 
-#: src/components/biometrics/Calibration/ProfileLibrary.tsx:36
+#: src/components/biometrics/Calibration/ProfileLibrary.tsx:40
 msgid "Resolved configuration hash"
 msgstr "Hash de la configuración resuelta"
+
+#: src/components/biometrics/Calibration/ProfileComparison.tsx:46
+msgid "Resolved parameter changes"
+msgstr "Cambios en los parámetros resueltos"
 
 #: src/components/biometrics/Calibration/CalibrationHistory.tsx:17
 msgid "Restore previous profile"
@@ -411,7 +463,7 @@ msgstr "Revisar candidato"
 #. placeholder {0}: profile.revision
 #. placeholder {1}: profile.origin
 #. placeholder {2}: profile.requester
-#: src/components/biometrics/Calibration/ProfileLibrary.tsx:30
+#: src/components/biometrics/Calibration/ProfileLibrary.tsx:32
 msgid "Revision {0} · {1} · {2}"
 msgstr "Revisión {0} · {1} · {2}"
 
@@ -448,7 +500,7 @@ msgstr "Guardado"
 msgid "Saved profile"
 msgstr "Perfil guardado"
 
-#: src/components/biometrics/Calibration/ProfileLibrary.tsx:17
+#: src/components/biometrics/Calibration/ProfileLibrary.tsx:19
 msgid "Saved profile revisions"
 msgstr "Revisiones de perfiles guardadas"
 
@@ -480,7 +532,7 @@ msgstr "Desactualizado"
 msgid "Start (UTC)"
 msgstr "Inicio (UTC)"
 
-#: src/components/biometrics/Calibration/ProfileLibrary.tsx:19
+#: src/components/biometrics/Calibration/ProfileLibrary.tsx:21
 msgid "Start from current profile"
 msgstr "Comenzar con el perfil actual"
 
@@ -495,6 +547,10 @@ msgstr "Valores predeterminados del sistema"
 #: src/components/biometrics/Calibration/CalibrationOverview.tsx:45
 msgid "The HRV index measures window IBI variability. It is not clinical beat-to-beat RMSSD, and incompatible reference metrics cannot validate it."
 msgstr "El índice de VFC mide la variabilidad de los intervalos entre latidos dentro de una ventana. No es la RMSSD clínica entre latidos consecutivos y no puede validarse con métricas de referencia incompatibles."
+
+#: src/components/biometrics/Calibration/ProfileComparison.tsx:31
+msgid "The saved profile changed. Compare again before reviewing these changes."
+msgstr "El perfil guardado ha cambiado. Vuelva a comparar antes de revisar estos cambios."
 
 #: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:28
 msgid "The saved profile or parameter definitions are incompatible with this editor."
