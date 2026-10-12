@@ -58,6 +58,18 @@ not a completed result or an activation. Result reads include the current
 holdout exposure count. Existing successful retries return the original job
 when the same public submission key and payload are supplied.
 
+`getBacktestSummary` (`GET /biometric-tuning/backtests/{id}/summary`) is the
+interactive review path. It verifies the complete report in the coordinator,
+then omits stage-trace rows before IPC and HTTP serialization. All scores,
+per-night comparisons, support, provenance, and operational measurements remain.
+Its `projection` is `scores_without_stage_trace_rows_v1`; `contentHashScope` is
+`complete_retained_report`. The hash identifies the retained full artifact,
+not the summary's serialized bytes. Summaries exceeding 2 MiB fail explicitly
+rather than silently truncating nights or scores. `getBacktestResult` continues
+to return the full verified report, and `getBacktestTrace` pages exact trace
+rows using that same retained hash. The UI and MCP report reader use the summary
+path; release and holdout exposure semantics are unchanged.
+
 The backtest host loop, measured resource admission, richer promotion reports,
 and full client UI/MCP integration remain separate implementation steps. The API does not claim that these are enabled merely because job
 submission exists.

@@ -45,7 +45,7 @@ const callerMock = vi.hoisted(() => {
       getProfileRevision: fn(), listProfileRevisions: fn(), compareReadings: fn(), deleteImport: fn(), releaseDataset: fn(), releaseBacktestResult: fn(), getActivationStatus: fn(), listActivationHistory: fn(), previewImport: fn(), commitImport: fn(),
       createProfileRevision: fn(), createDataset: fn(), getDataset: fn(), listDatasets: fn(), createExperiment: fn(),
       getExperiment: fn(), listExperiments: fn(), enqueueBacktest: fn(), getBacktest: fn(), cancelBacktest: fn(), listBacktests: fn(),
-      getBacktestResult: fn(), getBacktestTrace: fn(), activateProfile: fn(), rollbackProfile: fn(), resetProfile: fn(),
+      getBacktestSummary: fn(), getBacktestTrace: fn(), activateProfile: fn(), rollbackProfile: fn(), resetProfile: fn(),
     },
   }
 })
@@ -639,7 +639,7 @@ describe('sleepypod MCP server', () => {
       protocol: { version: 'descriptive-evaluation-v1', mode: 'stage_replay', assumedStageCalibrationQuality: 0, pointToleranceMs: 30000, clockOffsetMs: 0 } } } })
     api.enqueueBacktest.mockResolvedValue({ id, state: 'queued' })
     await call('backtest_biometrics', { request: { action: 'start', input: { experimentId: id, candidateRevisionId: id, expectedBindingGeneration: 0, split: 'tuning', idempotencyKey: 'job' } } })
-    api.getBacktestResult.mockResolvedValue({ jobId: id, available: true, report: { version: 'processed-backtest-report-v1', status: 'insufficient_evidence',
+    api.getBacktestSummary.mockResolvedValue({ jobId: id, available: true, report: { version: 'processed-backtest-report-v1', status: 'insufficient_evidence',
       split: 'tuning', evidence: 'descriptive_only', limitations: ['fixture'], nights: [{ privateTrace: 'never-export-this-trace' }] } })
     const report = await call('backtest_biometrics', { request: { action: 'report', input: { id } } })
     expect(text(report)).not.toContain('never-export-this-trace')
@@ -691,7 +691,7 @@ describe('sleepypod MCP server', () => {
       expectedGeneration: 0, expectedResolvedHash: 'a'.repeat(64), boundary: 'next_session', requester: 'fixture', idempotencyKey: 'stale', allowUnvalidated: true } } }) as CallToolResult
     expect(conflict.isError).toBe(true)
     expect(text(conflict)).toContain('STALE_BINDING')
-    api.getBacktestResult.mockResolvedValueOnce({ jobId: id, available: false, releasedAtMs: 123, report: null, contentHash: 'a'.repeat(64) })
+    api.getBacktestSummary.mockResolvedValueOnce({ jobId: id, available: false, releasedAtMs: 123, report: null, contentHash: 'a'.repeat(64) })
     const released = await client.callTool({ name: 'backtest_biometrics', arguments: { request: { action: 'report', input: { id } } } }) as CallToolResult
     expect(parse(released)).toMatchObject({ available: false, report: null, releasedAtMs: 123 })
     api.releaseBacktestResult.mockResolvedValueOnce({ available: false })

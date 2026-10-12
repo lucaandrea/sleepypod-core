@@ -24,6 +24,9 @@ async function prepare(key: string) {
 async function completed(id: string) {
   await vi.waitFor(async () => expect((await required(handlers.getBacktest)({ id })).state).toBe('succeeded'))
   const report = await required(handlers.getBacktestResult)({ id })
+  const summary = await required(handlers.getBacktestSummary)({ id })
+  expect(summary).toMatchObject({ contentHash: report?.contentHash, contentHashScope: 'complete_retained_report' })
+  expect(JSON.stringify(summary?.report)).not.toContain('"blocks"')
   if (!report) throw new Error('Missing report')
   return report
 }

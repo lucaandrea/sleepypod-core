@@ -24,7 +24,7 @@ const summarySchema = z.object({ version: z.string(), status: z.string(), split:
 })
 
 async function getReportSummary(id: string) {
-  const result = await getCaller().biometricTuning.getBacktestResult({ id })
+  const result = await getCaller().biometricTuning.getBacktestSummary({ id })
   return result === null
     ? null
     : { ...result, report: result.available ? summarySchema.parse(result.report) : null,

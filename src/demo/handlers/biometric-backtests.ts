@@ -1,5 +1,6 @@
 import type { DemoHandlers, RouterOutputs, RouterInputs } from '../types'
 import { experimentProtocolSchema } from '@/src/biometrics/backtest/contracts'
+import { summarizeBacktestResult } from '@/src/biometrics/backtest/report-summary'
 import { pageStageTraces } from '@/src/biometrics/backtest/trace-page'
 import { runDemoEvaluation } from '../biometrics/run'
 import workerBuild from '../biometrics/worker-build.json'
@@ -144,6 +145,7 @@ export function createDemoBacktestHandlers(loadProfiles: Profiles): DemoHandlers
       return structuredClone(row.job)
     },
     getBacktestResult: ({ id }) => result(job(id)),
+    getBacktestSummary: ({ id }) => summarizeBacktestResult(result(job(id))),
     getBacktestTrace: (input) => {
       const report = result(job(input.id))
       if (!report?.available) throw new Error('RESULT_RELEASED: report unavailable')

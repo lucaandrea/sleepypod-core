@@ -177,6 +177,12 @@ export const biometricTuningRouter = router({
     .output(resultDescriptorSchema.nullable())
     .query(({ input }) => references(() => coordinatorRequest(biometricsDb, { type: 'readResult', input }))),
 
+  getBacktestSummary: publicProcedure
+    .meta({ openapi: { method: 'GET', path: '/biometric-tuning/backtests/{id}/summary', protect: false, tags: ['Biometric tuning'] } })
+    .input(importIdSchema)
+    .output(resultDescriptorSchema.extend({ projection: z.literal('scores_without_stage_trace_rows_v1'), contentHashScope: z.literal('complete_retained_report') }).nullable())
+    .query(({ input }) => references(() => coordinatorRequest(biometricsDb, { type: 'readSummary', input }))),
+
   getBacktestTrace: publicProcedure
     .meta({ openapi: { method: 'GET', path: '/biometric-tuning/backtests/{id}/trace', protect: false, tags: ['Biometric tuning'] } })
     .input(traceRequestSchema)

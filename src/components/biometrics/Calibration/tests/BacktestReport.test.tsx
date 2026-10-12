@@ -7,8 +7,8 @@ const mock = vi.hoisted(() => ({ get: vi.fn(), release: vi.fn(), invalidate: vi.
 vi.mock('@/src/providers/TimeFormatProvider', () => ({ useTimeFormat: () => '24h' }))
 vi.mock('@/src/utils/trpc', () => ({ trpc: {
   settings: { getAll: { useQuery: () => ({ data: { device: { timezone: 'UTC' } } }) } },
-  useUtils: () => ({ biometricTuning: { getBacktestResult: { invalidate: mock.invalidate } } }),
-  biometricTuning: { getBacktestResult: { useQuery: mock.get }, releaseBacktestResult: { useMutation: () => ({ mutateAsync: mock.release, isPending: false }) } },
+  useUtils: () => ({ biometricTuning: { getBacktestSummary: { invalidate: mock.invalidate } } }),
+  biometricTuning: { getBacktestSummary: { useQuery: mock.get }, releaseBacktestResult: { useMutation: () => ({ mutateAsync: mock.release, isPending: false }) } },
 } }))
 const report = {
   version: 'processed-backtest-report-v1', status: 'insufficient_evidence', datasetHash: 'dataset', protocolHash: 'protocol', manifestHash: 'manifest', evaluatorBuildHash: 'worker',

@@ -107,6 +107,10 @@ it('runs a leased evaluation and preserves report identity across the process bo
     const result = await runCoordinatorTask(options(), { type: 'readResult', input: { id: job.id } })
     expect(result?.contentHash).toBe(jobs.result(job.id)?.contentHash)
     expect(result?.available).toBe(true)
+    const summary = await runCoordinatorTask(options(), { type: 'readSummary', input: { id: job.id } })
+    expect(summary).toMatchObject({ contentHash: result?.contentHash, contentHashScope: 'complete_retained_report' })
+    expect(JSON.stringify(summary?.report)).not.toContain('"blocks"')
+    expect(JSON.stringify(result?.report)).toContain('"blocks"')
   }
   finally { sqlite.close() }
 })

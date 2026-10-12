@@ -13,7 +13,7 @@ export function BacktestReport({ id }: { id: string }) {
   const { t, i18n } = useLingui()
   const [confirmRelease, setConfirmRelease] = useState(false)
   const [showTrace, setShowTrace] = useState(false)
-  const result = trpc.biometricTuning.getBacktestResult.useQuery({ id }, { staleTime: 60000 })
+  const result = trpc.biometricTuning.getBacktestSummary.useQuery({ id }, { staleTime: 60000 })
   const release = trpc.biometricTuning.releaseBacktestResult.useMutation()
   const utils = trpc.useUtils()
   if (result.error) return <InlineError>{result.error.message}</InlineError>
@@ -38,7 +38,7 @@ export function BacktestReport({ id }: { id: string }) {
   async function releaseReport() {
     await release.mutateAsync({ id, expectedContentHash: descriptor.contentHash })
     setConfirmRelease(false)
-    await utils.biometricTuning.getBacktestResult.invalidate({ id })
+    await utils.biometricTuning.getBacktestSummary.invalidate({ id })
   }
   return (
     <section className="space-y-3" aria-label={t`Evaluation report`}>
