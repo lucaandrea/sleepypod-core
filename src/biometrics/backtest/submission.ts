@@ -1,9 +1,9 @@
 import { eq } from 'drizzle-orm'
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3'
 import { z } from 'zod'
-import * as configSchema from '@/src/db/schema'
+import type * as configSchema from '@/src/db/schema'
 import * as bioSchema from '@/src/db/biometrics-schema'
-import { resolveStageClassifier } from '@/src/lib/sleep-stage-rules'
+import { resolveStageView } from '../profiles/stage-view'
 import { configHash } from '../algorithms/canonical'
 import { defaultConfig, manifestHash } from '../algorithms/registry'
 import { ProfileStore } from '../profiles/store'
@@ -33,9 +33,8 @@ export function submitBacktest(configDb: BetterSQLite3Database<typeof configSche
     const candidate = profiles.validateRevision(input.candidateRevisionId, experiment.side)
     // This is the actual retrospective view used by existing stage endpoints.
     // A desired-but-unacknowledged vitals profile is not a current baseline.
-    const legacy = configDb.select({ classifier: configSchema.sideSettings.stageClassifier }).from(configSchema.sideSettings)
-      .where(eq(configSchema.sideSettings.side, experiment.side)).get()
-    const current = { ...structuredClone(defaultConfig), sleep_stages: resolveStageClassifier(legacy?.classifier) }
+    const view = resolveStageView(configDb, bioDb, experiment.side)
+    const current = { ...structuredClone(defaultConfig), sleep_stages: view.classifier }
     return [
       { label: 'default' as const, revisionId: null, manifestHash, resolvedHash: configHash(defaultConfig), resolved: defaultConfig },
       { label: 'current' as const, revisionId: null, manifestHash, resolvedHash: configHash(current), resolved: current },

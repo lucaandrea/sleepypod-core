@@ -23,6 +23,7 @@ import { closeDatabase, closeBiometricsDatabase } from '@/src/db'
 import { startBiometricsRetention, stopBiometricsRetention } from '@/src/db/retention'
 import { startAutomationRunsRetention, stopAutomationRunsRetention } from '@/src/db/automationRunsRetention'
 import { startHealthSampler, stopHealthSampler } from '@/src/lib/healthSampler'
+import { stopBiometricRuntime } from '@/src/biometrics/profiles/runtime-host'
 import { getDacMonitor, shutdownDacMonitor } from '@/src/hardware/dacMonitor.instance'
 import { startPiezoStreamServer, shutdownPiezoStreamServer } from '@/src/streaming/piezoStream'
 import { startBonjourAnnouncement, stopBonjourAnnouncement } from '@/src/streaming/bonjourAnnounce'
@@ -139,6 +140,7 @@ async function gracefulShutdown(signal: string): Promise<void> {
     stopBiometricsRetention()
     stopAutomationRunsRetention()
     stopHealthSampler()
+    stopBiometricRuntime()
   }
   catch (error) {
     console.error('Error stopping biometrics retention:', error)
@@ -450,6 +452,10 @@ export async function register(): Promise<void> {
     await runMigrations()
     await seedDefaultData()
     recordStartupPhase('migrations-ready', migrationsStartedAt)
+    const [{ db, biometricsDb }, { startBiometricRuntime }] = await Promise.all([
+      import('@/src/db'), import('@/src/biometrics/profiles/runtime-host'),
+    ])
+    startBiometricRuntime(db, biometricsDb)
 
     // Skip hardware initialization in CI — no dac.sock, no sensors, no scheduler needed.
     // The server still starts and serves API routes (including /api/openapi.json).

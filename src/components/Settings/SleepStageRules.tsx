@@ -46,12 +46,14 @@ const sameRuleset = (a: StageRuleset, b: StageRuleset) => JSON.stringify(a) === 
  */
 export function SleepStageRules({ side, onSideChange }: { side: Side, onSideChange: (side: Side) => void }) {
   const utils = trpc.useUtils()
-  const query = trpc.sleepStages.getClassifier.useQuery({ side })
+  const query = trpc.sleepStages.getClassifier.useQuery({ side }, {
+    refetchInterval: query => query.state.data?.pending ? 5000 : false,
+  })
   const save = trpc.sleepStages.setClassifier.useMutation({
     onSuccess: () => utils.sleepStages.getClassifier.invalidate({ side }),
   })
 
-  const saved = query.data?.classifier.ruleset
+  const saved = query.data?.pending?.classifier.ruleset ?? query.data?.classifier.ruleset
   const [draft, setDraft] = useState<StageRuleset | null>(null)
   // Re-seed the draft when the side or its stored ruleset changes — by value,
   // so a background refetch of the same rules keeps unsaved edits.
@@ -88,9 +90,20 @@ export function SleepStageRules({ side, onSideChange }: { side: Side, onSideChan
             <CardHeader
               icon={Moon}
               title="Stage rules"
-              subtitle="Each 5-minute epoch takes the stage of the first rule whose conditions all hold. Stages are worked out when a night is shown, so saving re-scores past nights too."
+              subtitle="Each 5-minute epoch takes the stage of the first rule whose conditions all hold. Stages are worked out when a night is shown, so applied changes re-score past nights too."
             />
             <SideTabs side={side} onChange={onSideChange} label="Stage rules" />
+            {query.data.pending && (
+              <p role="status" className="px-4 py-2 text-sm">
+                Saved change
+                {' '}
+                {query.data.pending.generation}
+                ; waiting for processor adoption. Displayed nights still use the acknowledged rules.
+              </p>
+            )}
+            {(query.data.pending?.warning ?? query.data.provenance?.warning) && (
+              <InlineError>{query.data.pending?.warning ?? query.data.provenance?.warning}</InlineError>
+            )}
             <SettingRow label={isDefault ? 'Using the default rules' : 'Using custom rules'}>
               <SelectValue
                 label="Start from preset"

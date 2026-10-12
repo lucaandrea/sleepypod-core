@@ -11,6 +11,7 @@ import { migrate } from 'drizzle-orm/better-sqlite3/migrator'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as mainSchema from '@/src/db/schema'
 import * as bioSchema from '@/src/db/biometrics-schema'
+import { deliverRuntimeOutbox } from '@/src/biometrics/profiles/runtime'
 import {
   DEFAULT_STAGE_CLASSIFIER,
   DEFAULT_STAGE_RULESET,
@@ -99,12 +100,21 @@ describe('sleepStages router', () => {
 
   describe('setClassifier', () => {
     it('stores a classifier per side and resets with null', async () => {
-      expect(await caller.setClassifier({ side: 'right', classifier: movementOnly })).toEqual({ classifier: movementOnly, isDefault: false })
-      expect((await caller.getClassifier({ side: 'right' })).classifier).toEqual(movementOnly)
+      const saved = await caller.setClassifier({ side: 'right', classifier: movementOnly })
+      expect(saved).toMatchObject({ classifier: movementOnly, isDefault: false, activation: { generation: 1, state: 'pending_delivery' } })
+      expect((await caller.getClassifier({ side: 'right' })).classifier).toEqual(DEFAULT_STAGE_CLASSIFIER)
+      deliverRuntimeOutbox(dbHolder.main as ReturnType<typeof drizzle<typeof mainSchema>>, bio)
+      const projected = bio.select().from(bioSchema.biometricRuntimeConfigs).get()
+      if (!projected) throw new Error('Missing runtime projection')
+      for (const component of ['heart_rate', 'breathing_rate', 'hrv_index']) bio.insert(bioSchema.biometricRuntimeReceipts).values({
+        side: 'right', component, generation: 1, appliedHash: projected.resolvedHash, effectiveSampleTimeMs: BED.getTime(), state: 'applied', heartbeatAtMs: Date.now(),
+      }).run()
+      const applied = await caller.getClassifier({ side: 'right' })
+      expect(applied.classifier).toEqual(movementOnly)
+      expect(applied.provenance.generation).toBe(1)
       expect((await caller.getClassifier({ side: 'left' })).isDefault).toBe(true)
       expect(await loadStageClassifier('right')).toEqual(movementOnly)
-
-      expect(await caller.setClassifier({ side: 'right', classifier: null })).toEqual({ classifier: DEFAULT_STAGE_CLASSIFIER, isDefault: true })
+      expect(await caller.setClassifier({ side: 'right', classifier: null })).toMatchObject({ classifier: DEFAULT_STAGE_CLASSIFIER, isDefault: true, activation: { generation: 2 } })
       expect(mainRaw.prepare('SELECT stage_classifier FROM side_settings WHERE side = ?').get('right')).toEqual({ stage_classifier: null })
     })
 

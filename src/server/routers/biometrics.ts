@@ -7,7 +7,8 @@ import { deviceSettings } from '@/src/db/schema'
 import { eq, and, gt, gte, lt, lte, desc, asc, avg, min, max, count, sql } from 'drizzle-orm'
 import { sideSchema, idSchema, validateDateRange } from '@/src/server/validation-schemas'
 import { listRawFiles } from './raw'
-import { loadStageClassifier, loadStageInputs } from './sleepStages'
+import { loadStageView, loadStageInputs } from './sleepStages'
+import { stageViewSchema, type StageView } from '@/src/biometrics/profiles/stage-view'
 import {
   classifySleepStages,
   mergeIntoBlocks,
@@ -1350,11 +1351,12 @@ export const biometricsRouter = router({
       }),
       qualityScore: z.number(),
       totalSleepMs: z.number(),
+      stageView: stageViewSchema.optional(),
       sleepRecordId: z.number().nullable(),
       enteredBedAt: z.number().nullable(),
       leftBedAt: z.number().nullable(),
     }))
-    .query(async ({ input }): Promise<SleepStagesResult> => {
+    .query(async ({ input }): Promise<SleepStagesResult & { stageView?: StageView }> => {
       try {
         // Reject ambiguous requests: if sleepRecordId is provided alongside date range, error out
         if (input.sleepRecordId && (input.startDate || input.endDate)) {
@@ -1490,13 +1492,15 @@ export const biometricsRouter = router({
         }
 
         const { vitalsData, movementData, calibrationQuality } = await loadStageInputs(input.side, windowStart, windowEnd)
-        const classifier = await loadStageClassifier(input.side)
+        const stageView = loadStageView(input.side)
+        const classifier = stageView.classifier
 
         // Classify stages
         const epochs = classifySleepStages(vitalsData, movementData, calibrationQuality, classifier.ruleset)
 
         if (epochs.length === 0) {
           return {
+            stageView,
             epochs: [],
             blocks: [],
             distribution: { wake: 0, light: 0, deep: 0, rem: 0 },
@@ -1514,6 +1518,7 @@ export const biometricsRouter = router({
         const totalSleepMs = epochs.reduce((sum, e) => sum + e.duration, 0)
 
         return {
+          stageView,
           epochs,
           blocks,
           distribution,

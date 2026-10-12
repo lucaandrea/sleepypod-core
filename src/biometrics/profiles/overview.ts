@@ -4,6 +4,7 @@ import * as configSchema from '@/src/db/schema'
 import * as bioSchema from '@/src/db/biometrics-schema'
 import { resolveStageClassifier } from '@/src/lib/sleep-stage-rules'
 import { ProfileStore } from './store'
+import { resolveStageView } from './stage-view'
 
 /** Read-only inspection keeps desired intent separate from runtime evidence. */
 export function profileOverview(configDb: BetterSQLite3Database<typeof configSchema>, bioDb: BetterSQLite3Database<typeof bioSchema>, side: 'left' | 'right', now = Date.now()) {
@@ -20,7 +21,7 @@ export function profileOverview(configDb: BetterSQLite3Database<typeof configSch
       sourceWindowStartMs: row.sourceWindowStart === null ? null : row.sourceWindowStart * 1000,
       sourceWindowEndMs: row.sourceWindowEnd === null ? null : row.sourceWindowEnd * 1000,
     }))
-  return { desired,
+  return { desired, stageView: resolveStageView(configDb, bioDb, side),
     legacyStageView: { classifier: resolveStageClassifier(legacy?.classifier), personalized: legacy?.classifier != null,
       migrationPending: legacy?.classifier != null && desired.binding.generation === 0 },
     runtimeStatus: latest.length ? 'receipts_available' as const : 'unreported' as const, receipts: latest, sensorCalibration,

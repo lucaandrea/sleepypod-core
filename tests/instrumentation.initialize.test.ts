@@ -12,6 +12,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
+  startBiometricRuntime: vi.fn(),
+  stopBiometricRuntime: vi.fn(),
   getJobManager: vi.fn(),
   shutdownJobManager: vi.fn(async () => undefined),
   closeDatabase: vi.fn(),
@@ -71,7 +73,11 @@ vi.mock('@/src/scheduler', () => ({
   getJobManager: mocks.getJobManager,
   shutdownJobManager: mocks.shutdownJobManager,
 }))
+vi.mock('@/src/biometrics/profiles/runtime-host', () => ({
+  startBiometricRuntime: mocks.startBiometricRuntime, stopBiometricRuntime: mocks.stopBiometricRuntime,
+}))
 vi.mock('@/src/db', () => ({
+  db: {}, biometricsDb: {},
   closeDatabase: mocks.closeDatabase,
   closeBiometricsDatabase: mocks.closeBiometricsDatabase,
 }))
@@ -361,12 +367,14 @@ describe('register()', () => {
     const { register, initializeScheduler } = await fresh()
     const pending = register()
     await vi.waitFor(() => expect(mocks.runMigrations).toHaveBeenCalledOnce())
+    expect(mocks.startBiometricRuntime).not.toHaveBeenCalled()
 
     expect(mocks.seedDefaultData).not.toHaveBeenCalled()
     expect(mocks.startDacServer).not.toHaveBeenCalled()
     expect(mocks.startPiezoStreamServer).not.toHaveBeenCalled()
     release()
     await pending
+    expect(mocks.startBiometricRuntime).toHaveBeenCalledOnce()
     await initializeScheduler()
     expect(mocks.startPiezoStreamServer).toHaveBeenCalledOnce()
   })

@@ -20,6 +20,7 @@ const trpcMock = vi.hoisted(() => {
     isDefault: true,
     preview: undefined as unknown,
     savePending: false,
+    pending: null as { classifier: StageClassifier, generation: number, warning: string | null } | null,
   }
   return {
     setMutate,
@@ -32,6 +33,7 @@ const trpcMock = vi.hoisted(() => {
           useQuery: () => ({
             data: {
               classifier: state.classifier,
+              pending: state.pending,
               isDefault: state.isDefault,
               presets: [
                 { id: 'default', label: 'Default', description: '', classifier: { engine: 'rules', ruleset: state.classifier.ruleset } },
@@ -67,6 +69,7 @@ beforeEach(() => {
     preview: undefined,
     movementOnly: MOVEMENT_ONLY_STAGE_RULESET,
     savePending: false,
+    pending: null,
   })
 })
 
@@ -183,4 +186,11 @@ describe('SleepStageRules', () => {
     act(() => vi.advanceTimersByTime(1000))
     expect(trpcMock.previewMutate).not.toHaveBeenCalled()
   })
+})
+
+it('shows pending rules separately from the acknowledged view', () => {
+  trpcMock.state.pending = { classifier: { engine: 'rules', ruleset: MOVEMENT_ONLY_STAGE_RULESET }, generation: 7, warning: null }
+  renderRules()
+  expect(screen.getByRole('status').textContent).toContain('waiting for processor adoption')
+  expect(screen.getByRole('button', { name: 'Save' }).hasAttribute('disabled')).toBe(true)
 })

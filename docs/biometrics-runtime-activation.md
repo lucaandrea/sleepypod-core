@@ -27,9 +27,11 @@ activation is marked applied. Old-generation or wrong-hash receipts cannot
 acknowledge a newer binding. A final generation check fences concurrent intent
 changes while reconciling.
 
-The Node services are not yet connected to startup or the stage reader.
-Public activation remains unavailable until those consumers, fallback auditing
-and full acknowledgment have been implemented and verified.
+The Node startup hook starts one `globalThis` coordinator after migrations.
+Every five seconds it migrates legacy stage personalization, repairs delivered
+projections, delivers pending intents and reconciles receipts. Shutdown stops
+its timer. General public activation remains unavailable pending default-update
+and incompatible-engine fallback auditing, freshness reporting and final gates.
 There are no hardware-command paths in these services.
 
 The Python `common.biometrics.runtime` reader independently validates the latest
@@ -49,7 +51,7 @@ The live piezo daemon now uses these primitives through `runtime_adapter.py`.
 It polls projections every five seconds, installs configurations before ingesting
 an accepted dual-channel frame, and writes receipts only after both channel
 buffers have accepted that frame. Heart-rate, breathing-rate and HRV-index
-receipts are separate from the still-pending stage consumer. Heartbeats are
+receipts are separate from the stage-view consumer's acknowledgment. Heartbeats are
 bounded to once per thirty seconds unless the applied configuration changes.
 
 In single-sleeper mode both physical channels use the home side's profile.
@@ -70,4 +72,26 @@ next-session requests still require known empty occupancy. Invalid projections
 retain the actual compatible configuration and report degraded module health;
 an incompatible restored configuration falls back to defaults. Missing schema
 prevents custom adoption and preserves legacy writes. Persisted fallback audit
-and the Node supervisor remain outstanding.
+and automatic default-update projection remain outstanding.
+
+The stage reader selects the newest projection for which all three numerical
+components acknowledged the exact bundle hash and an effective boundary. Partial
+adoption of a newer generation keeps the prior view. Reading the classifier for
+use in the client or server records the stage-consumer receipt; merely inspecting
+profile overview or enqueueing a backtest does not. No stage receipt is generated
+by the background coordinator. Until a consumer requests the new view, the
+activation can truthfully remain pending.
+
+`getClassifier` exposes the applied classifier and provenance separately from a
+pending desired classifier. The editor retains pending edits and polls for
+adoption. `getSleepStages` includes the selected view with classified results;
+its interpretation is explicitly `current_classifier_view`, since the rules
+rescore original readings rather than replace historical observations. Backtest
+current-stage baselines use this same applied view.
+
+Legacy `setClassifier` writes now use the profile service and durable outbox.
+They retain HR, breathing and HRV overrides, and null clears only stage overrides.
+The response retains classifier/isDefault fields and adds pending activation
+identity. Existing legacy columns remain migration baselines, never a second
+writable authority. These changes are manual/unvalidated. Demo responses label
+simulated adoption explicitly.

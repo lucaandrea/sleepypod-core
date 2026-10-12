@@ -31,6 +31,10 @@ export const sleepStages: DemoHandlers<'sleepStages'> = {
   getClassifier: input => ({
     classifier: saved[input.side] ?? DEFAULT_STAGE_CLASSIFIER,
     isDefault: saved[input.side] === null,
+    pending: null,
+    provenance: { interpretation: 'current_classifier_view', source: 'demo', generation: null, revisionId: null,
+      bundleHash: 'demo-simulated', stageHash: 'demo-simulated', manifestHash: null, effectiveSampleTimeMs: null,
+      warning: 'Simulated demo classification; no processor activation' },
     defaults: DEFAULT_STAGE_CLASSIFIER,
     engines: Object.entries(STAGE_ENGINES).map(([id, e]) => ({ id, ...e })),
     presets: Object.entries(STAGE_RULESET_PRESETS).map(([id, p]) => ({
@@ -43,7 +47,8 @@ export const sleepStages: DemoHandlers<'sleepStages'> = {
 
   setClassifier: (input) => {
     saved[input.side] = input.classifier
-    return { classifier: input.classifier ?? DEFAULT_STAGE_CLASSIFIER, isDefault: input.classifier === null }
+    return { classifier: input.classifier ?? DEFAULT_STAGE_CLASSIFIER, isDefault: input.classifier === null,
+      activation: { generation: 0, revisionId: null, state: 'demo_applied' } }
   },
 
   // The demo's scripted hypnogram stands in for Apple Watch reference stages.
