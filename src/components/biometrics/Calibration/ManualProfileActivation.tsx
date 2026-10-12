@@ -55,7 +55,7 @@ export function ManualProfileActivation({ side, revisionId, review, action = 'ac
               </label>
               <p className="text-sm text-fg-2"><Trans>Next session waits for a known empty-bed boundary. Immediate application still waits for a safe processing boundary.</Trans></p>
               <label className="block">
-                <input type="checkbox" checked={acknowledged} disabled={busy || Boolean(intent)} onChange={event => setAcknowledgedReview(event.target.checked ? reviewKey : undefined)} />
+                <input type="checkbox" checked={acknowledged} disabled={busy || Boolean(intent) || !review} onChange={event => setAcknowledgedReview(event.target.checked ? reviewKey : undefined)} />
                 {' '}
                 {action === 'reset' ? <Trans>I intend to restore system defaults without validation evidence.</Trans> : action === 'rollback' ? <Trans>I intend to restore the exact previous profile without validation evidence.</Trans> : <Trans>I intend to apply this exact revision without validation evidence.</Trans>}
               </label>

@@ -16,6 +16,14 @@ beforeEach(() => {
   mock.activate.mockResolvedValue({ id: 'event-id' })
   mock.status.mockReturnValue({ data: { observedState: 'pending_boundary', isCurrent: true } })
 })
+it('disables acknowledgement until an exact comparison is available', () => {
+  const rendered = render(<I18nProvider i18n={i18n}><ManualProfileActivation side="left" revisionId="candidate-id" /></I18nProvider>)
+  expect((screen.getByRole('checkbox') as HTMLInputElement).disabled).toBe(true)
+  expect((screen.getByRole('button', { name: 'Apply unvalidated revision' }) as HTMLButtonElement).disabled).toBe(true)
+  rendered.rerender(view())
+  expect((screen.getByRole('checkbox') as HTMLInputElement).disabled).toBe(false)
+  expect((screen.getByRole('checkbox') as HTMLInputElement).checked).toBe(false)
+})
 it('requires deliberate acknowledgement and sends the exact reviewed intent without inventing adoption', async () => {
   render(view())
   expect((screen.getByRole('button', { name: 'Apply unvalidated revision' }) as HTMLButtonElement).disabled).toBe(true)
