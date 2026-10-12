@@ -5,6 +5,7 @@ import {
   calculateDistribution,
   calculateQualityScore,
   formatDurationHM,
+  piezoCalibrationQuality,
   type SleepEpoch,
 } from '../sleep-stages'
 
@@ -809,5 +810,18 @@ describe('calculateQualityScore — exact penalty arithmetic', () => {
 
   it('caps score at 50 for calibrationQuality just below 0.3', () => {
     expect(calculateQualityScore({ deep: 20, light: 50, rem: 25, wake: 5 }, 0.29)).toBe(50)
+  })
+})
+
+describe('piezoCalibrationQuality', () => {
+  it('uses the profile quality score when one exists', () => {
+    expect(piezoCalibrationQuality({ qualityScore: 0.12 })).toBe(0.12)
+    expect(piezoCalibrationQuality({ qualityScore: 0 })).toBe(0)
+  })
+
+  it('treats a side that was never calibrated as full quality', () => {
+    expect(piezoCalibrationQuality({ qualityScore: null })).toBe(1)
+    expect(piezoCalibrationQuality(null)).toBe(1)
+    expect(piezoCalibrationQuality(undefined)).toBe(1)
   })
 })

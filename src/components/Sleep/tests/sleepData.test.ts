@@ -142,6 +142,22 @@ describe('week nights', () => {
     expect(night.quality).toEqual(expect.any(Number))
   })
 
+  it('classifies with the HR rules unless calibration quality is low', () => {
+    const r = rec(1, at(21, 23), 1)
+    const hrs = [70, 70, 70, 60, 60, 60, 60, 70, 70, 70, 70, 70]
+    const vitals = hrs.map((heartRate, i) => ({
+      timestamp: new Date(at(21, 23).getTime() + i * 300_000),
+      heartRate,
+      hrv: 40,
+      breathingRate: 14,
+    }))
+    const [, calibrated] = buildNights(new Date(2026, 8, 20), 2, [r], vitals, [])
+    const [, lowQuality] = buildNights(new Date(2026, 8, 20), 2, [r], vitals, [], 0.1)
+    expect(calibrated.distribution?.deep).toBeGreaterThan(0)
+    expect(lowQuality.distribution?.deep).toBe(0)
+    expect(lowQuality.quality).toBeLessThanOrEqual(50)
+  })
+
   it('normalizes the REM/Light/Deep split and labels bars', () => {
     expect(sleepSplit({ wake: 10, rem: 18, light: 45, deep: 27 })).toEqual({ rem: 20, light: 50, deep: 30 })
     expect(sleepSplit({ wake: 100, rem: 0, light: 0, deep: 0 })).toBeUndefined()

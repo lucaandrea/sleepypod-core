@@ -214,6 +214,16 @@ export function classifySleepStages(
   return epochs
 }
 
+/**
+ * Calibration quality to classify a side with, from its piezo calibration
+ * profile. A side that has never been calibrated has no evidence of a bad
+ * signal, so it gets the full HR/HRV rules rather than movement-only mode.
+ * Running and failed recalibrations keep the last completed score.
+ */
+export function piezoCalibrationQuality(profile?: { qualityScore: number | null } | null): number {
+  return profile?.qualityScore ?? 1.0
+}
+
 /** Classify a single epoch using rule-based logic from iOS SleepAnalyzer. */
 function classifyEpoch(
   heartRate: number | null,

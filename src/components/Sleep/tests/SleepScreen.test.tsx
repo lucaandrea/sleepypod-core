@@ -34,6 +34,7 @@ vi.mock('@/src/utils/trpc', () => ({
       getVitals: { useQuery: state.vitals },
       getMovement: { useQuery: state.movement },
     },
+    calibration: { getStatus: { useQuery: () => ({ data: undefined, isLoading: false }) } },
     settings: { getAll: { useQuery: () => ({ data: undefined }) } },
   },
 }))

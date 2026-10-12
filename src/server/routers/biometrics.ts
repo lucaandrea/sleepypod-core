@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { TRPCError } from '@trpc/server'
 import { publicProcedure, router } from '@/src/server/trpc'
 import { biometricsDb, db } from '@/src/db'
-import { sleepRecords, vitals, movement, referenceStages } from '@/src/db/biometrics-schema'
+import { sleepRecords, vitals, movement, referenceStages, calibrationProfiles } from '@/src/db/biometrics-schema'
 import { deviceSettings } from '@/src/db/schema'
 import { eq, and, gt, gte, lt, lte, desc, asc, avg, min, max, count, sql } from 'drizzle-orm'
 import { sideSchema, idSchema, validateDateRange } from '@/src/server/validation-schemas'
@@ -12,6 +12,7 @@ import {
   mergeIntoBlocks,
   calculateDistribution,
   calculateQualityScore,
+  piezoCalibrationQuality,
   type SleepStagesResult,
 } from '@/src/lib/sleep-stages'
 import {
@@ -1405,8 +1406,20 @@ export const biometricsRouter = router({
           )
           .orderBy(asc(movement.timestamp))
 
+        const [piezoProfile] = await biometricsDb
+          .select({ qualityScore: calibrationProfiles.qualityScore })
+          .from(calibrationProfiles)
+          .where(
+            and(
+              eq(calibrationProfiles.side, input.side),
+              eq(calibrationProfiles.sensorType, 'piezo'),
+            )
+          )
+          .limit(1)
+        const calibrationQuality = piezoCalibrationQuality(piezoProfile)
+
         // Classify stages
-        const epochs = classifySleepStages(vitalsData, movementData)
+        const epochs = classifySleepStages(vitalsData, movementData, calibrationQuality)
 
         if (epochs.length === 0) {
           return {
@@ -1423,7 +1436,7 @@ export const biometricsRouter = router({
 
         const blocks = mergeIntoBlocks(epochs)
         const distribution = calculateDistribution(epochs)
-        const qualityScore = calculateQualityScore(distribution)
+        const qualityScore = calculateQualityScore(distribution, calibrationQuality)
         const totalSleepMs = epochs.reduce((sum, e) => sum + e.duration, 0)
 
         return {

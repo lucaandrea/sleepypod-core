@@ -110,6 +110,7 @@ const sleepStagesMock = vi.hoisted(() => ({
   mergeIntoBlocks: vi.fn(() => [] as { start: number, end: number, stage: 'wake' | 'light' | 'deep' | 'rem' }[]),
   calculateDistribution: vi.fn(() => ({ wake: 0, light: 0, deep: 0, rem: 0 })),
   calculateQualityScore: vi.fn(() => 0),
+  piezoCalibrationQuality: vi.fn(() => 1),
 }))
 
 vi.mock('@/src/db', () => ({
@@ -604,6 +605,22 @@ describe('biometrics.getSleepStages', () => {
     expect(out.epochs).toHaveLength(1)
     expect(out.qualityScore).toBe(80)
     expect(out.totalSleepMs).toBe(300_000)
+  })
+
+  it('classifies with the side\'s piezo calibration quality', async () => {
+    dbState.rowsQueue.push([{ id: 1, timestamp: new Date(), heartRate: 60, hrv: 50, breathingRate: 14 }])
+    dbState.rowsQueue.push([{ id: 1, timestamp: new Date(), totalMovement: 50 }])
+    dbState.rowsQueue.push([{ qualityScore: 0.2 }])
+    sleepStagesMock.piezoCalibrationQuality.mockImplementationOnce((p?: { qualityScore: number | null } | null) => p?.qualityScore ?? 1)
+    sleepStagesMock.classifySleepStages.mockReturnValue([
+      { start: 0, duration: 300_000, stage: 'light', heartRate: 60, hrv: 50, breathingRate: 14, movement: 50 },
+    ])
+
+    await caller.getSleepStages({ side: 'left', startDate: new Date('2025-01-01'), endDate: new Date('2025-01-02') })
+
+    expect(sleepStagesMock.piezoCalibrationQuality).toHaveBeenCalledWith({ qualityScore: 0.2 })
+    expect(sleepStagesMock.classifySleepStages).toHaveBeenCalledWith(expect.any(Array), expect.any(Array), 0.2)
+    expect(sleepStagesMock.calculateQualityScore).toHaveBeenCalledWith(expect.any(Object), 0.2)
   })
 
   it('rejects an inverted custom date range', async () => {

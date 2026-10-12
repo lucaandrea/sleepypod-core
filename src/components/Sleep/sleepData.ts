@@ -216,6 +216,7 @@ export function buildNights(
   records: SleepRecordRow[],
   vitals: VitalsRow[] = [],
   movement: MovementRow[] = [],
+  calibrationQuality = 1.0,
 ): NightSummary[] {
   const byNight = groupByNight(records)
   const sortedVitals = [...vitals].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
@@ -241,10 +242,10 @@ export function buildNights(
       const nv = sortedVitals.filter(v => inWindow(v.timestamp)).map(v => ({ ...v, timestamp: new Date(v.timestamp) }))
       if (nv.length > 0) {
         const nm = movement.filter(m => inWindow(m.timestamp)).map(m => ({ ...m, timestamp: new Date(m.timestamp) }))
-        const epochs = classifySleepStages(nv, nm)
+        const epochs = classifySleepStages(nv, nm, calibrationQuality)
         if (epochs.length > 0) {
           distribution = calculateDistribution(epochs)
-          quality = calculateQualityScore(distribution)
+          quality = calculateQualityScore(distribution, calibrationQuality)
         }
         hr = average(nv.map(v => v.heartRate))
         hrv = average(nv.map(v => v.hrv))
