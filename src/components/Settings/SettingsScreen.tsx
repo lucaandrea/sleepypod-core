@@ -22,6 +22,7 @@ import { TapGestureConfig } from './TapGestureConfig'
 import { MqttSettingsForm } from './MqttSettingsForm'
 import { HomeKitConfig } from './HomeKitConfig'
 import { ArchivePushSettingsForm } from './ArchivePushSettingsForm'
+import { BiometricCalibration } from '@/src/components/biometrics/Calibration/BiometricCalibration'
 import { SleepStageRules } from './SleepStageRules'
 import { AppearanceSettings, TempControlPicker, TempDisplayControl, ThemeControl, TimeFormatControl, UnitsControl } from './AppearanceSettings'
 import { SectionColumns } from './SettingsLayout'
@@ -125,6 +126,8 @@ function SectionBody({ section, side, onSideChange }: {
       return <WithSettings>{data => <SidesSection data={data} side={side} onSideChange={onSideChange} />}</WithSettings>
     case 'gestures':
       return <TapGestureConfig filterSide={side} onSideChange={onSideChange} />
+    case 'biometric-calibration':
+      return <BiometricCalibration side={side} onSideChange={onSideChange} />
     case 'sleep-stages':
       return <SleepStageRules side={side} onSideChange={onSideChange} />
     case 'appearance':

@@ -13,34 +13,212 @@ msgstr ""
 "Language-Team: \n"
 "Plural-Forms: \n"
 
-#: src/components/BottomNav/BottomNav.tsx:14
-msgid "Biometrics"
-msgstr ""
+#: src/components/biometrics/Calibration/CalibrationHistory.tsx:21
+msgid "Activation history"
+msgstr "Historial de activación"
 
-#: src/components/BottomNav/BottomNav.tsx:18
-msgid "Diagnostics"
-msgstr ""
+#: src/components/biometrics/Calibration/CalibrationHistory.tsx:18
+#: src/components/biometrics/Calibration/CalibrationOverview.tsx:17
+msgid "Applied"
+msgstr "Aplicado"
 
-#: app/[lang]/health/page.tsx:13
+#: src/components/biometrics/Calibration/CalibrationHistory.tsx:17
+msgid "Apply profile"
+msgstr "Aplicar perfil"
+
+#: src/components/biometrics/Calibration/BiometricCalibration.tsx:18
+msgid "Biometric calibration"
+msgstr "Calibración biométrica"
+
+#: src/components/biometrics/Calibration/CalibrationOverview.tsx:18
+msgid "Breathing rate"
+msgstr "Frecuencia respiratoria"
+
+#: src/components/biometrics/Calibration/BiometricCalibration.tsx:19
+msgid "Calibration views"
+msgstr "Vistas de calibración"
+
+#: src/components/biometrics/Calibration/CalibrationOverview.tsx:16
+msgid "Clock mismatch"
+msgstr "Desajuste de reloj"
+
+#: src/components/biometrics/Calibration/CalibrationHistory.tsx:17
+msgid "Compatibility fallback"
+msgstr "Configuración alternativa compatible"
+
+#: src/components/biometrics/Calibration/CalibrationOverview.tsx:36
+msgid "Configuration identity"
+msgstr "Identidad de la configuración"
+
+#: src/components/biometrics/Calibration/CalibrationOverview.tsx:15
+#: src/components/biometrics/Calibration/CalibrationOverview.tsx:58
+msgid "Current"
+msgstr "Actual"
+
+#: src/components/biometrics/Calibration/CalibrationOverview.tsx:16
+msgid "Different versions reported"
+msgstr "Se han informado versiones diferentes"
+
+#: src/components/biometrics/Calibration/BiometricCalibration.tsx:31
+msgid "Direct sleep-stage changes are unvalidated manual settings. Saving requests a profile change; processor adoption is reported separately in Overview."
+msgstr "Los cambios directos de las fases del sueño son ajustes manuales sin validar. Al guardar se solicita un cambio de perfil; su adopción por el procesador se informa por separado en Resumen."
+
+#: src/components/biometrics/Calibration/CalibrationHistory.tsx:45
+msgid "Exact profile transition"
+msgstr "Cambio exacto de perfil"
+
+#: src/components/biometrics/Calibration/CalibrationOverview.tsx:58
+msgid "Expired"
+msgstr "Caducada"
+
+#: src/components/biometrics/Calibration/CalibrationHistory.tsx:18
+#: src/components/biometrics/Calibration/CalibrationOverview.tsx:15
+msgid "Failed"
+msgstr "Fallido"
+
+#: src/components/biometrics/Calibration/CalibrationOverview.tsx:58
+msgid "Freshness unknown"
+msgstr "Vigencia desconocida"
+
+#. placeholder {0}: data.desired.binding.generation
+#. placeholder {0}: event.generation
+#: src/components/biometrics/Calibration/CalibrationHistory.tsx:41
+#: src/components/biometrics/Calibration/CalibrationOverview.tsx:39
+msgid "Generation {0}"
+msgstr "Generación {0}"
+
+#: src/components/biometrics/Calibration/CalibrationOverview.tsx:18
+msgid "Heart rate"
+msgstr "Frecuencia cardíaca"
+
+#: app/[lang]/health/HealthcheckDemo.tsx:13
 msgid "Hello, tRPC test page!"
 msgstr "¡Hola, tRPC test page!"
 
-#: src/components/WifiSignalStrength/WifiSignalStrength.tsx:45
-msgid "Offline"
-msgstr ""
+#: src/components/biometrics/Calibration/CalibrationOverview.tsx:46
+msgid "Historical sleep stages are recomputed with the current classifier. Original stored vitals remain separate from replay results."
+msgstr "Las fases históricas del sueño se recalculan con el clasificador actual. Los signos vitales originales almacenados se mantienen separados de los resultados del reprocesamiento."
 
-#: src/components/BottomNav/BottomNav.tsx:13
-msgid "Schedule"
-msgstr ""
+#: src/components/biometrics/Calibration/BiometricCalibration.tsx:22
+msgid "History"
+msgstr "Historial"
 
-#: src/components/BottomNav/BottomNav.tsx:15
-msgid "Sensors"
-msgstr ""
+#: src/components/biometrics/Calibration/CalibrationOverview.tsx:18
+msgid "HRV index"
+msgstr "Índice de VFC"
 
-#: src/components/BottomNav/BottomNav.tsx:16
-msgid "Status"
-msgstr ""
+#: src/components/biometrics/Calibration/CalibrationOverview.tsx:53
+msgid "Measured sensor calibration"
+msgstr "Calibración medida de los sensores"
 
-#: src/components/BottomNav/BottomNav.tsx:12
-msgid "Temp"
-msgstr ""
+#: src/components/biometrics/Calibration/CalibrationHistory.tsx:17
+msgid "Migrate settings"
+msgstr "Migrar ajustes"
+
+#: src/components/biometrics/Calibration/CalibrationHistory.tsx:62
+msgid "Newest"
+msgstr "Más recientes"
+
+#: src/components/biometrics/Calibration/CalibrationHistory.tsx:30
+msgid "No activation history for this side."
+msgstr "No hay historial de activación para este lado."
+
+#: src/components/biometrics/Calibration/CalibrationOverview.tsx:55
+msgid "No sensor calibration has been reported for this side."
+msgstr "No se ha informado ninguna calibración de sensores para este lado."
+
+#: src/components/biometrics/Calibration/CalibrationOverview.tsx:15
+#: src/components/biometrics/Calibration/CalibrationOverview.tsx:26
+msgid "Not reported"
+msgstr "Sin información"
+
+#: src/components/biometrics/Calibration/CalibrationHistory.tsx:63
+msgid "Older changes"
+msgstr "Cambios anteriores"
+
+#: src/components/biometrics/Calibration/BiometricCalibration.tsx:20
+msgid "Overview"
+msgstr "Resumen"
+
+#: src/components/biometrics/Calibration/CalibrationHistory.tsx:21
+msgid "Past acknowledgements do not establish which profile is running now."
+msgstr "Las confirmaciones anteriores no indican qué perfil se está ejecutando ahora."
+
+#: src/components/biometrics/Calibration/CalibrationOverview.tsx:25
+msgid "Personalized profile"
+msgstr "Perfil personalizado"
+
+#: src/components/biometrics/Calibration/CalibrationOverview.tsx:27
+msgid "Processor health"
+msgstr "Estado del procesador"
+
+#: src/components/biometrics/Calibration/CalibrationOverview.tsx:24
+msgid "Profile and processor"
+msgstr "Perfil y procesador"
+
+#: src/components/biometrics/Calibration/BiometricCalibration.tsx:21
+msgid "Profiles"
+msgstr "Perfiles"
+
+#. placeholder {0}: event.requester
+#: src/components/biometrics/Calibration/CalibrationHistory.tsx:54
+msgid "Requested by {0}"
+msgstr "Solicitado por {0}"
+
+#: src/components/biometrics/Calibration/CalibrationOverview.tsx:26
+msgid "Requested change"
+msgstr "Cambio solicitado"
+
+#: src/components/biometrics/Calibration/CalibrationHistory.tsx:17
+msgid "Restore previous profile"
+msgstr "Restaurar el perfil anterior"
+
+#: src/components/biometrics/Calibration/CalibrationHistory.tsx:18
+msgid "Saved"
+msgstr "Guardado"
+
+#: src/components/biometrics/Calibration/CalibrationOverview.tsx:25
+msgid "Saved profile"
+msgstr "Perfil guardado"
+
+#: src/components/biometrics/Calibration/CalibrationOverview.tsx:24
+msgid "Saved settings and processor reports are separate."
+msgstr "Los ajustes guardados y los informes del procesador son independientes."
+
+#: src/components/biometrics/Calibration/CalibrationOverview.tsx:53
+msgid "Sensor measurements are separate from algorithm personalization."
+msgstr "Las mediciones de los sensores son independientes de la personalización del algoritmo."
+
+#: src/components/biometrics/Calibration/CalibrationOverview.tsx:15
+msgid "Stale"
+msgstr "Desactualizado"
+
+#: src/components/biometrics/Calibration/CalibrationOverview.tsx:25
+msgid "System defaults"
+msgstr "Valores predeterminados del sistema"
+
+#: src/components/biometrics/Calibration/CalibrationOverview.tsx:45
+msgid "The HRV index measures window IBI variability. It is not clinical beat-to-beat RMSSD, and incompatible reference metrics cannot validate it."
+msgstr "El índice de VFC mide la variabilidad de los intervalos entre latidos dentro de una ventana. No es la RMSSD clínica entre latidos consecutivos y no puede validarse con métricas de referencia incompatibles."
+
+#: src/components/biometrics/Calibration/CalibrationHistory.tsx:23
+msgid "Times shown in {timezone}"
+msgstr "Horas mostradas en {timezone}"
+
+#: src/components/biometrics/Calibration/CalibrationHistory.tsx:17
+msgid "Use system defaults"
+msgstr "Usar los valores predeterminados del sistema"
+
+#: src/components/biometrics/Calibration/CalibrationHistory.tsx:18
+#: src/components/biometrics/Calibration/CalibrationOverview.tsx:17
+msgid "Waiting for a processing boundary"
+msgstr "Esperando un límite de procesamiento"
+
+#: src/components/biometrics/Calibration/CalibrationHistory.tsx:18
+#: src/components/biometrics/Calibration/CalibrationOverview.tsx:16
+msgid "Waiting for delivery"
+msgstr "Esperando la entrega"
+
+#: src/components/biometrics/Calibration/CalibrationOverview.tsx:44
+msgid "What these metrics mean"
+msgstr "Qué significan estas métricas"

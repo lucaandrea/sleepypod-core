@@ -26,7 +26,7 @@ describe('resolveSection', () => {
     expect(resolveSection('bogus', 'also-bogus')).toBeNull()
   })
 
-  it('lists all ten sections A–Z', () => {
-    expect(SECTIONS.map(s => s.id)).toEqual(['appearance', 'backup', 'device', 'gestures', 'homekit', 'mqtt', 'network', 'sides', 'sleep-stages', 'updates'])
+  it('lists all eleven sections A–Z', () => {
+    expect(SECTIONS.map(s => s.id)).toEqual(['appearance', 'backup', 'biometric-calibration', 'device', 'gestures', 'homekit', 'mqtt', 'network', 'sides', 'sleep-stages', 'updates'])
   })
 })
