@@ -16,6 +16,7 @@ vi.mock('@/src/utils/trpc', () => ({ trpc: {
   },
   settings: { getAll: { useQuery: () => ({ data: { device: { timezone: 'UTC' } } }) } },
 } }))
+vi.mock('../ProfileCandidateEditor', () => ({ ProfileCandidateEditor: () => <p>Candidate editor</p> }))
 vi.mock('@/src/hooks/useSideNames', () => ({ useSideNames: () => ({ leftName: 'Left', rightName: 'Right' }) }))
 vi.mock('@/src/components/Settings/SleepStageRules', () => ({ SleepStageRules: ({ side }: { side: string }) => <p>{`Existing stage editor ${side}`}</p> }))
 const i18n = setupI18n({ locale: 'en', messages: {} })

@@ -39,7 +39,7 @@ msgstr "Aplicado"
 msgid "Apply profile"
 msgstr "Aplicar perfil"
 
-#: src/components/biometrics/Calibration/BiometricCalibration.tsx:20
+#: src/components/biometrics/Calibration/BiometricCalibration.tsx:21
 msgid "Biometric calibration"
 msgstr "Calibración biométrica"
 
@@ -47,9 +47,21 @@ msgstr "Calibración biométrica"
 msgid "Breathing rate"
 msgstr "Frecuencia respiratoria"
 
-#: src/components/biometrics/Calibration/BiometricCalibration.tsx:21
+#: src/components/biometrics/Calibration/BiometricCalibration.tsx:22
 msgid "Calibration views"
 msgstr "Vistas de calibración"
+
+#: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:70
+msgid "Candidate parameters"
+msgstr "Parámetros del candidato"
+
+#: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:66
+msgid "Candidate save failed."
+msgstr "Error al guardar el candidato."
+
+#: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:101
+msgid "Candidate saved: {saved}"
+msgstr "Candidato guardado: {saved}"
 
 #: src/components/biometrics/Calibration/CalibrationOverview.tsx:16
 msgid "Clock mismatch"
@@ -101,7 +113,7 @@ msgstr "Eliminar una importación borra sus mediciones de origen. Los conjuntos 
 msgid "Different versions reported"
 msgstr "Se han informado versiones diferentes"
 
-#: src/components/biometrics/Calibration/BiometricCalibration.tsx:41
+#: src/components/biometrics/Calibration/BiometricCalibration.tsx:43
 msgid "Direct sleep-stage changes are unvalidated manual settings. Saving requests a profile change; processor adoption is reported separately in Overview."
 msgstr "Los cambios directos de las fases del sueño son ajustes manuales sin validar. Al guardar se solicita un cambio de perfil; su adopción por el procesador se informa por separado en Resumen."
 
@@ -157,7 +169,7 @@ msgstr "¡Hola, tRPC test page!"
 msgid "Historical sleep stages are recomputed with the current classifier. Original stored vitals remain separate from replay results."
 msgstr "Las fases históricas del sueño se recalculan con el clasificador actual. Los signos vitales originales almacenados se mantienen separados de los resultados del reprocesamiento."
 
-#: src/components/biometrics/Calibration/BiometricCalibration.tsx:25
+#: src/components/biometrics/Calibration/BiometricCalibration.tsx:26
 msgid "History"
 msgstr "Historial"
 
@@ -176,6 +188,10 @@ msgstr "Vista previa de la importación"
 #: src/components/biometrics/Calibration/CalibrationReferences.tsx:53
 msgid "Import reference measurements"
 msgstr "Importar mediciones de referencia"
+
+#: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:84
+msgid "Inherited default"
+msgstr "Valor predeterminado heredado"
 
 #: src/components/biometrics/Calibration/ReferenceLibrary.tsx:50
 msgid "Inspect measurements"
@@ -251,7 +267,11 @@ msgstr "Cambios anteriores"
 msgid "Older imports"
 msgstr "Importaciones anteriores"
 
-#: src/components/biometrics/Calibration/BiometricCalibration.tsx:22
+#: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:84
+msgid "Overridden"
+msgstr "Personalizado"
+
+#: src/components/biometrics/Calibration/BiometricCalibration.tsx:23
 msgid "Overview"
 msgstr "Resumen"
 
@@ -283,7 +303,11 @@ msgstr "Estado del procesador"
 msgid "Profile and processor"
 msgstr "Perfil y procesador"
 
-#: src/components/biometrics/Calibration/BiometricCalibration.tsx:24
+#: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:55
+msgid "Profile resolution failed."
+msgstr "Error al resolver el perfil."
+
+#: src/components/biometrics/Calibration/BiometricCalibration.tsx:25
 msgid "Profiles"
 msgstr "Perfiles"
 
@@ -315,9 +339,13 @@ msgstr "Registros de referencia"
 msgid "Reference source"
 msgstr "Fuente de referencia"
 
-#: src/components/biometrics/Calibration/BiometricCalibration.tsx:23
+#: src/components/biometrics/Calibration/BiometricCalibration.tsx:24
 msgid "References"
 msgstr "Referencias"
+
+#: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:85
+msgid "Remove override"
+msgstr "Quitar personalización"
 
 #. placeholder {0}: event.requester
 #: src/components/biometrics/Calibration/CalibrationHistory.tsx:54
@@ -332,6 +360,10 @@ msgstr "Cambio solicitado"
 msgid "Restore previous profile"
 msgstr "Restaurar el perfil anterior"
 
+#: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:90
+msgid "Review candidate"
+msgstr "Revisar candidato"
+
 #. placeholder {0}: item.revision
 #. placeholder {1}: item.summary.accepted
 #. placeholder {2}: item.summary.unscorable
@@ -344,6 +376,14 @@ msgstr "Revisión {0}; aceptados {1}; no evaluables {2}"
 #: src/components/biometrics/Calibration/CalibrationReferences.tsx:89
 msgid "Row {0}: {1}"
 msgstr "Fila {0}: {1}"
+
+#: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:70
+msgid "Save a candidate for evaluation. This does not change live processing."
+msgstr "Guarde un candidato para evaluarlo. Esto no cambia el procesamiento en vivo."
+
+#: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:96
+msgid "Save candidate without applying"
+msgstr "Guardar candidato sin aplicar"
 
 #: src/components/biometrics/Calibration/CalibrationReferences.tsx:103
 msgid "Save previewed import"
@@ -360,6 +400,10 @@ msgstr "Perfil guardado"
 #: src/components/biometrics/Calibration/CalibrationOverview.tsx:24
 msgid "Saved settings and processor reports are separate."
 msgstr "Los ajustes guardados y los informes del procesador son independientes."
+
+#: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:94
+msgid "Schema checks passed. Agreement with reference measurements has not been evaluated."
+msgstr "La validación del esquema se completó. No se ha evaluado la concordancia con las mediciones de referencia."
 
 #: src/components/biometrics/Calibration/CalibrationOverview.tsx:53
 msgid "Sensor measurements are separate from algorithm personalization."
@@ -381,6 +425,10 @@ msgstr "Desactualizado"
 msgid "Start (UTC)"
 msgstr "Inicio (UTC)"
 
+#: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:71
+msgid "Start from the saved profile. Existing sleep-stage overrides are preserved. Removing a numerical override follows the shipped default."
+msgstr "Comience con el perfil guardado. Se conservan las personalizaciones de las fases del sueño. Al quitar una personalización numérica se usa el valor predeterminado incluido."
+
 #: src/components/biometrics/Calibration/CalibrationOverview.tsx:25
 msgid "System defaults"
 msgstr "Valores predeterminados del sistema"
@@ -389,6 +437,10 @@ msgstr "Valores predeterminados del sistema"
 msgid "The HRV index measures window IBI variability. It is not clinical beat-to-beat RMSSD, and incompatible reference metrics cannot validate it."
 msgstr "El índice de VFC mide la variabilidad de los intervalos entre latidos dentro de una ventana. No es la RMSSD clínica entre latidos consecutivos y no puede validarse con métricas de referencia incompatibles."
 
+#: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:28
+msgid "The saved profile or parameter definitions are incompatible with this editor."
+msgstr "El perfil guardado o las definiciones de parámetros son incompatibles con este editor."
+
 #: src/components/biometrics/Calibration/ReferenceTimeSpan.tsx:26
 msgid "This is the first-to-last record span, not continuous coverage or overlap with pod readings."
 msgstr "Este intervalo abarca del primer al último registro; no indica cobertura continua ni coincidencia con las lecturas del pod."
@@ -396,6 +448,15 @@ msgstr "Este intervalo abarca del primer al último registro; no indica cobertur
 #: src/components/biometrics/Calibration/CalibrationHistory.tsx:23
 msgid "Times shown in {timezone}"
 msgstr "Horas mostradas en {timezone}"
+
+#. placeholder {0}: parameter.unit
+#. placeholder {1}: parameter.minimum
+#. placeholder {2}: parameter.maximum
+#. placeholder {3}: parameter.default
+#. placeholder {4}: String(original)
+#: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:83
+msgid "Unit: {0}; range: {1}–{2}; default: {3}; original: {4}"
+msgstr "Unidad: {0}; intervalo: {1}–{2}; predeterminado: {3}; original: {4}"
 
 #: src/components/biometrics/Calibration/CalibrationReferences.tsx:54
 msgid "Use offset-bearing ISO timestamps or Unix milliseconds. Each record needs recordKey, metric, value, unit, and timestamp (or start and end). JSON uses an array; CSV uses these field names as headers. Imports are limited to 2 MiB and 2000 records."
