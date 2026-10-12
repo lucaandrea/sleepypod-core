@@ -625,14 +625,15 @@
   },
   "sourceHashes": {
     "modules/common/biometrics/signal.py": "fff73469815673c8daebba9e2c9e7bcf97708939ad7a5639a52f0a53c9d75c18",
-    "modules/piezo-processor/main.py": "ab6ab441a70e0a4b4aa25d51ef18c0a2eb2cc01eaa166d6b48b9902eb02363fa",
+    "modules/piezo-processor/main.py": "7a8792e3dcae7d7354b8dc0d09c8c477091b91ada1f5a840d6a95cdb6307b479",
     "src/lib/sleep-stages.ts": "853f6b1f14618fbac11da43d3246b95aac55af8b782b2cbb1be3f7627bf560b4",
     "modules/piezo-processor/runtime_adapter.py": "0a22a2fa05aae6569bfc4b53fba80d75e89f702f021ccb61f82ce64e284c5bb8",
-    "modules/common/biometrics/runtime.py": "dbe327ce6e6ae315cad83439903e4c5d6a5c594468086739504caa8ed028a944"
+    "modules/common/biometrics/runtime.py": "dbe327ce6e6ae315cad83439903e4c5d6a5c594468086739504caa8ed028a944",
+    "modules/common/biometrics/gates.py": "c46285ff1cdf95bd4184823fabd6ceb66b005f7c410ee87880de4e563edd6e7c"
   },
   "dependencyHashes": {
     "modules/piezo-processor/uv.lock": "2803397e553a32588071d6be84c2bce5326552da03076261f48afce0ba919869",
-    "pnpm-lock.yaml": "7b0b3b2f50f7e35399f0e09954a66e8b33261f3bd48a212751d66643bff687c8"
+    "pnpm-lock.yaml": "afc63065304b85efe6d4452a093b1f64ef7412b9819609e7ec2a958974d8d638"
   },
   "legacySourceHashes": {
     "modules/piezo-processor/main.py": "c98bdb3d6ee38b5de5d36760238978a8fefe2153a0cdf3e82ea1872d2d0da34f",
