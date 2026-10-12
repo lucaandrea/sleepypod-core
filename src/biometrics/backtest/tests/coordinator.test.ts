@@ -3,7 +3,7 @@ import Database from 'better-sqlite3'
 import { drizzle } from 'drizzle-orm/better-sqlite3'
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator'
 import { execFile } from 'node:child_process'
-import { mkdtemp, rm, writeFile, readFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, rm, writeFile, readFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
 import { promisify } from 'node:util'
@@ -141,3 +141,40 @@ it('cooperatively interrupts a running lease before shutdown completes', async (
     sqlite.close()
   }
 })
+
+it('inspects actual archives through the isolated coordinator and persists only admitted evidence', async () => {
+  const archiveDirectory = join(directory, 'archive')
+  await mkdir(archiveDirectory)
+  const pythonPath = resolve('modules/piezo-processor/.venv/bin/python')
+  const rawLocation = { pythonPath, modulesPath: resolve('modules'), archiveDirectory }
+  await promisify(execFile)(pythonPath, ['-c', 'import gzip,sys;from pathlib import Path;Path(sys.argv[1]).write_bytes(gzip.compress(bytes.fromhex(\'a26373657101646461746148a164747970656178\'),mtime=0))', join(archiveDirectory, 'a.RAW.gz')])
+  const scan = () => ({ type: 'inspectRawSource' as const, input: { afterName: null } })
+  expect(await runCoordinatorTask({ ...options(), rawLocation }, scan())).toEqual({ status: 'deferred', nextCursor: null })
+  let checks = 0
+  expect(await runCoordinatorTask({ ...options(), rawLocation }, scan(), { admit: async () => ++checks === 1 })).toEqual({ status: 'deferred', nextCursor: null })
+  const sqlite = new Database(databasePath)
+  try {
+    expect(sqlite.prepare('SELECT count(*) n FROM biometric_raw_sources').get()).toEqual({ n: 0 })
+    const result = await runCoordinatorTask({ ...options(), rawLocation }, scan(), { admit: async () => true })
+    expect(result.status).toBe('inspected')
+    if (result.status !== 'inspected') throw new Error('Missing inspection')
+    expect(result.source).toMatchObject({ availability: 'requires_reverification', inspection: { source_name: 'a.RAW.gz', retained: false, inventory: { decoded_records: 1 } } })
+    expect(sqlite.prepare('SELECT count(*) n FROM biometric_raw_sources').get()).toEqual({ n: 1 })
+    expect(sqlite.prepare('SELECT count(*) n FROM biometric_raw_artifacts').get()).toEqual({ n: 0 })
+    expect(await runCoordinatorTask(options(), { type: 'pageRawSources', input: { startMs: 0, endMs: 1 } })).toEqual({ items: [], nextCursor: null })
+    await writeFile(join(archiveDirectory, 'a.RAW.gz'), 'corrupt')
+    expect(await runCoordinatorTask({ ...options(), rawLocation }, scan(), { admit: async () => true })).toEqual({ status: 'source_unavailable', nextCursor: 'a.RAW.gz' })
+    expect(sqlite.prepare('SELECT unavailable_at_ms unavailable FROM biometric_raw_sources').get()).toEqual({ unavailable: null })
+    expect(await runCoordinatorTask({ ...options(), rawLocation }, { type: 'inspectRawSource', input: { afterName: 'a.RAW.gz' } }, { admit: async () => true })).toEqual({ status: 'complete', nextCursor: null })
+  }
+  finally { sqlite.close() }
+})
+
+it('cancels archive inspection when ongoing resource admission is withdrawn', async () => {
+  const pythonPath = join(directory, 'slow-inspection')
+  await writeFile(pythonPath, `#!${process.execPath}\nprocess.stdin.resume();setInterval(()=>{},1000);setTimeout(()=>process.exit(91),10000).unref();`, { mode: 0o700 })
+  let checks = 0
+  expect(await runCoordinatorTask({ ...options(), rawLocation: { pythonPath, modulesPath: directory, archiveDirectory: directory } },
+    { type: 'inspectRawSource', input: { afterName: null } }, { admit: async () => ++checks === 1 })).toEqual({ status: 'deferred', nextCursor: null })
+  expect(checks).toBe(2)
+}, 10000)

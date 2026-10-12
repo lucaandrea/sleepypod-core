@@ -36,6 +36,9 @@ export const rawInspectionSchema = z.object({
   retained: z.literal(false), artifact: rawArtifactDescriptorSchema, inventory: rawInventorySchema,
 }).strict().refine(value => value.artifact.sha256 === value.inventory.artifact_sha256, 'Inventory must identify the inspected bytes')
 
+export const rawSourcePageSchema = z.object({ startMs: count, endMs: count, afterId: hash.optional() }).strict()
+  .refine(value => value.endMs > value.startMs, 'Expected a nonempty time window')
+
 /** Internal scan evidence only. This catalog neither retains bytes nor grants replay capability. */
 export class RawSourceCatalog {
   constructor(private readonly db: BetterSQLite3Database<typeof schema>, private readonly now = Date.now) {}
@@ -84,8 +87,7 @@ export class RawSourceCatalog {
   }
 
   page(raw: { startMs: number, endMs: number, afterId?: string }) {
-    const input = z.object({ startMs: count, endMs: count, afterId: hash.optional() }).strict()
-      .refine(value => value.endMs > value.startMs, 'Expected a nonempty time window').parse(raw)
+    const input = rawSourcePageSchema.parse(raw)
     // Event bounds are inclusive; requested windows are half-open. Inclusion
     // only indicates potential overlap, never continuous or complete coverage.
     const rows = this.db.select({ id: schema.biometricRawSources.id }).from(schema.biometricRawSources)

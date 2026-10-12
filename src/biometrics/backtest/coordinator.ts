@@ -4,10 +4,13 @@ import { dirname, resolve } from 'node:path'
 import { ReferenceInputError } from '../references/time'
 import { coordinatorTaskSchema, type CoordinatorTask, type CoordinatorResults } from './coordinator-tasks'
 
+import type { RawInspectionLocation } from './raw-inspection-child'
+
 export interface CoordinatorOptions {
   databasePath: string
   coordinatorPath: string
   workerPath: string
+  rawLocation?: RawInspectionLocation
   modulePath?: string
   timeoutMs?: number
 }
@@ -23,7 +26,7 @@ export function runCoordinatorTask<T extends CoordinatorTask>(options: Coordinat
   if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 10 || timeoutMs > 180000) throw new Error('Invalid coordinator timeout')
   if (control.signal?.aborted) return Promise.reject(new Error('Coordinator cancelled'))
   return new Promise((resolveResult, reject) => {
-    const child = fork(resolve(options.coordinatorPath), [resolve(options.databasePath), resolve(options.workerPath)], {
+    const child = fork(resolve(options.coordinatorPath), [resolve(options.databasePath), resolve(options.workerPath), JSON.stringify(options.rawLocation ?? null)], {
       cwd: dirname(resolve(options.databasePath)), detached: process.platform !== 'win32', serialization: 'advanced',
       execArgv: ['--max-old-space-size=384'], silent: true,
       env: { NODE_ENV: 'production', LANG: 'C.UTF-8', TZ: 'UTC', NODE_PATH: options.modulePath ?? resolve('node_modules') },
@@ -62,7 +65,7 @@ export function runCoordinatorTask<T extends CoordinatorTask>(options: Coordinat
     child.on('error', stop)
     child.on('message', (message: unknown) => {
       const data = message as { type?: string, sequence?: number, result?: CoordinatorResults[T['type']], code?: string, message?: string }
-      if (data?.type === 'admission' && parsed.type === 'execute' && !received && !admissionActive && Number.isSafeInteger(data.sequence)) {
+      if (data?.type === 'admission' && (parsed.type === 'execute' || parsed.type === 'inspectRawSource') && !received && !admissionActive && Number.isSafeInteger(data.sequence)) {
         admissionActive = true
         Promise.resolve().then(() => control.admit?.() ?? false).catch(() => false).then((allowed) => {
           if (child.connected && !failure) child.send({ type: 'admission', sequence: data.sequence, allowed }, () => {})

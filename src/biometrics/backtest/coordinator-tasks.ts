@@ -8,8 +8,13 @@ import { readStageTraces } from './traces'
 import { traceRequestSchema } from './trace-contracts'
 import { executeNextBacktest } from './runner'
 
+import { RawSourceCatalog, rawSourcePageSchema } from './raw-catalog'
+import { rawScanInputSchema, runRawInspectionChild, podRawInspectionLocation, type RawInspectionLocation } from './raw-inspection-child'
+
 const idInput = z.object({ id: z.string().uuid() }).strict()
 export const coordinatorTaskSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('inspectRawSource'), input: rawScanInputSchema }).strict(),
+  z.object({ type: z.literal('pageRawSources'), input: rawSourcePageSchema }).strict(),
   z.object({ type: z.literal('createDataset'), input: createDatasetSchema }).strict(),
   z.object({ type: z.literal('datasetDescriptor'), input: idInput }).strict(),
   z.object({ type: z.literal('readResult'), input: idInput }).strict(),
@@ -23,6 +28,8 @@ export const coordinatorTaskSchema = z.discriminatedUnion('type', [
 ])
 export type CoordinatorTask = z.input<typeof coordinatorTaskSchema>
 export interface CoordinatorResults {
+  inspectRawSource: Awaited<ReturnType<typeof inspectRawSource>>
+  pageRawSources: ReturnType<RawSourceCatalog['page']>
   createDataset: ReturnType<DatasetStore['create']>
   datasetDescriptor: ReturnType<DatasetStore['descriptor']>
   readResult: ReturnType<BacktestJobStore['result']>
@@ -38,11 +45,14 @@ export interface CoordinatorResults {
 /** Fixed shipped operations; neither executable code nor paths come from RPC input. */
 export async function performCoordinatorTask(db: BetterSQLite3Database<typeof schema>, raw: unknown, options: {
   workerPath: string
+  rawLocation?: RawInspectionLocation
   signal: AbortSignal
   admit: () => Promise<boolean>
 }) {
   const task = coordinatorTaskSchema.parse(raw)
   switch (task.type) {
+    case 'inspectRawSource': return inspectRawSource(db, task.input, options)
+    case 'pageRawSources': return new RawSourceCatalog(db).page(task.input)
     case 'createDataset': return new DatasetStore(db).create(task.input)
     case 'datasetDescriptor': return new DatasetStore(db).descriptor(task.input.id)
     case 'readResult': return new BacktestJobStore(db).result(task.input.id)
@@ -55,5 +65,47 @@ export async function performCoordinatorTask(db: BetterSQLite3Database<typeof sc
       new BacktestJobStore(db).collectOrphanedArtifacts()
       return null
     case 'execute': return executeNextBacktest(db, { owner: task.owner, ...options })
+  }
+}
+
+/** Recheck resource health during decompression and before committing evidence. */
+async function inspectRawSource(db: BetterSQLite3Database<typeof schema>, input: z.input<typeof rawScanInputSchema>, options: {
+  signal: AbortSignal
+  admit: () => Promise<boolean>
+  rawLocation?: RawInspectionLocation
+}) {
+  const deferred = { status: 'deferred' as const, nextCursor: input.afterName }
+  if (options.signal.aborted || !await options.admit()) return deferred
+  const controller = new AbortController()
+  const abort = () => controller.abort()
+  options.signal.addEventListener('abort', abort, { once: true })
+  if (options.signal.aborted) abort()
+  let checking: Promise<void> | undefined, denied = false
+  const timer = setInterval(() => {
+    if (checking) return
+    checking = Promise.resolve().then(() => options.admit()).catch(() => false).then((allowed) => {
+      if (!allowed) {
+        denied = true
+        controller.abort()
+      }
+    }).finally(() => { checking = undefined })
+  }, 5000)
+  try {
+    const result = await runRawInspectionChild(options.rawLocation ?? podRawInspectionLocation, input, { signal: controller.signal })
+    clearInterval(timer)
+    await checking
+    if (denied || options.signal.aborted || !await options.admit() || options.signal.aborted) return deferred
+    if (result.status !== 'inspected') return result
+    const id = new RawSourceCatalog(db).record(result.inspection)
+    return { status: 'inspected' as const, nextCursor: result.nextCursor, source: new RawSourceCatalog(db).read(id) }
+  }
+  catch (error) {
+    if (denied) return deferred
+    throw error
+  }
+  finally {
+    clearInterval(timer)
+    await checking
+    options.signal.removeEventListener('abort', abort)
   }
 }
