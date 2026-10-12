@@ -31,3 +31,18 @@ These services are not yet connected to startup, the stage reader, or Python
 boundary adoption. Public activation remains unavailable until those consumers,
 fallback behavior and actual acknowledgment have been implemented and verified.
 There are no hardware-command paths in these services.
+
+The Python `common.biometrics.runtime` reader independently validates the latest
+projected payload, its envelope, shipped manifest and resolved hash. Reads are
+bounded before materializing SQLite text. Missing tables, corrupt newest
+generations and incompatible engines surface errors; the reader neither creates
+schema nor silently selects an older generation. Snapshots retain immutable
+configuration bytes and return fresh decoded values.
+
+Its two-phase boundary selector allows immediate changes at the caller's next
+sample boundary and next-session changes only when occupancy is explicitly
+false. Unknown occupancy, including an uninitialized restart, does not count as
+an empty bed. Newer requests supersede pending ones, stale generations fail, and
+a late commit cannot acknowledge a superseded selection. The caller must install
+the selected configuration before committing selection and writing receipts.
+These primitives are tested but are not yet wired into the live daemon.
