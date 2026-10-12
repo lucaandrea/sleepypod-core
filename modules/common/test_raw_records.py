@@ -150,3 +150,15 @@ def test_inventory_rejects_channels_too_large_for_the_replay_driver(tmp_path):
     result = raw_records.inventory_retained(store, descriptor)
     assert result['oversize_channel_frames'] == 1
     assert result['ordered_waveform_available'] is False
+
+
+def test_shared_budget_counts_empty_placeholders_across_artifact_streams(tmp_path):
+    store, descriptor = retain(tmp_path, envelope(b'') + envelope(b''))
+    budget = raw_records.RawRecordBudget(3)
+    assert list(iter_retained_records(store, descriptor, budget=budget)) == []
+    assert budget.consumed == 2
+    with pytest.raises(ValueError, match='record count'):
+        list(iter_retained_records(store, descriptor, budget=budget))
+    assert budget.consumed == 4
+    with pytest.raises(ValueError, match='shared RAW'):
+        list(iter_retained_records(store, descriptor, budget=3))

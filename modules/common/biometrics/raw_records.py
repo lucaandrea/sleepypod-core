@@ -129,10 +129,25 @@ def decode_record(payload, limits=DecodeLimits()):
     return result
 
 
-def iter_retained_records(store, descriptor, limits=DecodeLimits(), max_records=1_000_000):
+class RawRecordBudget:
+    """One count budget shared by all artifacts, including empty placeholders."""
+    def __init__(self, maximum):
+        if type(maximum) is not int or maximum <= 0:
+            raise ValueError('Invalid RAW record count limit')
+        self.maximum, self.consumed = maximum, 0
+
+    def consume(self):
+        self.consumed += 1
+        if self.consumed > self.maximum:
+            raise ValueError('RAW record count limit exceeded')
+
+
+def iter_retained_records(store, descriptor, limits=DecodeLimits(), max_records=1_000_000, *, budget=None):
     """Yield decoded records without buffering a file or concealing truncation."""
     if type(max_records) is not int or max_records <= 0:
         raise ValueError('Invalid RAW record count limit')
+    if budget is not None and not isinstance(budget, RawRecordBudget):
+        raise ValueError('Invalid shared RAW record budget')
     with store.open_raw(descriptor) as stream:
         count = 0
         while True:
@@ -144,6 +159,8 @@ def iter_retained_records(store, descriptor, limits=DecodeLimits(), max_records=
                     raise ValueError('Truncated retained RAW framing') from None
                 return
             count += 1
+            if budget is not None:
+                budget.consume()
             if count > max_records:
                 raise ValueError('RAW record count limit exceeded')
             if payload is not None:

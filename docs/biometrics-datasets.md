@@ -163,3 +163,28 @@ SQLite transaction, commit before returning, and never reacquire the file lock
 inside the callback. Publication failure leaves complete bytes for recovery.
 The public waveform dataset creation path and scheduled collector still need
 to be wired through this protocol before waveform replay is enabled.
+
+`retained_replay.py` connects immutable artifact descriptors to the shared
+waveform engine. Its versioned `retained-waveform-input-v1` contract contains a
+retained/pre-roll/scoring window, ordered artifact descriptors with inspected
+event bounds, and frozen context intervals. It rejects duplicate or overlapping
+artifact windows instead of guessing which boundary frames to discard. Missing
+context intervals resolve to unknown; it never reads the current sleeper mode,
+occupancy or calibration to fill historical gaps.
+
+The adapter verifies retained bytes and consumes every selected file to EOF,
+including events outside the scoring window. It checks actual event bounds and
+ordering against the frozen input, then passes selected frames to the same
+numerical driver as direct replay. Initial bounds are 64 artifacts, 1 GiB
+compressed input, one million RAW records across all artifacts (including
+empty placeholders), 20,000 context intervals and 20,000 output readings.
+These are explicit implementation bounds, not a qualified pod resource policy.
+The caller must also enforce a process deadline; cooperative cancellation does
+not interrupt a file checksum operation already in progress.
+
+Output sink rows are provisional until the adapter returns successfully. A
+late archive integrity failure must fail the job and discard its staged result.
+The returned run metadata includes consumed/decoded counts, exact artifact and
+configuration hashes, processing counters and limitations. The public durable
+worker still needs to capture this input contract, retain its references and
+publish the completed result through its fenced job lifecycle.
