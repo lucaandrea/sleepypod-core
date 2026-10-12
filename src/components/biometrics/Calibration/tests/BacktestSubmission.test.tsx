@@ -3,6 +3,7 @@ import { setupI18n } from '@lingui/core'
 import { I18nProvider } from '@lingui/react'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { BacktestSubmission } from '../BacktestSubmission'
+vi.mock('../BacktestJobs', () => ({ BacktestJobDetails: () => <p>Job status</p> }))
 const mock = vi.hoisted(() => ({ enqueue: vi.fn(), invalidate: vi.fn(), generation: 2, available: true, data: undefined as unknown }))
 vi.mock('@/src/utils/trpc', () => ({ trpc: {
   useUtils: () => ({ biometricTuning: { listBacktests: { invalidate: mock.invalidate }, listExperiments: { invalidate: mock.invalidate } } }),

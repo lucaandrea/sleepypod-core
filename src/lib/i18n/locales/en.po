@@ -20,7 +20,7 @@ msgstr ""
 msgid "{0} · {1} · revision {2}"
 msgstr "{0} · {1} · revision {2}"
 
-#: src/components/biometrics/Calibration/BacktestSubmission.tsx:91
+#: src/components/biometrics/Calibration/BacktestSubmission.tsx:94
 msgid "A saved request does not mean execution has started or succeeded. Inspect the job for its current state."
 msgstr "A saved request does not mean execution has started or succeeded. Inspect the job for its current state."
 
@@ -83,16 +83,25 @@ msgstr "Apply unvalidated revision"
 msgid "Assumed calibration quality (0–1)"
 msgstr "Assumed calibration quality (0–1)"
 
+#. placeholder {0}: job.attempt
+#: src/components/biometrics/Calibration/BacktestJobs.tsx:33
+msgid "Attempt {0}"
+msgstr "Attempt {0}"
+
 #: src/components/biometrics/Calibration/ReplaySessionPicker.tsx:75
 msgid "Available reference records by metric (across revisions)"
 msgstr "Available reference records by metric (across revisions)"
 
+#: src/components/biometrics/Calibration/BacktestJobs.tsx:20
+msgid "Backtest jobs"
+msgstr "Backtest jobs"
+
 #. placeholder {0}: enqueue.data.id
-#: src/components/biometrics/Calibration/BacktestSubmission.tsx:90
+#: src/components/biometrics/Calibration/BacktestSubmission.tsx:93
 msgid "Backtest request saved: {0}"
 msgstr "Backtest request saved: {0}"
 
-#: src/components/biometrics/Calibration/BacktestSubmission.tsx:39
+#: src/components/biometrics/Calibration/BacktestSubmission.tsx:42
 msgid "Backtest submission"
 msgstr "Backtest submission"
 
@@ -120,6 +129,22 @@ msgstr "Breathing rate"
 msgid "Calibration views"
 msgstr "Calibration views"
 
+#: src/components/biometrics/Calibration/BacktestJobs.tsx:76
+msgid "Cancel backtest"
+msgstr "Cancel backtest"
+
+#: src/components/biometrics/Calibration/BacktestJobs.tsx:10
+msgid "Cancellation requested"
+msgstr "Cancellation requested"
+
+#: src/components/biometrics/Calibration/BacktestJobs.tsx:10
+msgid "Cancelled"
+msgstr "Cancelled"
+
+#: src/components/biometrics/Calibration/BacktestJobs.tsx:61
+msgid "Candidate"
+msgstr "Candidate"
+
 #: src/components/biometrics/Calibration/ProfileComparison.tsx:28
 msgid "Candidate changes"
 msgstr "Candidate changes"
@@ -138,7 +163,7 @@ msgstr "Candidate parameters"
 
 #. placeholder {0}: profile.revision
 #. placeholder {1}: profile.id
-#: src/components/biometrics/Calibration/BacktestSubmission.tsx:50
+#: src/components/biometrics/Calibration/BacktestSubmission.tsx:53
 msgid "Candidate revision {0}: {1}"
 msgstr "Candidate revision {0}: {1}"
 
@@ -191,6 +216,10 @@ msgstr "Compatibility fallback"
 msgid "Complete the required fields within their stated bounds."
 msgstr "Complete the required fields within their stated bounds."
 
+#: src/components/biometrics/Calibration/BacktestJobs.tsx:71
+msgid "Completed nights"
+msgstr "Completed nights"
+
 #: src/components/biometrics/Calibration/CalibrationOverview.tsx:36
 msgid "Configuration identity"
 msgstr "Configuration identity"
@@ -217,9 +246,21 @@ msgstr "Coverage estimates use nominal recording cadence; they do not prove cont
 msgid "Current"
 msgstr "Current"
 
+#: src/components/biometrics/Calibration/BacktestJobs.tsx:61
+msgid "Current stage view"
+msgstr "Current stage view"
+
 #: src/components/biometrics/Calibration/CalibrationReferences.tsx:67
 msgid "Data format"
 msgstr "Data format"
+
+#: src/components/biometrics/Calibration/BacktestJobs.tsx:81
+msgid "Dataset"
+msgstr "Dataset"
+
+#: src/components/biometrics/Calibration/BacktestJobs.tsx:83
+msgid "Dataset hash"
+msgstr "Dataset hash"
 
 #. placeholder {0}: create.data.id
 #: src/components/biometrics/Calibration/DatasetBuilder.tsx:57
@@ -290,9 +331,13 @@ msgstr "Evaluation mode"
 msgid "Evaluation protocol"
 msgstr "Evaluation protocol"
 
-#: src/components/biometrics/Calibration/BacktestSubmission.tsx:68
+#: src/components/biometrics/Calibration/BacktestSubmission.tsx:71
 msgid "Evaluation split"
 msgstr "Evaluation split"
+
+#: src/components/biometrics/Calibration/BacktestJobs.tsx:85
+msgid "Evaluator build hash"
+msgstr "Evaluator build hash"
 
 #: src/components/biometrics/Calibration/CalibrationReferences.tsx:91
 msgid "Exact import identity"
@@ -310,6 +355,18 @@ msgstr "Exact processed-data coverage"
 msgid "Exact profile transition"
 msgstr "Exact profile transition"
 
+#: src/components/biometrics/Calibration/BacktestJobs.tsx:10
+msgid "Execution completed"
+msgstr "Execution completed"
+
+#: src/components/biometrics/Calibration/BacktestJobs.tsx:75
+msgid "Execution completed. Review the report before drawing conclusions about agreement or improvement."
+msgstr "Execution completed. Review the report before drawing conclusions about agreement or improvement."
+
+#: src/components/biometrics/Calibration/BacktestJobs.tsx:20
+msgid "Execution state is separate from the strength of biometric evidence."
+msgstr "Execution state is separate from the strength of biometric evidence."
+
 #. placeholder {0}: create.data.id
 #: src/components/biometrics/Calibration/ExperimentBuilder.tsx:96
 msgid "Experiment saved: {0}"
@@ -323,6 +380,7 @@ msgstr "Expired"
 msgid "Explicit stage overrides"
 msgstr "Explicit stage overrides"
 
+#: src/components/biometrics/Calibration/BacktestJobs.tsx:10
 #: src/components/biometrics/Calibration/CalibrationHistory.tsx:18
 #: src/components/biometrics/Calibration/CalibrationOverview.tsx:15
 #: src/components/biometrics/Calibration/ManualProfileActivation.tsx:73
@@ -393,7 +451,8 @@ msgstr "Historical sleep stages are recomputed with the current classifier. Orig
 msgid "History"
 msgstr "History"
 
-#: src/components/biometrics/Calibration/BacktestSubmission.tsx:72
+#: src/components/biometrics/Calibration/BacktestJobs.tsx:60
+#: src/components/biometrics/Calibration/BacktestSubmission.tsx:75
 #: src/components/biometrics/Calibration/DatasetBuilder.tsx:20
 #: src/components/biometrics/Calibration/DatasetLibrary.tsx:62
 msgid "Holdout"
@@ -412,7 +471,7 @@ msgstr "HRV index"
 msgid "I intend to apply this exact revision without validation evidence."
 msgstr "I intend to apply this exact revision without validation evidence."
 
-#: src/components/biometrics/Calibration/BacktestSubmission.tsx:80
+#: src/components/biometrics/Calibration/BacktestSubmission.tsx:83
 msgid "I intend to expose this holdout. Repeated use, including overlapping datasets, weakens held-out evidence."
 msgstr "I intend to expose this holdout. Repeated use, including overlapping datasets, weakens held-out evidence."
 
@@ -473,6 +532,10 @@ msgstr "Inspect dataset"
 msgid "Inspect frozen inputs and whole-night partitions, or release their retained storage."
 msgstr "Inspect frozen inputs and whole-night partitions, or release their retained storage."
 
+#: src/components/biometrics/Calibration/BacktestJobs.tsx:34
+msgid "Inspect job"
+msgstr "Inspect job"
+
 #: src/components/biometrics/Calibration/ReferenceLibrary.tsx:50
 msgid "Inspect measurements"
 msgstr "Inspect measurements"
@@ -481,6 +544,14 @@ msgstr "Inspect measurements"
 #: src/components/biometrics/Calibration/ReplaySessionPicker.tsx:43
 msgid "Inspect session {0}"
 msgstr "Inspect session {0}"
+
+#: src/components/biometrics/Calibration/BacktestJobs.tsx:10
+msgid "Interrupted"
+msgstr "Interrupted"
+
+#: src/components/biometrics/Calibration/BacktestJobs.tsx:63
+msgid "Job details"
+msgstr "Job details"
 
 #: src/components/biometrics/Calibration/ReferenceLibrary.tsx:61
 msgid "Keep import"
@@ -540,11 +611,15 @@ msgstr "Newest experiments"
 msgid "Newest imports"
 msgstr "Newest imports"
 
+#: src/components/biometrics/Calibration/BacktestJobs.tsx:39
+msgid "Newest jobs"
+msgstr "Newest jobs"
+
 #: src/components/biometrics/Calibration/ReplaySessionPicker.tsx:49
 msgid "Newest nights"
 msgstr "Newest nights"
 
-#: src/components/biometrics/Calibration/BacktestSubmission.tsx:55
+#: src/components/biometrics/Calibration/BacktestSubmission.tsx:58
 #: src/components/biometrics/Calibration/ProfileLibrary.tsx:53
 msgid "Newest profiles"
 msgstr "Newest profiles"
@@ -561,6 +636,10 @@ msgstr "Next session boundary"
 msgid "Next session waits for a known empty-bed boundary. Immediate application still waits for a safe processing boundary."
 msgstr "Next session waits for a known empty-bed boundary. Immediate application still waits for a safe processing boundary."
 
+#: src/components/biometrics/Calibration/BacktestJobs.tsx:71
+msgid "Night progress is not available yet."
+msgstr "Night progress is not available yet."
+
 #: src/components/biometrics/Calibration/ReferenceTimeSpan.tsx:21
 msgid "No accepted time range."
 msgstr "No accepted time range."
@@ -568,6 +647,10 @@ msgstr "No accepted time range."
 #: src/components/biometrics/Calibration/CalibrationHistory.tsx:30
 msgid "No activation history for this side."
 msgstr "No activation history for this side."
+
+#: src/components/biometrics/Calibration/BacktestJobs.tsx:27
+msgid "No backtest jobs for this side."
+msgstr "No backtest jobs for this side."
 
 #: src/components/biometrics/Calibration/ReplaySessionPicker.tsx:77
 msgid "No overlapping reference records."
@@ -602,7 +685,7 @@ msgstr "No retained datasets for this side."
 msgid "No retained measurements."
 msgstr "No retained measurements."
 
-#: src/components/biometrics/Calibration/BacktestSubmission.tsx:43
+#: src/components/biometrics/Calibration/BacktestSubmission.tsx:46
 #: src/components/biometrics/Calibration/ProfileLibrary.tsx:28
 msgid "No saved candidate revisions."
 msgstr "No saved candidate revisions."
@@ -646,14 +729,22 @@ msgstr "Older experiments"
 msgid "Older imports"
 msgstr "Older imports"
 
+#: src/components/biometrics/Calibration/BacktestJobs.tsx:40
+msgid "Older jobs"
+msgstr "Older jobs"
+
 #: src/components/biometrics/Calibration/ReplaySessionPicker.tsx:50
 msgid "Older nights"
 msgstr "Older nights"
 
-#: src/components/biometrics/Calibration/BacktestSubmission.tsx:56
+#: src/components/biometrics/Calibration/BacktestSubmission.tsx:59
 #: src/components/biometrics/Calibration/ProfileLibrary.tsx:54
 msgid "Older profiles"
 msgstr "Older profiles"
+
+#: src/components/biometrics/Calibration/BacktestJobs.tsx:68
+msgid "Original stored-reading comparison"
+msgstr "Original stored-reading comparison"
 
 #: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:98
 msgid "Overridden"
@@ -704,11 +795,15 @@ msgstr "Pinned configuration and overrides"
 msgid "Pinned evaluation protocol"
 msgstr "Pinned evaluation protocol"
 
+#: src/components/biometrics/Calibration/BacktestJobs.tsx:79
+msgid "Pinned job inputs"
+msgstr "Pinned job inputs"
+
 #: src/components/biometrics/Calibration/ExperimentBuilder.tsx:58
 msgid "Point matching tolerance (ms, 0–300000)"
 msgstr "Point matching tolerance (ms, 0–300000)"
 
-#: src/components/biometrics/Calibration/BacktestSubmission.tsx:66
+#: src/components/biometrics/Calibration/BacktestSubmission.tsx:69
 msgid "Prepare a new request with the current baseline"
 msgstr "Prepare a new request with the current baseline"
 
@@ -744,9 +839,19 @@ msgstr "Profile resolution failed."
 msgid "Profiles"
 msgstr "Profiles"
 
-#: src/components/biometrics/Calibration/BacktestSubmission.tsx:84
+#. placeholder {0}: data.progress.completedNights
+#. placeholder {1}: data.progress.totalNights
+#: src/components/biometrics/Calibration/BacktestJobs.tsx:70
+msgid "Progress: {0} / {1} nights"
+msgstr "Progress: {0} / {1} nights"
+
+#: src/components/biometrics/Calibration/BacktestSubmission.tsx:87
 msgid "Queue backtest"
 msgstr "Queue backtest"
+
+#: src/components/biometrics/Calibration/BacktestJobs.tsx:10
+msgid "Queued"
+msgstr "Queued"
 
 #: src/components/biometrics/Calibration/ReplaySessionPicker.tsx:24
 msgid "Recorded nights"
@@ -911,6 +1016,10 @@ msgstr "Revision {0}; accepted {1}; unscorable {2}"
 msgid "Row {0}: {1}"
 msgstr "Row {0}: {1}"
 
+#: src/components/biometrics/Calibration/BacktestJobs.tsx:10
+msgid "Running"
+msgstr "Running"
+
 #: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:84
 msgid "Save a candidate for evaluation. This does not change live processing."
 msgstr "Save a candidate for evaluation. This does not change live processing."
@@ -998,6 +1107,10 @@ msgstr "Stage replay available"
 msgid "Stage replay unavailable"
 msgstr "Stage replay unavailable"
 
+#: src/components/biometrics/Calibration/BacktestJobs.tsx:68
+msgid "Stage rules on original readings"
+msgstr "Stage rules on original readings"
+
 #: src/components/biometrics/Calibration/CalibrationOverview.tsx:15
 msgid "Stale"
 msgstr "Stale"
@@ -1024,6 +1137,7 @@ msgstr "Stored vitals: {0}; movement records: {1}"
 msgid "Stored-reading comparison available"
 msgstr "Stored-reading comparison available"
 
+#: src/components/biometrics/Calibration/BacktestJobs.tsx:61
 #: src/components/biometrics/Calibration/CalibrationOverview.tsx:25
 #: src/components/biometrics/Calibration/ProfileComparison.tsx:29
 msgid "System defaults"
@@ -1037,7 +1151,7 @@ msgstr "The HRV index measures window IBI variability. It is not clinical beat-t
 msgid "The pinned profile is incompatible. Its revision will be preserved, but a valid before-and-after comparison is unavailable."
 msgstr "The pinned profile is incompatible. Its revision will be preserved, but a valid before-and-after comparison is unavailable."
 
-#: src/components/biometrics/Calibration/BacktestSubmission.tsx:24
+#: src/components/biometrics/Calibration/BacktestSubmission.tsx:26
 #: src/components/biometrics/Calibration/DatasetLibrary.tsx:66
 msgid "The retained inputs are unavailable for new evaluations."
 msgstr "The retained inputs are unavailable for new evaluations."
@@ -1055,7 +1169,7 @@ msgstr "The saved profile changed. Select a recovery action again to make a new 
 msgid "The saved profile or parameter definitions are incompatible with this editor."
 msgstr "The saved profile or parameter definitions are incompatible with this editor."
 
-#: src/components/biometrics/Calibration/BacktestSubmission.tsx:40
+#: src/components/biometrics/Calibration/BacktestSubmission.tsx:43
 msgid "The server captures default, current stage-view, and candidate configurations at submission. Stored readings cannot validate numerical parameter changes."
 msgstr "The server captures default, current stage-view, and candidate configurations at submission. Stored readings cannot validate numerical parameter changes."
 
@@ -1092,7 +1206,8 @@ msgstr "Times shown in {timezone}"
 msgid "Too few independent nights for a validation split; descriptive evaluation only."
 msgstr "Too few independent nights for a validation split; descriptive evaluation only."
 
-#: src/components/biometrics/Calibration/BacktestSubmission.tsx:70
+#: src/components/biometrics/Calibration/BacktestJobs.tsx:60
+#: src/components/biometrics/Calibration/BacktestSubmission.tsx:73
 #: src/components/biometrics/Calibration/DatasetBuilder.tsx:20
 #: src/components/biometrics/Calibration/DatasetLibrary.tsx:62
 msgid "Tuning"
@@ -1119,7 +1234,8 @@ msgstr "Use offset-bearing ISO timestamps or Unix milliseconds. Each record need
 msgid "Use system defaults"
 msgstr "Use system defaults"
 
-#: src/components/biometrics/Calibration/BacktestSubmission.tsx:71
+#: src/components/biometrics/Calibration/BacktestJobs.tsx:60
+#: src/components/biometrics/Calibration/BacktestSubmission.tsx:74
 #: src/components/biometrics/Calibration/DatasetBuilder.tsx:20
 #: src/components/biometrics/Calibration/DatasetLibrary.tsx:62
 msgid "Validation"
@@ -1143,6 +1259,10 @@ msgstr "Vitals with unknown original processing provenance: {0}"
 #: src/components/biometrics/Calibration/ManualProfileActivation.tsx:73
 msgid "Waiting for a processing boundary"
 msgstr "Waiting for a processing boundary"
+
+#: src/components/biometrics/Calibration/BacktestJobs.tsx:74
+msgid "Waiting for a worker and resource admission. No execution is implied by a queued request."
+msgstr "Waiting for a worker and resource admission. No execution is implied by a queued request."
 
 #: src/components/biometrics/Calibration/CalibrationHistory.tsx:18
 #: src/components/biometrics/Calibration/CalibrationOverview.tsx:16

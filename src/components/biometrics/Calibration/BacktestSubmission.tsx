@@ -2,6 +2,7 @@
 
 import { useRef, useState } from 'react'
 import { Trans, useLingui } from '@lingui/react/macro'
+import { BacktestJobDetails } from './BacktestJobs'
 import { trpc } from '@/src/utils/trpc'
 import { Button, InlineError, Skeleton } from '@/src/components/ds'
 
@@ -92,6 +93,7 @@ export function BacktestSubmission({ side, experimentId, datasetId }: { side: 'l
               <p>{t`Backtest request saved: ${enqueue.data.id}`}</p>
               <p><Trans>A saved request does not mean execution has started or succeeded. Inspect the job for its current state.</Trans></p>
               <p className="break-all font-mono text-xs">{enqueue.data.evaluatorBuildHash}</p>
+              <BacktestJobDetails key={enqueue.data.id} id={enqueue.data.id} />
             </div>
           )
         : null}
