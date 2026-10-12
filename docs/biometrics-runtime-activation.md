@@ -27,9 +27,9 @@ activation is marked applied. Old-generation or wrong-hash receipts cannot
 acknowledge a newer binding. A final generation check fences concurrent intent
 changes while reconciling.
 
-These services are not yet connected to startup, the stage reader, or Python
-boundary adoption. Public activation remains unavailable until those consumers,
-fallback behavior and actual acknowledgment have been implemented and verified.
+The Node services are not yet connected to startup or the stage reader.
+Public activation remains unavailable until those consumers, fallback auditing
+and full acknowledgment have been implemented and verified.
 There are no hardware-command paths in these services.
 
 The Python `common.biometrics.runtime` reader independently validates the latest
@@ -45,4 +45,29 @@ false. Unknown occupancy, including an uninitialized restart, does not count as
 an empty bed. Newer requests supersede pending ones, stale generations fail, and
 a late commit cannot acknowledge a superseded selection. The caller must install
 the selected configuration before committing selection and writing receipts.
-These primitives are tested but are not yet wired into the live daemon.
+The live piezo daemon now uses these primitives through `runtime_adapter.py`.
+It polls projections every five seconds, installs configurations before ingesting
+an accepted dual-channel frame, and writes receipts only after both channel
+buffers have accepted that frame. Heart-rate, breathing-rate and HRV-index
+receipts are separate from the still-pending stage consumer. Heartbeats are
+bounded to once per thirty seconds unless the applied configuration changes.
+
+In single-sleeper mode both physical channels use the home side's profile.
+Each computed candidate carries its immutable processing context through
+quality arbitration and write retries, including its original logical side and
+physical source channel. The observation, quality row and processing bundle
+commit in one SQLite transaction. Retained contexts recreate their processing
+bundle after history reset. This does not imply raw input retention: provenance
+explicitly labels raw identity unavailable and timestamps as processing-clock
+based. Measured sensor calibration is not consumed by this numerical path and
+its calibration hash remains null.
+
+Numerical changes reset sample buffers, tracking and presence state; stage-only
+changes preserve numerical state. Routing changes reset state to prevent mixing
+sleepers. A restart restores only a compatible projection previously acknowledged
+by all three numerical components, with fresh estimator warmup. Pending
+next-session requests still require known empty occupancy. Invalid projections
+retain the actual compatible configuration and report degraded module health;
+an incompatible restored configuration falls back to defaults. Missing schema
+prevents custom adoption and preserves legacy writes. Persisted fallback audit
+and the Node supervisor remain outstanding.

@@ -48,6 +48,7 @@ from common.dialect import KNOWN_RECORD_TYPES, warn_unknown_type_once
 from common.side_mode import SingleSleeperMode
 from common.bed_presence import BedPresence
 import numpy as np
+from runtime_adapter import RuntimeCoordinator, RunContext
 from common.biometrics.signal import (
     _bandpass, _autocorr_quality, _compute_autocorr, subharmonic_summation_hr,
     HRTracker, compute_breathing_rate, compute_hrv,
@@ -176,7 +177,8 @@ def write_vitals(holder: "DBHolder", side: str, ts: datetime,
                  breathing_rate: Optional[float],
                  quality_score: float,
                  flags: Optional[list] = None,
-                 hr_raw: Optional[float] = None) -> bool:
+                 hr_raw: Optional[float] = None,
+                 run_context: Optional[RunContext] = None) -> bool:
     """Insert one vitals row + paired vitals_quality row. Logs and swallows
     sqlite3 errors so the main loop survives transient WAL/disk issues (#325).
     After _DB_RECONNECT_THRESHOLD consecutive failures, the holder's
@@ -191,10 +193,21 @@ def write_vitals(holder: "DBHolder", side: str, ts: datetime,
     flags_json = json.dumps(flags) if flags else None
     try:
         with conn:
-            cur = conn.execute(
-                "INSERT INTO vitals (side, timestamp, heart_rate, hrv, breathing_rate) VALUES (?, ?, ?, ?, ?)",
-                (side, ts_unix, heart_rate, hrv, breathing_rate),
-            )
+            if run_context is not None:
+                # Keep the profile and source channel that computed the value,
+                # even if single-sleeper mode changed while this row was held.
+                if side != run_context.side:
+                    raise sqlite3.IntegrityError("Vitals routing disagrees with processing provenance")
+                run_context.ensure(conn)
+                cur = conn.execute(
+                    "INSERT INTO vitals (side, timestamp, heart_rate, hrv, breathing_rate, processing_run_id) VALUES (?, ?, ?, ?, ?, ?)",
+                    (side, ts_unix, heart_rate, hrv, breathing_rate, run_context.id),
+                )
+            else:
+                cur = conn.execute(
+                    "INSERT INTO vitals (side, timestamp, heart_rate, hrv, breathing_rate) VALUES (?, ?, ?, ?, ?)",
+                    (side, ts_unix, heart_rate, hrv, breathing_rate),
+                )
             conn.execute(
                 "INSERT INTO vitals_quality (vitals_id, side, timestamp, quality_score, flags, hr_raw, created_at) "
                 "VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -223,12 +236,16 @@ class VitalsCandidate:
     quality_score: float
     flags: Optional[list]
     hr_raw: Optional[float]
+    run_context: Optional[RunContext] = None
 
     def write(self, holder: "DBHolder", side: Optional[str] = None) -> bool:
-        return write_vitals(holder, side or self.side, self.ts, self.heart_rate,
+        # Provenance captures the logical side at computation, not at retry.
+        destination = self.run_context.side if self.run_context else side or self.side
+        kwargs = {"run_context": self.run_context} if self.run_context else {}
+        return write_vitals(holder, destination, self.ts, self.heart_rate,
                             self.hrv, self.breathing_rate,
                             quality_score=self.quality_score, flags=self.flags,
-                            hr_raw=self.hr_raw)
+                            hr_raw=self.hr_raw, **kwargs)
 
 
 class SingleSleeperVitals:
@@ -551,6 +568,7 @@ class SideProcessor:
         self._last_write = 0.0
         self._presence = PresenceDetector()
         self.parameters = parameters
+        self.run_context: Optional[RunContext] = None
         self._estimator = WindowEstimator(parameters)
         self._hr_tracker = self._estimator.hr_tracker
         self._other: Optional['SideProcessor'] = None  # set after both sides created
@@ -567,6 +585,19 @@ class SideProcessor:
         # merges both zones into the home side, so only the home side's
         # processor may treat `bed_occupied() is True` as its own evidence.
         self.home_side: Optional[Callable[[], Optional[str]]] = None
+
+    def install_runtime(self, parameters, run_context, reset_side=False):
+        if parameters != self.parameters or reset_side:
+            self._hr_buf.clear()
+            self._hrv_buf.clear()
+            self._br_buf.clear()
+            self._estimator = WindowEstimator(parameters)
+            self._hr_tracker = self._estimator.hr_tracker
+            self._last_write = 0.0
+            self._last_med_std = self._last_acr_qual = 0.0
+            self._presence = PresenceDetector()
+        self.parameters = parameters
+        self.run_context = run_context
 
     def ingest(self, samples: np.ndarray) -> None:
         self._hr_buf.extend(samples)
@@ -704,7 +735,7 @@ class SideProcessor:
                 flags.append("no_br")
             if med_std < self._presence.enter_threshold:
                 flags.append("low_signal")
-            cand = VitalsCandidate(self.side, ts, hr, hrv, br, quality, flags or None, hr_raw)
+            cand = VitalsCandidate(self.side, ts, hr, hrv, br, quality, flags or None, hr_raw, self.run_context)
             wrote = self.sink(cand) if self.sink is not None else cand.write(self.db_holder)
             log.info("vitals %s — HR=%.1f HRV=%.1f BR=%.1f q=%.2f", self.side,
                      hr or 0, hrv or 0, br or 0, quality)
@@ -781,6 +812,8 @@ def main() -> None:
     left.bed_occupied = lambda: bed.occupied(bed_mode.home_side() or "left")
     right.bed_occupied = lambda: bed.occupied(bed_mode.home_side() or "right")
     left.home_side = right.home_side = bed_mode.home_side
+    runtime = RuntimeCoordinator(db_holder, {"left": left, "right": right})
+    runtime_problem = None
     # Source selected once at startup: NatsFollower on new-firmware pods (NATS
     # reachable), else the unchanged .RAW tailer. Same decoded-record contract.
     follower = create_follower(RAW_DATA_DIR, _shutdown, poll_interval=0.01)
@@ -819,8 +852,16 @@ def main() -> None:
             if pump_gate.check(l_samples, r_samples):
                 continue
 
+            frame_time_ms = int(time.time() * 1000)
+            runtime.before_frame(bed_mode.home_side(), bed.occupied, frame_time_ms)
             left.ingest(l_samples)
             right.ingest(r_samples)
+            runtime.after_frame(frame_time_ms)
+            if runtime.problem != runtime_problem:
+                runtime_problem = runtime.problem
+                report_health("degraded" if runtime_problem else "healthy",
+                              "Biometric configuration fallback: " + runtime_problem if runtime_problem
+                              else "Biometric runtime configuration available")
 
     except Exception as e:
         log.exception("Fatal error in main loop: %s", e)
