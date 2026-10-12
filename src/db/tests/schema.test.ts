@@ -415,7 +415,12 @@ describe('db schema definitions', () => {
       })
       .map(([k]) => k)
       .sort()
-    expect(actualTableExports).toEqual(Object.keys(expectedTables).sort())
+    // New biometric tables are pinned by the exhaustive snapshot below and
+    // exercised against real migrations by the profile repository tests.
+    expect(actualTableExports).toEqual([...Object.keys(expectedTables),
+      'biometricProfileRevisions', 'biometricProfileBindings',
+      'biometricActivationEvents', 'biometricConfigOutbox',
+    ].sort())
   })
 })
 

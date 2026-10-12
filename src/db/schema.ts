@@ -360,3 +360,76 @@ export const baseSchedules = sqliteTable('base_schedules', {
   feedRate: integer('feed_rate').notNull().default(50),
   enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
 }, table => [uniqueIndex('base_schedules_day_time_side').on(table.dayOfWeek, table.time, table.side)])
+
+// Biometric algorithm personalization is configuration, not sensor calibration.
+// Immutable revisions survive biometric-history resets and artifact retention.
+export const biometricProfileRevisions = sqliteTable('biometric_profile_revisions', {
+  id: text('id').primaryKey(),
+  familyId: text('family_id').notNull(),
+  revision: integer('revision').notNull(),
+  side: text('side', { enum: ['left', 'right'] }).notNull(),
+  baseManifestHash: text('base_manifest_hash').notNull(),
+  baseManifest: text('base_manifest', { mode: 'json' }).notNull(),
+  overrides: text('overrides', { mode: 'json' }).notNull(),
+  resolved: text('resolved', { mode: 'json' }).notNull(),
+  resolvedHash: text('resolved_hash').notNull(),
+  dependencyHashes: text('dependency_hashes', { mode: 'json' }).notNull(),
+  parentRevisionId: text('parent_revision_id'),
+  origin: text('origin', { enum: ['manual', 'migration', 'agent', 'system'] }).notNull(),
+  requester: text('requester').notNull(),
+  idempotencyKey: text('idempotency_key').notNull(),
+  requestHash: text('request_hash').notNull(),
+  createdAtMs: integer('created_at_ms').notNull(),
+}, t => [
+  uniqueIndex('uq_biometric_profile_family_revision').on(t.familyId, t.revision),
+  uniqueIndex('uq_biometric_profile_idempotency').on(t.idempotencyKey),
+  index('idx_biometric_profile_side_created').on(t.side, t.createdAtMs),
+])
+
+export const biometricProfileBindings = sqliteTable('biometric_profile_bindings', {
+  side: text('side', { enum: ['left', 'right'] }).primaryKey(),
+  desiredRevisionId: text('desired_revision_id'), // null follows current shipped default
+  generation: integer('generation').notNull(),
+  previousRevisionId: text('previous_revision_id'),
+  updatedAtMs: integer('updated_at_ms').notNull(),
+})
+
+export const biometricActivationEvents = sqliteTable('biometric_activation_events', {
+  id: text('id').primaryKey(),
+  side: text('side', { enum: ['left', 'right'] }).notNull(),
+  generation: integer('generation').notNull(),
+  action: text('action', { enum: ['activate', 'reset', 'rollback', 'migration', 'fallback'] }).notNull(),
+  previousRevisionId: text('previous_revision_id'),
+  nextRevisionId: text('next_revision_id'),
+  previousHash: text('previous_hash').notNull(),
+  nextHash: text('next_hash').notNull(),
+  evaluationId: text('evaluation_id'),
+  evidence: text('evidence', { mode: 'json' }).notNull(),
+  requester: text('requester').notNull(),
+  state: text('state', { enum: ['saved', 'pending_delivery', 'pending_boundary', 'applied', 'failed'] }).notNull(),
+  reason: text('reason'),
+  idempotencyKey: text('idempotency_key').notNull(),
+  requestHash: text('request_hash').notNull(),
+  createdAtMs: integer('created_at_ms').notNull(),
+  updatedAtMs: integer('updated_at_ms').notNull(),
+}, t => [
+  uniqueIndex('uq_biometric_activation_generation').on(t.side, t.generation),
+  uniqueIndex('uq_biometric_activation_idempotency').on(t.idempotencyKey),
+])
+
+export const biometricConfigOutbox = sqliteTable('biometric_config_outbox', {
+  id: text('id').primaryKey(),
+  side: text('side', { enum: ['left', 'right'] }).notNull(),
+  generation: integer('generation').notNull(),
+  payload: text('payload', { mode: 'json' }).notNull(),
+  resolvedHash: text('resolved_hash').notNull(),
+  state: text('state', { enum: ['pending', 'delivered', 'failed'] }).notNull(),
+  attempts: integer('attempts').notNull().default(0),
+  nextAttemptAtMs: integer('next_attempt_at_ms').notNull(),
+  lastError: text('last_error'),
+  createdAtMs: integer('created_at_ms').notNull(),
+  deliveredAtMs: integer('delivered_at_ms'),
+}, t => [
+  uniqueIndex('uq_biometric_outbox_generation').on(t.side, t.generation),
+  index('idx_biometric_outbox_pending').on(t.state, t.nextAttemptAtMs),
+])

@@ -18,8 +18,9 @@ export const vitals = sqliteTable('vitals', {
   side: text('side', { enum: ['left', 'right'] }).notNull(),
   timestamp: integer('timestamp', { mode: 'timestamp' }).notNull(),
   heartRate: real('heart_rate'), // bpm — null if sensor data unreliable
-  hrv: real('hrv'), // ms RMSSD
+  hrv: real('hrv'), // ms — window_ibi_variability_v1, NOT clinical RMSSD
   breathingRate: real('breathing_rate'), // breaths/min
+  processingRunId: text('processing_run_id'), // null = legacy_unknown; never infer provenance
 }, t => [
   uniqueIndex('uq_vitals_side_timestamp').on(t.side, t.timestamp),
   // Retention pruning deletes WHERE timestamp < cutoff; without a plain
@@ -329,3 +330,36 @@ export const vitalsQuality = sqliteTable('vitals_quality', {
   // See idx_vitals_timestamp — retention pruning needs a timestamp seek.
   index('idx_vq_timestamp').on(t.timestamp),
 ])
+
+// Idempotent projection from the configuration DB. No cross-DB transaction.
+export const biometricRuntimeConfigs = sqliteTable('biometric_runtime_configs', {
+  side: text('side', { enum: ['left', 'right'] }).notNull(),
+  generation: integer('generation').notNull(),
+  resolvedHash: text('resolved_hash').notNull(),
+  payload: text('payload', { mode: 'json' }).notNull(),
+  boundary: text('boundary', { enum: ['immediate', 'next_session'] }).notNull(),
+  createdAtMs: integer('created_at_ms').notNull(),
+}, t => [uniqueIndex('uq_biometric_runtime_config').on(t.side, t.generation)])
+
+export const biometricRuntimeReceipts = sqliteTable('biometric_runtime_receipts', {
+  side: text('side', { enum: ['left', 'right'] }).notNull(),
+  component: text('component').notNull(),
+  generation: integer('generation').notNull(),
+  appliedHash: text('applied_hash').notNull(),
+  effectiveSampleTimeMs: integer('effective_sample_time_ms'),
+  state: text('state', { enum: ['pending_boundary', 'applied', 'failed'] }).notNull(),
+  error: text('error'),
+  heartbeatAtMs: integer('heartbeat_at_ms').notNull(),
+}, t => [uniqueIndex('uq_biometric_runtime_receipt').on(t.side, t.component, t.generation)])
+
+export const biometricProcessingRuns = sqliteTable('biometric_processing_runs', {
+  id: text('id').primaryKey(),
+  side: text('side', { enum: ['left', 'right'] }).notNull(),
+  kind: text('kind', { enum: ['live', 'shadow', 'replay'] }).notNull(),
+  bundle: text('bundle', { mode: 'json' }).notNull(),
+  configHash: text('config_hash').notNull(),
+  calibrationHash: text('calibration_hash'), // null explicitly means unavailable
+  inputIdentity: text('input_identity', { mode: 'json' }).notNull(),
+  startedAtMs: integer('started_at_ms').notNull(),
+  endedAtMs: integer('ended_at_ms'),
+}, t => [index('idx_biometric_processing_side_start').on(t.side, t.startedAtMs)])

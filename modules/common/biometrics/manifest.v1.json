@@ -1,0 +1,634 @@
+{
+  "id": "sleepypod-biometric-bundle",
+  "version": "1.0.0",
+  "schemaVersion": 1,
+  "canonicalization": "finite-binary64-json-v1",
+  "sampleRateHz": 500,
+  "hardware": [
+    "pod3",
+    "pod4",
+    "pod5"
+  ],
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "heart_rate": {
+        "type": "object",
+        "properties": {
+          "trackingToleranceBpm": {
+            "type": "number",
+            "minimum": 5,
+            "maximum": 30,
+            "default": 15,
+            "unit": "bpm",
+            "description": "Gaussian tracker consistency width; affects heart rate and downstream stages."
+          },
+          "trackingHistoryLength": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10,
+            "default": 5,
+            "unit": "windows",
+            "description": "Number of accepted heart-rate estimates retained by the tracker."
+          }
+        },
+        "required": [
+          "trackingToleranceBpm",
+          "trackingHistoryLength"
+        ],
+        "additionalProperties": false
+      },
+      "breathing_rate": {
+        "type": "object",
+        "properties": {
+          "intervalLowerRatio": {
+            "type": "number",
+            "minimum": 0.25,
+            "maximum": 0.9,
+            "default": 0.5,
+            "unit": "ratio",
+            "description": "Reject breathing intervals below this fraction of the median."
+          },
+          "intervalUpperRatio": {
+            "type": "number",
+            "minimum": 1.1,
+            "maximum": 2,
+            "default": 1.5,
+            "unit": "ratio",
+            "description": "Reject breathing intervals above this fraction of the median."
+          }
+        },
+        "required": [
+          "intervalLowerRatio",
+          "intervalUpperRatio"
+        ],
+        "additionalProperties": false
+      },
+      "hrv_index": {
+        "type": "object",
+        "properties": {
+          "harmonicTolerance": {
+            "type": "number",
+            "minimum": 0.05,
+            "maximum": 0.3,
+            "default": 0.18,
+            "unit": "ratio",
+            "description": "Tolerance for window IBI harmonic correction; does not produce beat-to-beat RMSSD."
+          },
+          "minimumWindows": {
+            "type": "integer",
+            "minimum": 10,
+            "maximum": 30,
+            "default": 10,
+            "unit": "windows",
+            "description": "Minimum accepted 10-second IBI windows before reporting the index."
+          }
+        },
+        "required": [
+          "harmonicTolerance",
+          "minimumWindows"
+        ],
+        "additionalProperties": false
+      },
+      "sleep_stages": {
+        "type": "object",
+        "properties": {
+          "engine": {
+            "type": "string",
+            "const": "rules"
+          },
+          "ruleset": {
+            "type": "object",
+            "properties": {
+              "outliers": {
+                "type": "object",
+                "properties": {
+                  "heartRate": {
+                    "type": "object",
+                    "properties": {
+                      "min": {
+                        "type": "number"
+                      },
+                      "max": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "min",
+                      "max"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "hrv": {
+                    "type": "object",
+                    "properties": {
+                      "min": {
+                        "type": "number"
+                      },
+                      "max": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "min",
+                      "max"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "breathingRate": {
+                    "type": "object",
+                    "properties": {
+                      "min": {
+                        "type": "number"
+                      },
+                      "max": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "min",
+                      "max"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "heartRateSpikeStdDevs": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 10
+                  }
+                },
+                "required": [
+                  "heartRate",
+                  "hrv",
+                  "breathingRate",
+                  "heartRateSpikeStdDevs"
+                ],
+                "additionalProperties": false
+              },
+              "lowSignalBelow": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "lowSignalRules": {
+                "maxItems": 32,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "stage": {
+                      "type": "string",
+                      "enum": [
+                        "wake",
+                        "light",
+                        "deep",
+                        "rem"
+                      ]
+                    },
+                    "when": {
+                      "maxItems": 8,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "metric": {
+                            "type": "string",
+                            "enum": [
+                              "hrRatio",
+                              "heartRate",
+                              "hrv",
+                              "breathingRate",
+                              "movement"
+                            ]
+                          },
+                          "op": {
+                            "type": "string",
+                            "enum": [
+                              "<",
+                              "<=",
+                              ">",
+                              ">="
+                            ]
+                          },
+                          "value": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "metric",
+                          "op",
+                          "value"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "stage",
+                    "when"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "rules": {
+                "maxItems": 32,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "stage": {
+                      "type": "string",
+                      "enum": [
+                        "wake",
+                        "light",
+                        "deep",
+                        "rem"
+                      ]
+                    },
+                    "when": {
+                      "maxItems": 8,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "metric": {
+                            "type": "string",
+                            "enum": [
+                              "hrRatio",
+                              "heartRate",
+                              "hrv",
+                              "breathingRate",
+                              "movement"
+                            ]
+                          },
+                          "op": {
+                            "type": "string",
+                            "enum": [
+                              "<",
+                              "<=",
+                              ">",
+                              ">="
+                            ]
+                          },
+                          "value": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "metric",
+                          "op",
+                          "value"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "stage",
+                    "when"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "fallback": {
+                "type": "string",
+                "enum": [
+                  "wake",
+                  "light",
+                  "deep",
+                  "rem"
+                ]
+              },
+              "smoothIsolatedEpochs": {
+                "type": "boolean"
+              },
+              "transitions": {
+                "maxItems": 16,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "from": {
+                      "type": "string",
+                      "enum": [
+                        "wake",
+                        "light",
+                        "deep",
+                        "rem"
+                      ]
+                    },
+                    "to": {
+                      "type": "string",
+                      "enum": [
+                        "wake",
+                        "light",
+                        "deep",
+                        "rem"
+                      ]
+                    },
+                    "via": {
+                      "type": "string",
+                      "enum": [
+                        "wake",
+                        "light",
+                        "deep",
+                        "rem"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "from",
+                    "to",
+                    "via"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "outliers",
+              "lowSignalBelow",
+              "lowSignalRules",
+              "rules",
+              "fallback",
+              "smoothIsolatedEpochs",
+              "transitions"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "engine",
+          "ruleset"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "required": [
+      "heart_rate",
+      "breathing_rate",
+      "hrv_index",
+      "sleep_stages"
+    ],
+    "additionalProperties": false
+  },
+  "defaults": {
+    "heart_rate": {
+      "trackingToleranceBpm": 15,
+      "trackingHistoryLength": 5
+    },
+    "breathing_rate": {
+      "intervalLowerRatio": 0.5,
+      "intervalUpperRatio": 1.5
+    },
+    "hrv_index": {
+      "harmonicTolerance": 0.18,
+      "minimumWindows": 10
+    },
+    "sleep_stages": {
+      "engine": "rules",
+      "ruleset": {
+        "outliers": {
+          "heartRate": {
+            "min": 45,
+            "max": 130
+          },
+          "hrv": {
+            "min": 1,
+            "max": 300
+          },
+          "breathingRate": {
+            "min": 8,
+            "max": 25
+          },
+          "heartRateSpikeStdDevs": 2
+        },
+        "lowSignalBelow": 0.3,
+        "lowSignalRules": [
+          {
+            "stage": "wake",
+            "when": [
+              {
+                "metric": "movement",
+                "op": ">",
+                "value": 200
+              }
+            ]
+          }
+        ],
+        "rules": [
+          {
+            "stage": "wake",
+            "when": [
+              {
+                "metric": "movement",
+                "op": ">",
+                "value": 200
+              }
+            ]
+          },
+          {
+            "stage": "deep",
+            "when": [
+              {
+                "metric": "hrRatio",
+                "op": "<",
+                "value": 0.92
+              }
+            ]
+          },
+          {
+            "stage": "rem",
+            "when": [
+              {
+                "metric": "hrRatio",
+                "op": ">=",
+                "value": 0.95
+              },
+              {
+                "metric": "hrv",
+                "op": "<",
+                "value": 25
+              },
+              {
+                "metric": "movement",
+                "op": "<",
+                "value": 30
+              }
+            ]
+          },
+          {
+            "stage": "rem",
+            "when": [
+              {
+                "metric": "hrRatio",
+                "op": ">=",
+                "value": 0.95
+              },
+              {
+                "metric": "movement",
+                "op": "<",
+                "value": 50
+              },
+              {
+                "metric": "hrv",
+                "op": "<",
+                "value": 40
+              }
+            ]
+          },
+          {
+            "stage": "wake",
+            "when": [
+              {
+                "metric": "hrRatio",
+                "op": ">=",
+                "value": 0.95
+              },
+              {
+                "metric": "movement",
+                "op": ">",
+                "value": 100
+              }
+            ]
+          }
+        ],
+        "fallback": "light",
+        "smoothIsolatedEpochs": true,
+        "transitions": [
+          {
+            "from": "wake",
+            "to": "deep",
+            "via": "light"
+          },
+          {
+            "from": "deep",
+            "to": "wake",
+            "via": "light"
+          },
+          {
+            "from": "deep",
+            "to": "rem",
+            "via": "light"
+          },
+          {
+            "from": "rem",
+            "to": "deep",
+            "via": "light"
+          }
+        ]
+      }
+    }
+  },
+  "orderedRanges": [
+    [
+      "sleep_stages",
+      "ruleset",
+      "outliers",
+      "heartRate"
+    ],
+    [
+      "sleep_stages",
+      "ruleset",
+      "outliers",
+      "hrv"
+    ],
+    [
+      "sleep_stages",
+      "ruleset",
+      "outliers",
+      "breathingRate"
+    ]
+  ],
+  "components": {
+    "piezo_preprocessing": {
+      "algorithmId": "piezo-presence-pump-v2",
+      "version": "1.0.0",
+      "runtime": "python3.10",
+      "requiredInputs": [
+        "dual-channel-piezo",
+        "pump-state",
+        "occupancy",
+        "sensor-calibration",
+        "side-mode"
+      ],
+      "dependencies": [],
+      "metricId": null,
+      "unit": null,
+      "description": "Shared presence, occupancy veto, pump gating and channel arbitration; not user tunable.",
+      "causal": true
+    },
+    "heart_rate": {
+      "algorithmId": "shs-tracker-v2",
+      "version": "1.0.0",
+      "runtime": "python3.10",
+      "requiredInputs": [
+        "piezo-30s"
+      ],
+      "dependencies": [
+        "piezo_preprocessing"
+      ],
+      "metricId": "heart_rate",
+      "unit": "bpm",
+      "description": "SHS heart-rate estimate with inter-window tracking.",
+      "causal": true
+    },
+    "breathing_rate": {
+      "algorithmId": "hilbert-envelope-v2",
+      "version": "1.0.0",
+      "runtime": "python3.10",
+      "requiredInputs": [
+        "piezo-60s"
+      ],
+      "dependencies": [
+        "piezo_preprocessing"
+      ],
+      "metricId": "breathing_rate",
+      "unit": "breaths/min",
+      "description": "Breathing rate from the cardiac-band amplitude envelope.",
+      "causal": true
+    },
+    "hrv_index": {
+      "algorithmId": "window-ibi-variability-v1",
+      "version": "1.0.0",
+      "runtime": "python3.10",
+      "requiredInputs": [
+        "piezo-300s"
+      ],
+      "dependencies": [
+        "piezo_preprocessing"
+      ],
+      "metricId": "window_ibi_variability_v1",
+      "unit": "ms",
+      "description": "Successive differences of window-level IBI estimates. Not clinical beat-to-beat RMSSD or SDNN.",
+      "causal": true
+    },
+    "sleep_stages": {
+      "algorithmId": "retrospective-stage-rules-v1",
+      "version": "1.0.0",
+      "runtime": "node",
+      "requiredInputs": [
+        "vitals",
+        "movement",
+        "piezo-calibration-quality"
+      ],
+      "dependencies": [
+        "heart_rate",
+        "breathing_rate",
+        "hrv_index"
+      ],
+      "metricId": "sleep_stages",
+      "unit": "stage",
+      "description": "Retrospective wake/light/deep/REM classification using nightly mean HR and neighboring epochs.",
+      "causal": false
+    }
+  },
+  "sourceHashes": {
+    "modules/piezo-processor/main.py": "c98bdb3d6ee38b5de5d36760238978a8fefe2153a0cdf3e82ea1872d2d0da34f",
+    "src/lib/sleep-stages.ts": "853f6b1f14618fbac11da43d3246b95aac55af8b782b2cbb1be3f7627bf560b4"
+  },
+  "dependencyHashes": {
+    "modules/piezo-processor/uv.lock": "2803397e553a32588071d6be84c2bce5326552da03076261f48afce0ba919869",
+    "pnpm-lock.yaml": "c2759776f923df62753fdbba112f174d39c0873c86fc87cbdb26566469f77318"
+  }
+}

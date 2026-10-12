@@ -9,6 +9,7 @@
  * every stored night.
  */
 import { z } from 'zod'
+import biometricContract from '../../modules/common/biometrics/manifest.v1.json'
 
 export const SLEEP_STAGES = ['wake', 'light', 'deep', 'rem'] as const
 
@@ -39,55 +40,53 @@ export const STAGE_METRIC_UNITS: Record<StageMetric, string> = {
   movement: '',
 }
 
-const stageSchema = z.enum(SLEEP_STAGES)
-const finite = z.number().finite()
+export interface StageCondition {
+  metric: StageMetric
+  op: StageOperator
+  value: number
+}
+export interface StageRule {
+  stage: typeof SLEEP_STAGES[number]
+  when: StageCondition[]
+}
+export interface StageTransition {
+  from: typeof SLEEP_STAGES[number]
+  to: typeof SLEEP_STAGES[number]
+  via: typeof SLEEP_STAGES[number]
+}
+export interface StageRuleset {
+  outliers: {
+    heartRate: { min: number, max: number }
+    hrv: { min: number, max: number }
+    breathingRate: { min: number, max: number }
+    heartRateSpikeStdDevs: number
+  }
+  lowSignalBelow: number
+  lowSignalRules: StageRule[]
+  rules: StageRule[]
+  fallback: typeof SLEEP_STAGES[number]
+  smoothIsolatedEpochs: boolean
+  transitions: StageTransition[]
+}
 
-const rangeSchema = z.object({ min: finite, max: finite }).strict()
-  .refine(r => r.min <= r.max, { message: 'min must be less than or equal to max' })
-
-export const stageConditionSchema = z.object({
-  metric: z.enum(STAGE_METRICS),
-  op: z.enum(STAGE_OPERATORS),
-  value: finite,
-}).strict()
-
-/** Matches when every condition holds. An empty `when` always matches. */
-export const stageRuleSchema = z.object({
-  stage: stageSchema,
-  when: z.array(stageConditionSchema).max(8),
-}).strict()
-
-export const stageTransitionSchema = z.object({
-  from: stageSchema,
-  to: stageSchema,
-  via: stageSchema,
-}).strict()
-
-export const stageRulesetSchema = z.object({
-  /** Readings outside these limits are dropped (set to null) before classifying. */
-  outliers: z.object({
-    heartRate: rangeSchema,
-    hrv: rangeSchema,
-    breathingRate: rangeSchema,
-    /** Drop a heart rate this many standard deviations from its 5-sample median; 0 disables. */
-    heartRateSpikeStdDevs: finite.min(0).max(10),
-  }).strict(),
-  /** Below this piezo calibration quality, `lowSignalRules` replace `rules`. */
-  lowSignalBelow: finite.min(0).max(1),
-  lowSignalRules: z.array(stageRuleSchema).max(32),
-  rules: z.array(stageRuleSchema).max(32),
-  /** Stage for an epoch no rule matches. */
-  fallback: stageSchema,
-  /** Replace a single epoch that differs from two matching neighbours (A-B-A → A-A-A). */
-  smoothIsolatedEpochs: z.boolean(),
-  /** A `from` epoch followed by a `to` epoch becomes `via` instead. */
-  transitions: z.array(stageTransitionSchema).max(16),
-}).strict()
-
-export type StageCondition = z.infer<typeof stageConditionSchema>
-export type StageRule = z.infer<typeof stageRuleSchema>
-export type StageTransition = z.infer<typeof stageTransitionSchema>
-export type StageRuleset = z.infer<typeof stageRulesetSchema>
+// Validation bounds and defaults come from the same artifact Python consumes.
+// The legacy API remains a typed Zod adapter over that contract.
+const rulesContract = biometricContract.parameters.properties.sleep_stages.properties.ruleset
+function contractSchema<T>(schema: unknown): z.ZodType<T, T> {
+  return z.fromJSONSchema(schema as Parameters<typeof z.fromJSONSchema>[0]) as z.ZodType<T, T>
+}
+export const stageConditionSchema = contractSchema<StageCondition>(rulesContract.properties.rules.items.properties.when.items)
+export const stageRuleSchema = contractSchema<StageRule>(rulesContract.properties.rules.items)
+export const stageTransitionSchema = contractSchema<StageTransition>(rulesContract.properties.transitions.items)
+export const stageRulesetSchema = contractSchema<StageRuleset>(rulesContract)
+  .superRefine((ruleset, context) => {
+    for (const path of biometricContract.orderedRanges) {
+      const metric = path[3] as keyof Pick<StageRuleset['outliers'], 'heartRate' | 'hrv' | 'breathingRate'>
+      if (ruleset.outliers[metric].min > ruleset.outliers[metric].max) {
+        context.addIssue({ code: 'custom', path: ['outliers', metric], message: 'min must be less than or equal to max' })
+      }
+    }
+  })
 
 /**
  * How a side's stages are classified. `engine` selects the classifier; the
@@ -107,53 +106,7 @@ export const STAGE_ENGINES: Record<StageEngine, { label: string, description: st
 }
 
 /** The iOS SleepAnalyzer port the pod has always used. */
-export const DEFAULT_STAGE_RULESET: StageRuleset = {
-  outliers: {
-    heartRate: { min: 45, max: 130 },
-    hrv: { min: 1, max: 300 },
-    breathingRate: { min: 8, max: 25 },
-    heartRateSpikeStdDevs: 2,
-  },
-  lowSignalBelow: 0.3,
-  lowSignalRules: [
-    { stage: 'wake', when: [{ metric: 'movement', op: '>', value: 200 }] },
-  ],
-  rules: [
-    { stage: 'wake', when: [{ metric: 'movement', op: '>', value: 200 }] },
-    { stage: 'deep', when: [{ metric: 'hrRatio', op: '<', value: 0.92 }] },
-    {
-      stage: 'rem',
-      when: [
-        { metric: 'hrRatio', op: '>=', value: 0.95 },
-        { metric: 'hrv', op: '<', value: 25 },
-        { metric: 'movement', op: '<', value: 30 },
-      ],
-    },
-    {
-      stage: 'rem',
-      when: [
-        { metric: 'hrRatio', op: '>=', value: 0.95 },
-        { metric: 'movement', op: '<', value: 50 },
-        { metric: 'hrv', op: '<', value: 40 },
-      ],
-    },
-    {
-      stage: 'wake',
-      when: [
-        { metric: 'hrRatio', op: '>=', value: 0.95 },
-        { metric: 'movement', op: '>', value: 100 },
-      ],
-    },
-  ],
-  fallback: 'light',
-  smoothIsolatedEpochs: true,
-  transitions: [
-    { from: 'wake', to: 'deep', via: 'light' },
-    { from: 'deep', to: 'wake', via: 'light' },
-    { from: 'deep', to: 'rem', via: 'light' },
-    { from: 'rem', to: 'deep', via: 'light' },
-  ],
-}
+export const DEFAULT_STAGE_RULESET: StageRuleset = stageRulesetSchema.parse(biometricContract.defaults.sleep_stages.ruleset)
 
 /** Movement only (actigraphy): ignores heart signals entirely. */
 export const MOVEMENT_ONLY_STAGE_RULESET: StageRuleset = {
