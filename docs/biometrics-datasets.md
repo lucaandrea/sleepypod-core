@@ -95,3 +95,22 @@ is serialized, including during an idempotent retry at the published quota.
 These are provisional storage limits, not a measured production replay policy.
 Dataset references, release/garbage collection, record inventory, and job
 admission must be integrated before this storage helper is exposed publicly.
+
+`raw_records.py` adds a bounded firmware-CBOR decoder and retained-file inventory.
+It supports the definite and indefinite maps/arrays/strings used by captured
+firmware, with explicit record-byte, string-byte, node-count and nesting limits.
+Container lengths are checked before allocation; duplicate/non-text map keys,
+semantic tags, malformed UTF-8 and trailing values are rejected. The retained
+iterator distinguishes clean end-of-file from a truncated outer RAW record and
+counts empty sequence placeholders toward its record limit.
+
+The inventory reports exact retained artifact identity, event-time bounds,
+relevant record counts, usable dual-channel frames, lost-marker counts,
+truncated sample tails, timestamp reversals and oversized channels. Its
+`ordered_waveform_available` flag means the retained records meet this driver's
+ordering and frame bounds; it does not establish continuous recording coverage,
+complete pump context, or availability of occupancy/calibration snapshots.
+Equal event timestamps are reported and preserved. Other sensor records are
+counted without being misrepresented as waveform support. Numerical sensor
+values retain CBOR float semantics; nonfinite or invalid event timestamps are
+reported as unavailable for ordered replay.
