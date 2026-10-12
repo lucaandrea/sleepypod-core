@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { Trans } from '@lingui/react/macro'
+import { ManualProfileActivation } from './ManualProfileActivation'
 import { trpc } from '@/src/utils/trpc'
 import { Button, Card, CardHeader, InlineError, Skeleton } from '@/src/components/ds'
 
@@ -68,6 +69,7 @@ export function ProfileComparison({ side, revisionId }: { side: 'left' | 'right'
             </>
           )
         : null}
+      <ManualProfileActivation side={side} revisionId={revisionId} review={reviewed && !stale && !current.warning ? { generation: reviewedGeneration, hash: diff.data.afterHash } : undefined} />
     </Card>
   )
 }

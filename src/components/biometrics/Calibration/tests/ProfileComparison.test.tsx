@@ -3,6 +3,7 @@ import { setupI18n } from '@lingui/core'
 import { I18nProvider } from '@lingui/react'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { ProfileComparison } from '../ProfileComparison'
+vi.mock('../ManualProfileActivation', () => ({ ManualProfileActivation: () => <p>Activation controls</p> }))
 const mock = vi.hoisted(() => ({ compare: vi.fn(), generation: 2, hash: 'before-hash', diff: undefined as unknown }))
 vi.mock('@/src/utils/trpc', () => ({ trpc: { biometricTuning: {
   getProfileOverview: { useQuery: () => ({ data: { desired: { hash: mock.hash, warning: null, binding: { generation: mock.generation, desiredRevisionId: 'saved-id' } } } }) },

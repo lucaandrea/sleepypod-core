@@ -34,16 +34,25 @@ msgstr "Aceptados: {0}; rechazados: {1}; duplicados: {2}; no evaluables: {3}; co
 msgid "Activation history"
 msgstr "Historial de activación"
 
-#: src/components/biometrics/Calibration/ProfileComparison.tsx:51
+#: src/components/biometrics/Calibration/ManualProfileActivation.tsx:62
+msgid "Activation request saved. Processor acknowledgement is reported separately below."
+msgstr "Solicitud de activación guardada. La confirmación del procesador se indica por separado a continuación."
+
+#: src/components/biometrics/Calibration/ManualProfileActivation.tsx:36
+msgid "Activation timing"
+msgstr "Momento de activación"
+
+#: src/components/biometrics/Calibration/ProfileComparison.tsx:52
 msgid "After"
 msgstr "Después"
 
-#: src/components/biometrics/Calibration/ProfileComparison.tsx:38
+#: src/components/biometrics/Calibration/ProfileComparison.tsx:39
 msgid "After configuration hash"
 msgstr "Hash de configuración posterior"
 
 #: src/components/biometrics/Calibration/CalibrationHistory.tsx:18
 #: src/components/biometrics/Calibration/CalibrationOverview.tsx:17
+#: src/components/biometrics/Calibration/ManualProfileActivation.tsx:59
 msgid "Applied"
 msgstr "Aplicado"
 
@@ -51,11 +60,15 @@ msgstr "Aplicado"
 msgid "Apply profile"
 msgstr "Aplicar perfil"
 
-#: src/components/biometrics/Calibration/ProfileComparison.tsx:50
+#: src/components/biometrics/Calibration/ManualProfileActivation.tsx:48
+msgid "Apply unvalidated revision"
+msgstr "Aplicar revisión sin validar"
+
+#: src/components/biometrics/Calibration/ProfileComparison.tsx:51
 msgid "Before"
 msgstr "Antes"
 
-#: src/components/biometrics/Calibration/ProfileComparison.tsx:36
+#: src/components/biometrics/Calibration/ProfileComparison.tsx:37
 msgid "Before configuration hash"
 msgstr "Hash de configuración anterior"
 
@@ -71,7 +84,7 @@ msgstr "Frecuencia respiratoria"
 msgid "Calibration views"
 msgstr "Vistas de calibración"
 
-#: src/components/biometrics/Calibration/ProfileComparison.tsx:26
+#: src/components/biometrics/Calibration/ProfileComparison.tsx:27
 msgid "Candidate changes"
 msgstr "Cambios del candidato"
 
@@ -87,15 +100,19 @@ msgstr "Error al guardar el candidato."
 msgid "Candidate saved: {saved}"
 msgstr "Candidato guardado: {saved}"
 
+#: src/components/biometrics/Calibration/ManualProfileActivation.tsx:72
+msgid "Check Overview for current processor health; a past acknowledgement does not prove current health."
+msgstr "Consulte Resumen para ver el estado actual del procesador; una confirmación anterior no demuestra el estado actual."
+
 #: src/components/biometrics/Calibration/CalibrationOverview.tsx:16
 msgid "Clock mismatch"
 msgstr "Desajuste de reloj"
 
-#: src/components/biometrics/Calibration/ProfileComparison.tsx:26
+#: src/components/biometrics/Calibration/ProfileComparison.tsx:27
 msgid "Compare against the saved profile. This is a configuration comparison, not validation evidence."
 msgstr "Compare con el perfil guardado. Esta comparación de configuración no demuestra validación."
 
-#: src/components/biometrics/Calibration/ProfileComparison.tsx:29
+#: src/components/biometrics/Calibration/ProfileComparison.tsx:30
 msgid "Compare with saved profile"
 msgstr "Comparar con el perfil guardado"
 
@@ -187,6 +204,7 @@ msgstr "Caducada"
 
 #: src/components/biometrics/Calibration/CalibrationHistory.tsx:18
 #: src/components/biometrics/Calibration/CalibrationOverview.tsx:15
+#: src/components/biometrics/Calibration/ManualProfileActivation.tsx:59
 msgid "Failed"
 msgstr "Fallido"
 
@@ -225,6 +243,14 @@ msgstr "Historial"
 msgid "HRV index"
 msgstr "Índice de VFC"
 
+#: src/components/biometrics/Calibration/ManualProfileActivation.tsx:46
+msgid "I intend to apply this exact revision without validation evidence."
+msgstr "Quiero aplicar esta revisión exacta sin evidencia de validación."
+
+#: src/components/biometrics/Calibration/ManualProfileActivation.tsx:39
+msgid "Immediate processing boundary"
+msgstr "Próximo límite de procesamiento"
+
 #: src/components/biometrics/Calibration/CalibrationReferences.tsx:99
 msgid "Import accepted records and omit rejected records"
 msgstr "Importar los registros aceptados y omitir los rechazados"
@@ -252,6 +278,14 @@ msgstr "Inspeccionar mediciones"
 #: src/components/biometrics/Calibration/ReferenceLibrary.tsx:61
 msgid "Keep import"
 msgstr "Conservar importación"
+
+#: src/components/biometrics/Calibration/ManualProfileActivation.tsx:30
+msgid "Manual activation"
+msgstr "Activación manual"
+
+#: src/components/biometrics/Calibration/ManualProfileActivation.tsx:31
+msgid "Manual application is unvalidated. It can change heart rate, breathing rate, the HRV index, and dependent sleep stages."
+msgstr "La aplicación manual no está validada. Puede cambiar la frecuencia cardíaca, la frecuencia respiratoria, el índice de VFC y las fases del sueño dependientes."
 
 #: src/components/biometrics/Calibration/CalibrationOverview.tsx:53
 msgid "Measured sensor calibration"
@@ -286,6 +320,14 @@ msgstr "Perfiles recientes"
 msgid "Next records"
 msgstr "Registros siguientes"
 
+#: src/components/biometrics/Calibration/ManualProfileActivation.tsx:38
+msgid "Next session boundary"
+msgstr "Límite de la próxima sesión"
+
+#: src/components/biometrics/Calibration/ManualProfileActivation.tsx:42
+msgid "Next session waits for a known empty-bed boundary. Immediate application still waits for a safe processing boundary."
+msgstr "La próxima sesión espera un límite con la cama vacía confirmada. La aplicación inmediata también espera un límite seguro de procesamiento."
+
 #: src/components/biometrics/Calibration/ReferenceTimeSpan.tsx:21
 msgid "No accepted time range."
 msgstr "No hay un intervalo de tiempo aceptado."
@@ -294,7 +336,7 @@ msgstr "No hay un intervalo de tiempo aceptado."
 msgid "No activation history for this side."
 msgstr "No hay historial de activación para este lado."
 
-#: src/components/biometrics/Calibration/ProfileComparison.tsx:67
+#: src/components/biometrics/Calibration/ProfileComparison.tsx:68
 msgid "No override intent changes."
 msgstr "No hay cambios en la intención de personalización."
 
@@ -302,7 +344,7 @@ msgstr "No hay cambios en la intención de personalización."
 msgid "No reference imports for this side."
 msgstr "No hay importaciones de referencia para este lado."
 
-#: src/components/biometrics/Calibration/ProfileComparison.tsx:42
+#: src/components/biometrics/Calibration/ProfileComparison.tsx:43
 msgid "No resolved value changes."
 msgstr "No hay cambios en los valores resueltos."
 
@@ -324,6 +366,7 @@ msgstr "Mediciones de referencia normalizadas"
 
 #: src/components/biometrics/Calibration/CalibrationOverview.tsx:15
 #: src/components/biometrics/Calibration/CalibrationOverview.tsx:26
+#: src/components/biometrics/Calibration/ManualProfileActivation.tsx:59
 msgid "Not reported"
 msgstr "Sin información"
 
@@ -343,7 +386,7 @@ msgstr "Perfiles anteriores"
 msgid "Overridden"
 msgstr "Personalizado"
 
-#: src/components/biometrics/Calibration/ProfileComparison.tsx:66
+#: src/components/biometrics/Calibration/ProfileComparison.tsx:67
 msgid "Override intent can change even when the resolved value stays the same."
 msgstr "La intención de personalización puede cambiar aunque el valor resuelto sea el mismo."
 
@@ -351,7 +394,7 @@ msgstr "La intención de personalización puede cambiar aunque el valor resuelto
 msgid "Overview"
 msgstr "Resumen"
 
-#: src/components/biometrics/Calibration/ProfileComparison.tsx:49
+#: src/components/biometrics/Calibration/ProfileComparison.tsx:50
 msgid "Parameter"
 msgstr "Parámetro"
 
@@ -448,13 +491,17 @@ msgstr "Cambio solicitado"
 msgid "Resolved configuration hash"
 msgstr "Hash de la configuración resuelta"
 
-#: src/components/biometrics/Calibration/ProfileComparison.tsx:46
+#: src/components/biometrics/Calibration/ProfileComparison.tsx:47
 msgid "Resolved parameter changes"
 msgstr "Cambios en los parámetros resueltos"
 
 #: src/components/biometrics/Calibration/CalibrationHistory.tsx:17
 msgid "Restore previous profile"
 msgstr "Restaurar el perfil anterior"
+
+#: src/components/biometrics/Calibration/ManualProfileActivation.tsx:48
+msgid "Retry exact activation request"
+msgstr "Reintentar la solicitud exacta de activación"
 
 #: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:90
 msgid "Review candidate"
@@ -548,7 +595,7 @@ msgstr "Valores predeterminados del sistema"
 msgid "The HRV index measures window IBI variability. It is not clinical beat-to-beat RMSSD, and incompatible reference metrics cannot validate it."
 msgstr "El índice de VFC mide la variabilidad de los intervalos entre latidos dentro de una ventana. No es la RMSSD clínica entre latidos consecutivos y no puede validarse con métricas de referencia incompatibles."
 
-#: src/components/biometrics/Calibration/ProfileComparison.tsx:31
+#: src/components/biometrics/Calibration/ProfileComparison.tsx:32
 msgid "The saved profile changed. Compare again before reviewing these changes."
 msgstr "El perfil guardado ha cambiado. Vuelva a comparar antes de revisar estos cambios."
 
@@ -559,6 +606,10 @@ msgstr "El perfil guardado o las definiciones de parámetros son incompatibles c
 #: src/components/biometrics/Calibration/ReferenceTimeSpan.tsx:26
 msgid "This is the first-to-last record span, not continuous coverage or overlap with pod readings."
 msgstr "Este intervalo abarca del primer al último registro; no indica cobertura continua ni coincidencia con las lecturas del pod."
+
+#: src/components/biometrics/Calibration/ManualProfileActivation.tsx:71
+msgid "This request has been superseded by another profile change."
+msgstr "Otro cambio de perfil ha sustituido esta solicitud."
 
 #: src/components/biometrics/Calibration/CalibrationHistory.tsx:23
 msgid "Times shown in {timezone}"
@@ -591,11 +642,13 @@ msgstr "Valor"
 
 #: src/components/biometrics/Calibration/CalibrationHistory.tsx:18
 #: src/components/biometrics/Calibration/CalibrationOverview.tsx:17
+#: src/components/biometrics/Calibration/ManualProfileActivation.tsx:59
 msgid "Waiting for a processing boundary"
 msgstr "Esperando un límite de procesamiento"
 
 #: src/components/biometrics/Calibration/CalibrationHistory.tsx:18
 #: src/components/biometrics/Calibration/CalibrationOverview.tsx:16
+#: src/components/biometrics/Calibration/ManualProfileActivation.tsx:59
 msgid "Waiting for delivery"
 msgstr "Esperando la entrega"
 
