@@ -146,6 +146,10 @@ msgstr "Current"
 msgid "Data format"
 msgstr "Data format"
 
+#: src/components/biometrics/Calibration/ProfileRecovery.tsx:31
+msgid "Default recovery configuration hash"
+msgstr "Default recovery configuration hash"
+
 #: src/components/biometrics/Calibration/ReferenceLibrary.tsx:52
 msgid "Delete import"
 msgstr "Delete import"
@@ -426,6 +430,10 @@ msgstr "Personalized profile"
 msgid "Pinned configuration and overrides"
 msgstr "Pinned configuration and overrides"
 
+#: src/components/biometrics/Calibration/ProfileRecovery.tsx:29
+msgid "Preserved incompatible revision"
+msgstr "Preserved incompatible revision"
+
 #: src/components/biometrics/Calibration/CalibrationReferences.tsx:78
 msgid "Preview import"
 msgstr "Preview import"
@@ -503,7 +511,7 @@ msgstr "Resolved configuration hash"
 msgid "Resolved parameter changes"
 msgstr "Resolved parameter changes"
 
-#: src/components/biometrics/Calibration/ProfileRecovery.tsx:15
+#: src/components/biometrics/Calibration/ProfileRecovery.tsx:17
 msgid "Restore a profile"
 msgstr "Restore a profile"
 
@@ -526,15 +534,15 @@ msgstr "Retry exact activation request"
 msgid "Review candidate"
 msgstr "Review candidate"
 
-#: src/components/biometrics/Calibration/ProfileRecovery.tsx:15
+#: src/components/biometrics/Calibration/ProfileRecovery.tsx:17
 msgid "Review changes before requesting system defaults or the exact previous profile."
 msgstr "Review changes before requesting system defaults or the exact previous profile."
 
-#: src/components/biometrics/Calibration/ProfileRecovery.tsx:19
+#: src/components/biometrics/Calibration/ProfileRecovery.tsx:21
 msgid "Review previous profile"
 msgstr "Review previous profile"
 
-#: src/components/biometrics/Calibration/ProfileRecovery.tsx:18
+#: src/components/biometrics/Calibration/ProfileRecovery.tsx:20
 msgid "Review system defaults"
 msgstr "Review system defaults"
 
@@ -627,11 +635,16 @@ msgstr "System defaults"
 msgid "The HRV index measures window IBI variability. It is not clinical beat-to-beat RMSSD, and incompatible reference metrics cannot validate it."
 msgstr "The HRV index measures window IBI variability. It is not clinical beat-to-beat RMSSD, and incompatible reference metrics cannot validate it."
 
+#: src/components/biometrics/Calibration/ProfileRecovery.tsx:27
+msgid "The pinned profile is incompatible. Its revision will be preserved, but a valid before-and-after comparison is unavailable."
+msgstr "The pinned profile is incompatible. Its revision will be preserved, but a valid before-and-after comparison is unavailable."
+
 #: src/components/biometrics/Calibration/ProfileComparison.tsx:33
 msgid "The saved profile changed. Compare again before reviewing these changes."
 msgstr "The saved profile changed. Compare again before reviewing these changes."
 
 #: src/components/biometrics/Calibration/ProfileComparison.tsx:33
+#: src/components/biometrics/Calibration/ProfileRecovery.tsx:34
 msgid "The saved profile changed. Select a recovery action again to make a new request."
 msgstr "The saved profile changed. Select a recovery action again to make a new request."
 

@@ -146,6 +146,10 @@ msgstr ""
 msgid "Data format"
 msgstr ""
 
+#: src/components/biometrics/Calibration/ProfileRecovery.tsx:31
+msgid "Default recovery configuration hash"
+msgstr ""
+
 #: src/components/biometrics/Calibration/ReferenceLibrary.tsx:52
 msgid "Delete import"
 msgstr ""
@@ -426,6 +430,10 @@ msgstr ""
 msgid "Pinned configuration and overrides"
 msgstr ""
 
+#: src/components/biometrics/Calibration/ProfileRecovery.tsx:29
+msgid "Preserved incompatible revision"
+msgstr ""
+
 #: src/components/biometrics/Calibration/CalibrationReferences.tsx:78
 msgid "Preview import"
 msgstr ""
@@ -503,7 +511,7 @@ msgstr ""
 msgid "Resolved parameter changes"
 msgstr ""
 
-#: src/components/biometrics/Calibration/ProfileRecovery.tsx:15
+#: src/components/biometrics/Calibration/ProfileRecovery.tsx:17
 msgid "Restore a profile"
 msgstr ""
 
@@ -526,15 +534,15 @@ msgstr ""
 msgid "Review candidate"
 msgstr ""
 
-#: src/components/biometrics/Calibration/ProfileRecovery.tsx:15
+#: src/components/biometrics/Calibration/ProfileRecovery.tsx:17
 msgid "Review changes before requesting system defaults or the exact previous profile."
 msgstr ""
 
-#: src/components/biometrics/Calibration/ProfileRecovery.tsx:19
+#: src/components/biometrics/Calibration/ProfileRecovery.tsx:21
 msgid "Review previous profile"
 msgstr ""
 
-#: src/components/biometrics/Calibration/ProfileRecovery.tsx:18
+#: src/components/biometrics/Calibration/ProfileRecovery.tsx:20
 msgid "Review system defaults"
 msgstr ""
 
@@ -627,11 +635,16 @@ msgstr ""
 msgid "The HRV index measures window IBI variability. It is not clinical beat-to-beat RMSSD, and incompatible reference metrics cannot validate it."
 msgstr ""
 
+#: src/components/biometrics/Calibration/ProfileRecovery.tsx:27
+msgid "The pinned profile is incompatible. Its revision will be preserved, but a valid before-and-after comparison is unavailable."
+msgstr ""
+
 #: src/components/biometrics/Calibration/ProfileComparison.tsx:33
 msgid "The saved profile changed. Compare again before reviewing these changes."
 msgstr ""
 
 #: src/components/biometrics/Calibration/ProfileComparison.tsx:33
+#: src/components/biometrics/Calibration/ProfileRecovery.tsx:34
 msgid "The saved profile changed. Select a recovery action again to make a new request."
 msgstr ""
 

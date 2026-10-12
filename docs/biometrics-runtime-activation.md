@@ -17,6 +17,13 @@ atomically; a publication failure leaves the original state intact. Valid
 legacy customizations still require migration before any new binding, including
 reset. Recovery does not claim processor adoption.
 
+For a bound revision whose engine is unavailable, the web recovery view shows
+its preserved revision ID and the current default recovery hash. It cannot
+produce a valid before/after diff of the unavailable engine and explicitly says
+so. The user can request an acknowledged, generation-checked reset to defaults;
+the old revision remains the previous binding. Rollback to that revision still
+requires its engine to be compatible and never silently substitutes defaults.
+
 `projectRuntimeConfig` validates the manifest/configuration identity and writes
 an immutable side/generation projection into the biometrics database. Duplicate
 identical delivery succeeds; a different payload for an existing generation

@@ -95,3 +95,16 @@ it('does not use malformed legacy recovery to bypass preservation or atomic publ
   expect(db.select().from(schema.biometricActivationEvents).all()).toEqual([])
   expect(db.select().from(schema.sideSettings).get()?.stageClassifier).toEqual({ broken: true })
 })
+
+it('resets an unavailable pinned engine without deleting or relabeling its previous revision', () => {
+  const input = request()
+  requestManualActivation(db, input)
+  sqlite.prepare('UPDATE biometric_profile_revisions SET base_manifest_hash = ? WHERE id = ?').run('old-engine', input.revisionId)
+  expect(profiles.effective('left').warning).toContain('PROFILE_INCOMPATIBLE')
+  const event = requestManualActivation(db, { ...input, action: 'reset', revisionId: null, expectedGeneration: 1, expectedResolvedHash: configHash(defaultConfig), idempotencyKey: 'reset-unavailable' })
+  expect(event).toMatchObject({ generation: 2, nextRevisionId: null, previousRevisionId: input.revisionId })
+  expect(profiles.binding('left').previousRevisionId).toBe(input.revisionId)
+  expect(profiles.getRevision(input.revisionId).baseManifestHash).toBe('old-engine')
+  expect(() => requestManualActivation(db, { ...input, action: 'rollback', expectedGeneration: 2, idempotencyKey: 'rollback-unavailable' })).toThrow('PROFILE_INCOMPATIBLE')
+  expect(profiles.binding('left').generation).toBe(2)
+})
