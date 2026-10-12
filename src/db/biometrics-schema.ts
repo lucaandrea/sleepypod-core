@@ -482,3 +482,44 @@ export const biometricHoldoutAccesses = sqliteTable('biometric_holdout_accesses'
   endMs: integer('end_ms').notNull(),
   accessedAtMs: integer('accessed_at_ms').notNull(),
 }, t => [index('idx_biometric_holdout_side_start').on(t.side, t.startMs)])
+
+// Inspection records are evidence about archive bytes at scan time, not retained
+// input availability. A changed source creates a different inspected identity.
+export const biometricRawSources = sqliteTable('biometric_raw_sources', {
+  id: text('id').primaryKey(),
+  sourceName: text('source_name').notNull(),
+  artifactHash: text('artifact_hash').notNull(),
+  descriptor: text('descriptor', { mode: 'json' }).notNull(),
+  inventoryVersion: text('inventory_version').notNull(),
+  inventory: text('inventory', { mode: 'json' }).notNull(),
+  firstEventMs: integer('first_event_ms'),
+  lastEventMs: integer('last_event_ms'),
+  inspectedAtMs: integer('inspected_at_ms').notNull(),
+  unavailableAtMs: integer('unavailable_at_ms'),
+}, t => [
+  uniqueIndex('idx_biometric_raw_source_identity').on(t.sourceName, t.artifactHash, t.inventoryVersion),
+  index('idx_biometric_raw_source_window').on(t.firstEventMs, t.lastEventMs),
+])
+
+// Content-addressed bytes may be shared by multiple immutable datasets. A
+// tombstone preserves identity after release; file existence is checked by I/O.
+export const biometricRawArtifacts = sqliteTable('biometric_raw_artifacts', {
+  contentHash: text('content_hash').primaryKey(),
+  name: text('name').notNull().unique(),
+  compressedBytes: integer('compressed_bytes').notNull(),
+  expandedBytes: integer('expanded_bytes').notNull(),
+  createdAtMs: integer('created_at_ms').notNull(),
+  releasedAtMs: integer('released_at_ms'),
+})
+
+export const biometricDatasetRawArtifacts = sqliteTable('biometric_dataset_raw_artifacts', {
+  id: text('id').primaryKey(),
+  datasetId: text('dataset_id').notNull().references(() => biometricDatasets.id),
+  artifactHash: text('artifact_hash').notNull().references(() => biometricRawArtifacts.contentHash),
+  position: integer('position').notNull(),
+  releasedAtMs: integer('released_at_ms'),
+}, t => [
+  uniqueIndex('idx_biometric_dataset_raw_identity').on(t.datasetId, t.artifactHash),
+  uniqueIndex('idx_biometric_dataset_raw_position').on(t.datasetId, t.position),
+  index('idx_biometric_raw_artifact_references').on(t.artifactHash, t.releasedAtMs),
+])

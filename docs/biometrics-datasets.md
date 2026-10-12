@@ -123,3 +123,20 @@ expanded-size validation and record inventory. Its result explicitly states
 publication. A source name or successful inspection alone is never evidence
 that a dataset has frozen input bytes. Persisted inventory caching and dataset
 references remain responsible for tracking inspected versus retained state.
+
+Migration `0028_retained_raw_artifacts` adds separate tables for inspected
+sources, content-addressed retained artifacts, and ordered dataset references.
+`RawSourceCatalog` validates the Python inspection contract, including matching
+hashes, event bounds, record counts and ordered-waveform eligibility. Repeating
+an inspection refreshes its timestamp; different evidence for identical bytes
+and inventory version fails. Replacing a filename preserves the old identity
+and marks it unavailable. A late failure for an old identity cannot mark newer
+bytes unavailable.
+
+Catalog queries return at most 50 entries per page for potential event-time
+overlap. Unexpired inspection evidence is labelled `requires_reverification`,
+not available or retained: selected copies still require the expected-descriptor
+check. Source scans do not create datasets or retained-artifact rows. Shared
+artifact references have unique dataset positions and cannot dangle; release
+and file garbage collection must coordinate those references before deletion.
+The catalog and schema do not yet enable public waveform jobs.
