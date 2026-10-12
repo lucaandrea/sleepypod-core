@@ -116,12 +116,20 @@ class RawArtifactStore:
         finally:
             os.close(fd)
 
-    def retain(self, archive_directory, name, expected=None):
-        """Copy one selected archive filename; paths and symlinks are rejected."""
+    def retain(self, archive_directory, name, expected=None, *, publish=None):
+        """Copy selected bytes and optionally publish references under the file lock.
+
+        A trusted publisher must commit its SQLite references before returning.
+        It must not acquire this lock again or hold a SQLite transaction before
+        calling retain: all lifecycle operations lock files before SQLite.
+        Failed publication leaves an unreferenced file, never partial bytes.
+        """
         if not isinstance(name, str) or not SOURCE_NAME.fullmatch(name):
             raise ValueError('Invalid RAW archive filename')
         if expected is not None and not isinstance(expected, RawArtifact):
             raise ValueError('Expected an inspected RAW descriptor')
+        if publish is not None and (not callable(publish) or expected is None):
+            raise ValueError('Publication requires a callable and inspected descriptor')
         archive = Path(archive_directory)
         if archive.is_symlink() or not archive.is_dir():
             raise ValueError('Invalid RAW archive directory')
@@ -172,6 +180,8 @@ class RawArtifactStore:
                 if destination.exists() or destination.is_symlink():
                     os.close(self._verify(descriptor))
                     self._sync_directory()
+                    if publish is not None:
+                        publish(descriptor)
                     return descriptor
                 # Include the unpublished copy when checking the publication quota.
                 used, count = self._usage()
@@ -181,6 +191,8 @@ class RawArtifactStore:
                     raise ValueError('Retained RAW storage quota exceeded')
                 os.replace(temporary, destination)
                 self._sync_directory()
+                if publish is not None:
+                    publish(descriptor)
                 return descriptor
             finally:
                 os.close(source_fd)
@@ -221,3 +233,59 @@ class RawArtifactStore:
             fd = self._verify(descriptor)
             with os.fdopen(fd, 'rb') as source, gzip.GzipFile(fileobj=source) as stream:
                 yield BoundedRawReader(stream, descriptor.expanded_bytes)
+
+    def collect_released(self, connection, *, now_ms, minimum_age_ms=3_600_000,
+                         maximum_entries=10_000):
+        """Collect only explicitly released metadata with no live references.
+
+        Unknown files and metadata are preserved, including crash orphans. The
+        file mutex also covers readers and reference publication. BEGIN
+        IMMEDIATE prevents reference changes between the last check and unlink.
+        Tombstones remain in SQLite; scanning present files avoids repeatedly
+        selecting absent tombstones and starving later eligible files.
+        """
+        if (type(now_ms) is not int or now_ms < 0 or type(minimum_age_ms) is not int
+                or minimum_age_ms < 0 or type(maximum_entries) is not int
+                or maximum_entries <= 0):
+            raise ValueError('Invalid RAW collection bounds')
+        if connection.in_transaction:
+            raise ValueError('RAW collection requires an independent transaction')
+        removed = []
+        with self._lock():
+            # Bound traversal before deleting anything; never partially process
+            # a directory that exceeds the agreed inventory budget.
+            names = []
+            with os.scandir(self.directory) as entries:
+                for count, entry in enumerate(entries, 1):
+                    if count > maximum_entries:
+                        raise ValueError('RAW collection entry limit exceeded')
+                    if ARTIFACT_NAME.fullmatch(entry.name):
+                        names.append(entry.name)
+            connection.execute('BEGIN IMMEDIATE')
+            try:
+                for name in sorted(names):
+                    eligible = connection.execute(
+                        """SELECT content_hash FROM biometric_raw_artifacts AS artifact
+                           WHERE name = ? AND released_at_ms IS NOT NULL
+                             AND released_at_ms <= ?
+                             AND NOT EXISTS (
+                               SELECT 1 FROM biometric_dataset_raw_artifacts AS reference
+                               WHERE reference.artifact_hash = artifact.content_hash
+                                 AND reference.released_at_ms IS NULL)""",
+                        (name, now_ms - minimum_age_ms)).fetchone()
+                    if eligible is None:
+                        continue
+                    if name != eligible[0] + '.RAW.gz':
+                        raise ValueError('Released RAW metadata identity mismatch')
+                    path = self.directory / name
+                    if not stat.S_ISREG(path.lstat().st_mode):
+                        raise ValueError('Released RAW artifact must be a regular file')
+                    path.unlink()
+                    removed.append(name)
+                if removed:
+                    self._sync_directory()
+                connection.commit()
+            except BaseException:
+                connection.rollback()
+                raise
+        return removed

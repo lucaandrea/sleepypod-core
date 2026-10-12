@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { and, desc, eq, gte, inArray, lt, or, sql } from 'drizzle-orm'
+import { and, desc, eq, gte, inArray, isNull, lt, or, sql } from 'drizzle-orm'
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3'
 import type { z } from 'zod'
 import * as schema from '@/src/db/biometrics-schema'
@@ -141,9 +141,21 @@ export class DatasetStore {
         .innerJoin(schema.biometricExperiments, eq(schema.biometricBacktestJobs.experimentId, schema.biometricExperiments.id))
         .where(and(eq(schema.biometricExperiments.datasetId, id), inArray(schema.biometricBacktestJobs.state, ['queued', 'running', 'cancel_requested', 'interrupted']))).get()
       if (active) throw new ReferenceInputError('REVISION_CONFLICT', 'Cancel or finish jobs using this dataset before releasing its inputs')
+      const releasedAtMs = this.now()
+      const references = schema.biometricDatasetRawArtifacts
+      const artifacts = schema.biometricRawArtifacts
+      tx.update(references).set({ releasedAtMs })
+        .where(and(eq(references.datasetId, id), isNull(references.releasedAtMs))).run()
+      // Mark storage eligible for collection only after its last live reference
+      // is released. The file collector separately serializes with publication.
+      tx.update(artifacts).set({ releasedAtMs }).where(and(isNull(artifacts.releasedAtMs),
+        inArray(artifacts.contentHash, tx.select({ hash: references.artifactHash }).from(references).where(eq(references.datasetId, id))),
+        sql`NOT EXISTS (SELECT 1 FROM biometric_dataset_raw_artifacts AS live
+          WHERE live.artifact_hash = ${artifacts.contentHash} AND live.released_at_ms IS NULL)`,
+      )).run()
       const tombstone = { released: true }
       const byteLength = Buffer.byteLength(JSON.stringify(dataset.manifest)) + Buffer.byteLength(JSON.stringify(tombstone))
-      const released = tx.update(schema.biometricDatasets).set({ snapshot: tombstone, byteLength, releasedAtMs: this.now() })
+      const released = tx.update(schema.biometricDatasets).set({ snapshot: tombstone, byteLength, releasedAtMs })
         .where(eq(schema.biometricDatasets.id, id)).returning().get()
       return this.describe(released)
     }, { behavior: 'immediate' })

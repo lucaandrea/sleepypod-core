@@ -140,3 +140,26 @@ check. Source scans do not create datasets or retained-artifact rows. Shared
 artifact references have unique dataset positions and cannot dangle; release
 and file garbage collection must coordinate those references before deletion.
 The catalog and schema do not yet enable public waveform jobs.
+
+Dataset release now atomically tombstones its RAW references with the dataset
+snapshot. Queued, running, cancellation-pending and interrupted jobs prevent
+release. An artifact becomes eligible for collection only when its last live
+reference is released; releasing another dataset never changes that timestamp.
+This eligibility timestamp does not itself mean the file has been deleted.
+
+`RawArtifactStore.collect_released` holds the same process lock as verified
+readers and publication, then takes a SQLite immediate transaction while it
+checks eligibility and unlinks files. The default one-hour grace period is
+injectable. Directory traversal is bounded before any deletion; the collector
+preserves unknown files/metadata, rejects symlinks and mismatched identities,
+and keeps database tombstones. It scans present files, so previously collected
+rows cannot starve later eligible files. Unregistered crash orphans are not yet
+collected automatically.
+
+The internal `retain(..., expected=descriptor, publish=callback)` hook allows a
+trusted publisher to commit references before releasing the file lock, including
+when reusing existing bytes. Publishers must lock files before beginning their
+SQLite transaction, commit before returning, and never reacquire the file lock
+inside the callback. Publication failure leaves complete bytes for recovery.
+The public waveform dataset creation path and scheduled collector still need
+to be wired through this protocol before waveform replay is enabled.
