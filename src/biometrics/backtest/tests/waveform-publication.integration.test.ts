@@ -11,7 +11,8 @@ import * as schema from '@/src/db/biometrics-schema'
 import { defaultConfig } from '../../algorithms/registry'
 import { DatasetStore } from '../datasets'
 import { datasetManifestSchema } from '../contracts'
-import { prepareWaveformDataset } from '../waveform-dataset'
+import { prepareSelectedWaveformDataset } from '../waveform-selection'
+import { RawSourceCatalog } from '../raw-catalog'
 import { runWaveformChild } from '../waveform-child'
 import type { z } from 'zod'
 import type { retainedWaveformInputSchema } from '../waveform-contracts'
@@ -42,37 +43,39 @@ records=[{'type':'frzHealth','ts':start/1000,'left':{'pumpRpm':0},'right':{'pump
 for second in range(150):
     samples=(np.sin((np.arange(500)+second*500)/500*2*np.pi*1.2)*1000000).astype('<i4').tobytes()
     records.append({'type':'piezo-dual','ts':start/1000+second,'left1':samples,'right1':bytes(2000)})
-artifacts=[]; selections=[]
+artifacts=[]; inspections=[]
 for index, group in enumerate([records[:76],records[76:]]):
     name=str(index)+'.RAW.gz'
     payload=b''.join(cbor2.dumps({'seq':number,'data':cbor2.dumps(record)}) for number,record in enumerate(group))
     (root/name).write_bytes(gzip.compress(payload,mtime=0))
     inspected=ArchiveSource(root,name).inspect()
     descriptor=asdict(inspected['artifact']); inventory=inspected['inventory']
-    selections.append({'source_name':name,'artifact':descriptor})
+    inspections.append({**inspected,'artifact':descriptor})
     artifacts.append({'artifact':descriptor,'first_event_ms':inventory['first_event_ms'],'last_event_ms':inventory['last_event_ms']})
-print(json.dumps({'start':start,'artifacts':artifacts,'selections':selections}))
+print(json.dumps({'start':start,'artifacts':artifacts,'inspections':inspections}))
 `, archive], { env: environment, encoding: 'utf8', timeout: 20000, maxBuffer: 65536 })) as {
       start: number
+      inspections: unknown[]
       artifacts: Input['artifacts']
-      selections: Array<{ source_name: string, artifact: Input['artifacts'][number]['artifact'] }>
     }
     const input: Input = { version: 'retained-waveform-input-v1', retained_start_ms: fixture.start,
       score_start_ms: fixture.start + 60000, score_end_ms: fixture.start + 150000, artifacts: fixture.artifacts,
-      contexts: [{ start_ms: fixture.start, end_ms: fixture.start + 150000, active_sides: ['left'],
-        left_occupied: true, right_occupied: false, pump_context_known: true }] }
+      contexts: [] }
     db.insert(schema.sleepRecords).values({ id: 1, side: 'left', enteredBedAt: new Date(input.score_start_ms),
-      leftBedAt: new Date(input.score_end_ms), sleepDurationSeconds: 90, timesExitedBed: 0 }).run()
+      leftBedAt: new Date(input.score_end_ms), sleepDurationSeconds: 90, timesExitedBed: 0, presentIntervals: [[input.score_start_ms / 1000, input.score_end_ms / 1000]] }).run()
     db.insert(schema.vitals).values({ side: 'left', timestamp: new Date(input.score_start_ms), heartRate: 65 }).run()
     const now = input.score_end_ms + 10000
     const datasets = new DatasetStore(db, () => now)
     const base = datasets.read(datasets.create({ side: 'left', subjectId: 'fixture', sessionIds: [1],
       referenceImportIds: [], timezone: 'UTC', idempotencyKey: 'processed' }).id)
     const manifest = datasetManifestSchema.parse(base.manifest)
-    const prepared = prepareWaveformDataset({ ...base, manifest }, [{ cohortId: manifest.splitProtocol.assignments[0].cohortId, input }], 'waveform', now)
+    const catalog = new RawSourceCatalog(db)
+    const sourceIds = fixture.inspections.map(inspection => catalog.record(inspection))
+    const { prepared, selections } = prepareSelectedWaveformDataset(db, { parentDatasetId: base.id, expectedContentHash: base.contentHash,
+      cohorts: [{ cohortId: manifest.splitProtocol.assignments[0].cohortId, sourceIds }], idempotencyKey: 'waveform' }, now)
     const publish = () => JSON.parse(execFileSync(python, ['-B', '-m', 'common.biometrics.publication_worker',
       '--database', database, '--archive-directory', archive, '--retained-directory', retained], {
-      env: environment, input: JSON.stringify({ version: 'waveform-publication-work-v1', prepared, selections: fixture.selections }),
+      env: environment, input: JSON.stringify({ version: 'waveform-publication-work-v1', prepared, selections }),
       encoding: 'utf8', timeout: 20000, maxBuffer: 65536,
     })) as { type: string, id: string, contentHash: string, available: boolean }
     const published = publish()
