@@ -41,3 +41,31 @@ availability, not measured signal support duration. Overlapping selected
 sessions retain original row IDs; evaluators must deduplicate shared rows and
 score one independent night cohort rather than treating sessions as independent
 nights. Retrospective classification remains retrospective.
+
+## Shared waveform replay driver
+
+`modules/common/biometrics/replay.py` provides the internal streaming driver for
+retained waveform experiments. Callers supply immutable per-logical-side
+configurations, integer Unix-millisecond record times, recorded sleeper mode
+and occupancy snapshots, pump-context availability, and an experiment output
+sink. The driver does not read current bindings, occupancy files, or databases.
+It processes both physical channels in left-before-right order using the same
+sample repair, pump/presence gates, stateful estimator, and single-sleeper
+arbitration as the live adapter.
+
+Records must be ordered within the retained half-open time window. Each channel
+is capped at 5,000 int32 samples per record; processor buffers retain only their
+fixed windows. Pre-roll is processed, but outputs are scored only inside the
+requested half-open scoring window. The output records preserve computed
+logical side, physical source side, configuration hash, event timestamp,
+quality, and flags, including when a held candidate is flushed after a mode
+change. Context and outputs are immutable; outputs stream to the supplied sink.
+
+Cold-start state and replacing live arrival time with recorded event time are
+explicit limitations. Missing mode, occupancy, or pump context adds separate
+limitations; unknown mode uses a disclosed two-side fallback. Less than five
+minutes of pre-roll is also flagged. These labels do not claim exact historical
+parity. The shared driver does not itself discover or retain RAW files, capture
+historical context, or authorize a public waveform job. Those integration and
+resource checks are required before dataset capabilities may advertise raw
+signal replay.
