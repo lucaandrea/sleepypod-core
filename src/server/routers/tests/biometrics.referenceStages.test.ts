@@ -50,6 +50,21 @@ describe('biometrics reference stages', () => {
 
   afterEach(() => raw.close())
 
+  it('records new legacy rows through the normalized service with limited provenance', async () => {
+    await caller.importReferenceStages({ side: 'left', source: 'apple_watch', segments: night })
+    expect(raw.prepare('SELECT count(*) AS total FROM reference_imports').get()).toEqual({ total: 1 })
+    expect(raw.prepare('SELECT count(*) AS total FROM reference_measurements').get()).toEqual({ total: night.length })
+    expect(raw.prepare('SELECT count(*) AS total FROM reference_stages WHERE import_id IS NOT NULL').get()).toEqual({ total: night.length })
+    expect(db.select().from(schema.referenceImports).get()?.subjectId).toBe('legacy_unknown:left')
+  })
+
+  it('rolls back legacy writes if normalized provenance cannot be saved', async () => {
+    raw.exec('CREATE TRIGGER fail_reference BEFORE INSERT ON reference_measurements BEGIN SELECT RAISE(ABORT, \'disk full\'); END')
+    await expect(caller.importReferenceStages({ side: 'left', source: 'apple_watch', segments: night })).rejects.toThrow()
+    expect(raw.prepare('SELECT count(*) AS total FROM reference_stages').get()).toEqual({ total: 0 })
+    expect(raw.prepare('SELECT count(*) AS total FROM reference_imports').get()).toEqual({ total: 0 })
+  })
+
   describe('importReferenceStages', () => {
     it('writes every segment with second-resolution timestamps', async () => {
       const out = await caller.importReferenceStages({ side: 'left', source: 'apple_watch', segments: night })

@@ -27,7 +27,7 @@ describe('getOpenApiDocument', () => {
         + 'There is no authentication: the API trusts the local network '
         + '(the pod firewalls WAN exposure via iptables — see /health/system). '
         + 'Do not port-forward or reverse-proxy this API to the internet.',
-      tags: ['Health', 'Device', 'Settings', 'Schedules', 'Biometrics', 'System', 'Environment', 'Raw', 'Calibration', 'Water Level'],
+      tags: ['Health', 'Device', 'Settings', 'Schedules', 'Biometrics', 'Biometric tuning', 'System', 'Environment', 'Raw', 'Calibration', 'Water Level'],
       securitySchemes: {},
     })
   })

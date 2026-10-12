@@ -1,3 +1,4 @@
+import { sql } from 'drizzle-orm'
 import { index, integer, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
 
 /**
@@ -232,7 +233,7 @@ export const healthRuns = sqliteTable('health_runs', {
 
 /**
  * Externally scored sleep stages (Apple Watch SleepAnalysis posted by the iOS
- * app) used as ground truth for calibrating the pod's stage classifier. One
+ * app) used as a named comparison source for the pod's stage classifier. One
  * row per contiguous segment. A repeated post of the same night is a no-op:
  * the unique key is the segment start per side and source.
  */
@@ -244,6 +245,7 @@ export const referenceStages = sqliteTable('reference_stages', {
   end: integer('end', { mode: 'timestamp' }).notNull(),
   stage: text('stage', { enum: ['wake', 'light', 'deep', 'rem'] }).notNull(),
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
+  importId: text('import_id'), // nullable for exports imported before provenance support
 }, t => [
   // Start before source so getReferenceStages (side + start range, no source)
   // can seek and read in order instead of scanning the side and sorting.
@@ -266,6 +268,7 @@ export const referenceVitals = sqliteTable('reference_vitals', {
   timestamp: integer('timestamp', { mode: 'timestamp' }).notNull(),
   heartRate: real('heart_rate').notNull(), // bpm
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
+  importId: text('import_id'), // nullable for exports imported before provenance support
 }, t => [
   // Timestamp before source so getReferenceVitals (side + time range, no
   // source) seeks and reads in order.
@@ -363,3 +366,51 @@ export const biometricProcessingRuns = sqliteTable('biometric_processing_runs', 
   startedAtMs: integer('started_at_ms').notNull(),
   endedAtMs: integer('ended_at_ms'),
 }, t => [index('idx_biometric_processing_side_start').on(t.side, t.startedAtMs)])
+
+export const referenceImports = sqliteTable('reference_imports', {
+  id: text('id').primaryKey(),
+  familyId: text('family_id').notNull(),
+  revision: integer('revision').notNull(),
+  supersedesImportId: text('supersedes_import_id'),
+  contentHash: text('content_hash').notNull(),
+  source: text('source').notNull(),
+  adapterVersion: text('adapter_version').notNull(),
+  side: text('side', { enum: ['left', 'right'] }).notNull(),
+  subjectId: text('subject_id').notNull(),
+  timePolicy: text('time_policy', { mode: 'json' }).notNull(),
+  summary: text('summary', { mode: 'json' }).notNull(),
+  overlapPolicy: text('overlap_policy').notNull().default('exclude_conflicts'),
+  acceptedCount: integer('accepted_count').notNull(),
+  rejectedCount: integer('rejected_count').notNull(),
+  createdAtMs: integer('created_at_ms').notNull(),
+  deletedAtMs: integer('deleted_at_ms'),
+}, t => [
+  uniqueIndex('uq_reference_import_active_root').on(t.contentHash).where(sql`${t.deletedAtMs} IS NULL AND ${t.supersedesImportId} IS NULL`),
+  uniqueIndex('uq_reference_import_active_correction').on(t.contentHash, t.supersedesImportId).where(sql`${t.deletedAtMs} IS NULL`),
+  uniqueIndex('uq_reference_import_revision').on(t.familyId, t.revision),
+  index('idx_reference_import_side_created').on(t.side, t.createdAtMs, t.id),
+])
+
+export const referenceMeasurements = sqliteTable('reference_measurements', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  importId: text('import_id').notNull().references(() => referenceImports.id),
+  recordKey: text('record_key').notNull(),
+  side: text('side', { enum: ['left', 'right'] }).notNull(),
+  metric: text('metric').notNull(),
+  value: real('value'),
+  stage: text('stage'),
+  unit: text('unit').notNull(),
+  startMs: integer('start_ms').notNull(),
+  endMs: integer('end_ms').notNull(),
+  temporalKind: text('temporal_kind', { enum: ['point', 'interval'] }).notNull(),
+  aggregation: text('aggregation').notNull(),
+  windowMs: integer('window_ms'),
+  quality: real('quality'),
+  scorable: integer('scorable', { mode: 'boolean' }).notNull(),
+  exclusions: text('exclusions', { mode: 'json' }).notNull(),
+  original: text('original', { mode: 'json' }).notNull(),
+}, t => [
+  uniqueIndex('uq_reference_measurement_key').on(t.importId, t.recordKey),
+  index('idx_reference_measurement_side_metric_start').on(t.side, t.metric, t.startMs),
+  index('idx_reference_measurement_import_id').on(t.importId, t.id),
+])

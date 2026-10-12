@@ -20,6 +20,7 @@ import {
   RESTLESS_SCORE_MIN,
   pickMinBucketNonStillEpochs,
 } from '@/src/lib/movement'
+import { recordLegacyReferenceImport } from '@/src/biometrics/references/legacy'
 import { getOccupancy } from '@/src/lib/occupancy'
 
 /**
@@ -908,8 +909,8 @@ export const biometricsRouter = router({
 
   /**
    * Import reference sleep stages scored by another device (Apple Watch
-   * SleepAnalysis, posted by the iOS app each morning). These are ground-truth
-   * labels for calibrating the pod's classifier; they never feed getSleepStages.
+   * SleepAnalysis, posted by the iOS app each morning). These are reference
+   * labels for comparing the pod's classifier; they never feed getSleepStages.
    *
    * Idempotent: a segment identical to a stored one (same side, source, start,
    * end and stage) is skipped, so re-posting a night is a no-op. A post whose
@@ -988,12 +989,14 @@ export const biometricsRouter = router({
             })
           }
 
-          return tx
+          const accepted = tx
             .insert(referenceStages)
             .values(rows)
             .onConflictDoNothing()
             .returning()
             .all()
+          recordLegacyReferenceImport(biometricsDb, 'stages', accepted)
+          return accepted
         })
 
         return { written: inserted.length }
@@ -1097,12 +1100,11 @@ export const biometricsRouter = router({
           timestamp: new Date(s.timestamp * 1000),
           heartRate: s.heartRate,
         }))
-        const inserted = biometricsDb
-          .insert(referenceVitals)
-          .values(rows)
-          .onConflictDoNothing()
-          .returning()
-          .all()
+        const inserted = biometricsDb.transaction((tx) => {
+          const accepted = tx.insert(referenceVitals).values(rows).onConflictDoNothing().returning().all()
+          recordLegacyReferenceImport(biometricsDb, 'vitals', accepted)
+          return accepted
+        })
         return { written: inserted.length }
       }
       catch (error) {

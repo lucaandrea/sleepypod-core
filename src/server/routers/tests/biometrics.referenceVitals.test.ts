@@ -49,6 +49,21 @@ describe('biometrics reference vitals', () => {
 
   afterEach(() => raw.close())
 
+  it('records new legacy rows through the normalized service with limited provenance', async () => {
+    await caller.importReferenceVitals({ side: 'left', source: 'apple_watch', samples: samples })
+    expect(raw.prepare('SELECT count(*) AS total FROM reference_imports').get()).toEqual({ total: 1 })
+    expect(raw.prepare('SELECT count(*) AS total FROM reference_measurements').get()).toEqual({ total: samples.length })
+    expect(raw.prepare('SELECT count(*) AS total FROM reference_vitals WHERE import_id IS NOT NULL').get()).toEqual({ total: samples.length })
+    expect(db.select().from(schema.referenceImports).get()?.subjectId).toBe('legacy_unknown:left')
+  })
+
+  it('rolls back legacy writes if normalized provenance cannot be saved', async () => {
+    raw.exec('CREATE TRIGGER fail_reference BEFORE INSERT ON reference_measurements BEGIN SELECT RAISE(ABORT, \'disk full\'); END')
+    await expect(caller.importReferenceVitals({ side: 'left', source: 'apple_watch', samples: samples })).rejects.toThrow()
+    expect(raw.prepare('SELECT count(*) AS total FROM reference_vitals').get()).toEqual({ total: 0 })
+    expect(raw.prepare('SELECT count(*) AS total FROM reference_imports').get()).toEqual({ total: 0 })
+  })
+
   describe('importReferenceVitals', () => {
     it('writes every sample with second-resolution timestamps', async () => {
       const out = await caller.importReferenceVitals({ side: 'left', source: 'apple_watch', samples })
