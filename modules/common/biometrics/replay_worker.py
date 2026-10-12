@@ -65,19 +65,23 @@ def run(input_stream, output_stream, retained_directory):
     emit({'type': 'result', 'result': result})
 
 
+def configure_process_limits():
+    # Provisional execution caps; qualified scheduling/admission belongs to
+    # the parent. It must also enforce wall time and kill on cancellation.
+    resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
+    resource.setrlimit(resource.RLIMIT_CPU, (120, 121))
+    resource.setrlimit(resource.RLIMIT_NOFILE, (64, 64))
+    os.nice(19)
+    for key in ('OPENBLAS_NUM_THREADS', 'OMP_NUM_THREADS', 'MKL_NUM_THREADS', 'NUMEXPR_NUM_THREADS'):
+        os.environ[key] = '1'
+
+
 def main():
     parser = argparse.ArgumentParser(description='Replay fixed retained waveform inputs')
     parser.add_argument('--retained-directory', required=True)
     args = parser.parse_args()
     try:
-        # Provisional execution caps; qualified scheduling/admission belongs to
-        # the parent. It must also enforce wall time and kill on cancellation.
-        resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
-        resource.setrlimit(resource.RLIMIT_CPU, (120, 121))
-        resource.setrlimit(resource.RLIMIT_NOFILE, (64, 64))
-        os.nice(19)
-        for key in ('OPENBLAS_NUM_THREADS', 'OMP_NUM_THREADS', 'MKL_NUM_THREADS', 'NUMEXPR_NUM_THREADS'):
-            os.environ[key] = '1'
+        configure_process_limits()
         run(sys.stdin.buffer, sys.stdout.buffer, args.retained_directory)
         return 0
     except Exception:

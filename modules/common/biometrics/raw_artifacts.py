@@ -121,88 +121,125 @@ class RawArtifactStore:
             os.close(fd)
 
     def retain(self, archive_directory, name, expected=None, *, publish=None):
-        """Copy selected bytes and optionally publish references under the file lock.
+        """Retain one source, optionally committing references under the lock."""
+        if publish is not None and (not callable(publish) or expected is None):
+            raise ValueError('Publication requires a callable and inspected descriptor')
+        if self.read_only:
+            raise ValueError('Retained RAW store is read-only')
+        with self._lock():
+            descriptor = self._retain_locked(archive_directory, name, expected)
+            if publish is not None:
+                publish(descriptor)
+            return descriptor
 
-        A trusted publisher must commit its SQLite references before returning.
-        It must not acquire this lock again or hold a SQLite transaction before
-        calling retain: all lifecycle operations lock files before SQLite.
-        Failed publication leaves an unreferenced file, never partial bytes.
+    def retain_batch(self, archive_directory, selections, *, publish):
+        """Publish a whole selected batch while holding the file lifecycle lock.
+
+        The trusted callback begins and commits SQLite only after every copy is
+        verified. Never enter with an existing SQLite transaction or reacquire
+        the file lock inside the callback. A failed callback leaves complete
+        unreferenced files, but cannot publish a partial dataset.
         """
+        if self.read_only:
+            raise ValueError('Retained RAW store is read-only')
+        if not isinstance(selections, (list, tuple)) or not 1 <= len(selections) <= self.limits.max_artifacts or not callable(publish):
+            raise ValueError('Invalid retained RAW batch')
+        frozen, hashes = [], set()
+        for selection in selections:
+            if not isinstance(selection, (list, tuple)) or len(selection) != 2:
+                raise ValueError('Expected source name and inspected descriptor')
+            name, expected = selection
+            if not isinstance(name, str) or not SOURCE_NAME.fullmatch(name) or not isinstance(expected, RawArtifact):
+                raise ValueError('Invalid inspected RAW selection')
+            if expected.sha256 in hashes:
+                raise ValueError('Select each retained artifact once')
+            hashes.add(expected.sha256)
+            frozen.append((name, expected))
+        with self._lock():
+            descriptors = tuple(self._retain_locked(archive_directory, name, expected) for name, expected in frozen)
+            return publish(descriptors)
+
+    def _retain_locked(self, archive_directory, name, expected):
         if self.read_only:
             raise ValueError('Retained RAW store is read-only')
         if not isinstance(name, str) or not SOURCE_NAME.fullmatch(name):
             raise ValueError('Invalid RAW archive filename')
         if expected is not None and not isinstance(expected, RawArtifact):
             raise ValueError('Expected an inspected RAW descriptor')
-        if publish is not None and (not callable(publish) or expected is None):
-            raise ValueError('Publication requires a callable and inspected descriptor')
+        # Exact retained bytes are independent of the rolling source. Reuse
+        # them only after checking both compressed identity and expanded size.
+        if expected is not None:
+            cached = self.directory / expected.name
+            if cached.exists() or cached.is_symlink():
+                fd = self._verify(expected)
+                with os.fdopen(fd, 'rb') as source, gzip.GzipFile(fileobj=source) as stream:
+                    reader = BoundedRawReader(stream, expected.expanded_bytes)
+                    while reader.read(CHUNK):
+                        pass
+                self._sync_directory()
+                return expected
         archive = Path(archive_directory)
         if archive.is_symlink() or not archive.is_dir():
             raise ValueError('Invalid RAW archive directory')
-        with self._lock():
-            # A dead copier can leave a private temporary file, never a published
-            # descriptor. The shared lock proves no other copier is using it.
-            for entry in self.directory.iterdir():
-                if PART_NAME.fullmatch(entry.name):
-                    entry.unlink()
-            source_fd = os.open(archive / name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
-            temporary = self.directory / ('.part-' + uuid.uuid4().hex)
-            try:
-                before = _regular(source_fd)
-                if before.st_size > self.limits.compressed_bytes:
-                    raise ValueError('RAW compressed byte limit exceeded')
-                if shutil.disk_usage(self.directory).free - before.st_size < self.limits.minimum_free_bytes:
-                    raise ValueError('Insufficient free space for retained RAW input')
-                digest, copied = hashlib.sha256(), 0
-                target_fd = os.open(temporary, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
-                with os.fdopen(target_fd, 'wb') as target:
-                    while True:
-                        data = os.read(source_fd, CHUNK)
-                        if not data:
-                            break
-                        copied += len(data)
-                        if copied > self.limits.compressed_bytes:
-                            raise ValueError('RAW compressed byte limit exceeded')
-                        digest.update(data)
-                        target.write(data)
-                    target.flush()
-                    os.fsync(target.fileno())
-                if _identity(before) != _identity(_regular(source_fd)):
-                    raise ValueError('RAW archive changed during retention')
-                expanded = 0
-                with gzip.open(temporary, 'rb') as stream:
-                    while True:
-                        data = stream.read(min(CHUNK, self.limits.expanded_bytes - expanded + 1))
-                        if not data:
-                            break
-                        expanded += len(data)
-                        if expanded > self.limits.expanded_bytes:
-                            raise ValueError('RAW expanded byte limit exceeded')
-                sha256 = digest.hexdigest()
-                descriptor = RawArtifact(sha256 + '.RAW.gz', sha256, copied, expanded)
-                if expected is not None and descriptor != expected:
-                    raise ValueError('RAW archive changed since inspection')
-                destination = self.directory / descriptor.name
-                if destination.exists() or destination.is_symlink():
-                    os.close(self._verify(descriptor))
-                    self._sync_directory()
-                    if publish is not None:
-                        publish(descriptor)
-                    return descriptor
-                # Include the unpublished copy when checking the publication quota.
-                used, count = self._usage()
-                if count >= self.limits.max_artifacts:
-                    raise ValueError('Retained RAW artifact count exceeded')
-                if used > self.limits.total_bytes:
-                    raise ValueError('Retained RAW storage quota exceeded')
-                os.replace(temporary, destination)
+        # A dead copier can leave a private temporary file, never a published
+        # descriptor. The shared lock proves no other copier is using it.
+        for entry in self.directory.iterdir():
+            if PART_NAME.fullmatch(entry.name):
+                entry.unlink()
+        source_fd = os.open(archive / name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        temporary = self.directory / ('.part-' + uuid.uuid4().hex)
+        try:
+            before = _regular(source_fd)
+            if before.st_size > self.limits.compressed_bytes:
+                raise ValueError('RAW compressed byte limit exceeded')
+            if shutil.disk_usage(self.directory).free - before.st_size < self.limits.minimum_free_bytes:
+                raise ValueError('Insufficient free space for retained RAW input')
+            digest, copied = hashlib.sha256(), 0
+            target_fd = os.open(temporary, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+            with os.fdopen(target_fd, 'wb') as target:
+                while True:
+                    data = os.read(source_fd, CHUNK)
+                    if not data:
+                        break
+                    copied += len(data)
+                    if copied > self.limits.compressed_bytes:
+                        raise ValueError('RAW compressed byte limit exceeded')
+                    digest.update(data)
+                    target.write(data)
+                target.flush()
+                os.fsync(target.fileno())
+            if _identity(before) != _identity(_regular(source_fd)):
+                raise ValueError('RAW archive changed during retention')
+            expanded = 0
+            with gzip.open(temporary, 'rb') as stream:
+                while True:
+                    data = stream.read(min(CHUNK, self.limits.expanded_bytes - expanded + 1))
+                    if not data:
+                        break
+                    expanded += len(data)
+                    if expanded > self.limits.expanded_bytes:
+                        raise ValueError('RAW expanded byte limit exceeded')
+            sha256 = digest.hexdigest()
+            descriptor = RawArtifact(sha256 + '.RAW.gz', sha256, copied, expanded)
+            if expected is not None and descriptor != expected:
+                raise ValueError('RAW archive changed since inspection')
+            destination = self.directory / descriptor.name
+            if destination.exists() or destination.is_symlink():
+                os.close(self._verify(descriptor))
                 self._sync_directory()
-                if publish is not None:
-                    publish(descriptor)
                 return descriptor
-            finally:
-                os.close(source_fd)
-                temporary.unlink(missing_ok=True)
+            # Include the unpublished copy when checking the publication quota.
+            used, count = self._usage()
+            if count >= self.limits.max_artifacts:
+                raise ValueError('Retained RAW artifact count exceeded')
+            if used > self.limits.total_bytes:
+                raise ValueError('Retained RAW storage quota exceeded')
+            os.replace(temporary, destination)
+            self._sync_directory()
+            return descriptor
+        finally:
+            os.close(source_fd)
+            temporary.unlink(missing_ok=True)
 
     def _verify(self, descriptor):
         if not isinstance(descriptor, RawArtifact):

@@ -18,7 +18,7 @@ import { datasetSnapshotSchema } from './contracts'
 
 const LIMITS = { rows: 20000, datasetBytes: 8 * 1024 * 1024, totalBytes: 64 * 1024 * 1024 }
 
-/** Small retained processed snapshots. Waveform pinning is a separate capability. */
+/** Creates processed snapshots; reads and releases both retained dataset formats. */
 export class DatasetStore {
   constructor(private readonly db: BetterSQLite3Database<typeof schema>, private readonly now = Date.now) {}
 

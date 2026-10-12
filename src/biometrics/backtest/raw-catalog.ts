@@ -7,9 +7,8 @@ import { ReferenceInputError } from '../references/time'
 
 const count = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER)
 const hash = z.string().regex(/^[a-f0-9]{64}$/)
-export const rawArtifactDescriptorSchema = z.object({
-  name: z.string(), sha256: hash, compressed_bytes: count, expanded_bytes: count,
-}).strict().refine(value => value.name === `${value.sha256}.RAW.gz`, 'Artifact name must match its content hash')
+export { rawArtifactDescriptorSchema } from './waveform-contracts'
+import { rawArtifactDescriptorSchema } from './waveform-contracts'
 const channel = z.object({ samples: count, lost_markers: count, truncated_tail_bytes: count }).strict()
 export const rawInventorySchema = z.object({
   version: z.literal('retained-raw-inventory-v1'), artifact_sha256: hash,

@@ -187,3 +187,17 @@ def test_read_only_store_does_not_create_or_change_storage_and_rejects_mutations
     os.mkfifo(store.directory / '.lock')
     with pytest.raises(ValueError, match='regular file'):
         read_all(reader, descriptor)
+
+
+def test_reuses_exact_retained_bytes_without_the_original_archive_and_checks_expanded_size(tmp_path):
+    archive, store, _ = fixture(tmp_path)
+    descriptor = store.retain(archive, '1.RAW.gz')
+    (archive / '1.RAW.gz').unlink()
+    archive.rmdir()
+    seen = []
+    assert store.retain(archive, '1.RAW.gz', expected=descriptor, publish=seen.append) == descriptor
+    assert seen == [descriptor]
+    with pytest.raises(ValueError, match='expanded size mismatch'):
+        store.retain(archive, '1.RAW.gz', expected=replace(descriptor, expanded_bytes=descriptor.expanded_bytes + 1))
+    with pytest.raises(ValueError, match='expanded byte limit'):
+        store.retain(archive, '1.RAW.gz', expected=replace(descriptor, expanded_bytes=descriptor.expanded_bytes - 1))

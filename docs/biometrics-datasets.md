@@ -214,5 +214,38 @@ hashes, returning readings only after a final result and zero exit. A missing or
 failed worker never returns its provisional rows. Executable, module and retained
 storage locations are internal server configuration and must not be accepted
 from public requests. The transport is tested against the actual Python worker;
-it still needs the frozen dataset publisher and durable-job integration before
-public waveform capability can be enabled.
+the coordinator still needs to invoke the frozen dataset publisher and durable
+waveform jobs before public waveform capability can be enabled.
+
+Waveform dataset publication now has an internal complete path. The TypeScript
+preparer verifies a processed parent dataset, detaches its historical context,
+and creates a new `waveform-dataset-v1` snapshot with one frozen input per
+whole-night cohort. It preserves original observations and references, requires
+matching scoring windows, normalizes cohort order, and hashes the complete new
+snapshot. Shared artifacts must have identical descriptors and inspected event
+bounds across cohorts. The parent dataset remains independently readable.
+
+The fixed `common.biometrics.publication_worker` accepts a server-prepared row
+and inspected source selections, with database/archive/retained paths supplied
+only by server configuration. It opens an existing database, enables foreign
+keys, and uses `retain_batch` to hold the file lifecycle lock through all copies
+and reference publication. Copies and checksum/decompression verification finish
+before the SQLite immediate transaction. That transaction inserts the dataset,
+artifact metadata, and all ordered references together, enforcing the aggregate
+snapshot quota. A failed transaction rolls back every database write. Complete
+unreferenced files can remain after failure and still require orphan recovery.
+
+Identical retries return the original dataset, including a released tombstone;
+they do not resurrect it or require the rolling archives. A new dataset may
+reuse exact retained bytes after rechecking compressed identity and expanded
+size, even when the original archive directory has expired. Reusing an artifact
+clears its collection eligibility only in the transaction adding its new live
+references. Existing reference history and artifact creation time remain intact.
+
+The shared reader understands both processed and waveform snapshot versions and
+verifies their full content hashes. A committed integration test covers actual
+archive inspection → TypeScript preparation → Python publication → shared
+reader verification → Python numerical replay → release → collection, while
+checking that canonical observations and the parent dataset remain unchanged.
+Public `signalReplay` remains false until coordinator/API source selection and
+fenced waveform-job/report integration are wired to this publisher.

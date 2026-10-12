@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { waveformDatasetInputsSchema } from './waveform-contracts'
 import { nightBootstrapSchema } from './uncertainty-policy'
 import { normalizedMeasurementSchema } from '../references/contracts'
 const key = z.string().min(1).max(200)
@@ -22,7 +23,7 @@ export const enqueueBacktestSchema = z.object({
 const vitalSchema = z.object({ id: z.number().int(), timestampMs: z.number().int(), heartRate: z.number().nullable(),
   hrv: z.number().nullable(), breathingRate: z.number().nullable(), processingRunId: z.string().nullable() })
 const movementSchema = z.object({ id: z.number().int(), timestampMs: z.number().int(), totalMovement: z.number() })
-export const datasetSnapshotSchema = z.object({
+const processedDatasetSnapshotSchema = z.object({
   version: z.literal('processed-dataset-v1'), side: z.enum(['left', 'right']), subjectId: z.string(),
   sessions: z.array(z.object({ id: z.number().int(), startMs: z.number().int(), endMs: z.number().int(),
     sleepDurationSeconds: z.number(), timesExitedBed: z.number(), presentIntervals: z.unknown(), notPresentIntervals: z.unknown(),
@@ -33,13 +34,18 @@ export const datasetSnapshotSchema = z.object({
   processingRuns: z.array(z.object({ id: z.string(), side: z.string(), kind: z.string(), bundle: z.unknown(),
     configHash: z.string(), calibrationHash: z.string().nullable(), inputIdentity: z.unknown(), startedAtMs: z.number(), endedAtMs: z.number().nullable() })),
 })
+export const datasetSnapshotSchema = z.discriminatedUnion('version', [
+  processedDatasetSnapshotSchema,
+  processedDatasetSnapshotSchema.extend({ version: z.literal('waveform-dataset-v1'), waveformInputs: waveformDatasetInputsSchema }),
+])
 export type DatasetSnapshot = z.infer<typeof datasetSnapshotSchema>
 
 export const coverageSchema = z.object({ count: z.number(), duplicateTimestamps: z.number(), firstMs: z.number().nullable(), lastMs: z.number().nullable(),
   expectedCadenceMs: z.number(), gaps: z.array(z.object({ startMs: z.number(), endMs: z.number() })), gapDurationMs: z.number(),
   interpretation: z.literal('cadence_availability_not_measured_support') })
 export const datasetManifestSchema = z.object({
-  version: z.literal('processed-dataset-manifest-v1'),
+  version: z.enum(['processed-dataset-manifest-v1', 'waveform-dataset-manifest-v1']),
+  parentDataset: z.object({ id: z.string().uuid(), contentHash: z.string().regex(/^[a-f0-9]{64}$/) }).optional(),
   splitProtocol: z.object({ version: z.literal('chronological-whole-night-v1'), timezone: z.string(),
     timezoneRuntime: z.object({ icu: z.string(), tz: z.string() }), grouping: z.literal('local_noon_connected_sessions'),
     assignments: z.array(z.object({ cohortId: z.string(), nightLabels: z.array(z.string()), sessionIds: z.array(z.number()),
