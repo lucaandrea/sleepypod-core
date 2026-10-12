@@ -19,3 +19,25 @@ export const reportViewSchema = z.object({
       interval: z.object({ lower: z.number().finite(), upper: z.number().finite() }).nullable(), limitations: z.array(z.string()) }),
   })).max(3),
 })
+
+/** Numerical scores describe original readings, regardless of candidate parameters. */
+export const numericReportViewSchema = z.object({
+  nights: z.array(z.object({
+    cohortId: z.string(),
+    evaluations: z.array(z.object({
+      label: z.enum(['default', 'current', 'candidate']), configHash: z.string(),
+      windows: z.array(z.object({
+        startMs: z.number().finite(), endMs: z.number().finite(), observationCount: z.number().int().nonnegative(),
+        numeric: z.array(z.object({
+          metric: z.enum(['heart_rate', 'breathing_rate', 'window_ibi_variability_v1']),
+          status: z.enum(['compared', 'no_reference', 'no_overlap', 'incompatible']),
+          metrics: z.object({ mae: score, medianAbsoluteError: score, p95AbsoluteError: score, signedBias: score }).nullable(),
+          pairedCount: z.number().int().nonnegative(), referenceCoverage: score, outputCoverage: score,
+          unmatchedReferences: z.number().int().nonnegative(), unmatchedObservations: z.number().int().nonnegative(),
+          exclusions: z.record(z.string(), z.number().int().nonnegative()),
+        })).max(3),
+      })).max(60),
+    })).max(3),
+  })).max(60),
+})
+export type NumericReportView = z.infer<typeof numericReportViewSchema>
