@@ -414,3 +414,19 @@ export const referenceMeasurements = sqliteTable('reference_measurements', {
   index('idx_reference_measurement_side_metric_start').on(t.side, t.metric, t.startMs),
   index('idx_reference_measurement_import_id').on(t.importId, t.id),
 ])
+
+// Small processed-data snapshots are retained here; raw waveforms use bounded
+// artifacts. The immutable snapshot owns its bytes, independent of retention
+// or reference deletion. A content hash alone is not a reproducible dataset.
+export const biometricDatasets = sqliteTable('biometric_datasets', {
+  id: text('id').primaryKey(),
+  side: text('side', { enum: ['left', 'right'] }).notNull(),
+  subjectId: text('subject_id').notNull(),
+  idempotencyKey: text('idempotency_key').notNull().unique(),
+  requestHash: text('request_hash').notNull(),
+  contentHash: text('content_hash').notNull(),
+  manifest: text('manifest', { mode: 'json' }).notNull(),
+  snapshot: text('snapshot', { mode: 'json' }).notNull(),
+  byteLength: integer('byte_length').notNull(),
+  createdAtMs: integer('created_at_ms').notNull(),
+}, t => [index('idx_biometric_dataset_side_created').on(t.side, t.createdAtMs, t.id)])
