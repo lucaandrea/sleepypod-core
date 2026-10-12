@@ -8,7 +8,9 @@ import { drizzle } from 'drizzle-orm/better-sqlite3'
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator'
 import { expect, it } from 'vitest'
 import * as schema from '@/src/db/biometrics-schema'
-import { defaultConfig } from '../../algorithms/registry'
+import { configHash } from '../../algorithms/canonical'
+import { BacktestJobStore } from '../jobs'
+import { defaultConfig, manifestHash } from '../../algorithms/registry'
 import { DatasetStore } from '../datasets'
 import { datasetManifestSchema } from '../contracts'
 import { prepareSelectedWaveformDataset } from '../waveform-selection'
@@ -115,6 +117,34 @@ print(json.dumps({'start':start,'artifacts':artifacts,'inspections':inspections}
     expect(replay.run.build_hash).toBe(build.python.hash)
     expect(replay.readings.length).toBeGreaterThan(0)
     expect(replay.run.raw_records).toBe(151)
+    expect(sqlite.prepare('SELECT heart_rate FROM vitals').all()).toEqual([{ heart_rate: 65 }])
+    const jobs = new BacktestJobStore(db)
+    const experiment = jobs.createExperiment(published.id, { version: 'descriptive-evaluation-v1', mode: 'signal_replay', waveformStages: true,
+      assumedStageCalibrationQuality: 0, pointToleranceMs: 30000, clockOffsetMs: 0 })
+    const candidate = structuredClone(defaultConfig)
+    candidate.heart_rate.trackingToleranceBpm = 20
+    const jobInput = { experimentId: experiment.id, evaluatorBuildHash: build.hash, split: 'tuning' as const,
+      waveform: { pythonBuildHash: build.python.hash, otherSide: { manifestHash, resolvedHash: configHash(defaultConfig), resolved: defaultConfig } },
+      configs: [
+        { label: 'default' as const, revisionId: null, manifestHash, resolvedHash: configHash(defaultConfig), resolved: defaultConfig },
+        { label: 'current' as const, revisionId: null, manifestHash, resolvedHash: configHash(defaultConfig), resolved: defaultConfig },
+        { label: 'candidate' as const, revisionId: null, manifestHash, resolvedHash: configHash(candidate), resolved: candidate },
+      ] }
+    expect(() => jobs.enqueue({ ...jobInput, waveform: undefined, idempotencyKey: 'unpinned-signal' })).toThrow('pinned Python')
+    expect(() => jobs.enqueue({ ...jobInput, waveform: { ...jobInput.waveform, otherSide: { ...jobInput.waveform.otherSide, resolvedHash: '0'.repeat(64) } }, idempotencyKey: 'wrong-other-side' })).toThrow('Other-side configuration')
+    const job = jobs.enqueue({ ...jobInput, idempotencyKey: 'signal-job' })
+    expect(await runCoordinatorTask(options, { type: 'execute', owner: 'signal-integration' }, { admit: async () => true })).toEqual({ state: 'succeeded', jobId: job.id })
+    const report = jobs.result(job.id)?.report
+    expect(report).toMatchObject({ version: 'waveform-backtest-report-v1', datasetHash: published.contentHash,
+      evaluatorBuildHash: build.hash, protocol: { mode: 'signal_replay' }, waveform: { outputs: [{}, {}] },
+      nights: [{ evaluations: [{ label: 'default' }, { label: 'current' }, { label: 'candidate' }] }] })
+    const summary = await runCoordinatorTask(options, { type: 'readSummary', input: { id: job.id } })
+    expect(JSON.stringify(summary?.report)).not.toContain('"readings"')
+    expect(JSON.stringify(report)).toContain('"readings"')
+    const wrongBuild = jobs.enqueue({ ...jobInput, evaluatorBuildHash: '0'.repeat(64), idempotencyKey: 'wrong-signal-build' })
+    expect(await runCoordinatorTask(options, { type: 'execute', owner: 'wrong-build' }, { admit: async () => true })).toEqual({ state: 'stopped', jobId: wrongBuild.id })
+    expect(jobs.get(wrongBuild.id).state).toBe('failed')
+    expect(jobs.result(wrongBuild.id)).toBeNull()
     expect(sqlite.prepare('SELECT heart_rate FROM vitals').all()).toEqual([{ heart_rate: 65 }])
     const reused = await publish({ ...request, idempotencyKey: 'reuse-retained' })
     expect(reused.contentHash).toBe(published.contentHash)

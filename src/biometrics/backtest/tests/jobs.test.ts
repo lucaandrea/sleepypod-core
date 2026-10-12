@@ -132,3 +132,7 @@ describe('durable backtest leases and results', () => {
     expect(store.get(claimed.id).state).toBe('failed')
   })
 })
+
+it('refuses signal experiments without immutable waveform inputs', () => {
+  expect(() => store.createExperiment(datasetId, { ...protocol, mode: 'signal_replay' })).toThrow('retained waveform inputs')
+})

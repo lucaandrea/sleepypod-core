@@ -180,7 +180,7 @@ export const biometricTuningRouter = router({
   getBacktestSummary: publicProcedure
     .meta({ openapi: { method: 'GET', path: '/biometric-tuning/backtests/{id}/summary', protect: false, tags: ['Biometric tuning'] } })
     .input(importIdSchema)
-    .output(resultDescriptorSchema.extend({ projection: z.literal('scores_without_stage_trace_rows_v1'), contentHashScope: z.literal('complete_retained_report') }).nullable())
+    .output(resultDescriptorSchema.extend({ projection: z.enum(['scores_without_stage_trace_rows_v1', 'scores_without_replay_trace_rows_v1']), contentHashScope: z.literal('complete_retained_report') }).nullable())
     .query(({ input }) => references(() => coordinatorRequest(biometricsDb, { type: 'readSummary', input }))),
 
   getBacktestTrace: publicProcedure

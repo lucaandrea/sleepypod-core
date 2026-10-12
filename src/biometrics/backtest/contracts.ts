@@ -6,7 +6,8 @@ const key = z.string().min(1).max(200)
 const hash = z.string().regex(/^[a-f0-9]{64}$/)
 export const experimentProtocolSchema = z.object({
   version: z.literal('descriptive-evaluation-v1'),
-  mode: z.enum(['comparison', 'stage_replay']),
+  mode: z.enum(['comparison', 'stage_replay', 'signal_replay']),
+  waveformStages: z.boolean().optional(),
   // Explicit approximation, never represented as measured sensor calibration.
   assumedStageCalibrationQuality: z.number().min(0).max(1),
   pointToleranceMs: z.number().int().min(0).max(300000),
@@ -15,6 +16,7 @@ export const experimentProtocolSchema = z.object({
 }).strict()
 export const enqueueBacktestSchema = z.object({
   experimentId: z.string().uuid(), idempotencyKey: key, evaluatorBuildHash: hash, submissionHash: hash.optional(),
+  waveform: z.object({ pythonBuildHash: hash, otherSide: z.object({ manifestHash: hash, resolvedHash: hash, resolved: z.unknown() }).strict() }).strict().optional(),
   split: z.enum(['tuning', 'validation', 'holdout']),
   configs: z.array(z.object({ label: z.enum(['default', 'current', 'candidate']), revisionId: z.string().uuid().nullable(),
     manifestHash: hash, resolvedHash: hash, resolved: z.unknown() }).strict()).min(1).max(3),

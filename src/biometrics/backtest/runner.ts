@@ -4,12 +4,15 @@ import type * as schema from '@/src/db/biometrics-schema'
 import { DatasetStore } from './datasets'
 import { BacktestJobStore } from './jobs'
 import { backtestWorkSchema } from './evaluator'
+import { executeWaveformInputs, verifyWaveformJobBuild } from './waveform-execution'
+import type { RawInspectionLocation } from './raw-inspection-child'
 import { workerBuildHash, runBacktestChild } from './child'
 
 /** One leased attempt. Call only after the host's resource/ingest gate admits work. */
 export async function executeNextBacktest(db: BetterSQLite3Database<typeof schema>, options: {
   owner: string
   workerPath: string
+  rawLocation?: RawInspectionLocation
   signal?: AbortSignal
   timeoutMs?: number
   admit: () => Promise<boolean>
@@ -57,7 +60,10 @@ export async function executeNextBacktest(db: BetterSQLite3Database<typeof schem
     const input = z.object({ datasetId: z.string() }).parse(claimed.input)
     const retained = new DatasetStore(db).read(input.datasetId)
     const work = backtestWorkSchema.parse({ job: claimed.input, dataset: { manifest: retained.manifest, snapshot: retained.snapshot } })
-    if (await workerBuildHash(options.workerPath) !== work.job.evaluatorBuildHash) throw new Error('Evaluator bundle changed since enqueue')
+    if (work.job.protocol.mode === 'signal_replay') {
+      work.waveform = await executeWaveformInputs(db, work, { ...options, signal: controller.signal })
+    }
+    else if (await workerBuildHash(options.workerPath) !== work.job.evaluatorBuildHash) throw new Error('Evaluator bundle changed since enqueue')
     heartbeat()
     const report = await runBacktestChild(options.workerPath, work, { signal: controller.signal, timeoutMs: options.timeoutMs,
       onProgress: (completedNights, totalNights) => {
@@ -66,6 +72,7 @@ export async function executeNextBacktest(db: BetterSQLite3Database<typeof schem
         heartbeat()
       },
     })
+    if (work.job.protocol.mode === 'signal_replay') await verifyWaveformJobBuild(work, { ...options, signal: controller.signal })
     // Quiesce the periodic check before the final fresh check and publication.
     clearInterval(timer)
     await resourceCheck

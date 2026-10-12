@@ -54,9 +54,11 @@ export class BacktestJobStore {
 
   createExperiment(datasetId: string, rawProtocol: z.input<typeof experimentProtocolSchema>, idempotencyKey: string = randomUUID()) {
     const protocol = experimentProtocolSchema.parse(rawProtocol)
+    if (protocol.waveformStages === undefined) delete protocol.waveformStages
     key.parse(idempotencyKey)
     const requestHash = configHash({ datasetId, protocol })
     const dataset = new DatasetStore(this.db).read(datasetId)
+    if (protocol.mode === 'signal_replay' && dataset.snapshot.version !== 'waveform-dataset-v1') throw new ReferenceInputError('INSUFFICIENT_RAW_DATA', 'Signal replay requires retained waveform inputs')
     return this.db.transaction((tx) => {
       const existing = tx.select().from(experiments).where(eq(experiments.idempotencyKey, idempotencyKey)).get()
       if (existing) {
@@ -99,6 +101,7 @@ export class BacktestJobStore {
 
   enqueue(raw: z.input<typeof enqueueBacktestSchema>) {
     const input = enqueueBacktestSchema.parse(raw)
+    if (input.waveform === undefined) delete input.waveform
     if (new Set(input.configs.map(config => config.label)).size !== input.configs.length) throw new ReferenceInputError('INVALID_CONFIG', 'Baseline labels must be unique')
     for (const config of input.configs) {
       const resolved = validateConfig(config.resolved)
@@ -116,6 +119,10 @@ export class BacktestJobStore {
       if (total >= 1000) throw new ReferenceInputError('RESOURCE_LIMIT', 'Job history has reached its 1000-entry bound')
       const experiment = tx.select().from(experiments).where(eq(experiments.id, input.experimentId)).get()
       if (!experiment) throw new ReferenceInputError('NOT_FOUND', 'Experiment not found')
+      const protocol = experimentProtocolSchema.parse(experiment.protocol)
+      if ((protocol.mode === 'signal_replay') !== Boolean(input.waveform)) throw new ReferenceInputError('INVALID_CONFIG', 'Waveform replay requires pinned Python and other-side configuration')
+      if (input.waveform && (input.waveform.otherSide.manifestHash !== manifestHash
+        || configHash(validateConfig(input.waveform.otherSide.resolved)) !== input.waveform.otherSide.resolvedHash)) throw new ReferenceInputError('INVALID_CONFIG', 'Other-side configuration identity mismatch')
       const dataset = tx.select({ contentHash: schema.biometricDatasets.contentHash, releasedAtMs: schema.biometricDatasets.releasedAtMs, manifest: schema.biometricDatasets.manifest })
         .from(schema.biometricDatasets).where(eq(schema.biometricDatasets.id, experiment.datasetId)).get()
       if (!dataset) throw new ReferenceInputError('NOT_FOUND', 'Dataset unavailable')

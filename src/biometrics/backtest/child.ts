@@ -7,7 +7,7 @@ import { z } from 'zod'
 
 const eventSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('progress'), completedNights: z.number().int().min(0).max(60), totalNights: z.number().int().min(0).max(60) }).strict(),
-  z.object({ type: z.literal('result'), report: z.object({ version: z.literal('processed-backtest-report-v1') }).passthrough() }).strict(),
+  z.object({ type: z.literal('result'), report: z.object({ version: z.enum(['processed-backtest-report-v1', 'waveform-backtest-report-v1']) }).passthrough() }).strict(),
 ])
 
 export async function workerBuildHash(workerPath: string) {
