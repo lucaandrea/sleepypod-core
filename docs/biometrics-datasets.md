@@ -114,3 +114,12 @@ Equal event timestamps are reported and preserved. Other sensor records are
 counted without being misrepresented as waveform support. Numerical sensor
 values retain CBOR float semantics; nonfinite or invalid event timestamps are
 reported as unavailable for ordered replay.
+
+`raw_sources.py` inspects server-owned cold archives without retaining them.
+Discovery is bounded and excludes symlinks; inspection streams checksum,
+expanded-size validation and record inventory. Its result explicitly states
+`retained: false`. Selection passes the inspected descriptor as `expected` to
+`RawArtifactStore.retain`; changed compressed bytes or sizes fail before
+publication. A source name or successful inspection alone is never evidence
+that a dataset has frozen input bytes. Persisted inventory caching and dataset
+references remain responsible for tracking inspected versus retained state.

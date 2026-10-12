@@ -116,10 +116,12 @@ class RawArtifactStore:
         finally:
             os.close(fd)
 
-    def retain(self, archive_directory, name):
+    def retain(self, archive_directory, name, expected=None):
         """Copy one selected archive filename; paths and symlinks are rejected."""
         if not isinstance(name, str) or not SOURCE_NAME.fullmatch(name):
             raise ValueError('Invalid RAW archive filename')
+        if expected is not None and not isinstance(expected, RawArtifact):
+            raise ValueError('Expected an inspected RAW descriptor')
         archive = Path(archive_directory)
         if archive.is_symlink() or not archive.is_dir():
             raise ValueError('Invalid RAW archive directory')
@@ -164,6 +166,8 @@ class RawArtifactStore:
                             raise ValueError('RAW expanded byte limit exceeded')
                 sha256 = digest.hexdigest()
                 descriptor = RawArtifact(sha256 + '.RAW.gz', sha256, copied, expanded)
+                if expected is not None and descriptor != expected:
+                    raise ValueError('RAW archive changed since inspection')
                 destination = self.directory / descriptor.name
                 if destination.exists() or destination.is_symlink():
                     os.close(self._verify(descriptor))
