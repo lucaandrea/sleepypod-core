@@ -178,7 +178,7 @@ export function SleepStageRules({ side, onSideChange }: { side: Side, onSideChan
   )
 }
 
-function RuleList({ rules, onChange, label = 'Rule' }: { rules: StageRule[], onChange: (rules: StageRule[]) => void, label?: string }) {
+export function RuleList({ rules, onChange, label = 'Rule' }: { rules: StageRule[], onChange: (rules: StageRule[]) => void, label?: string }) {
   const setRule = (i: number, rule: StageRule) => onChange(rules.map((r, j) => (j === i ? rule : r)))
   return (
     <div className="flex flex-col gap-2">
@@ -252,7 +252,7 @@ function RuleList({ rules, onChange, label = 'Rule' }: { rules: StageRule[], onC
   )
 }
 
-function RangeRow({ label, range, onChange }: {
+export function RangeRow({ label, range, onChange }: {
   label: string
   range: { min: number, max: number }
   onChange: (range: { min: number, max: number }) => void
@@ -268,7 +268,7 @@ function RangeRow({ label, range, onChange }: {
   )
 }
 
-function TransitionList({ transitions, onChange }: { transitions: StageTransition[], onChange: (t: StageTransition[]) => void }) {
+export function TransitionList({ transitions, onChange }: { transitions: StageTransition[], onChange: (t: StageTransition[]) => void }) {
   const set = (i: number, t: StageTransition) => onChange(transitions.map((x, j) => (j === i ? t : x)))
   return (
     <div className="flex flex-col gap-2">

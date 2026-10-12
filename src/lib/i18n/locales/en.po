@@ -88,17 +88,33 @@ msgstr "Calibration views"
 msgid "Candidate changes"
 msgstr "Candidate changes"
 
-#: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:70
+#: src/components/biometrics/Calibration/CandidateStageFields.tsx:31
+msgid "Candidate low-signal rule"
+msgstr "Candidate low-signal rule"
+
+#: src/components/biometrics/Calibration/CandidateStageFields.tsx:30
+msgid "Candidate low-signal threshold"
+msgstr "Candidate low-signal threshold"
+
+#: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:84
 msgid "Candidate parameters"
 msgstr "Candidate parameters"
 
-#: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:66
+#: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:80
 msgid "Candidate save failed."
 msgstr "Candidate save failed."
 
-#: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:101
+#: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:116
 msgid "Candidate saved: {saved}"
 msgstr "Candidate saved: {saved}"
+
+#: src/components/biometrics/Calibration/CandidateStageFields.tsx:14
+msgid "Candidate sleep-stage rules"
+msgstr "Candidate sleep-stage rules"
+
+#: src/components/biometrics/Calibration/CandidateStageFields.tsx:29
+msgid "Candidate spike threshold"
+msgstr "Candidate spike threshold"
 
 #: src/components/biometrics/Calibration/ManualProfileActivation.tsx:86
 msgid "Check Overview for current processor health; a past acknowledgement does not prove current health."
@@ -206,11 +222,20 @@ msgstr "Exact profile transition"
 msgid "Expired"
 msgstr "Expired"
 
+#: src/components/biometrics/Calibration/CandidateStageFields.tsx:34
+msgid "Explicit stage overrides"
+msgstr "Explicit stage overrides"
+
 #: src/components/biometrics/Calibration/CalibrationHistory.tsx:18
 #: src/components/biometrics/Calibration/CalibrationOverview.tsx:15
 #: src/components/biometrics/Calibration/ManualProfileActivation.tsx:73
 msgid "Failed"
 msgstr "Failed"
+
+#: src/components/biometrics/Calibration/CandidateStageFields.tsx:17
+#: src/components/biometrics/Calibration/CandidateStageFields.tsx:17
+msgid "Fallback stage"
+msgstr "Fallback stage"
 
 #: src/components/biometrics/Calibration/ReferenceLibrary.tsx:119
 msgid "First records"
@@ -230,6 +255,10 @@ msgstr "Generation {0}"
 #: src/components/biometrics/Calibration/CalibrationOverview.tsx:18
 msgid "Heart rate"
 msgstr "Heart rate"
+
+#: src/components/biometrics/Calibration/CandidateStageFields.tsx:29
+msgid "Heart-rate spike threshold (standard deviations)"
+msgstr "Heart-rate spike threshold (standard deviations)"
 
 #: app/[lang]/health/HealthcheckDemo.tsx:13
 msgid "Hello, tRPC test page!"
@@ -275,7 +304,8 @@ msgstr "Import preview"
 msgid "Import reference measurements"
 msgstr "Import reference measurements"
 
-#: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:84
+#: src/components/biometrics/Calibration/CandidateStageFields.tsx:36
+#: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:98
 msgid "Inherited default"
 msgstr "Inherited default"
 
@@ -290,6 +320,10 @@ msgstr "Inspect measurements"
 #: src/components/biometrics/Calibration/ReferenceLibrary.tsx:61
 msgid "Keep import"
 msgstr "Keep import"
+
+#: src/components/biometrics/Calibration/CandidateStageFields.tsx:30
+msgid "Low-signal calibration quality threshold"
+msgstr "Low-signal calibration quality threshold"
 
 #: src/components/biometrics/Calibration/ManualProfileActivation.tsx:44
 msgid "Manual activation"
@@ -394,7 +428,7 @@ msgstr "Older imports"
 msgid "Older profiles"
 msgstr "Older profiles"
 
-#: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:84
+#: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:98
 msgid "Overridden"
 msgstr "Overridden"
 
@@ -450,7 +484,7 @@ msgstr "Processor health"
 msgid "Profile and processor"
 msgstr "Profile and processor"
 
-#: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:55
+#: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:69
 msgid "Profile resolution failed."
 msgstr "Profile resolution failed."
 
@@ -490,9 +524,13 @@ msgstr "Reference source"
 msgid "References"
 msgstr "References"
 
-#: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:85
+#: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:99
 msgid "Remove override"
 msgstr "Remove override"
+
+#: src/components/biometrics/Calibration/CandidateStageFields.tsx:43
+msgid "Remove stage override"
+msgstr "Remove stage override"
 
 #. placeholder {0}: event.requester
 #: src/components/biometrics/Calibration/CalibrationHistory.tsx:54
@@ -530,7 +568,7 @@ msgstr "Restore system defaults"
 msgid "Retry exact activation request"
 msgstr "Retry exact activation request"
 
-#: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:90
+#: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:105
 msgid "Review candidate"
 msgstr "Review candidate"
 
@@ -566,11 +604,11 @@ msgstr "Revision {0}; accepted {1}; unscorable {2}"
 msgid "Row {0}: {1}"
 msgstr "Row {0}: {1}"
 
-#: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:70
+#: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:84
 msgid "Save a candidate for evaluation. This does not change live processing."
 msgstr "Save a candidate for evaluation. This does not change live processing."
 
-#: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:96
+#: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:111
 msgid "Save candidate without applying"
 msgstr "Save candidate without applying"
 
@@ -594,7 +632,7 @@ msgstr "Saved profile revisions"
 msgid "Saved settings and processor reports are separate."
 msgstr "Saved settings and processor reports are separate."
 
-#: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:94
+#: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:109
 msgid "Schema checks passed. Agreement with reference measurements has not been evaluated."
 msgstr "Schema checks passed. Agreement with reference measurements has not been evaluated."
 
@@ -605,6 +643,10 @@ msgstr "Sensor measurements are separate from algorithm personalization."
 #: src/components/biometrics/Calibration/CalibrationReferences.tsx:59
 msgid "Sleeper identifier"
 msgstr "Sleeper identifier"
+
+#: src/components/biometrics/Calibration/CandidateStageFields.tsx:32
+msgid "Smooth isolated epochs"
+msgstr "Smooth isolated epochs"
 
 #: src/components/biometrics/Calibration/ReferenceLibrary.tsx:55
 msgid "Source measurements deleted"
@@ -622,7 +664,7 @@ msgstr "Start (UTC)"
 msgid "Start from current profile"
 msgstr "Start from current profile"
 
-#: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:71
+#: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:85
 msgid "Start from the saved profile. Existing sleep-stage overrides are preserved. Removing a numerical override follows the shipped default."
 msgstr "Start from the saved profile. Existing sleep-stage overrides are preserved. Removing a numerical override follows the shipped default."
 
@@ -648,9 +690,13 @@ msgstr "The saved profile changed. Compare again before reviewing these changes.
 msgid "The saved profile changed. Select a recovery action again to make a new request."
 msgstr "The saved profile changed. Select a recovery action again to make a new request."
 
-#: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:28
+#: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:30
 msgid "The saved profile or parameter definitions are incompatible with this editor."
 msgstr "The saved profile or parameter definitions are incompatible with this editor."
+
+#: src/components/biometrics/Calibration/CandidateStageFields.tsx:15
+msgid "These edits belong only to the candidate. Rule order matters: the first matching rule wins."
+msgstr "These edits belong only to the candidate. Rule order matters: the first matching rule wins."
 
 #: src/components/biometrics/Calibration/ReferenceTimeSpan.tsx:26
 msgid "This is the first-to-last record span, not continuous coverage or overlap with pod readings."
@@ -669,7 +715,7 @@ msgstr "Times shown in {timezone}"
 #. placeholder {2}: parameter.maximum
 #. placeholder {3}: parameter.default
 #. placeholder {4}: String(original)
-#: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:83
+#: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:97
 msgid "Unit: {0}; range: {1}–{2}; default: {3}; original: {4}"
 msgstr "Unit: {0}; range: {1}–{2}; default: {3}; original: {4}"
 

@@ -3,11 +3,13 @@
 import { useState } from 'react'
 import { z } from 'zod'
 import { Trans, useLingui } from '@lingui/react/macro'
+import { stageClassifierSchema, type StageRuleset } from '@/src/lib/sleep-stage-rules'
+import { CandidateStageFields } from './CandidateStageFields'
 import { trpc } from '@/src/utils/trpc'
 import { Button, Card, CardHeader, InlineError, Skeleton } from '@/src/components/ds'
 
 const parameterSchema = z.object({ type: z.enum(['number', 'integer']), minimum: z.number(), maximum: z.number(), default: z.number(), unit: z.string(), description: z.string() })
-const numericManifestSchema = z.object({ parameters: z.object({ properties: z.object({
+const numericManifestSchema = z.object({ defaults: z.object({ sleep_stages: stageClassifierSchema }), parameters: z.object({ properties: z.object({
   heart_rate: z.object({ properties: z.record(z.string(), parameterSchema) }),
   breathing_rate: z.object({ properties: z.record(z.string(), parameterSchema) }),
   hrv_index: z.object({ properties: z.record(z.string(), parameterSchema) }),
@@ -27,10 +29,10 @@ export function ProfileCandidateEditor({ side, revisionId }: { side: 'left' | 'r
   const overrides = z.array(z.object({ path: z.string(), value: z.unknown() })).safeParse(parentId ? parent.data?.overrides : [])
   if (!parsed.success || !overrides.success || (!revisionId && overview.data.desired.warning) || (parentId && (parent.data?.side !== side || parent.data.baseManifestHash !== manifest.data.manifestHash))) return <InlineError><Trans>The saved profile or parameter definitions are incompatible with this editor.</Trans></InlineError>
   const parameters = Object.entries(parsed.data.parameters.properties).flatMap(([component, group]) => Object.entries(group.properties).map(([name, spec]) => ({ ...spec, path: `${component}.${name}` })))
-  return <CandidateForm key={`${side}:${manifest.data.manifestHash}:${parentId ?? 'default'}`} side={side} manifestHash={manifest.data.manifestHash} parentId={parentId ?? undefined} initial={overrides.data} parameters={parameters} />
+  return <CandidateForm key={`${side}:${manifest.data.manifestHash}:${parentId ?? 'default'}`} side={side} manifestHash={manifest.data.manifestHash} parentId={parentId ?? undefined} initial={overrides.data} parameters={parameters} stageDefaults={parsed.data.defaults.sleep_stages.ruleset} />
 }
 
-function CandidateForm({ side, manifestHash, parentId, initial, parameters }: { side: 'left' | 'right', manifestHash: string, parentId?: string, initial: Overrides, parameters: Parameter[] }) {
+function CandidateForm({ side, manifestHash, parentId, initial, parameters, stageDefaults }: { side: 'left' | 'right', manifestHash: string, parentId?: string, initial: Overrides, parameters: Parameter[], stageDefaults: StageRuleset }) {
   const { t } = useLingui()
   const [overrides, setOverrides] = useState<Overrides>(initial)
   const [preview, setPreview] = useState<{ hash: string, overrides: Overrides, key: string }>()
@@ -40,11 +42,23 @@ function CandidateForm({ side, manifestHash, parentId, initial, parameters }: { 
   const create = trpc.biometricTuning.createProfileRevision.useMutation()
   const utils = trpc.useUtils()
   const busy = resolve.isPending || create.isPending
-  function change(path: string, value: number | undefined) {
+  function change(path: string, value: unknown) {
     setOverrides(current => [...current.filter(item => item.path !== path), ...(value === undefined ? [] : [{ path, value }])])
     setPreview(undefined)
     setSaved(undefined)
     setError(undefined)
+  }
+  const stageDraft = structuredClone(stageDefaults)
+  stageOverrides: for (const override of overrides) {
+    if (!override.path.startsWith('sleep_stages.ruleset.')) continue
+    const parts = override.path.slice('sleep_stages.ruleset.'.length).split('.')
+    let node = stageDraft as unknown as Record<string, unknown>
+    for (const part of parts.slice(0, -1)) {
+      if (!Object.hasOwn(node, part) || node[part] === null || typeof node[part] !== 'object' || Array.isArray(node[part])) continue stageOverrides
+      node = node[part] as Record<string, unknown>
+    }
+    const leaf = parts[parts.length - 1]
+    if (Object.hasOwn(node, leaf)) node[leaf] = override.value
   }
   async function inspect() {
     setError(undefined)
@@ -86,6 +100,7 @@ function CandidateForm({ side, manifestHash, parentId, initial, parameters }: { 
             </div>
           )
         })}
+        <CandidateStageFields ruleset={stageDraft} overrides={overrides} onChange={change} />
       </fieldset>
       <Button disabled={busy || overrides.some(item => typeof item.value === 'number' && !Number.isFinite(item.value))} onClick={() => void inspect()}><Trans>Review candidate</Trans></Button>
       {preview

@@ -88,17 +88,33 @@ msgstr "Vistas de calibración"
 msgid "Candidate changes"
 msgstr "Cambios del candidato"
 
-#: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:70
+#: src/components/biometrics/Calibration/CandidateStageFields.tsx:31
+msgid "Candidate low-signal rule"
+msgstr "Regla de señal baja del candidato"
+
+#: src/components/biometrics/Calibration/CandidateStageFields.tsx:30
+msgid "Candidate low-signal threshold"
+msgstr "Umbral de señal baja del candidato"
+
+#: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:84
 msgid "Candidate parameters"
 msgstr "Parámetros del candidato"
 
-#: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:66
+#: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:80
 msgid "Candidate save failed."
 msgstr "Error al guardar el candidato."
 
-#: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:101
+#: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:116
 msgid "Candidate saved: {saved}"
 msgstr "Candidato guardado: {saved}"
+
+#: src/components/biometrics/Calibration/CandidateStageFields.tsx:14
+msgid "Candidate sleep-stage rules"
+msgstr "Reglas de fases del sueño del candidato"
+
+#: src/components/biometrics/Calibration/CandidateStageFields.tsx:29
+msgid "Candidate spike threshold"
+msgstr "Umbral de picos del candidato"
 
 #: src/components/biometrics/Calibration/ManualProfileActivation.tsx:86
 msgid "Check Overview for current processor health; a past acknowledgement does not prove current health."
@@ -206,11 +222,20 @@ msgstr "Cambio exacto de perfil"
 msgid "Expired"
 msgstr "Caducada"
 
+#: src/components/biometrics/Calibration/CandidateStageFields.tsx:34
+msgid "Explicit stage overrides"
+msgstr "Personalizaciones explícitas de fases"
+
 #: src/components/biometrics/Calibration/CalibrationHistory.tsx:18
 #: src/components/biometrics/Calibration/CalibrationOverview.tsx:15
 #: src/components/biometrics/Calibration/ManualProfileActivation.tsx:73
 msgid "Failed"
 msgstr "Fallido"
+
+#: src/components/biometrics/Calibration/CandidateStageFields.tsx:17
+#: src/components/biometrics/Calibration/CandidateStageFields.tsx:17
+msgid "Fallback stage"
+msgstr "Fase alternativa"
 
 #: src/components/biometrics/Calibration/ReferenceLibrary.tsx:119
 msgid "First records"
@@ -230,6 +255,10 @@ msgstr "Generación {0}"
 #: src/components/biometrics/Calibration/CalibrationOverview.tsx:18
 msgid "Heart rate"
 msgstr "Frecuencia cardíaca"
+
+#: src/components/biometrics/Calibration/CandidateStageFields.tsx:29
+msgid "Heart-rate spike threshold (standard deviations)"
+msgstr "Umbral de picos de frecuencia cardíaca (desviaciones estándar)"
 
 #: app/[lang]/health/HealthcheckDemo.tsx:13
 msgid "Hello, tRPC test page!"
@@ -275,7 +304,8 @@ msgstr "Vista previa de la importación"
 msgid "Import reference measurements"
 msgstr "Importar mediciones de referencia"
 
-#: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:84
+#: src/components/biometrics/Calibration/CandidateStageFields.tsx:36
+#: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:98
 msgid "Inherited default"
 msgstr "Valor predeterminado heredado"
 
@@ -290,6 +320,10 @@ msgstr "Inspeccionar mediciones"
 #: src/components/biometrics/Calibration/ReferenceLibrary.tsx:61
 msgid "Keep import"
 msgstr "Conservar importación"
+
+#: src/components/biometrics/Calibration/CandidateStageFields.tsx:30
+msgid "Low-signal calibration quality threshold"
+msgstr "Umbral de calidad de calibración para señal baja"
 
 #: src/components/biometrics/Calibration/ManualProfileActivation.tsx:44
 msgid "Manual activation"
@@ -394,7 +428,7 @@ msgstr "Importaciones anteriores"
 msgid "Older profiles"
 msgstr "Perfiles anteriores"
 
-#: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:84
+#: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:98
 msgid "Overridden"
 msgstr "Personalizado"
 
@@ -450,7 +484,7 @@ msgstr "Estado del procesador"
 msgid "Profile and processor"
 msgstr "Perfil y procesador"
 
-#: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:55
+#: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:69
 msgid "Profile resolution failed."
 msgstr "Error al resolver el perfil."
 
@@ -490,9 +524,13 @@ msgstr "Fuente de referencia"
 msgid "References"
 msgstr "Referencias"
 
-#: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:85
+#: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:99
 msgid "Remove override"
 msgstr "Quitar personalización"
+
+#: src/components/biometrics/Calibration/CandidateStageFields.tsx:43
+msgid "Remove stage override"
+msgstr "Quitar personalización de fases"
 
 #. placeholder {0}: event.requester
 #: src/components/biometrics/Calibration/CalibrationHistory.tsx:54
@@ -530,7 +568,7 @@ msgstr "Restaurar valores predeterminados del sistema"
 msgid "Retry exact activation request"
 msgstr "Reintentar la solicitud exacta de activación"
 
-#: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:90
+#: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:105
 msgid "Review candidate"
 msgstr "Revisar candidato"
 
@@ -566,11 +604,11 @@ msgstr "Revisión {0}; aceptados {1}; no evaluables {2}"
 msgid "Row {0}: {1}"
 msgstr "Fila {0}: {1}"
 
-#: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:70
+#: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:84
 msgid "Save a candidate for evaluation. This does not change live processing."
 msgstr "Guarde un candidato para evaluarlo. Esto no cambia el procesamiento en vivo."
 
-#: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:96
+#: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:111
 msgid "Save candidate without applying"
 msgstr "Guardar candidato sin aplicar"
 
@@ -594,7 +632,7 @@ msgstr "Revisiones de perfiles guardadas"
 msgid "Saved settings and processor reports are separate."
 msgstr "Los ajustes guardados y los informes del procesador son independientes."
 
-#: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:94
+#: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:109
 msgid "Schema checks passed. Agreement with reference measurements has not been evaluated."
 msgstr "La validación del esquema se completó. No se ha evaluado la concordancia con las mediciones de referencia."
 
@@ -605,6 +643,10 @@ msgstr "Las mediciones de los sensores son independientes de la personalización
 #: src/components/biometrics/Calibration/CalibrationReferences.tsx:59
 msgid "Sleeper identifier"
 msgstr "Identificador de la persona"
+
+#: src/components/biometrics/Calibration/CandidateStageFields.tsx:32
+msgid "Smooth isolated epochs"
+msgstr "Suavizar épocas aisladas"
 
 #: src/components/biometrics/Calibration/ReferenceLibrary.tsx:55
 msgid "Source measurements deleted"
@@ -622,7 +664,7 @@ msgstr "Inicio (UTC)"
 msgid "Start from current profile"
 msgstr "Comenzar con el perfil actual"
 
-#: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:71
+#: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:85
 msgid "Start from the saved profile. Existing sleep-stage overrides are preserved. Removing a numerical override follows the shipped default."
 msgstr "Comience con el perfil guardado. Se conservan las personalizaciones de las fases del sueño. Al quitar una personalización numérica se usa el valor predeterminado incluido."
 
@@ -648,9 +690,13 @@ msgstr "El perfil guardado ha cambiado. Vuelva a comparar antes de revisar estos
 msgid "The saved profile changed. Select a recovery action again to make a new request."
 msgstr "El perfil guardado ha cambiado. Seleccione de nuevo una acción de restauración para realizar una nueva solicitud."
 
-#: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:28
+#: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:30
 msgid "The saved profile or parameter definitions are incompatible with this editor."
 msgstr "El perfil guardado o las definiciones de parámetros son incompatibles con este editor."
+
+#: src/components/biometrics/Calibration/CandidateStageFields.tsx:15
+msgid "These edits belong only to the candidate. Rule order matters: the first matching rule wins."
+msgstr "Estos cambios pertenecen solo al candidato. El orden importa: se aplica la primera regla que coincida."
 
 #: src/components/biometrics/Calibration/ReferenceTimeSpan.tsx:26
 msgid "This is the first-to-last record span, not continuous coverage or overlap with pod readings."
@@ -669,7 +715,7 @@ msgstr "Horas mostradas en {timezone}"
 #. placeholder {2}: parameter.maximum
 #. placeholder {3}: parameter.default
 #. placeholder {4}: String(original)
-#: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:83
+#: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:97
 msgid "Unit: {0}; range: {1}–{2}; default: {3}; original: {4}"
 msgstr "Unidad: {0}; intervalo: {1}–{2}; predeterminado: {3}; original: {4}"
 
