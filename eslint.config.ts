@@ -25,6 +25,13 @@ export default defineConfig([
   tseslint.configs.strict,
   pluginReact.configs.flat.recommended,
   ...nextVitals,
+  // Next selects its Babel parser for JS and for .mts/.cts config files.
+  // The strict TypeScript rules above need TypeScript scope references;
+  // otherwise used runtime variables are reported as type-only usages.
+  {
+    files: ['**/*.js', '**/*.mjs', '**/*.cjs', '**/*.mts', '**/*.cts'],
+    languageOptions: { parser: tseslint.parser },
+  },
 
   globalIgnores([
     '.claude/**',
