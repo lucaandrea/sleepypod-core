@@ -6,7 +6,6 @@ import {
   demoMovement,
   demoNights,
   demoNightsOverlapping,
-  demoStageEpochs,
   demoVitals,
   editDemoNight,
   findDemoNight,
@@ -16,6 +15,8 @@ import {
 } from '../history'
 import type { DemoHandlers, RouterOutputs } from '../types'
 import { DAY, MINUTE } from '../util'
+import { classifyDemoWindow } from '../biometrics/stages'
+import { demoStageView } from './biometricTuning'
 
 type SleepRecord = RouterOutputs['biometrics']['getSleepRecords'][number]
 
@@ -57,12 +58,14 @@ const emptyStages = (sleepRecordId: number | null = null, enteredBedAt: number |
   leftBedAt,
 })
 
-function stagesForNight(n: DemoNight) {
+async function stagesForNight(n: DemoNight) {
+  const stageView = await demoStageView(n.side)
   const end = n.leftBedAt?.getTime() ?? Date.now()
-  const epochs = demoStageEpochs(n, n.enteredBedAt.getTime(), end)
-  if (epochs.length === 0) return emptyStages(n.id, n.enteredBedAt.getTime(), n.leftBedAt?.getTime() ?? null)
+  const epochs = classifyDemoWindow(n.side, n.enteredBedAt.getTime(), end, stageView.classifier)
+  if (epochs.length === 0) return { ...emptyStages(n.id, n.enteredBedAt.getTime(), n.leftBedAt?.getTime() ?? null), stageView }
   return {
     epochs,
+    stageView,
     ...summarizeEpochs(epochs),
     sleepRecordId: n.id,
     enteredBedAt: n.enteredBedAt.getTime(),
@@ -244,7 +247,7 @@ export const biometrics: DemoHandlers<'biometrics'> = {
     return { success: true }
   },
 
-  getSleepStages: (input) => {
+  getSleepStages: async (input) => {
     if (input.sleepRecordId && (input.startDate || input.endDate)) {
       throw new TRPCError({ code: 'BAD_REQUEST', message: 'Provide either sleepRecordId or startDate/endDate, not both' })
     }
@@ -257,13 +260,14 @@ export const biometrics: DemoHandlers<'biometrics'> = {
     }
     if (input.startDate && input.endDate) {
       const { start, end } = range(input)
+      const stageView = await demoStageView(input.side)
       const epochs = demoNightsOverlapping(input.side, start, end)
         .reverse()
-        .flatMap(n => demoStageEpochs(n, Math.max(start, n.enteredBedAt.getTime()), Math.min(end, n.leftBedAt?.getTime() ?? Date.now())))
-      if (epochs.length === 0) return emptyStages()
-      return { epochs, ...summarizeEpochs(epochs), sleepRecordId: null, enteredBedAt: null, leftBedAt: null }
+        .flatMap(n => classifyDemoWindow(input.side, Math.max(start, n.enteredBedAt.getTime()), Math.min(end, n.leftBedAt?.getTime() ?? Date.now()), stageView.classifier))
+      if (epochs.length === 0) return { ...emptyStages(), stageView }
+      return { epochs, stageView, ...summarizeEpochs(epochs), sleepRecordId: null, enteredBedAt: null, leftBedAt: null }
     }
     const n = lastNight(input.side)
-    return n ? stagesForNight(n) : emptyStages()
+    return n ? stagesForNight(n) : { ...emptyStages(), stageView: await demoStageView(input.side) }
   },
 }

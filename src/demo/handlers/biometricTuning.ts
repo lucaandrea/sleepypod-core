@@ -2,9 +2,10 @@ import { createDemoBacktestHandlers } from './biometric-backtests'
 import { datasetHandlers } from './biometric-datasets'
 import { hash, uuid } from './biometric-utils'
 import { referenceHandlers } from './biometric-references'
-import { biometricManifest, defaultConfig, resolveOverrides } from '@/src/biometrics/algorithms/registry-core'
+import { biometricManifest, defaultConfig, legacyStageOverrides, resolveOverrides } from '@/src/biometrics/algorithms/registry-core'
 import { canonicalJson } from '@/src/biometrics/algorithms/canonical-json'
 import type { DemoHandlers, RouterOutputs, RouterInputs } from '../types'
+import { stageClassifierSchema, type StageClassifier } from '@/src/lib/sleep-stage-rules'
 
 type Revision = RouterOutputs['biometricTuning']['getProfileRevision']
 const revisions: Revision[] = []
@@ -42,32 +43,99 @@ function observed(event: Event): Event {
   const stored = events.find(row => row.event.id === event.id)
   return { ...structuredClone(event), state: stored && Date.now() >= stored.readyAtMs ? 'applied' : 'pending_boundary' }
 }
-function activate(input: RouterInputs['biometricTuning']['rollbackProfile'] & { action: 'activate' | 'rollback' | 'reset' }) {
-  const work = mutationQueue.then(async () => {
-    if (input.allowUnvalidated !== true) throw new Error('Explicit unvalidated acknowledgement required')
-    const fingerprint = await hash(input)
-    const prior = activationRequests.get(input.idempotencyKey)
-    if (prior) {
-      if (prior.fingerprint !== fingerprint) throw new Error('REVISION_CONFLICT: activation request changed')
-      return structuredClone(prior.event)
-    }
-    const binding = bindings[input.side]
-    if (binding.generation !== input.expectedGeneration) throw new Error('STALE_BINDING: inspect the current demo profile')
-    if (input.action === 'rollback' && (binding.generation === 0 || input.revisionId !== binding.previousRevisionId)) throw new Error('INVALID_SELECTION: rollback must select the previous binding')
-    const next = await selected(input.side, input.revisionId)
-    if (next.hash !== input.expectedResolvedHash) throw new Error('REVISION_CONFLICT: resolved hash changed')
-    const previous = await selected(input.side, binding.desiredRevisionId)
-    const now = Date.now(), generation = binding.generation + 1
-    const event: Event = { id: uuid(), side: input.side, generation, action: input.action, previousRevisionId: binding.desiredRevisionId, nextRevisionId: input.revisionId,
-      previousHash: previous.hash, nextHash: next.hash, evaluationId: null, evidence: { status: 'manual_unvalidated', simulated: true },
-      requester: input.requester, state: 'pending_boundary', reason: 'SIMULATED DEMO: no live processor or hardware activation.', createdAtMs: now, updatedAtMs: now }
-    bindings[input.side] = { side: input.side, generation, desiredRevisionId: input.revisionId, previousRevisionId: binding.desiredRevisionId, updatedAtMs: now }
-    events.unshift({ event, readyAtMs: now + (input.boundary === 'immediate' ? 1000 : 3000) })
-    activationRequests.set(input.idempotencyKey, { fingerprint, event })
-    return structuredClone(event)
-  })
+function serializeMutation<T>(action: () => Promise<T>): Promise<T> {
+  const work = mutationQueue.then(action)
   mutationQueue = work.catch(() => {})
   return work
+}
+type ActivationInput = RouterInputs['biometricTuning']['rollbackProfile'] & { action: 'activate' | 'rollback' | 'reset' }
+function activate(input: ActivationInput) {
+  return serializeMutation(() => activateNow(input))
+}
+async function activateNow(input: ActivationInput) {
+  if (input.allowUnvalidated !== true) throw new Error('Explicit unvalidated acknowledgement required')
+  const fingerprint = await hash(input)
+  const prior = activationRequests.get(input.idempotencyKey)
+  if (prior) {
+    if (prior.fingerprint !== fingerprint) throw new Error('REVISION_CONFLICT: activation request changed')
+    return structuredClone(prior.event)
+  }
+  const binding = bindings[input.side]
+  if (binding.generation !== input.expectedGeneration) throw new Error('STALE_BINDING: inspect the current demo profile')
+  if (input.action === 'rollback' && (binding.generation === 0 || input.revisionId !== binding.previousRevisionId)) throw new Error('INVALID_SELECTION: rollback must select the previous binding')
+  const next = await selected(input.side, input.revisionId)
+  if (next.hash !== input.expectedResolvedHash) throw new Error('REVISION_CONFLICT: resolved hash changed')
+  const previous = await selected(input.side, binding.desiredRevisionId)
+  const now = Date.now(), generation = binding.generation + 1
+  const event: Event = { id: uuid(), side: input.side, generation, action: input.action, previousRevisionId: binding.desiredRevisionId, nextRevisionId: input.revisionId,
+    previousHash: previous.hash, nextHash: next.hash, evaluationId: null, evidence: { status: 'manual_unvalidated', simulated: true },
+    requester: input.requester, state: 'pending_boundary', reason: 'SIMULATED DEMO: no live processor or hardware activation.', createdAtMs: now, updatedAtMs: now }
+  bindings[input.side] = { side: input.side, generation, desiredRevisionId: input.revisionId, previousRevisionId: binding.desiredRevisionId, updatedAtMs: now }
+  events.unshift({ event, readyAtMs: now + (input.boundary === 'immediate' ? 1000 : 3000) })
+  activationRequests.set(input.idempotencyKey, { fingerprint, event })
+  return structuredClone(event)
+}
+
+async function createDemoRevision(input: RouterInputs['biometricTuning']['createProfileRevision']): Promise<Revision> {
+  const result = await resolve(input.overrides, input.baseManifestHash)
+  const normalized = { ...input, baseManifestHash: result.manifestHash }
+  if (normalized.parentRevisionId === undefined) delete normalized.parentRevisionId
+  const fingerprint = await hash(normalized)
+  const key = input.idempotencyKey
+  const previous = requests.get(key)
+  if (previous) {
+    if (previous.fingerprint !== fingerprint) throw new Error('IDEMPOTENCY_CONFLICT: demo profile request changed')
+    return structuredClone(previous.revision)
+  }
+  const parent = input.parentRevisionId ? getRevision(input.parentRevisionId) : null
+  if (parent && parent.side !== input.side) throw new Error('PROFILE_INCOMPATIBLE: wrong side')
+  const familyId = parent?.familyId ?? uuid()
+  const revision: Revision = { ...input, id: uuid(), familyId, revision: 1 + Math.max(0, ...revisions.filter(row => row.familyId === familyId).map(row => row.revision)),
+    baseManifestHash: result.manifestHash, baseManifest: biometricManifest, resolved: result.resolved, resolvedHash: result.hash,
+    dependencyHashes: biometricManifest.dependencyHashes, parentRevisionId: parent?.id ?? null, requestHash: fingerprint, createdAtMs: Date.now() }
+  revisions.unshift(revision)
+  requests.set(key, { fingerprint, revision })
+  return structuredClone(revision)
+}
+
+/** Compatibility editor and calibration use one simulated adoption history. */
+export async function demoStageView(side: Side): Promise<RouterOutputs['biometricTuning']['getProfileOverview']['stageView']> {
+  const adopted = events.find(row => row.event.side === side && row.readyAtMs <= Date.now())?.event
+  const effective = await selected(side, adopted?.nextRevisionId ?? null)
+  return { classifier: effective.resolved.sleep_stages,
+    isDefault: canonicalJson(effective.resolved.sleep_stages) === canonicalJson(defaultConfig.sleep_stages),
+    provenance: { interpretation: 'current_classifier_view' as const, source: 'demo', generation: adopted?.generation ?? null,
+      revisionId: adopted?.nextRevisionId ?? null, bundleHash: effective.hash, stageHash: await hash(effective.resolved.sleep_stages),
+      manifestHash: effective.manifestHash, effectiveSampleTimeMs: null, warning: 'SIMULATED DEMO: no live processor.' } }
+}
+
+export async function demoStageSettings(side: Side) {
+  const view = await demoStageView(side)
+  const binding = bindings[side]
+  const desired = await selected(side, binding.desiredRevisionId)
+  return { ...view, pending: binding.generation > (view.provenance.generation ?? 0)
+    ? { classifier: desired.resolved.sleep_stages, generation: binding.generation, warning: 'SIMULATED DEMO: waiting for adoption.' }
+    : null }
+}
+
+export function writeDemoStageClassifier(side: Side, classifier: StageClassifier | null) {
+  return serializeMutation(async () => {
+    const parsed = classifier === null ? null : stageClassifierSchema.parse(classifier)
+    const binding = bindings[side]
+    const current = binding.desiredRevisionId ? getRevision(binding.desiredRevisionId) : null
+    const overrides = (current?.overrides ?? []).filter(override => !override.path.startsWith('sleep_stages.'))
+    if (parsed) overrides.push(...legacyStageOverrides(parsed))
+    const key = `legacy-stage-write:${uuid()}`
+    const revision = overrides.length
+      ? await createDemoRevision({ side, overrides, origin: 'manual', requester: 'legacy-stage-settings',
+          idempotencyKey: key, ...(current ? { parentRevisionId: current.id } : {}) })
+      : null
+    const event = await activateNow({ side, action: revision ? 'activate' : 'reset', revisionId: revision?.id ?? null,
+      expectedGeneration: binding.generation, expectedResolvedHash: revision?.resolvedHash ?? await hash(defaultConfig),
+      boundary: 'immediate', requester: 'legacy-stage-settings', idempotencyKey: key, allowUnvalidated: true })
+    return { classifier: parsed ?? defaultConfig.sleep_stages, isDefault: parsed === null,
+      activation: { generation: event.generation, revisionId: revision?.id ?? null, state: event.state } }
+  })
 }
 
 export const biometricTuning: DemoHandlers<'biometricTuning'> = {
@@ -89,27 +157,7 @@ export const biometricTuning: DemoHandlers<'biometricTuning'> = {
   }),
   getManifest: async () => ({ manifest: biometricManifest, manifestHash: await hash(biometricManifest), activationAvailable: true }),
   resolveProfile: input => resolve(input.overrides, input.baseManifestHash),
-  createProfileRevision: async (input) => {
-    const result = await resolve(input.overrides, input.baseManifestHash)
-    const normalized = { ...input, baseManifestHash: result.manifestHash }
-    if (normalized.parentRevisionId === undefined) delete normalized.parentRevisionId
-    const fingerprint = await hash(normalized)
-    const key = input.idempotencyKey
-    const previous = requests.get(key)
-    if (previous) {
-      if (previous.fingerprint !== fingerprint) throw new Error('IDEMPOTENCY_CONFLICT: demo profile request changed')
-      return structuredClone(previous.revision)
-    }
-    const parent = input.parentRevisionId ? getRevision(input.parentRevisionId) : null
-    if (parent && parent.side !== input.side) throw new Error('PROFILE_INCOMPATIBLE: wrong side')
-    const familyId = parent?.familyId ?? uuid()
-    const revision: Revision = { ...input, id: uuid(), familyId, revision: 1 + Math.max(0, ...revisions.filter(row => row.familyId === familyId).map(row => row.revision)),
-      baseManifestHash: result.manifestHash, baseManifest: biometricManifest, resolved: result.resolved, resolvedHash: result.hash,
-      dependencyHashes: biometricManifest.dependencyHashes, parentRevisionId: parent?.id ?? null, requestHash: fingerprint, createdAtMs: Date.now() }
-    revisions.unshift(revision)
-    requests.set(key, { fingerprint, revision })
-    return structuredClone(revision)
-  },
+  createProfileRevision: createDemoRevision,
   getProfileRevision: input => getRevision(input.id),
   listProfileRevisions: (input) => {
     const rows = revisions.filter(row => row.side === input.side && (!input.familyId || row.familyId === input.familyId)
@@ -152,10 +200,9 @@ export const biometricTuning: DemoHandlers<'biometricTuning'> = {
   getProfileOverview: async ({ side }) => {
     const binding = structuredClone(bindings[side])
     const desired = await selected(side, binding.desiredRevisionId)
-    const adopted = events.find(row => row.event.side === side && row.readyAtMs <= Date.now())?.event
-    const effective = await selected(side, adopted?.nextRevisionId ?? null)
+    const stageView = await demoStageView(side)
     return { desired: { binding, resolved: desired.resolved, hash: desired.hash, isDefault: binding.desiredRevisionId === null, warning: null },
-      stageView: { classifier: effective.resolved.sleep_stages, isDefault: !adopted?.nextRevisionId, provenance: { interpretation: 'current_classifier_view', source: 'demo', generation: adopted?.generation ?? null, revisionId: adopted?.nextRevisionId ?? null, bundleHash: effective.hash, stageHash: await hash(effective.resolved.sleep_stages), manifestHash: effective.manifestHash, effectiveSampleTimeMs: null, warning: 'SIMULATED DEMO: no live processor.' } },
+      stageView,
       legacyStageView: { classifier: defaultConfig.sleep_stages, personalized: false, migrationPending: false },
       runtimeHealth: noHealth, runtimeStatus: 'unreported', receipts: [], sensorCalibration: [], activationAvailable: true,
       limitations: ['SIMULATED DEMO: activation boundaries are simulated after a short delay. No live processor or hardware activation.'] }
