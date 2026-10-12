@@ -1,5 +1,6 @@
 /** Synthetic-only qualification harness. Bundle with esbuild (better-sqlite3 external).
- * Pass a NEW persistent directory, migrations directory, packaged worker, and optional mixed|dense fixture.
+ * Pass NEW_DIRECTORY MIGRATIONS WORKER [mixed|dense] [COORDINATOR].
+ * Omitting COORDINATOR measures the old, synchronous calling-process path.
  * Reads only loopback sensor/API telemetry; never opens the application databases.
  */
 import Database from 'better-sqlite3'
@@ -13,6 +14,7 @@ import WebSocket from 'ws'
 import * as schema from '../../src/db/biometrics-schema'
 import { DatasetStore } from '../../src/biometrics/backtest/datasets'
 import { BacktestJobStore } from '../../src/biometrics/backtest/jobs'
+import { runCoordinatorTask } from '../../src/biometrics/backtest/coordinator'
 import { executeNextBacktest } from '../../src/biometrics/backtest/runner'
 import { workerBuildHash } from '../../src/biometrics/backtest/child'
 import { defaultConfig, manifestHash } from '../../src/biometrics/algorithms/registry'
@@ -21,7 +23,7 @@ import { ReferenceStore } from '../../src/biometrics/references/store'
 import { previewReferenceImport } from '../../src/biometrics/references/normalize'
 
 async function main() {
-  const [directoryArg, migrationsArg, workerArg, fixture = 'mixed'] = process.argv.slice(2)
+  const [directoryArg, migrationsArg, workerArg, fixture = 'mixed', coordinatorArg] = process.argv.slice(2)
   if (!directoryArg || !migrationsArg || !workerArg) throw new Error('NEW_DIRECTORY MIGRATIONS WORKER required')
   if (!['mixed', 'dense'].includes(fixture)) throw new Error('Fixture must be mixed or dense')
   const dense = fixture === 'dense'
@@ -55,13 +57,22 @@ async function main() {
   const imported = { side: 'left' as const, subjectId: 'synthetic-qualification', source: 'synthetic-v1', rows: references }
   const preview = previewReferenceImport(imported)
   const reference = new ReferenceStore(db).commit({ import: imported, previewHash: preview.summary.contentHash })
+  const coordinator = coordinatorArg ? { databasePath: join(directory, 'synthetic.db'), coordinatorPath: resolve(coordinatorArg), workerPath, modulePath: process.env.NODE_PATH } : null
+  const snapshotHistogram = monitorEventLoopDelay({ resolution: 20 })
+  snapshotHistogram.enable()
+  await new Promise(resolve => setTimeout(resolve, 50))
   const snapshotStart = performance.now()
-  const dataset = new DatasetStore(db).create({ side: 'left', subjectId: imported.subjectId, sessionIds, referenceImportIds: [reference.id], timezone: 'UTC', idempotencyKey: 'synthetic-v1' })
+  const datasetInput = { side: 'left' as const, subjectId: imported.subjectId, sessionIds, referenceImportIds: [reference.id], timezone: 'UTC', idempotencyKey: 'synthetic-v1' }
+  const dataset = coordinator ? await runCoordinatorTask(coordinator, { type: 'createDataset', input: datasetInput }) : new DatasetStore(db).create(datasetInput)
   const snapshotMs = performance.now() - snapshotStart
+  await new Promise(resolve => setTimeout(resolve, 50))
+  const snapshotEventLoopMaxMs = snapshotHistogram.max / 1e6
+  snapshotHistogram.disable()
   const originalHash = () => createHash('sha256').update(JSON.stringify(sqlite.prepare('SELECT * FROM vitals ORDER BY id').all())).digest('hex')
   const beforeHash = originalHash()
   const jobs = new BacktestJobStore(db)
-  const experiment = jobs.createExperiment(dataset.id, { version: 'descriptive-evaluation-v1', mode: 'stage_replay', assumedStageCalibrationQuality: 1, pointToleranceMs: 30000, clockOffsetMs: 0 })
+  const protocol = { version: 'descriptive-evaluation-v1' as const, mode: 'stage_replay' as const, assumedStageCalibrationQuality: 1, pointToleranceMs: 30000, clockOffsetMs: 0 }
+  const experiment = coordinator ? await runCoordinatorTask(coordinator, { type: 'createExperiment', input: { datasetId: dataset.id, protocol, idempotencyKey: 'synthetic-experiment' } }) : jobs.createExperiment(dataset.id, protocol)
   const configs = (['default', 'current', 'candidate'] as const).map((label, index) => {
     const resolved = structuredClone(defaultConfig)
     // Synthetic comparison roles: this benchmark tests resources, not promotion.
@@ -110,14 +121,19 @@ async function main() {
       phase = `replay-${attempt}`
       histogram.reset()
       const began = performance.now()
-      const outcome = await executeNextBacktest(db, { owner: 'synthetic-qualification', workerPath, admit: async () => true, timeoutMs: 120000 })
+      const outcome = coordinator
+        ? await runCoordinatorTask(coordinator, { type: 'execute', owner: 'synthetic-qualification' }, { admit: async () => true })
+        : await executeNextBacktest(db, { owner: 'synthetic-qualification', workerPath, admit: async () => true, timeoutMs: 120000 })
       const elapsedMs = performance.now() - began
       // Let timers observe the final synchronous publication before reading delay.
       await new Promise(resolve => setTimeout(resolve, 50))
-      const readStarted = performance.now(), result = jobs.result(job.id)
+      const readStarted = performance.now(), result = coordinator ? await runCoordinatorTask(coordinator, { type: 'readResult', input: { id: job.id } }) : jobs.result(job.id)
       const resultReadMs = performance.now() - readStarted
       const report = result?.report as { operational?: unknown } | undefined
-      runs.push({ outcome, elapsedMs, resultReadMs, available: result?.available, reportBytes: Buffer.byteLength(JSON.stringify(report ?? null)), operational: report?.operational,
+      const reportBytes = Buffer.byteLength(JSON.stringify(report ?? null))
+      // Include IPC deserialization and report serialization in the calling-loop maximum.
+      await new Promise(resolve => setTimeout(resolve, 50))
+      runs.push({ outcome, elapsedMs, resultReadMs, available: result?.available, reportBytes, operational: report?.operational,
         parentEventLoopP95Ms: histogram.percentile(95) / 1e6, parentEventLoopMaxMs: histogram.max / 1e6, parentPeakRssKiB: process.resourceUsage().maxRSS })
       if (outcome.state !== 'succeeded') throw new Error(`Qualification run failed: ${jobs.get(job.id).error}`)
     }
@@ -129,7 +145,7 @@ async function main() {
     await sampler
     socket.terminate()
     histogram.disable()
-    const output = { version: 'synthetic-runner-qualification-v1', fixture, evaluatorBuildHash, datasetHash: dataset.contentHash, snapshotMs,
+    const output = { version: 'synthetic-runner-qualification-v1', fixture, coordinator: coordinator !== null, evaluatorBuildHash, datasetHash: dataset.contentHash, snapshotMs, snapshotEventLoopMaxMs,
       canonicalObservationsUnchanged: beforeHash === originalHash(), runs, samples }
     writeFileSync(join(directory, 'measurements.json'), JSON.stringify(output, null, 2))
     sqlite.close()

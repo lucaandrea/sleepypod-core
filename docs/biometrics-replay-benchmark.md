@@ -190,3 +190,62 @@ comparison against an asserted shipped-default profile. Repeat qualification
 after coordinator isolation and again for the final deployed worker. The
 measurements do not yet select universal admission thresholds or qualify live
 SQLite contention and closed-loop control responsiveness.
+
+## Isolated coordinator follow-up
+
+The coordinator implementation at `0e5c87c0` was measured on the same pod on
+October 12 using the dense fixture above. The optional final `COORDINATOR`
+argument to `scripts/benchmarks/biometrics-runner.ts` routes dataset creation,
+experiment creation, execution, and report reads through the shipped coordinator.
+The caller uses the same 384 MiB heap cap as the preceding benchmark; each
+coordinator has a 384 MiB cap and nice 19, and its evaluator retains 128 MiB/nice
+19. Each operation gets a fresh process. The worker hash remains
+`45547553cd456cba5051fe6e60e8562b5510ae32bbf8b92cfeb62c59cdeb59d1`.
+
+An initial isolated run succeeded three times. The repeat below adds a timer
+turn after report serialization, so its event-loop maximum includes final IPC
+deserialization and JSON serialization as well as execution/publication. This
+is a calling-process measurement, not the production application's event-loop
+histogram. Both runs used exclusively created synthetic databases and retained
+no personal recordings or API response bodies.
+
+| Measurement | Run 1 | Run 2 | Run 3 |
+| --- | --- | --- | --- |
+| Execution through publication | 14,955.19 ms | 15,390.62 ms | 15,141.36 ms |
+| Integrity-checked full report read | 4,178.71 ms | 4,418.67 ms | 4,237.17 ms |
+| Calling-process event-loop maximum | 144.83 ms | 187.83 ms | 174.59 ms |
+| Calling-process event-loop p95 | 21.22 ms | 21.04 ms | 21.12 ms |
+| Calling-process cumulative peak RSS | 153,428 KiB | 156,940 KiB | 156,940 KiB |
+| Evaluator peak RSS | 164,460 KiB | 171,136 KiB | 162,032 KiB |
+
+All three attempts succeeded; full reports remained approximately 2.30 MB and
+canonical synthetic vitals were unchanged. Dataset construction took 5,693.98 ms
+with a calling-process event-loop maximum of 56.30 ms. During replay, minimum
+available system memory was 1,046,688 KiB, maximum zone-zero temperature was
+41.909 °C, and maximum piezo source timestamp age was 2,756 ms. This does not
+measure the coordinator's peak RSS; the memory values above must not be summed
+as a complete process-tree maximum.
+
+The independent probe recorded 12 baseline samples, 291 spanning the complete
+benchmark, and nine afterward. Every request returned HTTP 200.
+
+| Maximum HTTP latency | Baseline | Entire benchmark | After |
+| --- | --- | --- | --- |
+| Performance | 30.48 ms | 160.12 ms | 38.15 ms |
+| Sensor source | 27.47 ms | 109.92 ms | 24.23 ms |
+| Device status | 65.74 ms | 159.46 ms | 76.02 ms |
+
+Isolation removed the multi-second calling-loop stalls observed previously,
+but full-report IPC/serialization still transfers large trace arrays. In one
+retained synthetic report, `nights` occupied about 2.21 MB; the first evaluated
+window's `blocks` alone occupied 56,786 bytes. A bounded summary for interactive
+review, with exact traces fetched through the existing paginated endpoint, is
+an appropriate next optimization. Keep the complete immutable report and its
+hash; a transport projection must not silently redefine the retained artifact.
+
+These observations still do not qualify live-database write contention,
+closed-loop hardware responsiveness, waveform processing, or arbitrary-code
+isolation. No production resource policy or automatic background execution was
+enabled by this benchmark. Temporary benchmark databases and binaries were
+removed after measurements were copied locally; the production service was
+left running without a deployment or restart.
