@@ -1,3 +1,5 @@
+import { hash, uuid } from './biometric-utils'
+import { referenceHandlers } from './biometric-references'
 import { biometricManifest, defaultConfig, resolveOverrides } from '@/src/biometrics/algorithms/registry-core'
 import { canonicalJson } from '@/src/biometrics/algorithms/canonical-json'
 import type { DemoHandlers, RouterOutputs, RouterInputs } from '../types'
@@ -6,18 +8,6 @@ type Revision = RouterOutputs['biometricTuning']['getProfileRevision']
 const revisions: Revision[] = []
 const requests = new Map<string, { fingerprint: string, revision: Revision }>()
 
-/** Real canonical SHA-256, with no Node modules in the browser demo bundle. */
-async function hash(value: unknown): Promise<string> {
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(canonicalJson(value)))
-  return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('')
-}
-function uuid() {
-  const bytes = crypto.getRandomValues(new Uint8Array(16))
-  bytes[6] = (bytes[6] & 15) | 64
-  bytes[8] = (bytes[8] & 63) | 128
-  const hex = Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('')
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
-}
 const getRevision = (id: string) => {
   const revision = revisions.find(row => row.id === id)
   if (!revision) throw new Error('NOT_FOUND: demo profile revision')
@@ -79,6 +69,7 @@ function activate(input: RouterInputs['biometricTuning']['rollbackProfile'] & { 
 }
 
 export const biometricTuning: DemoHandlers<'biometricTuning'> = {
+  ...referenceHandlers,
   getManifest: async () => ({ manifest: biometricManifest, manifestHash: await hash(biometricManifest), activationAvailable: true }),
   resolveProfile: input => resolve(input.overrides, input.baseManifestHash),
   createProfileRevision: async (input) => {
