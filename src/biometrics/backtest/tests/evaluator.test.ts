@@ -21,7 +21,7 @@ describe('retained-data evaluator', () => {
     expect(windows[0].numeric[0]).toMatchObject({ metrics: { mae: 2 }, pairedCount: 1 })
     expect(report.status).toBe('insufficient_evidence')
     expect(report.stageNightSummary).toMatchObject([{ totalNights: 1, scoredNights: 1, equalNightMeanAgreementDifference: 0 }])
-    expect(report.nights[0].comparisons).toMatchObject([{ baseline: 'default', candidate: 'current', windows: [{ coverageReduced: false, differences: { commonAgreement: 0 } }] }])
+    expect(report.nights[0].comparisons).toMatchObject([{ baseline: 'default', candidate: 'current', windows: [{ commonSupportScope: 'all_configurations', coverageReduced: false, differences: { commonAgreement: 0 } }] }])
   })
   it('rejects changed retained inputs and engine snapshots before evaluation', () => {
     const input = fixture()
@@ -49,5 +49,15 @@ describe('retained-data evaluator', () => {
     expect(report.stageNightSummary[0].uncertainty).toMatchObject({ policy: protocol.nightUncertainty,
       status: 'insufficient_nights', scoredNights: 1, interval: null })
     expect(report.status).toBe('insufficient_evidence')
+  })
+  it('applies the shared three-configuration support to every reported comparison', () => {
+    const input = fixture()
+    const candidate = { ...input.job.configs[0], label: 'candidate' as const }
+    const report = evaluateBacktest({ ...input, job: { ...input.job, configs: [...input.job.configs, candidate] } })
+    expect(report.nights[0].comparisons).toHaveLength(3)
+    for (const comparison of report.nights[0].comparisons) {
+      expect(comparison.windows[0]).toMatchObject({ commonSupportScope: 'all_configurations',
+        commonSupport: { baseline: { pairedDurationMs: 600000 }, candidate: { pairedDurationMs: 600000 } } })
+    }
   })
 })

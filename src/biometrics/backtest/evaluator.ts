@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { compareStageOutputs } from './stage-comparison'
 import { summarizeStageNights } from './night-summary'
+import { intersectOutputSupport } from './common-support'
 import { classifySleepStages, type SleepStageBlock } from '@/src/lib/sleep-stages'
 import { configHash, dataHash } from '../algorithms/canonical'
 import { manifestHash, validateConfig } from '../algorithms/registry'
@@ -88,17 +89,21 @@ export function evaluateBacktest(raw: z.input<typeof backtestWorkSchema>, progre
       }
       return { label: config.label, revisionId: config.revisionId, configHash: config.resolvedHash, windows }
     })
+    const shift = (blocks: SleepStageBlock[]) => blocks.map(block => ({ ...block,
+      start: block.start + job.protocol.clockOffsetMs, end: block.end + job.protocol.clockOffsetMs }))
+    const sharedSupport = job.protocol.mode === 'stage_replay'
+      ? windows.map((window, index) =>
+          intersectOutputSupport(evaluations.map(evaluation => shift(evaluation.windows[index].blocks)), window.startMs, window.endMs))
+      : []
     const comparisons = job.protocol.mode === 'stage_replay'
       ? evaluations.flatMap(candidate => evaluations
           .filter(baseline => (candidate.label === 'candidate' && baseline.label !== 'candidate') || (candidate.label === 'current' && baseline.label === 'default'))
           .map(baseline => ({ baseline: baseline.label, candidate: candidate.label,
             baselineHash: baseline.configHash, candidateHash: candidate.configHash,
             windows: candidate.windows.map((window, index) => {
-              const shift = (blocks: SleepStageBlock[]) => blocks.map(block => ({ ...block,
-                start: block.start + job.protocol.clockOffsetMs, end: block.end + job.protocol.clockOffsetMs }))
               return { startMs: window.startMs, endMs: window.endMs,
                 ...compareStageOutputs(shift(baseline.windows[index].blocks), shift(window.blocks),
-                  references.filter(row => row.metric === 'sleep_stages'), window.startMs, window.endMs) }
+                  references.filter(row => row.metric === 'sleep_stages'), window.startMs, window.endMs, sharedSupport[index]) }
             }),
           })))
       : []

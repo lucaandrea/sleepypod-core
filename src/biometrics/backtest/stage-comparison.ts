@@ -1,3 +1,4 @@
+import { intersectOutputSupport, restrictToSupport, type SupportInterval } from './common-support'
 import type { SleepStageBlock } from '@/src/lib/sleep-stages'
 import type { NormalizedMeasurement } from '../references/contracts'
 import { scoreStageDurations } from '../references/stage-scoring'
@@ -12,28 +13,19 @@ const difference = (candidate: number | null, baseline: number | null) => candid
 /** Compare accuracy on exactly the same intervals, while preserving each
  * output's own support. Dropping hard intervals cannot manufacture an accuracy
  * gain on common support. This is descriptive evidence, not a promotion gate. */
-export function compareStageOutputs(baseline: SleepStageBlock[], candidate: SleepStageBlock[], references: NormalizedMeasurement[], startMs: number, endMs: number) {
+export function compareStageOutputs(baseline: SleepStageBlock[], candidate: SleepStageBlock[], references: NormalizedMeasurement[], startMs: number, endMs: number, sharedSupport?: SupportInterval[]) {
   // The shared scorer validates ordering/overlap and normalizes conflicts across
   // reference imports identically for both outputs.
   const baselineOwn = scoreStageDurations(baseline, references, startMs, endMs)
   const candidateOwn = scoreStageDurations(candidate, references, startMs, endMs)
-  const left = [...baseline].sort((a, b) => a.start - b.start)
-  const right = [...candidate].sort((a, b) => a.start - b.start)
-  const commonBaseline: SleepStageBlock[] = [], commonCandidate: SleepStageBlock[] = []
-  let i = 0, j = 0
-  while (i < left.length && j < right.length) {
-    const a = left[i], b = right[j]
-    const start = Math.max(startMs, a.start, b.start), end = Math.min(endMs, a.end, b.end)
-    if (end > start) {
-      commonBaseline.push({ start, end, stage: a.stage })
-      commonCandidate.push({ start, end, stage: b.stage })
-    }
-    if (a.end <= b.end) i++
-    else j++
-  }
+  const pairSupport = intersectOutputSupport([baseline, candidate], startMs, endMs)
+  const support = sharedSupport === undefined ? pairSupport : restrictToSupport(pairSupport, sharedSupport)
+  const commonBaseline = restrictToSupport(baseline, support)
+  const commonCandidate = restrictToSupport(candidate, support)
   const baselineCommon = scoreStageDurations(commonBaseline, references, startMs, endMs)
   const candidateCommon = scoreStageDurations(commonCandidate, references, startMs, endMs)
   return { version: 'paired-stage-support-v1' as const,
+    commonSupportScope: sharedSupport === undefined ? 'pair' as const : 'all_configurations' as const,
     ownSupport: { baseline: summarize(baselineOwn), candidate: summarize(candidateOwn) },
     commonSupport: { baseline: summarize(baselineCommon), candidate: summarize(candidateCommon),
       baselineConfusionMs: baselineCommon.confusionMs, candidateConfusionMs: candidateCommon.confusionMs },

@@ -215,3 +215,21 @@ exchangeable nights; serial dependence and unobserved nights can make the
 estimate misleading. Reports retain these limitations and remain
 `insufficient_evidence` for promotion. Objective/coverage/operational policy and
 held-out qualification are still required for validated activation.
+
+## Shared support across all submitted configurations
+
+Saved stage replays compute one intersection across default, current and any
+candidate for each evaluation window, after applying the fixed clock offset.
+Every pairwise comparison uses that same mask and identifies its
+`commonSupportScope` as `all_configurations`. If any configuration has no output,
+the shared mask is empty and common-support agreement is null. The configuration
+is never silently omitted from the intersection. Each output's own coverage and
+agreement remain separate, preserving visibility into lost output and references.
+
+The interval sweep clips to the evaluation bounds, preserves gaps and labels,
+and rejects overlapping or malformed input intervals. The standalone two-output
+comparison helper still supports explicitly labelled `pair` scope, but saved
+replay reports always supply the all-configuration mask. Nightly summaries and
+uncertainty therefore use the same scored intervals for every comparison in a
+run. The output-availability policy and validated promotion gate remain separate
+requirements; common support alone does not establish improvement.
