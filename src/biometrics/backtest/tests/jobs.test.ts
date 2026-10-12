@@ -48,6 +48,25 @@ describe('durable backtest leases and results', () => {
     expect(sqlite.prepare('SELECT count(*) AS n FROM biometric_backtest_results').get()).toEqual({ n: 1 })
     expect(() => store.complete(token, {})).toThrow('no longer authoritative')
   })
+  it('releases inline report bytes idempotently without erasing holdout exposure or job identity', () => {
+    const job = enqueue('release-report', 'holdout')
+    expect(() => store.releaseResult(job.id, '0'.repeat(64))).toThrow('Only completed')
+    const claimed = store.claim('worker-A')
+    if (!claimed) throw new Error('Missing claim')
+    const published = store.complete(lease(claimed), { traces: ['retained until release'] })
+    expect(() => store.releaseResult(job.id, '0'.repeat(64))).toThrow('hash changed')
+    expect(store.result(job.id)?.available).toBe(true)
+    const released = store.releaseResult(job.id, published.contentHash)
+    expect(released).toMatchObject({ available: false, report: null, releasedAtMs: now,
+      contentHash: published.contentHash, fencingToken: claimed.fencingToken, currentHoldoutUseCount: 1 })
+    now += 1000
+    expect(store.releaseResult(job.id, published.contentHash)).toEqual(released)
+    expect(store.result(job.id)).toEqual(released)
+    expect(enqueue('release-report', 'holdout').id).toBe(job.id)
+    expect(store.get(job.id).state).toBe('succeeded')
+    expect(sqlite.prepare('SELECT report FROM biometric_backtest_results').get()).toEqual({ report: '{}' })
+    expect(sqlite.prepare('SELECT count(*) AS n FROM biometric_holdout_accesses').get()).toEqual({ n: 1 })
+  })
   it('fences expired workers and retries crashes only within the attempt limit', () => {
     const job = enqueue()
     const first = store.claim('worker-A', 1000)

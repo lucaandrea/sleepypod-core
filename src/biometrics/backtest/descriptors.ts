@@ -18,3 +18,6 @@ export function describeJob(row: typeof biometricBacktestJobs.$inferSelect) {
     split: input.split, configurations: input.configs.map(config => ({ label: config.label, revisionId: config.revisionId, hash: config.resolvedHash })),
     evaluationScope: input.protocol.mode === 'comparison' ? 'original_readings_comparison' : 'stage_rules_on_original_readings' })
 }
+
+export const resultDescriptorSchema = z.object({ jobId: z.string(), fencingToken: z.number(), report: z.unknown(),
+  contentHash: z.string(), completedAtMs: z.number(), releasedAtMs: z.number().nullable(), available: z.boolean(), currentHoldoutUseCount: z.number() })

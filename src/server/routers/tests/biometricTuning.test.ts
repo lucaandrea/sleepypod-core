@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as schema from '@/src/db/biometrics-schema'
 import * as configSchema from '@/src/db/schema'
 import { DEFAULT_STAGE_CLASSIFIER } from '@/src/lib/sleep-stage-rules'
+import { BacktestJobStore } from '@/src/biometrics/backtest/jobs'
 import { ProfileStore } from '@/src/biometrics/profiles/store'
 
 const holder = vi.hoisted(() => ({ bio: null as unknown, config: null as unknown }))
@@ -208,6 +209,17 @@ describe('shared biometric reference API', () => {
     expect(await caller.getBacktestResult({ id: job.id })).toBeNull()
     expect((await caller.cancelBacktest({ id: job.id })).state).toBe('cancelled')
     expect((await caller.getBacktest({ id: job.id })).state).toBe('cancelled')
+    const completed = await caller.enqueueBacktest({ ...request, idempotencyKey: 'completed-for-release' })
+    const reports = new BacktestJobStore(drizzle(sqlite, { schema }))
+    const claim = reports.claim('api-fixture')
+    if (!claim) throw new Error('Missing claim')
+    const published = reports.complete({ id: claim.id, owner: 'api-fixture', token: claim.fencingToken }, { fixture: true })
+    expect((await caller.getBacktestResult({ id: completed.id }))?.available).toBe(true)
+    await expect(caller.releaseBacktestResult({ id: completed.id, expectedContentHash: '0'.repeat(64) })).rejects.toMatchObject({ code: 'CONFLICT' })
+    const releasedReport = await caller.releaseBacktestResult({ id: completed.id, expectedContentHash: published.contentHash })
+    expect(releasedReport).toMatchObject({ available: false, report: null, contentHash: published.contentHash })
+    expect(await caller.getBacktestResult({ id: completed.id })).toEqual(releasedReport)
+    expect(await caller.releaseBacktestResult({ id: completed.id, expectedContentHash: published.contentHash })).toEqual(releasedReport)
     const released = await caller.releaseDataset({ id: dataset.id })
     expect(released.available).toBe(false)
     expect(await caller.releaseDataset({ id: dataset.id })).toEqual(released)

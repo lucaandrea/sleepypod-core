@@ -83,6 +83,17 @@ it('publishes a descriptor under the lease, resolves it after reopening, and ret
     }
     expect(store.collectOrphanedArtifacts()).toBe(1)
     expect(store.result(job.id)?.report).toEqual(report)
+    const hash = persisted?.contentHash
+    if (!hash) throw new Error('Missing report hash')
+    raw.exec('CREATE TRIGGER reject_release BEFORE UPDATE ON biometric_backtest_results BEGIN SELECT RAISE(ABORT, \'full\'); END;')
+    expect(() => store.releaseResult(job.id, hash)).toThrow('full')
+    expect(store.result(job.id)?.report).toEqual(report)
+    raw.exec('DROP TRIGGER reject_release')
+    const released = store.releaseResult(job.id, hash)
+    expect(released).toMatchObject({ available: false, report: null, contentHash: hash })
+    expect(readdirSync(root).filter(name => !name.startsWith('.publication.sqlite'))).toEqual([])
+    expect(store.releaseResult(job.id, hash)).toEqual(released)
+    expect(store.result(job.id)).toEqual(released)
   }
   finally { raw.close() }
 })

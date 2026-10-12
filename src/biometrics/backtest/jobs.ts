@@ -162,15 +162,53 @@ export class BacktestJobStore {
   }
 
   result(id: string) {
-    const job = this.get(id)
-    if (job.state !== 'succeeded') return null
-    const result = this.db.select().from(results).where(eq(results.jobId, id)).get()
-    if (!result || result.fencingToken !== job.fencingToken) throw new ReferenceInputError('RESULT_CORRUPT', 'Backtest result integrity check failed')
-    const artifact = reportArtifactSchema.safeParse(result.report)
-    const report = artifact.success ? this.artifacts().read(artifact.data) : result.report
-    if (dataHash(report) !== result.contentHash) throw new ReferenceInputError('RESULT_CORRUPT', 'Backtest result integrity check failed')
-    const input = z.object({ datasetId: z.string() }).parse(job.input)
-    return { ...result, report, currentHoldoutUseCount: this.holdoutUseCount(input.datasetId) }
+    const storage = this.storage()
+    const read = () => {
+      const job = this.get(id)
+      if (job.state !== 'succeeded') return null
+      const result = this.db.select().from(results).where(eq(results.jobId, id)).get()
+      if (!result || result.fencingToken !== job.fencingToken) throw new ReferenceInputError('RESULT_CORRUPT', 'Backtest result integrity check failed')
+      const input = z.object({ datasetId: z.string() }).parse(job.input)
+      const currentHoldoutUseCount = this.holdoutUseCount(input.datasetId)
+      if (result.releasedAtMs !== null) return { ...result, report: null, available: false, currentHoldoutUseCount }
+      const artifact = reportArtifactSchema.safeParse(result.report)
+      const report = artifact.success ? this.artifacts().read(artifact.data) : result.report
+      if (dataHash(report) !== result.contentHash) throw new ReferenceInputError('RESULT_CORRUPT', 'Backtest result integrity check failed')
+      return { ...result, report, available: true, currentHoldoutUseCount }
+    }
+    // A release cannot unlink an artifact between reading its descriptor and bytes.
+    return storage ? storage.withPublication(read) : read()
+  }
+
+  /** Release payload bytes, retaining winning-attempt and holdout audit records.
+   * The caller must identify the exact report hash it intends to release. */
+  releaseResult(id: string, expectedContentHash: string) {
+    z.string().regex(/^[a-f0-9]{64}$/).parse(expectedContentHash)
+    const storage = this.storage()
+    const release = () => {
+      const previous = this.db.transaction((tx) => {
+        const job = this.get(id)
+        if (job.state !== 'succeeded') throw new ReferenceInputError('INVALID_STATE', 'Only completed reports can be released')
+        const result = tx.select().from(results).where(eq(results.jobId, id)).get()
+        if (!result || result.fencingToken !== job.fencingToken) throw new ReferenceInputError('RESULT_CORRUPT', 'Backtest result integrity check failed')
+        if (result.contentHash !== expectedContentHash) throw new ReferenceInputError('REVISION_CONFLICT', 'Report hash changed')
+        if (result.releasedAtMs === null) {
+          tx.update(results).set({ report: {}, releasedAtMs: this.now() }).where(eq(results.jobId, id)).run()
+        }
+        return result.report
+      }, { behavior: 'immediate' })
+      const artifact = reportArtifactSchema.safeParse(previous)
+      if (artifact.success && storage) {
+        const stillReferenced = this.db.select({ report: results.report }).from(results).all().some((row) => {
+          const named = z.object({ name: z.string() }).safeParse(row.report)
+          return named.success && named.data.name === artifact.data.name
+        })
+        if (!stillReferenced) storage.removeReleased(artifact.data)
+      }
+    }
+    if (storage) storage.withPublication(release)
+    else release()
+    return this.result(id)
   }
 
   /** Recover expired attempts without granting stale owners publication rights. */

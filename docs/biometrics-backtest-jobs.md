@@ -132,3 +132,17 @@ Unknown piezo freshness, missing thermal data, read failures or unsupported
 platforms yield unavailable evidence. Collection makes no hardware commands or
 database queries. These helpers are not yet connected to production startup;
 measured thresholds and full publication-load qualification remain required.
+
+## Explicit report release
+
+Completed results support an exact-hash, idempotent release. The release
+transaction replaces payload bytes with an empty stored object and records
+`released_at_ms`, preserving the original content hash and completion/attempt
+metadata. Readers return a null payload with explicit unavailability. Report
+reads and releases share the publication lock, preventing file deletion between
+descriptor lookup and byte verification. After commit, an unreferenced artifact
+is unlinked; failed file deletion leaves an orphan counted against disk quota
+until collection can remove it. A failed database transaction never deletes the
+file. Referenced artifacts are retained conservatively, including future-format
+named references. There is no automatic age-based expiry of committed reports;
+release is an explicit user action through the shared API.

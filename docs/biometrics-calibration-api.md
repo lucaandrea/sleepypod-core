@@ -123,3 +123,27 @@ from the repository root. The JS unit-test CI job installs that same environment
 The test runs the shipped Python adapter with a synthetic frame, verifies the
 next-session boundary, TypeScript stage receipt, restart restoration and rollback;
 it neither starts a sensor follower nor accesses hardware.
+
+## Releasing completed reports
+
+`releaseBacktestResult` (`POST /biometric-tuning/backtests/{id}/result/release`)
+requires the job ID and `expectedContentHash`. It applies only to successful
+jobs and rejects a mismatched hash. Repeating the same release is idempotent.
+The result endpoint now includes `available` and nullable `releasedAtMs`.
+After release it returns `available: false`, `report: null` and the original
+content hash, completion time, winning fencing token and current holdout count.
+A released report is distinct from a job that has not completed (which still
+returns null as the whole result).
+
+Release removes inline payload bytes or detaches an artifact descriptor in a
+transaction before deleting the file. It does not erase experiments, jobs,
+holdout exposure, profile revisions or activation history. A retried enqueue
+with the same idempotency key still resolves to the original successful job;
+it cannot recreate released bytes or erase previous holdout use. A new replay
+requires a new request key and available retained inputs.
+
+The additive biometrics migration `0027_release_backtest_reports` preserves
+existing reports with a null release timestamp. Older readers cannot validate
+a released payload against the original hash, so they report an unavailable or
+corrupt result rather than silently displaying different data. UI/MCP clients
+must use the explicit availability fields when presenting released evidence.

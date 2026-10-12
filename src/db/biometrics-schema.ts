@@ -469,6 +469,7 @@ export const biometricBacktestResults = sqliteTable('biometric_backtest_results'
   report: text('report', { mode: 'json' }).notNull(),
   contentHash: text('content_hash').notNull(),
   completedAtMs: integer('completed_at_ms').notNull(),
+  releasedAtMs: integer('released_at_ms'),
 })
 
 // Exposure follows physical side and recorded time, not a recreatable dataset

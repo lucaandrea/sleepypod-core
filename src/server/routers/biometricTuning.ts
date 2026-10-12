@@ -21,7 +21,7 @@ import { workerBuildHash } from '@/src/biometrics/backtest/child'
 import { packagedWorkerPath } from '@/src/biometrics/backtest/location'
 import { submitBacktest, submitBacktestSchema } from '@/src/biometrics/backtest/submission'
 import { BacktestJobStore } from '@/src/biometrics/backtest/jobs'
-import { describeJob, jobDescriptorSchema } from '@/src/biometrics/backtest/descriptors'
+import { describeJob, jobDescriptorSchema, resultDescriptorSchema } from '@/src/biometrics/backtest/descriptors'
 import { experimentProtocolSchema } from '@/src/biometrics/backtest/contracts'
 import { datasetDescriptorSchema } from '@/src/biometrics/backtest/contracts'
 import { deviceSettings } from '@/src/db/schema'
@@ -174,8 +174,14 @@ export const biometricTuningRouter = router({
   getBacktestResult: publicProcedure
     .meta({ openapi: { method: 'GET', path: '/biometric-tuning/backtests/{id}/result', protect: false, tags: ['Biometric tuning'] } })
     .input(importIdSchema)
-    .output(z.object({ jobId: z.string(), fencingToken: z.number(), report: z.unknown(), contentHash: z.string(), completedAtMs: z.number(), currentHoldoutUseCount: z.number() }).nullable())
+    .output(resultDescriptorSchema.nullable())
     .query(({ input }) => references(() => new BacktestJobStore(biometricsDb).result(input.id))),
+
+  releaseBacktestResult: publicProcedure
+    .meta({ openapi: { method: 'POST', path: '/biometric-tuning/backtests/{id}/result/release', protect: false, tags: ['Biometric tuning'] } })
+    .input(importIdSchema.extend({ expectedContentHash: z.string().regex(/^[a-f0-9]{64}$/) }))
+    .output(resultDescriptorSchema.nullable())
+    .mutation(({ input }) => references(() => new BacktestJobStore(biometricsDb).releaseResult(input.id, input.expectedContentHash))),
 
   createDataset: publicProcedure
     .meta({ openapi: { method: 'POST', path: '/biometric-tuning/datasets', protect: false, tags: ['Biometric tuning'] } })

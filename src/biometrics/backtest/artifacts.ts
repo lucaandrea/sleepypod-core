@@ -129,6 +129,17 @@ export class ReportArtifactStore {
     }
   }
 
+  /** Called only after the descriptor has been detached in a committed DB
+   * transaction under the publication lock. Failed unlink remains GC work. */
+  removeReleased(raw: ReportArtifact) {
+    const descriptor = reportArtifactSchema.parse(raw)
+    if (!this.publishing) throw new Error('Artifact release requires the publication lock')
+    try {
+      unlinkSync(join(this.root, descriptor.name))
+    }
+    catch { /* Retained orphan remains counted against the filesystem quota. */ }
+  }
+
   /** Protect freshly staged files from a concurrent publisher. Only files
    * outside the committed descriptor set and older than one hour are removed. */
   collect(referenced: ReadonlySet<string>, now = Date.now()) {
