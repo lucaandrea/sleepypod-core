@@ -23,7 +23,7 @@ The worker supervisor must terminate unresponsive execution after its grace
 period. The repository itself does not execute code or control processes.
 
 A result and its terminal job state commit atomically. Summaries are bounded
-to 2 MiB each and 64 MiB total; job and experiment histories each stop at 1000
+to 16 MiB each and 64 MiB retained total; job and experiment histories each stop at 1000
 entries. These repository bounds do not replace worker CPU, memory, wall-time,
 free-space, or live-ingest safeguards. They require target-pod measurement
 before enabling production replay.
@@ -57,8 +57,10 @@ interval-duration agreement, not the chart's older midpoint agreement.
 Reports remain descriptive/insufficient-evidence until the promotion policy,
 reference support, common-support checks and operational qualification are
 complete. Merged replay windows are currently limited to one day, and complete
-reports must fit the repository's 2 MiB bound; larger trace artifacts still
-need the dedicated artifact publication path.
+reports up to 2 MiB remain inline. Larger reports use checksummed files beside
+the biometrics database, with a small descriptor in SQLite. The complete report
+is available through the same result reader, with both byte and canonical-data
+hash verification; it is never truncated to fit the inline limit.
 
 `pnpm build` now bundles the worker into
 `.next/standalone/biometrics-worker/worker.cjs`; `pnpm build:biometrics-worker`
@@ -82,3 +84,20 @@ owned unfinished jobs interrupted for bounded retry. Cancellation is
 acknowledged only after the child has stopped, and old attempts cannot publish.
 Result reads verify their hash and winning fencing token and return the current
 holdout exposure count, so later reuse remains visible.
+
+## Large report storage
+
+`ReportArtifactStore` stages a uniquely named file, fsyncs it, atomically renames
+it and fsyncs the directory before a fenced database transaction publishes the
+descriptor and successful job state. File paths derive from the server-owned
+database directory, job UUID, attempt token and content hash; request filenames
+never select a path. An in-memory database needs an explicitly injected artifact
+store for large-report tests. Existing inline results remain readable.
+
+A failed database commit can leave an unpublished file, but cannot expose a
+partial result. Staged files count toward storage checks. The collector removes
+only owned files that are unreferenced and older than one hour; it preserves
+committed descriptors and conservatively retains future-version named references
+during downgrade. Automatic collection and the production host loop are still
+pending. The quota checks rely on the single-active-worker lease protocol;
+strict cross-process filesystem reservation is not yet implemented.

@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { dirname, join } from 'node:path'
 import { and, asc, desc, eq, gt, inArray, lt, lte, or, sql } from 'drizzle-orm'
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3'
 import { z } from 'zod'
@@ -7,6 +8,7 @@ import { configHash, dataHash } from '../algorithms/canonical'
 import { manifestHash, validateConfig } from '../algorithms/registry'
 import { ReferenceInputError } from '../references/time'
 import { DatasetStore } from './datasets'
+import { MAX_REPORT_BYTES, REPORT_BUDGET_BYTES, ReportArtifactStore, reportArtifactSchema } from './artifacts'
 
 const jobs = schema.biometricBacktestJobs
 const experiments = schema.biometricExperiments
@@ -23,7 +25,30 @@ export type JobLease = z.infer<typeof leaseSchema>
 
 /** Leases fence every publication; all expensive work happens outside SQLite. */
 export class BacktestJobStore {
-  constructor(private readonly db: BetterSQLite3Database<typeof schema>, private readonly now = Date.now) {}
+  constructor(private readonly db: BetterSQLite3Database<typeof schema>, private readonly now = Date.now,
+    private readonly artifactStore?: ReportArtifactStore) {}
+
+  private storage() {
+    if (this.artifactStore) return this.artifactStore
+    const main = this.db.all<{ name: string, file: string }>(sql`PRAGMA database_list`).find(row => row.name === 'main')
+    return main?.file ? new ReportArtifactStore(join(dirname(main.file), 'biometric-report-artifacts')) : undefined
+  }
+
+  private artifacts() {
+    const store = this.storage()
+    if (!store) throw new ReferenceInputError('RESOURCE_LIMIT', 'Large reports require a persistent artifact directory')
+    return store
+  }
+
+  collectOrphanedArtifacts() {
+    const referenced = new Set(this.db.select({ report: results.report }).from(results).all().flatMap((row) => {
+      // Preserve future-version descriptors during downgrade; cleanup must
+      // not erase a file merely because this build cannot interpret it.
+      const artifact = z.object({ name: z.string() }).safeParse(row.report)
+      return artifact.success ? [artifact.data.name] : []
+    }))
+    return this.artifacts().collect(referenced, this.now())
+  }
 
   createExperiment(datasetId: string, rawProtocol: z.input<typeof experimentProtocolSchema>, idempotencyKey: string = randomUUID()) {
     const protocol = experimentProtocolSchema.parse(rawProtocol)
@@ -138,9 +163,12 @@ export class BacktestJobStore {
     const job = this.get(id)
     if (job.state !== 'succeeded') return null
     const result = this.db.select().from(results).where(eq(results.jobId, id)).get()
-    if (!result || result.fencingToken !== job.fencingToken || dataHash(result.report) !== result.contentHash) throw new ReferenceInputError('RESULT_CORRUPT', 'Backtest result integrity check failed')
+    if (!result || result.fencingToken !== job.fencingToken) throw new ReferenceInputError('RESULT_CORRUPT', 'Backtest result integrity check failed')
+    const artifact = reportArtifactSchema.safeParse(result.report)
+    const report = artifact.success ? this.artifacts().read(artifact.data) : result.report
+    if (dataHash(report) !== result.contentHash) throw new ReferenceInputError('RESULT_CORRUPT', 'Backtest result integrity check failed')
     const input = z.object({ datasetId: z.string() }).parse(job.input)
-    return { ...result, currentHoldoutUseCount: this.holdoutUseCount(input.datasetId) }
+    return { ...result, report, currentHoldoutUseCount: this.holdoutUseCount(input.datasetId) }
   }
 
   /** Recover expired attempts without granting stale owners publication rights. */
@@ -232,15 +260,25 @@ export class BacktestJobStore {
   complete(lease: JobLease, report: unknown) {
     // Concrete evaluator schemas validate reports before calling this sink.
     const serialized = JSON.stringify(report)
-    if (!serialized || Buffer.byteLength(serialized) > 2 * 1024 * 1024) throw new ReferenceInputError('RESOURCE_LIMIT', 'Backtest summary exceeds 2 MiB')
+    if (!serialized || Buffer.byteLength(serialized) > MAX_REPORT_BYTES) throw new ReferenceInputError('RESOURCE_LIMIT', 'Backtest report exceeds 16 MiB')
     const contentHash = dataHash(report)
+    const owned = this.owned(lease)
+    if (owned.state !== 'running') throw new ReferenceInputError('INVALID_STATE', 'Cancelled work cannot publish a result')
+    let stored: unknown = report
+    const inlineBytes = this.db.select({ bytes: sql<number>`coalesce(sum(case when json_extract(${results.report}, '$.kind') = 'biometric-report-artifact-v1' then 0 else length(cast(${results.report} as blob)) end), 0)` }).from(results).get()?.bytes ?? 0
+    if (Buffer.byteLength(serialized) > 2 * 1024 * 1024) {
+      stored = this.artifacts().write(lease.id, lease.token, serialized, inlineBytes)
+    }
+    else if (inlineBytes + (this.storage()?.usage() ?? 0) + Buffer.byteLength(serialized) > REPORT_BUDGET_BYTES) {
+      throw new ReferenceInputError('RESOURCE_LIMIT', 'Reports and staged artifacts reached the 64 MiB storage budget')
+    }
     return this.db.transaction((tx) => {
       const job = this.owned(lease)
       if (job.state !== 'running') throw new ReferenceInputError('INVALID_STATE', 'Cancelled work cannot publish a result')
-      const retained = tx.select({ bytes: sql<number>`coalesce(sum(length(cast(${results.report} as blob))), 0)` }).from(results).get()?.bytes ?? 0
-      if (retained + Buffer.byteLength(serialized) > 64 * 1024 * 1024) throw new ReferenceInputError('RESOURCE_LIMIT', 'Backtest summaries have reached their 64 MiB storage budget')
+      const retained = tx.select({ bytes: sql<number>`coalesce(sum(case when json_extract(${results.report}, '$.kind') = 'biometric-report-artifact-v1' then json_extract(${results.report}, '$.byteLength') else length(cast(${results.report} as blob)) end), 0)` }).from(results).get()?.bytes ?? 0
+      if (retained + Buffer.byteLength(serialized) > REPORT_BUDGET_BYTES) throw new ReferenceInputError('RESOURCE_LIMIT', 'Backtest summaries have reached their 64 MiB storage budget')
       const now = this.now()
-      tx.insert(results).values({ jobId: job.id, fencingToken: lease.token, report, contentHash, completedAtMs: now }).run()
+      tx.insert(results).values({ jobId: job.id, fencingToken: lease.token, report: stored, contentHash, completedAtMs: now }).run()
       const progress = progressSchema.parse(job.progress)
       tx.update(jobs).set({ state: 'succeeded', progress: { ...progress, phase: 'complete', completedNights: progress.totalNights },
         leaseOwner: null, leaseExpiresAtMs: null, updatedAtMs: now }).where(eq(jobs.id, job.id)).run()
