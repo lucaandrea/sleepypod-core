@@ -25,6 +25,8 @@ export async function executeNextBacktest(db: BetterSQLite3Database<typeof schem
   if (options.signal?.aborted) controller.abort()
   let progress = z.object({ completedNights: z.number(), totalNights: z.number() }).parse(claimed.progress)
   let heartbeatFailure: unknown
+  let resourceFailure = false
+  let resourceCheck: Promise<void> | null = null
   const heartbeat = () => {
     try {
       const result = jobs.heartbeat(lease, { phase: 'evaluating', ...progress })
@@ -35,7 +37,22 @@ export async function executeNextBacktest(db: BetterSQLite3Database<typeof schem
       controller.abort()
     }
   }
-  const timer = setInterval(heartbeat, 5000)
+  const checkResources = async () => {
+    try {
+      if (await options.admit()) return
+    }
+    catch { /* Missing health evidence must stop background work. */ }
+    resourceFailure = true
+    controller.abort()
+  }
+  const timer = setInterval(() => {
+    heartbeat()
+    if (!resourceCheck && !controller.signal.aborted) {
+      resourceCheck = checkResources().finally(() => {
+        resourceCheck = null
+      })
+    }
+  }, 5000)
   try {
     const input = z.object({ datasetId: z.string() }).parse(claimed.input)
     const retained = new DatasetStore(db).read(input.datasetId)
@@ -49,6 +66,10 @@ export async function executeNextBacktest(db: BetterSQLite3Database<typeof schem
         heartbeat()
       },
     })
+    // Quiesce the periodic check before the final fresh check and publication.
+    clearInterval(timer)
+    await resourceCheck
+    await checkResources()
     if (heartbeatFailure) throw heartbeatFailure
     const identity = z.object({ datasetHash: z.string(), protocolHash: z.string(), evaluatorBuildHash: z.string(), split: z.string(), nights: z.array(z.unknown()) }).parse(report)
     if (identity.evaluatorBuildHash !== work.job.evaluatorBuildHash || identity.datasetHash !== work.job.datasetHash || identity.protocolHash !== work.job.protocolHash || identity.split !== work.job.split
@@ -63,7 +84,7 @@ export async function executeNextBacktest(db: BetterSQLite3Database<typeof schem
     try {
       const latest = jobs.get(claimed.id)
       if (latest.state === 'cancel_requested') jobs.acknowledgeCancellation(lease)
-      else if (options.signal?.aborted) jobs.interrupt(lease)
+      else if (options.signal?.aborted || resourceFailure) jobs.interrupt(lease, resourceFailure ? 'Resource admission withdrawn' : 'Worker host stopped')
       else jobs.fail(lease, 'Replay failed validation, resources, or execution')
     }
     catch { /* Lost lease: recovery owns the state transition. */ }
@@ -71,6 +92,7 @@ export async function executeNextBacktest(db: BetterSQLite3Database<typeof schem
   }
   finally {
     clearInterval(timer)
+    await resourceCheck
     options.signal?.removeEventListener('abort', abort)
   }
 }

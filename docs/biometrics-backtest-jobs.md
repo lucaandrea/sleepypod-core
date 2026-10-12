@@ -79,7 +79,10 @@ isolation for shipped trusted code; it is not the external sandbox required
 for user-proposed algorithm packages. The heap limit is not a total RSS cap.
 The child records evaluation runtime and peak RSS for operational inspection.
 
-The runner heartbeats independently of the child's progress. Shutdown leaves
+The runner heartbeats independently of the child's progress. It rechecks resource
+admission every five seconds and before publication; denied or unavailable health
+evidence aborts the child and records a resource interruption under the same
+bounded retry policy. Checks never overlap. Shutdown leaves
 owned unfinished jobs interrupted for bounded retry. Cancellation is
 acknowledged only after the child has stopped, and old attempts cannot publish.
 Result reads verify their hash and winning fencing token and return the current

@@ -5,7 +5,7 @@ import { migrate } from 'drizzle-orm/better-sqlite3/migrator'
 import { execFile } from 'node:child_process'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { promisify } from 'node:util'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import * as schema from '@/src/db/biometrics-schema'
@@ -69,5 +69,28 @@ describe('durable replay execution', () => {
       return true
     } })).toEqual({ state: 'deferred' })
     expect(jobs.get(jobId).attempt).toBe(0)
+  })
+  it('interrupts a running child when health declines and never publishes its result', async () => {
+    const stalledPath = join(directory, 'stalled.cjs')
+    await writeFile(stalledPath, 'process.stdin.resume(); setInterval(() => {}, 1000)')
+    const hash = await workerBuildHash(stalledPath)
+    sqlite.prepare('UPDATE biometric_backtest_jobs SET input = json_set(input, \'$.evaluatorBuildHash\', ?)').run(hash)
+    let checks = 0
+    const result = await executeNextBacktest(db, { ...options, workerPath: stalledPath, admit: async () => ++checks === 1 })
+    expect(result).toEqual({ state: 'stopped', jobId })
+    expect(checks).toBe(2)
+    expect(jobs.get(jobId)).toMatchObject({ state: 'interrupted', error: 'Resource admission withdrawn' })
+    expect(jobs.result(jobId)).toBeNull()
+  }, 10000)
+
+  it('withholds publication when the final resource check fails', async () => {
+    let checks = 0
+    expect(await executeNextBacktest(db, { ...options, admit: async () => {
+      if (++checks === 1) return true
+      throw new Error('Health collector unavailable')
+    } })).toEqual({ state: 'stopped', jobId })
+    expect(checks).toBe(2)
+    expect(jobs.get(jobId)).toMatchObject({ state: 'interrupted', error: 'Resource admission withdrawn' })
+    expect(jobs.result(jobId)).toBeNull()
   })
 })

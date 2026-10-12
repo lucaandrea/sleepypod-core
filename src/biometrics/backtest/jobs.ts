@@ -243,11 +243,11 @@ export class BacktestJobStore {
     }, { behavior: 'immediate' })
   }
 
-  interrupt(lease: JobLease) {
+  interrupt(lease: JobLease, reason: 'Worker host stopped' | 'Resource admission withdrawn' = 'Worker host stopped') {
     return this.db.transaction((tx) => {
       const job = this.owned(lease)
       return tx.update(jobs).set({ state: job.state === 'cancel_requested' ? 'cancelled' : job.attempt >= 3 ? 'failed' : 'interrupted',
-        error: 'Worker host stopped', leaseOwner: null, leaseExpiresAtMs: null, updatedAtMs: this.now() }).where(eq(jobs.id, job.id)).returning().get()
+        error: reason, leaseOwner: null, leaseExpiresAtMs: null, updatedAtMs: this.now() }).where(eq(jobs.id, job.id)).returning().get()
     }, { behavior: 'immediate' })
   }
 
