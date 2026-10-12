@@ -41,3 +41,24 @@ export const numericReportViewSchema = z.object({
   })).max(60),
 })
 export type NumericReportView = z.infer<typeof numericReportViewSchema>
+
+const duration = z.number().finite().nonnegative()
+const stage = z.enum(['wake', 'light', 'deep', 'rem'])
+const matrixRow = z.object({ wake: duration, light: duration, deep: duration, rem: duration })
+const stageScore = pooled.extend({
+  confusionMs: z.object({ wake: matrixRow, light: matrixRow, deep: matrixRow, rem: matrixRow }),
+  perStage: z.array(z.object({ stage, referenceMs: duration, predictedMs: duration, precision: score, recall: score, f1: score })).length(4),
+})
+const ownSupport = z.object({ outputMs: duration, pairedMs: duration, referenceMs: duration, agreement: score, outputCoverage: score, referenceCoverage: score })
+export const stageReportViewSchema = z.object({ stageNightSummary: z.array(z.object({
+  baseline: z.string(), candidate: z.string(), baselineHash: z.string(), candidateHash: z.string(),
+  pooledCommonSupport: z.object({ baseline: stageScore, candidate: stageScore }),
+  nights: z.array(z.object({
+    cohortId: z.string(), evaluationDurationMs: duration,
+    commonSupport: z.object({ baseline: stageScore, candidate: stageScore }),
+    ownSupport: z.object({ baseline: ownSupport, candidate: ownSupport }),
+    commonAgreementDifference: score, commonMacroF1Difference: score, coverageReduced: z.boolean(),
+  })).max(60),
+})).max(3) })
+export type StageReportView = z.infer<typeof stageReportViewSchema>
+export type StageScoreView = z.infer<typeof stageScore>

@@ -4,8 +4,9 @@ import { useState } from 'react'
 import { Trans, useLingui } from '@lingui/react/macro'
 import { trpc } from '@/src/utils/trpc'
 import { Button, InlineError, Skeleton } from '@/src/components/ds'
-import { reportViewSchema, numericReportViewSchema } from './report-view'
+import { reportViewSchema, numericReportViewSchema, stageReportViewSchema } from './report-view'
 import { NumericReport } from './NumericReport'
+import { StageReport } from './StageReport'
 
 export function BacktestReport({ id }: { id: string }) {
   const { t, i18n } = useLingui()
@@ -27,6 +28,7 @@ export function BacktestReport({ id }: { id: string }) {
   if (!parsed.success) return <InlineError><Trans>This report version or structure is not supported by this view.</Trans></InlineError>
   const report = parsed.data
   const numeric = numericReportViewSchema.safeParse(descriptor.report)
+  const stages = stageReportViewSchema.safeParse(descriptor.report)
   const labels: Record<string, string> = { default: t`System defaults`, current: t`Current stage view`, candidate: t`Candidate` }
   const splits = { tuning: t`Tuning`, validation: t`Validation`, holdout: t`Holdout` }
   const uncertaintyLabels = { not_requested: t`Not requested`, insufficient_nights: t`Insufficient paired nights`, degenerate: t`No estimable variation`, estimated: t`Exploratory interval estimated` }
@@ -82,6 +84,7 @@ export function BacktestReport({ id }: { id: string }) {
           {summary.uncertainty.limitations.map(limitation => <p key={limitation} className="text-xs text-fg-2">{limitation}</p>)}
         </div>
       ))}
+      {report.protocol.mode === 'stage_replay' ? (stages.success ? <StageReport key={descriptor.contentHash} report={stages.data} /> : <InlineError><Trans>Stage details are unavailable or incompatible.</Trans></InlineError>) : null}
       {numeric.success ? <NumericReport key={descriptor.contentHash} report={numeric.data} /> : <InlineError><Trans>Numerical details are unavailable or incompatible.</Trans></InlineError>}
       <details>
         <summary><Trans>Report identity</Trans></summary>

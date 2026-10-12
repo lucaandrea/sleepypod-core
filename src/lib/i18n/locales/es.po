@@ -65,7 +65,9 @@ msgstr "Después"
 msgid "After configuration hash"
 msgstr "Hash de configuración posterior"
 
-#: src/components/biometrics/Calibration/BacktestReport.tsx:62
+#: src/components/biometrics/Calibration/BacktestReport.tsx:64
+#: src/components/biometrics/Calibration/StageReport.tsx:19
+#: src/components/biometrics/Calibration/StageReport.tsx:108
 msgid "Agreement"
 msgstr "Concordancia"
 
@@ -92,7 +94,7 @@ msgid "Assumed calibration quality (0–1)"
 msgstr "Calidad de calibración asumida (0–1)"
 
 #. placeholder {0}: report.calibration.quality
-#: src/components/biometrics/Calibration/BacktestReport.tsx:45
+#: src/components/biometrics/Calibration/BacktestReport.tsx:47
 msgid "Assumed stage calibration quality: {0}"
 msgstr "Calidad de calibración de fases asumida: {0}"
 
@@ -159,8 +161,9 @@ msgid "Cancelled"
 msgstr "Cancelado"
 
 #: src/components/biometrics/Calibration/BacktestJobs.tsx:63
-#: src/components/biometrics/Calibration/BacktestReport.tsx:30
+#: src/components/biometrics/Calibration/BacktestReport.tsx:32
 #: src/components/biometrics/Calibration/NumericReport.tsx:26
+#: src/components/biometrics/Calibration/StageReport.tsx:76
 msgid "Candidate"
 msgstr "Candidato"
 
@@ -214,6 +217,30 @@ msgstr "Elija el protocolo antes de ver los resultados. Crear un experimento no 
 msgid "Clock mismatch"
 msgstr "Desajuste de reloj"
 
+#. placeholder {0}: minutes(score.pairedDurationMs)
+#: src/components/biometrics/Calibration/StageReport.tsx:17
+msgid "Common paired minutes: {0}"
+msgstr "Minutos emparejados compartidos: {0}"
+
+#: src/components/biometrics/Calibration/StageReport.tsx:154
+msgid "Common support is the intersection of all evaluated configurations and eligible reference intervals. Own-support scores use each configuration’s available intervals and may describe different portions of the night."
+msgstr "Los intervalos compartidos son la intersección de todas las configuraciones evaluadas y los intervalos de referencia aptos. Las puntuaciones sobre intervalos propios usan los datos disponibles de cada configuración y pueden describir distintas partes de la noche."
+
+#. placeholder {0}: percent(night.commonAgreementDifference)
+#: src/components/biometrics/Calibration/StageReport.tsx:100
+msgid "Common-support agreement difference: {0}"
+msgstr "Diferencia de concordancia en intervalos compartidos: {0}"
+
+#. placeholder {0}: labels[comparison[role]] ?? comparison[role]
+#: src/components/biometrics/Calibration/StageReport.tsx:136
+msgid "Common-support details: {0}"
+msgstr "Detalles de intervalos compartidos: {0}"
+
+#. placeholder {0}: percent(night.commonMacroF1Difference)
+#: src/components/biometrics/Calibration/StageReport.tsx:101
+msgid "Common-support macro F1 difference: {0}"
+msgstr "Diferencia de F1 macro en intervalos compartidos: {0}"
+
 #: src/components/biometrics/Calibration/ProfileComparison.tsx:28
 msgid "Compare against the saved profile. This is a configuration comparison, not validation evidence."
 msgstr "Compare con el perfil guardado. Esta comparación de configuración no demuestra validación."
@@ -243,7 +270,8 @@ msgstr "Complete los campos obligatorios dentro de los límites indicados."
 msgid "Completed nights"
 msgstr "Noches completadas"
 
-#: src/components/biometrics/Calibration/BacktestReport.tsx:61
+#: src/components/biometrics/Calibration/BacktestReport.tsx:63
+#: src/components/biometrics/Calibration/StageReport.tsx:107
 msgid "Configuration"
 msgstr "Configuración"
 
@@ -254,6 +282,10 @@ msgstr "Identidad de la configuración"
 #: src/components/biometrics/Calibration/ReferenceLibrary.tsx:58
 msgid "Confirm import deletion"
 msgstr "Confirmar la eliminación de la importación"
+
+#: src/components/biometrics/Calibration/StageReport.tsx:28
+msgid "Confusion matrix in minutes: reference rows, predicted columns"
+msgstr "Matriz de confusión en minutos: filas de referencia, columnas de predicción"
 
 #: src/components/biometrics/Calibration/ReferenceLibrary.tsx:51
 msgid "Correct import"
@@ -268,19 +300,24 @@ msgstr "Corrigiendo la importación {0}. Proporcione la exportación de reemplaz
 msgid "Coverage estimates use nominal recording cadence; they do not prove continuous signal support."
 msgstr "Las estimaciones de cobertura usan la cadencia nominal de registro; no demuestran disponibilidad continua de la señal."
 
+#: src/components/biometrics/Calibration/StageReport.tsx:99
+msgid "Coverage reduced in at least one evaluated window"
+msgstr "Cobertura reducida en al menos una ventana evaluada"
+
 #: src/components/biometrics/Calibration/CalibrationOverview.tsx:15
 #: src/components/biometrics/Calibration/CalibrationOverview.tsx:58
 msgid "Current"
 msgstr "Actual"
 
 #. placeholder {0}: descriptor.currentHoldoutUseCount
-#: src/components/biometrics/Calibration/BacktestReport.tsx:43
+#: src/components/biometrics/Calibration/BacktestReport.tsx:45
 msgid "Current holdout exposure count: {0}"
 msgstr "Número actual de exposiciones al conjunto reservado: {0}"
 
 #: src/components/biometrics/Calibration/BacktestJobs.tsx:63
-#: src/components/biometrics/Calibration/BacktestReport.tsx:30
+#: src/components/biometrics/Calibration/BacktestReport.tsx:32
 #: src/components/biometrics/Calibration/NumericReport.tsx:26
+#: src/components/biometrics/Calibration/StageReport.tsx:76
 msgid "Current stage view"
 msgstr "Vista de fases actual"
 
@@ -293,7 +330,7 @@ msgid "Dataset"
 msgstr "Conjunto de datos"
 
 #: src/components/biometrics/Calibration/BacktestJobs.tsx:87
-#: src/components/biometrics/Calibration/BacktestReport.tsx:91
+#: src/components/biometrics/Calibration/BacktestReport.tsx:94
 msgid "Dataset hash"
 msgstr "Hash del conjunto de datos"
 
@@ -305,6 +342,10 @@ msgstr "Conjunto de datos guardado: {0}"
 #: src/components/biometrics/Calibration/DatasetBuilder.tsx:35
 msgid "Dataset sleeper identifier"
 msgstr "Identificador de la persona del conjunto de datos"
+
+#: src/components/biometrics/Calibration/StageReport.tsx:12
+msgid "Deep"
+msgstr "Profundo"
 
 #: src/components/biometrics/Calibration/ProfileRecovery.tsx:31
 msgid "Default recovery configuration hash"
@@ -334,6 +375,10 @@ msgstr "Se han informado versiones diferentes"
 msgid "Direct sleep-stage changes are unvalidated manual settings. Saving requests a profile change; processor adoption is reported separately in Overview."
 msgstr "Los cambios directos de las fases del sueño son ajustes manuales sin validar. Al guardar se solicita un cambio de perfil; su adopción por el procesador se informa por separado en Resumen."
 
+#: src/components/biometrics/Calibration/StageReport.tsx:104
+msgid "Each configuration on its own available intervals"
+msgstr "Cada configuración en sus propios intervalos disponibles"
+
 #: src/components/biometrics/Calibration/ProfileLibrary.tsx:34
 msgid "Edit a new candidate from this revision"
 msgstr "Editar un nuevo candidato a partir de esta revisión"
@@ -346,6 +391,10 @@ msgstr "Editando a partir de la revisión {revisionId}"
 msgid "Editing from the currently saved profile."
 msgstr "Editando a partir del perfil guardado actualmente."
 
+#: src/components/biometrics/Calibration/StageReport.tsx:113
+msgid "Eligible reference minutes"
+msgstr "Minutos de referencia aptos"
+
 #: src/components/biometrics/Calibration/ReferenceLibrary.tsx:97
 msgid "End (UTC)"
 msgstr "Fin (UTC)"
@@ -354,12 +403,12 @@ msgstr "Fin (UTC)"
 msgid "Engine manifest hash"
 msgstr "Hash del manifiesto del motor"
 
-#: src/components/biometrics/Calibration/BacktestReport.tsx:79
+#: src/components/biometrics/Calibration/BacktestReport.tsx:81
 msgid "Equal-night differences and pooled duration scores use different weighting. Coverage loss must be considered alongside score changes."
 msgstr "Las diferencias con igual peso por noche y las puntuaciones agrupadas por duración usan ponderaciones diferentes. La pérdida de cobertura debe considerarse junto con los cambios de puntuación."
 
 #. placeholder {0}: percent(summary.equalNightMeanAgreementDifference)
-#: src/components/biometrics/Calibration/BacktestReport.tsx:56
+#: src/components/biometrics/Calibration/BacktestReport.tsx:58
 msgid "Equal-night mean agreement difference: {0}"
 msgstr "Diferencia media de concordancia con igual peso por noche: {0}"
 
@@ -371,6 +420,11 @@ msgstr "Los errores usan la unidad de la métrica; el sesgo con signo es el valo
 msgid "Estimate exploratory whole-night uncertainty"
 msgstr "Estimar incertidumbre exploratoria por noches completas"
 
+#. placeholder {0}: minutes(night.evaluationDurationMs)
+#: src/components/biometrics/Calibration/StageReport.tsx:98
+msgid "Evaluated minutes: {0}"
+msgstr "Minutos evaluados: {0}"
+
 #: src/components/biometrics/Calibration/ExperimentBuilder.tsx:42
 msgid "Evaluation mode"
 msgstr "Modo de evaluación"
@@ -379,7 +433,7 @@ msgstr "Modo de evaluación"
 msgid "Evaluation protocol"
 msgstr "Protocolo de evaluación"
 
-#: src/components/biometrics/Calibration/BacktestReport.tsx:40
+#: src/components/biometrics/Calibration/BacktestReport.tsx:42
 msgid "Evaluation report"
 msgstr "Informe de evaluación"
 
@@ -388,7 +442,7 @@ msgid "Evaluation split"
 msgstr "Partición de evaluación"
 
 #: src/components/biometrics/Calibration/BacktestJobs.tsx:89
-#: src/components/biometrics/Calibration/BacktestReport.tsx:95
+#: src/components/biometrics/Calibration/BacktestReport.tsx:98
 msgid "Evaluator build hash"
 msgstr "Hash de la compilación del evaluador"
 
@@ -440,13 +494,17 @@ msgstr "Personalizaciones explícitas de fases"
 
 #. placeholder {0}: percent(summary.uncertainty.interval.lower)
 #. placeholder {1}: percent(summary.uncertainty.interval.upper)
-#: src/components/biometrics/Calibration/BacktestReport.tsx:81
+#: src/components/biometrics/Calibration/BacktestReport.tsx:83
 msgid "Exploratory 95% interval: {0} to {1}"
 msgstr "Intervalo exploratorio del 95 %: de {0} a {1}"
 
-#: src/components/biometrics/Calibration/BacktestReport.tsx:32
+#: src/components/biometrics/Calibration/BacktestReport.tsx:34
 msgid "Exploratory interval estimated"
 msgstr "Intervalo exploratorio estimado"
+
+#: src/components/biometrics/Calibration/StageReport.tsx:53
+msgid "F1"
+msgstr "F1"
 
 #: src/components/biometrics/Calibration/BacktestJobs.tsx:11
 #: src/components/biometrics/Calibration/CalibrationHistory.tsx:18
@@ -518,7 +576,7 @@ msgstr "¡Hola, tRPC test page!"
 #. placeholder {0}: summary.improvedAgreementNights
 #. placeholder {1}: summary.regressedAgreementNights
 #. placeholder {2}: summary.unchangedAgreementNights
-#: src/components/biometrics/Calibration/BacktestReport.tsx:55
+#: src/components/biometrics/Calibration/BacktestReport.tsx:57
 msgid "Higher agreement: {0}; lower: {1}; unchanged: {2}"
 msgstr "Mayor concordancia: {0}; menor: {1}; sin cambios: {2}"
 
@@ -531,7 +589,7 @@ msgid "History"
 msgstr "Historial"
 
 #: src/components/biometrics/Calibration/BacktestJobs.tsx:62
-#: src/components/biometrics/Calibration/BacktestReport.tsx:31
+#: src/components/biometrics/Calibration/BacktestReport.tsx:33
 #: src/components/biometrics/Calibration/BacktestSubmission.tsx:75
 #: src/components/biometrics/Calibration/DatasetBuilder.tsx:20
 #: src/components/biometrics/Calibration/DatasetLibrary.tsx:62
@@ -629,11 +687,11 @@ msgstr "Inspeccionar mediciones"
 msgid "Inspect session {0}"
 msgstr "Inspeccionar sesión {0}"
 
-#: src/components/biometrics/Calibration/BacktestReport.tsx:41
+#: src/components/biometrics/Calibration/BacktestReport.tsx:43
 msgid "Insufficient evidence for validated improvement"
 msgstr "Evidencia insuficiente para una mejora validada"
 
-#: src/components/biometrics/Calibration/BacktestReport.tsx:32
+#: src/components/biometrics/Calibration/BacktestReport.tsx:34
 msgid "Insufficient paired nights"
 msgstr "Noches emparejadas insuficientes"
 
@@ -649,7 +707,7 @@ msgstr "Detalles del trabajo"
 msgid "Keep import"
 msgstr "Conservar importación"
 
-#: src/components/biometrics/Calibration/BacktestReport.tsx:104
+#: src/components/biometrics/Calibration/BacktestReport.tsx:107
 msgid "Keep report"
 msgstr "Conservar informe"
 
@@ -657,11 +715,16 @@ msgstr "Conservar informe"
 msgid "Keep retained inputs"
 msgstr "Conservar los datos retenidos"
 
+#: src/components/biometrics/Calibration/StageReport.tsx:12
+msgid "Light"
+msgstr "Ligero"
+
 #: src/components/biometrics/Calibration/CandidateStageFields.tsx:30
 msgid "Low-signal calibration quality threshold"
 msgstr "Umbral de calidad de calibración para señal baja"
 
-#: src/components/biometrics/Calibration/BacktestReport.tsx:63
+#: src/components/biometrics/Calibration/BacktestReport.tsx:65
+#: src/components/biometrics/Calibration/StageReport.tsx:23
 msgid "Macro F1"
 msgstr "F1 macro"
 
@@ -738,6 +801,7 @@ msgid "Next records"
 msgstr "Registros siguientes"
 
 #: src/components/biometrics/Calibration/NumericReport.tsx:109
+#: src/components/biometrics/Calibration/StageReport.tsx:144
 msgid "Next report nights"
 msgstr "Siguientes noches del informe"
 
@@ -751,6 +815,7 @@ msgstr "La próxima sesión espera un límite con la cama vacía confirmada. La 
 
 #. placeholder {0}: night.cohortId
 #: src/components/biometrics/Calibration/NumericReport.tsx:40
+#: src/components/biometrics/Calibration/StageReport.tsx:97
 msgid "Night {0}"
 msgstr "Noche {0}"
 
@@ -770,11 +835,15 @@ msgstr "No hay historial de activación para este lado."
 msgid "No backtest jobs for this side."
 msgstr "No hay trabajos de evaluación retrospectiva para este lado."
 
-#: src/components/biometrics/Calibration/BacktestReport.tsx:18
+#: src/components/biometrics/Calibration/BacktestReport.tsx:19
 msgid "No committed report is available yet."
 msgstr "Todavía no hay ningún informe guardado disponible."
 
-#: src/components/biometrics/Calibration/BacktestReport.tsx:32
+#: src/components/biometrics/Calibration/StageReport.tsx:99
+msgid "No coverage reduction detected"
+msgstr "No se detectó reducción de cobertura"
+
+#: src/components/biometrics/Calibration/BacktestReport.tsx:34
 msgid "No estimable variation"
 msgstr "Sin variación estimable"
 
@@ -850,17 +919,19 @@ msgstr "Mediciones de referencia normalizadas"
 msgid "Not reported"
 msgstr "Sin información"
 
-#: src/components/biometrics/Calibration/BacktestReport.tsx:32
+#: src/components/biometrics/Calibration/BacktestReport.tsx:34
 msgid "Not requested"
 msgstr "No solicitado"
 
-#: src/components/biometrics/Calibration/BacktestReport.tsx:33
+#: src/components/biometrics/Calibration/BacktestReport.tsx:35
 #: src/components/biometrics/Calibration/NumericReport.tsx:24
 #: src/components/biometrics/Calibration/NumericReport.tsx:25
+#: src/components/biometrics/Calibration/StageReport.tsx:14
+#: src/components/biometrics/Calibration/StageReport.tsx:77
 msgid "Not scored"
 msgstr "Sin puntuación"
 
-#: src/components/biometrics/Calibration/BacktestReport.tsx:85
+#: src/components/biometrics/Calibration/BacktestReport.tsx:88
 msgid "Numerical details are unavailable or incompatible."
 msgstr "Los detalles numéricos no están disponibles o son incompatibles."
 
@@ -899,7 +970,7 @@ msgstr "Noches anteriores"
 msgid "Older profiles"
 msgstr "Perfiles anteriores"
 
-#: src/components/biometrics/Calibration/BacktestReport.tsx:45
+#: src/components/biometrics/Calibration/BacktestReport.tsx:47
 msgid "Original stored readings were compared; numerical parameter changes were not replayed."
 msgstr "Se compararon las lecturas originales almacenadas; no se reprocesaron los cambios de parámetros numéricos."
 
@@ -908,8 +979,17 @@ msgid "Original stored-reading comparison"
 msgstr "Comparación de lecturas originales almacenadas"
 
 #: src/components/biometrics/Calibration/NumericReport.tsx:65
+#: src/components/biometrics/Calibration/StageReport.tsx:109
 msgid "Output coverage"
 msgstr "Cobertura de salida"
+
+#: src/components/biometrics/Calibration/StageReport.tsx:155
+msgid "Output coverage uses evaluated time as its denominator. Reference coverage uses eligible reference time. A higher score with reduced coverage is not sufficient evidence of improvement."
+msgstr "La cobertura de salida usa el tiempo evaluado como denominador. La cobertura de referencia usa el tiempo de referencia apto. Una puntuación mayor con cobertura reducida no es evidencia suficiente de mejora."
+
+#: src/components/biometrics/Calibration/StageReport.tsx:111
+msgid "Output minutes"
+msgstr "Minutos de salida"
 
 #: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:98
 msgid "Overridden"
@@ -922,6 +1002,10 @@ msgstr "La intención de personalización puede cambiar aunque el valor resuelto
 #: src/components/biometrics/Calibration/BiometricCalibration.tsx:25
 msgid "Overview"
 msgstr "Resumen"
+
+#: src/components/biometrics/Calibration/StageReport.tsx:112
+msgid "Paired minutes"
+msgstr "Minutos emparejados"
 
 #: src/components/biometrics/Calibration/NumericReport.tsx:63
 msgid "Paired records"
@@ -944,6 +1028,10 @@ msgstr "Zona horaria de las particiones: {0}"
 msgid "Past acknowledgements do not establish which profile is running now."
 msgstr "Las confirmaciones anteriores no indican qué perfil se está ejecutando ahora."
 
+#: src/components/biometrics/Calibration/StageReport.tsx:45
+msgid "Per-stage scores on common paired intervals"
+msgstr "Puntuaciones por fase en intervalos emparejados compartidos"
+
 #: src/components/biometrics/Calibration/ReferenceLibrary.tsx:60
 msgid "Permanently delete import"
 msgstr "Eliminar importación permanentemente"
@@ -952,7 +1040,7 @@ msgstr "Eliminar importación permanentemente"
 msgid "Permanently release inputs"
 msgstr "Liberar datos permanentemente"
 
-#: src/components/biometrics/Calibration/BacktestReport.tsx:103
+#: src/components/biometrics/Calibration/BacktestReport.tsx:106
 msgid "Permanently release report"
 msgstr "Liberar informe permanentemente"
 
@@ -976,9 +1064,21 @@ msgstr "Datos de entrada fijados del trabajo"
 msgid "Point matching tolerance (ms, 0–300000)"
 msgstr "Tolerancia de coincidencia de puntos (ms, 0–300000)"
 
-#: src/components/biometrics/Calibration/BacktestReport.tsx:58
+#: src/components/biometrics/Calibration/BacktestReport.tsx:60
 msgid "Pooled common-support stage scores"
 msgstr "Puntuaciones de fases agrupadas en intervalos compartidos"
+
+#: src/components/biometrics/Calibration/StageReport.tsx:87
+msgid "Pooled stage confusion"
+msgstr "Confusión de fases agrupada"
+
+#: src/components/biometrics/Calibration/StageReport.tsx:51
+msgid "Precision"
+msgstr "Precisión"
+
+#: src/components/biometrics/Calibration/StageReport.tsx:50
+msgid "Predicted minutes"
+msgstr "Minutos predichos"
 
 #: src/components/biometrics/Calibration/BacktestSubmission.tsx:69
 msgid "Prepare a new request with the current baseline"
@@ -1001,6 +1101,7 @@ msgid "Preview normalized records before saving them on the pod."
 msgstr "Revise los registros normalizados antes de guardarlos en el pod."
 
 #: src/components/biometrics/Calibration/NumericReport.tsx:108
+#: src/components/biometrics/Calibration/StageReport.tsx:143
 msgid "Previous report nights"
 msgstr "Noches anteriores del informe"
 
@@ -1026,7 +1127,7 @@ msgstr "Perfiles"
 msgid "Progress: {0} / {1} nights"
 msgstr "Progreso: {0} / {1} noches"
 
-#: src/components/biometrics/Calibration/BacktestReport.tsx:93
+#: src/components/biometrics/Calibration/BacktestReport.tsx:96
 msgid "Protocol hash"
 msgstr "Hash del protocolo"
 
@@ -1038,11 +1139,20 @@ msgstr "Poner evaluación retrospectiva en cola"
 msgid "Queued"
 msgstr "En cola"
 
+#: src/components/biometrics/Calibration/StageReport.tsx:52
+msgid "Recall"
+msgstr "Sensibilidad"
+
 #: src/components/biometrics/Calibration/ReplaySessionPicker.tsx:24
 msgid "Recorded nights"
 msgstr "Noches registradas"
 
+#: src/components/biometrics/Calibration/StageReport.tsx:31
+msgid "Reference / predicted"
+msgstr "Referencia / predicción"
+
 #: src/components/biometrics/Calibration/NumericReport.tsx:64
+#: src/components/biometrics/Calibration/StageReport.tsx:110
 msgid "Reference coverage"
 msgstr "Cobertura de referencia"
 
@@ -1066,6 +1176,10 @@ msgstr "Importación de referencias guardada: {saved}"
 msgid "Reference library"
 msgstr "Biblioteca de referencias"
 
+#: src/components/biometrics/Calibration/StageReport.tsx:49
+msgid "Reference minutes"
+msgstr "Minutos de referencia"
+
 #: src/components/biometrics/Calibration/CalibrationReferences.tsx:38
 msgid "Reference preview failed."
 msgstr "Error en la vista previa de las referencias."
@@ -1082,11 +1196,11 @@ msgstr "Fuente de referencia"
 msgid "References"
 msgstr "Referencias"
 
-#: src/components/biometrics/Calibration/BacktestReport.tsx:107
+#: src/components/biometrics/Calibration/BacktestReport.tsx:110
 msgid "Release detailed report"
 msgstr "Liberar informe detallado"
 
-#: src/components/biometrics/Calibration/BacktestReport.tsx:102
+#: src/components/biometrics/Calibration/BacktestReport.tsx:105
 msgid "Release detailed results permanently? The report hash, job history, and holdout exposure audit remain."
 msgstr "¿Liberar permanentemente los resultados detallados? Se conservan el hash del informe, el historial del trabajo y la auditoría de exposición al conjunto reservado."
 
@@ -1097,6 +1211,10 @@ msgstr "Liberar datos conservados"
 #: src/components/biometrics/Calibration/DatasetLibrary.tsx:92
 msgid "Release these retained inputs permanently? Existing reports and audit metadata remain. Active jobs must finish or be cancelled first."
 msgstr "¿Liberar estos datos conservados permanentemente? Se mantienen los informes existentes y los metadatos de auditoría. Los trabajos activos deben finalizar o cancelarse primero."
+
+#: src/components/biometrics/Calibration/StageReport.tsx:12
+msgid "REM"
+msgstr "REM"
 
 #: src/components/biometrics/Calibration/ProfileCandidateEditor.tsx:99
 msgid "Remove override"
@@ -1115,7 +1233,7 @@ msgstr "Quitar sesión {id}"
 msgid "Remove stage override"
 msgstr "Quitar personalización de fases"
 
-#: src/components/biometrics/Calibration/BacktestReport.tsx:44
+#: src/components/biometrics/Calibration/BacktestReport.tsx:46
 msgid "Repeated holdout exposure weakens independent evidence. Treat reused holdout results as validation, not untouched holdout evidence."
 msgstr "La exposición repetida al conjunto reservado debilita la evidencia independiente. Trate los resultados reutilizados como validación, no como evidencia de un conjunto reservado intacto."
 
@@ -1124,11 +1242,11 @@ msgstr "La exposición repetida al conjunto reservado debilita la evidencia inde
 msgid "Replay sleep stages"
 msgstr "Reprocesar fases del sueño"
 
-#: src/components/biometrics/Calibration/BacktestReport.tsx:89
+#: src/components/biometrics/Calibration/BacktestReport.tsx:92
 msgid "Report hash"
 msgstr "Hash del informe"
 
-#: src/components/biometrics/Calibration/BacktestReport.tsx:87
+#: src/components/biometrics/Calibration/BacktestReport.tsx:90
 msgid "Report identity"
 msgstr "Identidad del informe"
 
@@ -1280,7 +1398,7 @@ msgstr "La validación del esquema se completó. No se ha evaluado la concordanc
 #. placeholder {0}: summary.scoredNights
 #. placeholder {1}: summary.unscoredNights
 #. placeholder {2}: summary.coverageReducedNights
-#: src/components/biometrics/Calibration/BacktestReport.tsx:54
+#: src/components/biometrics/Calibration/BacktestReport.tsx:56
 msgid "Scored nights: {0}; unscored: {1}; coverage reduced: {2}"
 msgstr "Noches puntuadas: {0}; sin puntuar: {1}; cobertura reducida: {2}"
 
@@ -1323,9 +1441,21 @@ msgstr "Suavizar épocas aisladas"
 msgid "Source measurements deleted"
 msgstr "Mediciones de origen eliminadas"
 
+#: src/components/biometrics/Calibration/StageReport.tsx:48
+msgid "Stage"
+msgstr "Fase"
+
 #: src/components/biometrics/Calibration/ExperimentBuilder.tsx:56
 msgid "Stage calibration quality is an explicit replay assumption, not a recovered sensor measurement. Stored-reading comparison does not test numerical parameter changes."
 msgstr "La calidad de calibración de fases es una suposición explícita del reprocesamiento, no una medición recuperada del sensor. La comparación de lecturas almacenadas no prueba cambios en parámetros numéricos."
+
+#: src/components/biometrics/Calibration/StageReport.tsx:153
+msgid "Stage coverage and confusion by night"
+msgstr "Cobertura y confusión de fases por noche"
+
+#: src/components/biometrics/Calibration/BacktestReport.tsx:87
+msgid "Stage details are unavailable or incompatible."
+msgstr "Los detalles de fases no están disponibles o son incompatibles."
 
 #: src/components/biometrics/Calibration/ReplaySessionPicker.tsx:66
 msgid "Stage replay available"
@@ -1375,10 +1505,11 @@ msgid "Stored-reading comparison available"
 msgstr "Comparación de lecturas almacenadas disponible"
 
 #: src/components/biometrics/Calibration/BacktestJobs.tsx:63
-#: src/components/biometrics/Calibration/BacktestReport.tsx:30
+#: src/components/biometrics/Calibration/BacktestReport.tsx:32
 #: src/components/biometrics/Calibration/CalibrationOverview.tsx:25
 #: src/components/biometrics/Calibration/NumericReport.tsx:26
 #: src/components/biometrics/Calibration/ProfileComparison.tsx:29
+#: src/components/biometrics/Calibration/StageReport.tsx:76
 msgid "System defaults"
 msgstr "Valores predeterminados del sistema"
 
@@ -1432,11 +1563,11 @@ msgstr "Estas puntuaciones comparan las lecturas originales almacenadas. Los res
 msgid "This is the first-to-last record span, not continuous coverage or overlap with pod readings."
 msgstr "Este intervalo abarca del primer al último registro; no indica cobertura continua ni coincidencia con las lecturas del pod."
 
-#: src/components/biometrics/Calibration/BacktestReport.tsx:27
+#: src/components/biometrics/Calibration/BacktestReport.tsx:28
 msgid "This report version or structure is not supported by this view."
 msgstr "Esta vista no admite la versión o estructura de este informe."
 
-#: src/components/biometrics/Calibration/BacktestReport.tsx:22
+#: src/components/biometrics/Calibration/BacktestReport.tsx:23
 msgid "This report was released. Its audit hash remains, but detailed results are unavailable."
 msgstr "Este informe se ha liberado. Su hash de auditoría se conserva, pero los resultados detallados no están disponibles."
 
@@ -1463,7 +1594,7 @@ msgid "Too few independent nights for a validation split; descriptive evaluation
 msgstr "No hay suficientes noches independientes para una división de validación; solo se permite una evaluación descriptiva."
 
 #: src/components/biometrics/Calibration/BacktestJobs.tsx:62
-#: src/components/biometrics/Calibration/BacktestReport.tsx:31
+#: src/components/biometrics/Calibration/BacktestReport.tsx:33
 #: src/components/biometrics/Calibration/BacktestSubmission.tsx:73
 #: src/components/biometrics/Calibration/DatasetBuilder.tsx:20
 #: src/components/biometrics/Calibration/DatasetLibrary.tsx:62
@@ -1500,7 +1631,7 @@ msgid "Use system defaults"
 msgstr "Usar los valores predeterminados del sistema"
 
 #: src/components/biometrics/Calibration/BacktestJobs.tsx:62
-#: src/components/biometrics/Calibration/BacktestReport.tsx:31
+#: src/components/biometrics/Calibration/BacktestReport.tsx:33
 #: src/components/biometrics/Calibration/BacktestSubmission.tsx:74
 #: src/components/biometrics/Calibration/DatasetBuilder.tsx:20
 #: src/components/biometrics/Calibration/DatasetLibrary.tsx:62
@@ -1535,6 +1666,10 @@ msgstr "Esperando un ejecutor y recursos disponibles. Una solicitud en cola no i
 #: src/components/biometrics/Calibration/ManualProfileActivation.tsx:73
 msgid "Waiting for delivery"
 msgstr "Esperando la entrega"
+
+#: src/components/biometrics/Calibration/StageReport.tsx:12
+msgid "Wake"
+msgstr "Vigilia"
 
 #: src/components/biometrics/Calibration/CalibrationOverview.tsx:44
 msgid "What these metrics mean"
