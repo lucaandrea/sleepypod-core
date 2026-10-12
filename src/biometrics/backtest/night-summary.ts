@@ -1,3 +1,4 @@
+import { nightUncertainty, type NightBootstrapPolicy } from './uncertainty'
 import type { compareStageOutputs } from './stage-comparison'
 
 type WindowComparison = ReturnType<typeof compareStageOutputs> & { startMs: number, endMs: number }
@@ -56,7 +57,7 @@ function summarizeNight(cohortId: string, comparison: NightComparison) {
 /** Aggregate disconnected windows within each whole-night cohort first. Equal
  * night means and pooled duration scores are both explicit; neither silently
  * substitutes epochs for independent nights. No promotion status is inferred. */
-export function summarizeStageNights(nights: Night[]) {
+export function summarizeStageNights(nights: Night[], uncertaintyPolicy?: NightBootstrapPolicy) {
   if (nights.length > 60 || new Set(nights.map(night => night.cohortId)).size !== nights.length) throw new Error('Invalid whole-night summary input')
   const groups = new Map<string, { identity: Omit<NightComparison, 'windows'>, nights: ReturnType<typeof summarizeNight>[], windows: WindowComparison[] }>()
   for (const night of nights) {
@@ -87,6 +88,7 @@ export function summarizeStageNights(nights: Night[]) {
       unchangedAgreementNights: deltas.filter(delta => delta === 0).length,
       coverageReducedNights: group.nights.filter(night => night.coverageReduced).length,
       equalNightMeanAgreementDifference: mean(deltas),
+      uncertainty: nightUncertainty(group.nights.map(night => ({ cohortId: night.cohortId, difference: night.commonAgreementDifference })), uncertaintyPolicy),
       observedNightRange: deltas.length ? { minimum: Math.min(...deltas), maximum: Math.max(...deltas) } : null,
       pooledCommonSupport: { baseline: commonScore(group.windows, 'baseline'), candidate: commonScore(group.windows, 'candidate') },
       interpretation: 'descriptive_night_aggregation_not_confidence_interval' as const }

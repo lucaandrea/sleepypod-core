@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { nightBootstrapSchema } from './uncertainty-policy'
 import { normalizedMeasurementSchema } from '../references/contracts'
 const key = z.string().min(1).max(200)
 const hash = z.string().regex(/^[a-f0-9]{64}$/)
@@ -9,6 +10,7 @@ export const experimentProtocolSchema = z.object({
   assumedStageCalibrationQuality: z.number().min(0).max(1),
   pointToleranceMs: z.number().int().min(0).max(300000),
   clockOffsetMs: z.number().int().min(-3600000).max(3600000),
+  nightUncertainty: nightBootstrapSchema.optional(),
 }).strict()
 export const enqueueBacktestSchema = z.object({
   experimentId: z.string().uuid(), idempotencyKey: key, evaluatorBuildHash: hash, submissionHash: hash.optional(),

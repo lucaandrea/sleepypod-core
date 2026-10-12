@@ -186,5 +186,32 @@ one vote. Pooled duration confusion and agreement are reported separately and
 can differ substantially when night lengths differ. Missing reference support
 remains null and is counted as unscored, not converted to a zero difference.
 The observed nightly minimum/maximum is explicitly a descriptive range, not a
-confidence interval. Seeded uncertainty and the frozen promotion policy remain
-required before a report can establish validated improvement.
+confidence interval. The optional seeded interval is reported separately below. The frozen promotion
+policy remains required before a report can establish validated improvement.
+
+## Reproducible exploratory uncertainty
+
+Experiment protocols may now include `nightUncertainty` with version
+`paired-night-percentile-v1`, an explicit seed (1–64 characters), resample count
+(200–5,000), and minimum scored nights (3–60). These fields participate in the
+immutable protocol hash. Older protocols remain readable and report
+`not_requested`; no parameters are silently added to their hashes.
+
+The statistic is the equal-night mean of paired common-support agreement
+differences. Whole-night cohorts are sorted by ID, then resampled with
+replacement, preserving the baseline/candidate pairing. A SHA-256 counter
+stream over JSON `[version, seed, counter]` supplies big-endian 32-bit draws;
+rejection sampling removes modulo bias. The two-sided 95% percentile interval
+uses linear interpolation at ranks `(resamples - 1) * 0.025` and
+`(resamples - 1) * 0.975`. This is a versioned local implementation, not a call
+to SciPy. The general resampling procedure and pairing are described in
+[the SciPy bootstrap reference](https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.bootstrap.html).
+
+Missing-reference nights are counted and omitted from the statistic. Too few
+scored nights return `insufficient_nights`, and identical observed differences
+return `degenerate`, both with a null interval. The requested minimum is a
+reporting threshold, not a claim of adequate statistical power. Intervals assume
+exchangeable nights; serial dependence and unobserved nights can make the
+estimate misleading. Reports retain these limitations and remain
+`insufficient_evidence` for promotion. Objective/coverage/operational policy and
+held-out qualification are still required for validated activation.

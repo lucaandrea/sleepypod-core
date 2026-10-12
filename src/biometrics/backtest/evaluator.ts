@@ -107,7 +107,7 @@ export function evaluateBacktest(raw: z.input<typeof backtestWorkSchema>, progre
   })
   return { version: 'processed-backtest-report-v1' as const, datasetId: job.datasetId, datasetHash: job.datasetHash,
     evaluatorBuildHash: job.evaluatorBuildHash, protocol: job.protocol, protocolHash: job.protocolHash, manifestHash, support: 'identical_retained_epoch_intervals' as const, split: job.split, holdoutUse: job.holdoutUse,
-    status: 'insufficient_evidence' as const, evidence: job.evidence, nights, stageNightSummary: summarizeStageNights(nights),
+    status: 'insufficient_evidence' as const, evidence: job.evidence, nights, stageNightSummary: summarizeStageNights(nights, job.protocol.nightUncertainty),
     calibration: { source: 'explicit_assumption' as const, quality: job.protocol.assumedStageCalibrationQuality },
     limitations: ['This descriptive report does not establish validated improvement.',
       'Numeric readings are original observations; parameter changes to waveform processing are not evaluated by processed-data replay.',

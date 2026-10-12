@@ -41,4 +41,13 @@ describe('retained-data evaluator', () => {
     expect(report.nights[0].comparisons[0].windows[0].commonSupport.candidate.pairedDurationMs).toBe(540000)
     expect(report.nights[0].evaluations[0].windows[0].blocks[0].start).toBe(start)
   })
+  it('uses the frozen uncertainty policy while retaining insufficient-evidence status', () => {
+    const input = fixture()
+    const protocol = { ...input.job.protocol, nightUncertainty: { version: 'paired-night-percentile-v1' as const,
+      seed: 'retained-policy', resamples: 200, minimumNights: 3 } }
+    const report = evaluateBacktest({ ...input, job: { ...input.job, protocol, protocolHash: configHash(protocol) } })
+    expect(report.stageNightSummary[0].uncertainty).toMatchObject({ policy: protocol.nightUncertainty,
+      status: 'insufficient_nights', scoredNights: 1, interval: null })
+    expect(report.status).toBe('insufficient_evidence')
+  })
 })
