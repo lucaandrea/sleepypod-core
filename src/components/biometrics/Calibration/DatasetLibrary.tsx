@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { Trans, useLingui } from '@lingui/react/macro'
+import { ExperimentBuilder } from './ExperimentBuilder'
 import { trpc } from '@/src/utils/trpc'
 import { Button, Card, CardHeader, InlineError, Skeleton } from '@/src/components/ds'
 
@@ -82,6 +83,7 @@ function DatasetDetails({ id }: { id: string }) {
         <summary><Trans>Frozen coverage and capabilities</Trans></summary>
         <pre className="max-h-64 overflow-auto whitespace-pre-wrap text-xs">{JSON.stringify({ coverage: data.manifest.coverage, capabilities: data.manifest.capabilities }, null, 2)}</pre>
       </details>
+      {data.available ? <ExperimentBuilder datasetId={id} stageReplay={data.manifest.capabilities.stageReplay} /> : null}
       {data.available
         ? (
             confirmRelease

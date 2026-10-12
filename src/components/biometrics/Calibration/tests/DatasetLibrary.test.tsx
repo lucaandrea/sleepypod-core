@@ -3,6 +3,7 @@ import { setupI18n } from '@lingui/core'
 import { I18nProvider } from '@lingui/react'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { DatasetLibrary } from '../DatasetLibrary'
+vi.mock('../ExperimentBuilder', () => ({ ExperimentBuilder: () => <p>Protocol editor</p> }))
 const mock = vi.hoisted(() => ({ list: vi.fn(), get: vi.fn(), release: vi.fn(), invalidateList: vi.fn(), invalidateDetail: vi.fn() }))
 vi.mock('@/src/utils/trpc', () => ({ trpc: {
   useUtils: () => ({ biometricTuning: { listDatasets: { invalidate: mock.invalidateList }, getDataset: { invalidate: mock.invalidateDetail } } }),

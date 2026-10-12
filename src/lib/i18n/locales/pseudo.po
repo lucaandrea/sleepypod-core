@@ -75,6 +75,10 @@ msgstr ""
 msgid "Apply unvalidated revision"
 msgstr ""
 
+#: src/components/biometrics/Calibration/ExperimentBuilder.tsx:51
+msgid "Assumed calibration quality (0–1)"
+msgstr ""
+
 #: src/components/biometrics/Calibration/ReplaySessionPicker.tsx:75
 msgid "Available reference records by metric (across revisions)"
 msgstr ""
@@ -139,6 +143,10 @@ msgstr ""
 msgid "Check Overview for current processor health; a past acknowledgement does not prove current health."
 msgstr ""
 
+#: src/components/biometrics/Calibration/ExperimentBuilder.tsx:39
+msgid "Choose the protocol before looking at results. Creating an experiment does not run a job or apply a profile."
+msgstr ""
+
 #: src/components/biometrics/Calibration/CalibrationOverview.tsx:16
 msgid "Clock mismatch"
 msgstr ""
@@ -147,12 +155,20 @@ msgstr ""
 msgid "Compare against the saved profile. This is a configuration comparison, not validation evidence."
 msgstr ""
 
+#: src/components/biometrics/Calibration/ExperimentBuilder.tsx:44
+msgid "Compare stored readings"
+msgstr ""
+
 #: src/components/biometrics/Calibration/ProfileComparison.tsx:31
 msgid "Compare with saved profile"
 msgstr ""
 
 #: src/components/biometrics/Calibration/CalibrationHistory.tsx:17
 msgid "Compatibility fallback"
+msgstr ""
+
+#: src/components/biometrics/Calibration/ExperimentBuilder.tsx:89
+msgid "Complete the required fields within their stated bounds."
 msgstr ""
 
 #: src/components/biometrics/Calibration/CalibrationOverview.tsx:36
@@ -210,7 +226,7 @@ msgstr ""
 msgid "Deleting an import removes its source measurements. Previously frozen datasets are separate retained copies."
 msgstr ""
 
-#: src/components/biometrics/Calibration/DatasetLibrary.tsx:67
+#: src/components/biometrics/Calibration/DatasetLibrary.tsx:68
 msgid "Descriptive evaluation only"
 msgstr ""
 
@@ -242,6 +258,18 @@ msgstr ""
 msgid "Engine manifest hash"
 msgstr ""
 
+#: src/components/biometrics/Calibration/ExperimentBuilder.tsx:68
+msgid "Estimate exploratory whole-night uncertainty"
+msgstr ""
+
+#: src/components/biometrics/Calibration/ExperimentBuilder.tsx:42
+msgid "Evaluation mode"
+msgstr ""
+
+#: src/components/biometrics/Calibration/ExperimentBuilder.tsx:38
+msgid "Evaluation protocol"
+msgstr ""
+
 #: src/components/biometrics/Calibration/CalibrationReferences.tsx:91
 msgid "Exact import identity"
 msgstr ""
@@ -256,6 +284,11 @@ msgstr ""
 
 #: src/components/biometrics/Calibration/CalibrationHistory.tsx:45
 msgid "Exact profile transition"
+msgstr ""
+
+#. placeholder {0}: create.data.id
+#: src/components/biometrics/Calibration/ExperimentBuilder.tsx:96
+msgid "Experiment saved: {0}"
 msgstr ""
 
 #: src/components/biometrics/Calibration/CalibrationOverview.tsx:58
@@ -281,6 +314,10 @@ msgstr ""
 msgid "First records"
 msgstr ""
 
+#: src/components/biometrics/Calibration/ExperimentBuilder.tsx:62
+msgid "Fixed offset added to pod timestamps (ms, ±3600000)"
+msgstr ""
+
 #: src/components/biometrics/Calibration/DatasetBuilder.tsx:33
 msgid "Freeze evaluation inputs"
 msgstr ""
@@ -293,7 +330,7 @@ msgstr ""
 msgid "Freshness unknown"
 msgstr ""
 
-#: src/components/biometrics/Calibration/DatasetLibrary.tsx:82
+#: src/components/biometrics/Calibration/DatasetLibrary.tsx:83
 msgid "Frozen coverage and capabilities"
 msgstr ""
 
@@ -301,7 +338,7 @@ msgstr ""
 msgid "Frozen dataset"
 msgstr ""
 
-#: src/components/biometrics/Calibration/DatasetLibrary.tsx:63
+#: src/components/biometrics/Calibration/DatasetLibrary.tsx:64
 msgid "Frozen input details"
 msgstr ""
 
@@ -333,7 +370,7 @@ msgid "History"
 msgstr ""
 
 #: src/components/biometrics/Calibration/DatasetBuilder.tsx:20
-#: src/components/biometrics/Calibration/DatasetLibrary.tsx:61
+#: src/components/biometrics/Calibration/DatasetLibrary.tsx:62
 msgid "Holdout"
 msgstr ""
 
@@ -378,11 +415,11 @@ msgstr ""
 msgid "Inherited default"
 msgstr ""
 
-#: src/components/biometrics/Calibration/DatasetLibrary.tsx:29
+#: src/components/biometrics/Calibration/DatasetLibrary.tsx:30
 msgid "Inputs released; metadata retained"
 msgstr ""
 
-#: src/components/biometrics/Calibration/DatasetLibrary.tsx:29
+#: src/components/biometrics/Calibration/DatasetLibrary.tsx:30
 msgid "Inputs retained"
 msgstr ""
 
@@ -394,11 +431,11 @@ msgstr ""
 msgid "Inspect candidate changes"
 msgstr ""
 
-#: src/components/biometrics/Calibration/DatasetLibrary.tsx:33
+#: src/components/biometrics/Calibration/DatasetLibrary.tsx:34
 msgid "Inspect dataset"
 msgstr ""
 
-#: src/components/biometrics/Calibration/DatasetLibrary.tsx:15
+#: src/components/biometrics/Calibration/DatasetLibrary.tsx:16
 msgid "Inspect frozen inputs and whole-night partitions, or release their retained storage."
 msgstr ""
 
@@ -415,7 +452,7 @@ msgstr ""
 msgid "Keep import"
 msgstr ""
 
-#: src/components/biometrics/Calibration/DatasetLibrary.tsx:92
+#: src/components/biometrics/Calibration/DatasetLibrary.tsx:94
 msgid "Keep retained inputs"
 msgstr ""
 
@@ -448,11 +485,15 @@ msgstr ""
 msgid "Migrate settings"
 msgstr ""
 
+#: src/components/biometrics/Calibration/ExperimentBuilder.tsx:82
+msgid "Minimum paired nights (3–60)"
+msgstr ""
+
 #: src/components/biometrics/Calibration/CalibrationHistory.tsx:62
 msgid "Newest"
 msgstr ""
 
-#: src/components/biometrics/Calibration/DatasetLibrary.tsx:39
+#: src/components/biometrics/Calibration/DatasetLibrary.tsx:40
 msgid "Newest datasets"
 msgstr ""
 
@@ -514,7 +555,7 @@ msgstr ""
 msgid "No resolved value changes."
 msgstr ""
 
-#: src/components/biometrics/Calibration/DatasetLibrary.tsx:22
+#: src/components/biometrics/Calibration/DatasetLibrary.tsx:23
 msgid "No retained datasets for this side."
 msgstr ""
 
@@ -548,7 +589,7 @@ msgstr ""
 msgid "Older changes"
 msgstr ""
 
-#: src/components/biometrics/Calibration/DatasetLibrary.tsx:40
+#: src/components/biometrics/Calibration/DatasetLibrary.tsx:41
 msgid "Older datasets"
 msgstr ""
 
@@ -586,7 +627,7 @@ msgid "Parent revision"
 msgstr ""
 
 #. placeholder {0}: data.manifest.splitProtocol.timezone
-#: src/components/biometrics/Calibration/DatasetLibrary.tsx:66
+#: src/components/biometrics/Calibration/DatasetLibrary.tsx:67
 msgid "Partition timezone: {0}"
 msgstr ""
 
@@ -598,7 +639,7 @@ msgstr ""
 msgid "Permanently delete import"
 msgstr ""
 
-#: src/components/biometrics/Calibration/DatasetLibrary.tsx:91
+#: src/components/biometrics/Calibration/DatasetLibrary.tsx:93
 msgid "Permanently release inputs"
 msgstr ""
 
@@ -608,6 +649,10 @@ msgstr ""
 
 #: src/components/biometrics/Calibration/ProfileLibrary.tsx:38
 msgid "Pinned configuration and overrides"
+msgstr ""
+
+#: src/components/biometrics/Calibration/ExperimentBuilder.tsx:58
+msgid "Point matching tolerance (ms, 0–300000)"
 msgstr ""
 
 #: src/components/biometrics/Calibration/ProfileRecovery.tsx:29
@@ -674,11 +719,11 @@ msgstr ""
 msgid "References"
 msgstr ""
 
-#: src/components/biometrics/Calibration/DatasetLibrary.tsx:95
+#: src/components/biometrics/Calibration/DatasetLibrary.tsx:97
 msgid "Release retained inputs"
 msgstr ""
 
-#: src/components/biometrics/Calibration/DatasetLibrary.tsx:90
+#: src/components/biometrics/Calibration/DatasetLibrary.tsx:92
 msgid "Release these retained inputs permanently? Existing reports and audit metadata remain. Active jobs must finish or be cancelled first."
 msgstr ""
 
@@ -699,6 +744,14 @@ msgstr ""
 msgid "Remove stage override"
 msgstr ""
 
+#: src/components/biometrics/Calibration/ExperimentBuilder.tsx:45
+msgid "Replay sleep stages"
+msgstr ""
+
+#: src/components/biometrics/Calibration/ExperimentBuilder.tsx:74
+msgid "Reproducible sampling seed"
+msgstr ""
+
 #. placeholder {0}: event.requester
 #: src/components/biometrics/Calibration/CalibrationHistory.tsx:54
 msgid "Requested by {0}"
@@ -706,6 +759,10 @@ msgstr ""
 
 #: src/components/biometrics/Calibration/CalibrationOverview.tsx:26
 msgid "Requested change"
+msgstr ""
+
+#: src/components/biometrics/Calibration/ExperimentBuilder.tsx:78
+msgid "Resamples (200–5000)"
 msgstr ""
 
 #: src/components/biometrics/Calibration/ProfileLibrary.tsx:40
@@ -736,15 +793,15 @@ msgid "Retain a copy of the selected nights and reference revisions. Future edit
 msgstr ""
 
 #. placeholder {0}: dataset.byteLength
-#: src/components/biometrics/Calibration/DatasetLibrary.tsx:32
+#: src/components/biometrics/Calibration/DatasetLibrary.tsx:33
 msgid "Retained bytes: {0}"
 msgstr ""
 
-#: src/components/biometrics/Calibration/DatasetLibrary.tsx:15
+#: src/components/biometrics/Calibration/DatasetLibrary.tsx:16
 msgid "Retained datasets"
 msgstr ""
 
-#: src/components/biometrics/Calibration/DatasetLibrary.tsx:65
+#: src/components/biometrics/Calibration/DatasetLibrary.tsx:66
 msgid "Retained input integrity checked by the server."
 msgstr ""
 
@@ -796,6 +853,10 @@ msgstr ""
 msgid "Save candidate without applying"
 msgstr ""
 
+#: src/components/biometrics/Calibration/ExperimentBuilder.tsx:90
+msgid "Save evaluation protocol"
+msgstr ""
+
 #: src/components/biometrics/Calibration/CalibrationReferences.tsx:103
 msgid "Save previewed import"
 msgstr ""
@@ -835,7 +896,7 @@ msgid "Sensor measurements are separate from algorithm personalization."
 msgstr ""
 
 #. placeholder {0}: cohort.sessionIds.join(', ')
-#: src/components/biometrics/Calibration/DatasetLibrary.tsx:75
+#: src/components/biometrics/Calibration/DatasetLibrary.tsx:76
 msgid "Sessions: {0}"
 msgstr ""
 
@@ -853,6 +914,10 @@ msgstr ""
 
 #: src/components/biometrics/Calibration/ReferenceLibrary.tsx:55
 msgid "Source measurements deleted"
+msgstr ""
+
+#: src/components/biometrics/Calibration/ExperimentBuilder.tsx:56
+msgid "Stage calibration quality is an explicit replay assumption, not a recovered sensor measurement. Stored-reading comparison does not test numerical parameter changes."
 msgstr ""
 
 #: src/components/biometrics/Calibration/ReplaySessionPicker.tsx:66
@@ -902,7 +967,7 @@ msgstr ""
 msgid "The pinned profile is incompatible. Its revision will be preserved, but a valid before-and-after comparison is unavailable."
 msgstr ""
 
-#: src/components/biometrics/Calibration/DatasetLibrary.tsx:65
+#: src/components/biometrics/Calibration/DatasetLibrary.tsx:66
 msgid "The retained inputs are unavailable for new evaluations."
 msgstr ""
 
@@ -931,6 +996,10 @@ msgstr ""
 msgid "This is the first-to-last record span, not continuous coverage or overlap with pod readings."
 msgstr ""
 
+#: src/components/biometrics/Calibration/ExperimentBuilder.tsx:85
+msgid "This reporting threshold is not a validated sample-size requirement. Too few or degenerate nights yield no interval."
+msgstr ""
+
 #: src/components/biometrics/Calibration/ManualProfileActivation.tsx:85
 msgid "This request has been superseded by another profile change."
 msgstr ""
@@ -949,7 +1018,7 @@ msgid "Too few independent nights for a validation split; descriptive evaluation
 msgstr ""
 
 #: src/components/biometrics/Calibration/DatasetBuilder.tsx:20
-#: src/components/biometrics/Calibration/DatasetLibrary.tsx:61
+#: src/components/biometrics/Calibration/DatasetLibrary.tsx:62
 msgid "Tuning"
 msgstr ""
 
@@ -975,7 +1044,7 @@ msgid "Use system defaults"
 msgstr ""
 
 #: src/components/biometrics/Calibration/DatasetBuilder.tsx:20
-#: src/components/biometrics/Calibration/DatasetLibrary.tsx:61
+#: src/components/biometrics/Calibration/DatasetLibrary.tsx:62
 msgid "Validation"
 msgstr ""
 
@@ -1009,6 +1078,6 @@ msgid "What these metrics mean"
 msgstr ""
 
 #: src/components/biometrics/Calibration/DatasetBuilder.tsx:59
-#: src/components/biometrics/Calibration/DatasetLibrary.tsx:67
+#: src/components/biometrics/Calibration/DatasetLibrary.tsx:68
 msgid "Whole-night partitions assigned; biometric performance is not yet validated."
 msgstr ""
