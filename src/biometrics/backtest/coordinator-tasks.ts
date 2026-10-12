@@ -11,8 +11,12 @@ import { executeNextBacktest } from './runner'
 import { RawSourceCatalog, rawSourcePageSchema } from './raw-catalog'
 import { rawScanInputSchema, runRawInspectionChild, podRawInspectionLocation, type RawInspectionLocation } from './raw-inspection-child'
 
+import { createWaveformDatasetSchema } from './waveform-selection'
+import { publishSelectedWaveformDataset } from './waveform-publication'
+
 const idInput = z.object({ id: z.string().uuid() }).strict()
 export const coordinatorTaskSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('createWaveformDataset'), input: createWaveformDatasetSchema }).strict(),
   z.object({ type: z.literal('inspectRawSource'), input: rawScanInputSchema }).strict(),
   z.object({ type: z.literal('pageRawSources'), input: rawSourcePageSchema }).strict(),
   z.object({ type: z.literal('createDataset'), input: createDatasetSchema }).strict(),
@@ -28,6 +32,7 @@ export const coordinatorTaskSchema = z.discriminatedUnion('type', [
 ])
 export type CoordinatorTask = z.input<typeof coordinatorTaskSchema>
 export interface CoordinatorResults {
+  createWaveformDataset: Awaited<ReturnType<typeof publishSelectedWaveformDataset>>
   inspectRawSource: Awaited<ReturnType<typeof inspectRawSource>>
   pageRawSources: ReturnType<RawSourceCatalog['page']>
   createDataset: ReturnType<DatasetStore['create']>
@@ -51,6 +56,7 @@ export async function performCoordinatorTask(db: BetterSQLite3Database<typeof sc
 }) {
   const task = coordinatorTaskSchema.parse(raw)
   switch (task.type) {
+    case 'createWaveformDataset': return publishSelectedWaveformDataset(db, task.input, options)
     case 'inspectRawSource': return inspectRawSource(db, task.input, options)
     case 'pageRawSources': return new RawSourceCatalog(db).page(task.input)
     case 'createDataset': return new DatasetStore(db).create(task.input)

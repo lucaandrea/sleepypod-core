@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { execFileSync } from 'node:child_process'
-import { mkdtempSync, readdirSync, rmSync } from 'node:fs'
+import { mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import Database from 'better-sqlite3'
@@ -13,6 +13,7 @@ import { DatasetStore } from '../datasets'
 import { datasetManifestSchema } from '../contracts'
 import { prepareSelectedWaveformDataset } from '../waveform-selection'
 import { RawSourceCatalog } from '../raw-catalog'
+import { runCoordinatorTask } from '../coordinator'
 import { runWaveformChild } from '../waveform-child'
 import type { z } from 'zod'
 import type { retainedWaveformInputSchema } from '../waveform-contracts'
@@ -25,7 +26,7 @@ it('publishes, verifies, replays, releases and collects a retained waveform data
   const directory = mkdtempSync(join(tmpdir(), 'waveform-publication-integration-'))
   const database = join(directory, 'biometrics.db')
   const archive = join(directory, 'archive')
-  const retained = join(directory, 'retained')
+  const retained = join(directory, 'biometric-raw')
   const sqlite = new Database(database)
   try {
     const db = drizzle(sqlite, { schema })
@@ -71,20 +72,39 @@ print(json.dumps({'start':start,'artifacts':artifacts,'inspections':inspections}
     const manifest = datasetManifestSchema.parse(base.manifest)
     const catalog = new RawSourceCatalog(db)
     const sourceIds = fixture.inspections.map(inspection => catalog.record(inspection))
-    const { prepared, selections } = prepareSelectedWaveformDataset(db, { parentDatasetId: base.id, expectedContentHash: base.contentHash,
-      cohorts: [{ cohortId: manifest.splitProtocol.assignments[0].cohortId, sourceIds }], idempotencyKey: 'waveform' }, now)
-    const publish = () => JSON.parse(execFileSync(python, ['-B', '-m', 'common.biometrics.publication_worker',
-      '--database', database, '--archive-directory', archive, '--retained-directory', retained], {
-      env: environment, input: JSON.stringify({ version: 'waveform-publication-work-v1', prepared, selections }),
-      encoding: 'utf8', timeout: 20000, maxBuffer: 65536,
-    })) as { type: string, id: string, contentHash: string, available: boolean }
-    const published = publish()
-    expect(published).toEqual({ type: 'result', id: prepared.id, contentHash: prepared.contentHash, available: true })
+    const request = { parentDatasetId: base.id, expectedContentHash: base.contentHash,
+      cohorts: [{ cohortId: manifest.splitProtocol.assignments[0].cohortId, sourceIds }], idempotencyKey: 'waveform' }
+    const { prepared } = prepareSelectedWaveformDataset(db, request, now)
+    execFileSync(process.execPath, ['scripts/build/biometrics-worker.mjs', directory])
+    const options = { databasePath: database, coordinatorPath: join(directory, 'coordinator.cjs'), workerPath: join(directory, 'worker.cjs'),
+      modulePath: resolve('node_modules'), rawLocation: { pythonPath: python, modulesPath: resolve('modules'), archiveDirectory: archive } }
+    expect(await runCoordinatorTask(options, { type: 'createWaveformDataset', input: request })).toEqual({ status: 'deferred' })
+    let admissionChecks = 0
+    expect(await runCoordinatorTask(options, { type: 'createWaveformDataset', input: request }, { admit: async () => ++admissionChecks === 1 })).toEqual({ status: 'deferred' })
+    expect(admissionChecks).toBe(2)
+    expect(readdirSync(directory)).not.toContain('biometric-raw')
+    const slowPublisher = join(directory, 'slow-publisher')
+    writeFileSync(slowPublisher, `#!${process.execPath}\nprocess.stdin.resume();setInterval(()=>{},1000);setTimeout(()=>process.exit(91),10000).unref();`, { mode: 0o700 })
+    let resourceChecks = 0
+    expect(await runCoordinatorTask({ ...options, rawLocation: { ...options.rawLocation, pythonPath: slowPublisher } },
+      { type: 'createWaveformDataset', input: request }, { admit: async () => ++resourceChecks <= 2 })).toEqual({ status: 'deferred' })
+    expect(resourceChecks).toBe(3)
+    expect(sqlite.prepare('SELECT count(*) n FROM biometric_datasets').get()).toEqual({ n: 1 })
+    const publish = async (input = request) => {
+      const result = await runCoordinatorTask(options, { type: 'createWaveformDataset', input }, { admit: async () => true })
+      if (result.status !== 'published') throw new Error('Publication was deferred')
+      return { type: 'result', id: result.dataset.id, contentHash: result.dataset.contentHash, available: result.dataset.available }
+    }
+    const published = await publish()
+    expect(published).toEqual({ type: 'result', id: expect.any(String), contentHash: prepared.contentHash, available: true })
     const frozen = datasets.read(published.id)
     expect(frozen.snapshot).toEqual(prepared.snapshot) // Includes shared cross-language content-hash verification.
     expect(sqlite.prepare('SELECT count(*) AS count FROM biometric_dataset_raw_artifacts').get()).toEqual({ count: 2 })
     rmSync(archive, { recursive: true })
-    expect(publish()).toEqual(published)
+    for (const id of sourceIds) catalog.markUnavailable(id)
+    expect(await publish()).toEqual(published)
+    const retryWithoutAdmission = await runCoordinatorTask(options, { type: 'createWaveformDataset', input: { ...request, cohorts: request.cohorts.map(item => ({ ...item, sourceIds: [...item.sourceIds].reverse() })) } })
+    expect(retryWithoutAdmission).toMatchObject({ status: 'published', dataset: { id: published.id } })
     if (frozen.snapshot.version !== 'waveform-dataset-v1') throw new Error('Missing waveform inputs')
     const replay = await runWaveformChild({ pythonPath: python, modulesPath: resolve('modules'), retainedDirectory: retained }, {
       version: 'retained-waveform-work-v1', input: frozen.snapshot.waveformInputs[0].input,
@@ -93,8 +113,20 @@ print(json.dumps({'start':start,'artifacts':artifacts,'inspections':inspections}
     expect(replay.readings.length).toBeGreaterThan(0)
     expect(replay.run.raw_records).toBe(151)
     expect(sqlite.prepare('SELECT heart_rate FROM vitals').all()).toEqual([{ heart_rate: 65 }])
+    const reused = await publish({ ...request, idempotencyKey: 'reuse-retained' })
+    expect(reused.contentHash).toBe(published.contentHash)
+    expect(reused.id).not.toBe(published.id)
+    datasets.release(reused.id)
+    const lostReply = join(directory, 'lost-reply')
+    writeFileSync(lostReply, `#!${process.execPath}\nconst {spawnSync}=require('node:child_process');const input=require('node:fs').readFileSync(0);const result=spawnSync(${JSON.stringify(python)},process.argv.slice(2),{input,env:process.env});process.exit(result.status===0?42:1);`, { mode: 0o700 })
+    const recovered = await runCoordinatorTask({ ...options, rawLocation: { ...options.rawLocation, pythonPath: lostReply } },
+      { type: 'createWaveformDataset', input: { ...request, idempotencyKey: 'lost-reply' } }, { admit: async () => true })
+    expect(recovered.status).toBe('published')
+    if (recovered.status !== 'published') throw new Error('Lost committed response was not recovered')
+    expect(recovered.dataset.contentHash).toBe(published.contentHash)
+    datasets.release(recovered.dataset.id)
     datasets.release(published.id)
-    expect(publish()).toEqual({ ...published, available: false })
+    expect(await publish()).toEqual({ ...published, available: false })
     const collected = JSON.parse(execFileSync(python, ['-B', '-c', `
 import json, sqlite3, sys
 from common.biometrics.raw_artifacts import RawArtifactStore
@@ -105,6 +137,9 @@ connection.close()
     expect(collected).toHaveLength(2)
     expect(readdirSync(retained).filter(name => name.endsWith('.RAW.gz'))).toEqual([])
     expect(datasets.read(base.id)).toEqual(base)
+    datasets.release(base.id)
+    expect(await publish()).toEqual({ ...published, available: false })
+    await expect(publish({ ...request, expectedContentHash: '0'.repeat(64) })).rejects.toMatchObject({ code: 'REVISION_CONFLICT' })
   }
   finally {
     sqlite.close()

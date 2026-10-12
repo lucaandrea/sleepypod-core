@@ -1,6 +1,8 @@
 import { z } from 'zod'
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3'
-import type * as schema from '@/src/db/biometrics-schema'
+import { eq } from 'drizzle-orm'
+import { configHash } from '../algorithms/canonical'
+import * as schema from '@/src/db/biometrics-schema'
 import { ReferenceInputError } from '../references/time'
 import { DatasetStore } from './datasets'
 import { datasetManifestSchema, type DatasetSnapshot } from './contracts'
@@ -15,6 +17,22 @@ export const createWaveformDatasetSchema = z.object({
   }).strict()).min(1).max(60),
   idempotencyKey: z.string().min(1).max(200),
 }).strict()
+
+/** Retry identity depends on the requested immutable IDs, not mutable catalog availability. */
+export function waveformSelectionRequestHash(raw: z.input<typeof createWaveformDatasetSchema>) {
+  const input = createWaveformDatasetSchema.parse(raw)
+  const cohorts = input.cohorts.map(item => ({ ...item, sourceIds: [...item.sourceIds].sort() }))
+    .sort((a, b) => a.cohortId < b.cohortId ? -1 : a.cohortId > b.cohortId ? 1 : 0)
+  return configHash({ version: 'selected-waveform-dataset-request-v1', ...input, cohorts })
+}
+
+export function selectedWaveformRetry(db: BetterSQLite3Database<typeof schema>, raw: z.input<typeof createWaveformDatasetSchema>) {
+  const input = createWaveformDatasetSchema.parse(raw)
+  const row = db.select().from(schema.biometricDatasets).where(eq(schema.biometricDatasets.idempotencyKey, input.idempotencyKey)).get()
+  if (!row) return null
+  if (row.requestHash !== waveformSelectionRequestHash(input)) throw new ReferenceInputError('REVISION_CONFLICT', 'Dataset idempotency key was already used for a different selection')
+  return new DatasetStore(db).descriptor(row.id)
+}
 
 /** Only intervals actually recorded in the frozen parent are evidence. Session
  * boundaries are not evidence of continuous occupancy, nor of sleeper mode. */
@@ -86,7 +104,14 @@ export function prepareSelectedWaveformDataset(db: BetterSQLite3Database<typeof 
       const artifacts = selection.sourceIds.map((id) => {
         const source = catalog.read(id)
         const { inventory, artifact, source_name } = source.inspection
-        if (source.unavailableAtMs !== null || !inventory.ordered_waveform_available
+        const cached = source.unavailableAtMs === null
+          ? undefined
+          : db.select().from(schema.biometricRawArtifacts)
+              .where(eq(schema.biometricRawArtifacts.contentHash, artifact.sha256)).get()
+        const mayReuse = cached?.name === artifact.name && cached.compressedBytes === artifact.compressed_bytes
+          && cached.expandedBytes === artifact.expanded_bytes
+        // Metadata only permits attempting reuse; Python still verifies the complete retained file.
+        if ((source.unavailableAtMs !== null && !mayReuse) || !inventory.ordered_waveform_available
           || inventory.first_event_ms === null || inventory.last_event_ms === null) {
           throw new ReferenceInputError('INSUFFICIENT_RAW_DATA', 'Selected RAW source is unavailable or cannot provide ordered waveforms')
         }
@@ -100,6 +125,7 @@ export function prepareSelectedWaveformDataset(db: BetterSQLite3Database<typeof 
         artifacts, contexts: recordedWaveformContexts(parent.snapshot, start, cohort.endMs) } }
     })
     const prepared = prepareWaveformDataset({ ...parent, manifest }, inputs, input.idempotencyKey, now)
+    prepared.requestHash = waveformSelectionRequestHash(input)
     return { prepared, selections: [...selections.values()].sort((a, b) => a.artifact.sha256.localeCompare(b.artifact.sha256)) }
   })
 }
