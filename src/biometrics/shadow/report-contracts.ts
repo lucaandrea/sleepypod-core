@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { previewSummarySchema, referenceImportSchema, referenceMetricSchema } from '../references/contracts'
 import { shadowReceiptEnvelopeSchema } from './receipt'
+import { shadowMonitoringSchema } from './store'
 
 const count = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER)
 const finite = z.number().finite()
@@ -27,6 +28,7 @@ export const shadowReportSchema = z.object({
   capturedAtMs: count, state: z.enum(['pending', 'running', 'completed', 'stopped', 'failed']), reason: z.string().nullable(),
   health: z.enum(['issues_detected', 'waiting', 'within_observed_limits']), issues: z.array(z.string()),
   expectedSlots: count, observedSamples: count, maximumGapMs: count, attemptsObserved: count,
+  alignment: shadowMonitoringSchema.shape.alignment,
   metrics: z.array(z.object({ metric: z.enum(['heart_rate', 'breathing_rate', 'window_ibi_variability_v1']), windowMs: count.nullable(),
     current: coverage, candidate: coverage, coverageDifference: nullable, issues: z.array(z.string()),
     referenceExclusions: z.record(z.string(), count), comparison }).strict()).max(3),

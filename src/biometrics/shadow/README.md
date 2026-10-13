@@ -862,8 +862,16 @@ polling ends for terminal runs; list polling continues to discover new work.
 Reports are opened on request and refreshed explicitly rather than recomputed
 every status poll. They distinguish unavailable coverage/resource receipts from
 zero values and show operational issues without implying validated improvement.
-The UI still needs reference-comparison controls;
-browser verification and translation-catalog completion remain release work.
+The report UI also compares pasted CSV/JSON reference records for the run's saved
+side and sleeper identity. It checks the serialized 64 KiB coordinator request
+bound, invalidates old results on edits, and prevents overlapping comparisons.
+Results show accepted/rejected counts, outside-window exclusions, alignment
+offset/tolerance, shared reference pairs, shared-support MAE, each output's
+reference coverage and lost/added observation timestamps. Missing scores remain
+unavailable; coverage loss and incompatible definitions remain visible. The
+comparison is a fresh snapshot, identified separately from the earlier health
+report, and does not persist a reference import. Browser verification and
+translation-catalog completion remain release work.
 
 ### Creation admission
 

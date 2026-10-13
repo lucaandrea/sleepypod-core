@@ -72,7 +72,7 @@ export function reportShadowRun(store: ShadowStore, runId: string, limits: Param
   if (metrics.some(metric => metric.issues.length)) issues.push('coverage_degraded')
   const report = { schema: 'biometric-shadow-report-v1' as const, runId, planHash: run.plan_hash, snapshotHash: snapshot.snapshotHash,
     capturedAtMs, state: run.state, reason: run.reason, health: issues.length ? 'issues_detected' as const : capturedAtMs < plan.startMs ? 'waiting' as const : 'within_observed_limits' as const,
-    issues, expectedSlots, observedSamples: windowSamples.length, maximumGapMs,
+    issues, expectedSlots, observedSamples: windowSamples.length, maximumGapMs, alignment: policy.alignment,
     attemptsObserved: new Set(samples.map(sample => sample.attemptId)).size, metrics,
     pairing: { activeOnly: samples.filter(sample => sample.pairing?.activePresent && !sample.pairing.candidatePresent).length,
       candidateOnly: samples.filter(sample => sample.pairing?.candidatePresent && !sample.pairing.activePresent).length,

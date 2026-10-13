@@ -86,7 +86,7 @@ export function ShadowRunDetails({ id }: { id: string }) {
       {['pending', 'running'].includes(data.state) ? <Button disabled={stop.isPending} onClick={() => void requestStop().catch(() => {})}><Trans>Stop observation</Trans></Button> : null}
       {stop.error ? <InlineError>{stop.error.message}</InlineError> : null}
       <Button aria-expanded={showReport} onClick={() => setShowReport(!showReport)}><Trans>Review observation report</Trans></Button>
-      {showReport ? <ShadowReport id={id} /> : null}
+      {showReport ? <ShadowReport id={id} side={data.side} subjectId={data.subjectId} /> : null}
       <details>
         <summary><Trans>Saved evidence identity</Trans></summary>
         <dl className="break-all text-xs">

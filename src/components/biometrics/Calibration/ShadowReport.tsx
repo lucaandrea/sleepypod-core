@@ -3,8 +3,9 @@
 import { Trans, useLingui } from '@lingui/react/macro'
 import { Button, InlineError, Skeleton } from '@/src/components/ds'
 import { trpc } from '@/src/utils/trpc'
+import { ShadowComparison } from './ShadowComparison'
 
-export function ShadowReport({ id }: { id: string }) {
+export function ShadowReport({ id, side, subjectId }: { id: string, side?: 'left' | 'right', subjectId?: string }) {
   const { t, i18n } = useLingui()
   const report = trpc.biometricShadow.report.useQuery({ id }, { staleTime: Infinity, refetchOnWindowFocus: false, retry: false })
   const percent = new Intl.NumberFormat(i18n.locale || 'en', { style: 'percent', maximumFractionDigits: 1 })
@@ -61,6 +62,7 @@ export function ShadowReport({ id }: { id: string }) {
         : <p><Trans>No completed worker resource receipt is available.</Trans></p>}
       <p><Trans>Presence and pump context reflect host observations, not proof of the live processor’s cached state.</Trans></p>
       <Button disabled={report.isFetching} onClick={() => void report.refetch()}><Trans>Refresh report</Trans></Button>
+      {side && subjectId !== undefined ? <ShadowComparison key={id} id={id} side={side} subjectId={subjectId} /> : null}
       <details>
         <summary><Trans>Report evidence</Trans></summary>
         <dl className="break-all text-xs">
