@@ -93,9 +93,9 @@ Frame output remains provisional until the cooperative CPU check succeeds.
 Sink errors stop further processing; the controller must resolve any uncertain
 write through the storage idempotency contract. Cancellation does not flush
 pending arbitration; normal finish flushes once. These checks cannot preempt an
-individual numerical call. An isolated worker with host CPU/RSS/wall limits and
-health supervision is still required before enabling live shadow processing.
-The worker/source/controller/storage bridge is not yet connected.
+individual numerical call. The kernel entrypoint and parent supervisor below
+provide CPU/RSS/wall enforcement. The live source/controller/storage bridge is
+not yet connected.
 
 ## Subprocess transport
 
@@ -117,8 +117,8 @@ fails instead of publishing a completion acknowledgment. Lines are capped at
 The worker does not receive database handles or hardware access and does not
 open the configured biometrics database. The supervisor must supply actual
 contemporaneous active readings separately, validate replies, enforce OS limits,
-and persist through the fenced shadow store. This bridge and live source
-supervision are still pending. CPU accounting now includes failed adapter calls;
+and persist through the fenced shadow store. The components below provide reply
+validation, persistence and process supervision; live controller wiring is pending. CPU accounting now includes failed adapter calls;
 missing, invalid or regressing CPU clocks terminate the adapter.
 
 ## Supervisor reply validation and fenced sink
@@ -144,8 +144,8 @@ changed retries fail. Replaced leases remain unable to write.
 
 This sink handles candidate output, not a complete live join: the supervisor
 must also retain active-only observation times, manage bounded joining and late
-arrival, and identify missing candidate output. Admission, live source capture,
-OS process supervision and public API integration remain unfinished. Reports
+arrival, and identify missing candidate output, using `ShadowStreamJoin` below.
+Admission, live source capture and public API integration remain unfinished. Reports
 must not be used as complete prospective evidence until those paths are wired.
 
 ## Bounded active/candidate stream union
@@ -182,7 +182,7 @@ Joined samples identify whether each stream was present and whether their input
 identity is a candidate prefix, active provenance, or unavailable. Active-only
 readings with unavailable signal provenance retain a null input hash rather than
 a fabricated one. Reports expose active-only/candidate-only counts and unknown
-input identity. Live source capture, OS supervision, admission and API/UI wiring
+input identity. Live source capture, admission and API/UI wiring
 remain required to turn this component into an enabled prospective service.
 
 ## Linux kernel-limit entrypoint
@@ -199,7 +199,44 @@ remains a transport test entrypoint and does not install kernel limits.
 
 The CPU cap includes import/startup and has a one-second hard-limit grace; it is
 separate from the adapter's finer cooperative processing budget. Address space
-bounds virtual allocations, not resident memory. The parent must still enforce
-RSS, wall/idle deadlines, cancellation, lease loss and process cleanup. These
-host controls and live admission remain unfinished. This entrypoint runs only
+bounds virtual allocations, not resident memory. The parent supervisor below
+enforces RSS, wall/idle deadlines, cancellation and process cleanup. The live
+controller must signal lease loss and perform admission. This entrypoint runs only
 trusted shipped algorithms and is not a sandbox for external package proposals.
+
+## Parent process supervision
+
+`runShadowChild` launches that fixed Linux entrypoint in a detached process group,
+with trusted host paths, a sanitized environment, and explicit resource budgets.
+It validates the frozen configurations and hashes before launch. Input comes from
+an async frame iterator, with one frame in flight and one validated acknowledgment
+per command. The caller must bound any buffering in its source adapter. Each
+candidate batch passes `ShadowWorkerProtocol`; the supervisor waits for each sink
+callback before pulling the next frame. The callback must use the leased store
+or join and propagate storage/lease errors.
+
+The supervisor enforces cumulative transport bytes, 128 KiB lines, record counts,
+16 KiB diagnostics, source-idle and acknowledgment deadlines, and a separate wall
+deadline that also bounds stalled sinks. Unsolicited output, malformed UTF-8/JSON,
+missing terminal acknowledgment, nonzero exit and pipe errors fail the run.
+Diagnostics are discarded rather than copied into logs. Normal completion
+requires both a validated finished receipt and a clean process exit.
+
+Bounded procfs observations sample the entire detached process group's RSS.
+Unavailable, timed-out or excessive observations fail closed. A successful receipt
+includes the observed peak, sample count, maximum observation gap, configured
+budgets and explicit sampled-memory scope; it does not claim an exact kernel RSS
+peak. The address-space kernel cap is a separate limit. There are no pod resource
+defaults in this component.
+
+Cancellation (including a host lease-loss signal), source/sink failures and every
+exit path kill the process group and wait for the direct child to close, with a
+bounded cleanup deadline. A descendant retaining the worker's pipes is killed as
+well. There is no canonical worker state to flush. Iterator cleanup is requested
+without allowing a stalled iterator to keep the process alive. A pending host
+sink cannot be forcibly cancelled; its writes must remain attempt-fenced.
+
+This implements process supervision, not service admission or restart recovery.
+The live controller must still bind the installed build/qualification and active
+profile, manage leases, capture bounded sensor/active streams, renew or cancel on
+binding changes, recover after host crashes, and expose the requested API/UI.
