@@ -1,3 +1,4 @@
+import { numericSubgroupNames } from '@/src/biometrics/backtest/numeric-subgroups'
 import { jobOperationsSchema } from '@/src/biometrics/backtest/job-operations'
 import { waveformResourceSummarySchema } from '@/src/biometrics/backtest/waveform-resources'
 import { z } from 'zod'
@@ -49,6 +50,13 @@ export const numericComparisonViewSchema = z.object({
 })
 /** Bounded scores only; readings and reference records remain outside this projection. */
 export const numericReportViewSchema = z.object({
+  numericSubgroupSummary: z.array(z.object({ name: z.enum(numericSubgroupNames), version: z.literal('reference-defined-numeric-subgroups-v1'),
+    referenceMembershipBasis: z.literal('native_reference_time'), observationCoverageScope: z.literal('complete_scoring_windows'),
+    excludedBoundaryReferenceCount: count,
+    summary: z.object({ metric: numericMetric, baseline: configuration, candidate: configuration, baselineHash: z.string(), candidateHash: z.string(),
+      scoredNights: count, unscoredNights: count, equalNightMeanMaeDifference: score,
+    }),
+  })).max(12).optional(),
   numericNightSummary: z.array(z.object({
     version: z.literal('numeric-night-summary-v1'), metric: numericMetric, baseline: configuration, candidate: configuration,
     baselineHash: z.string(), candidateHash: z.string(), totalNights: count, scoredNights: count, unscoredNights: count,

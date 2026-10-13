@@ -27,6 +27,7 @@ export function NumericReport({ report, waveform = false }: { report: NumericRep
   const metrics = { heart_rate: t`Heart rate (bpm)`, breathing_rate: t`Breathing rate (breaths/min)`, window_ibi_variability_v1: t`Window IBI variability index (ms)` }
   const uncertaintyLabels = { not_requested: t`Not requested`, insufficient_nights: t`Insufficient paired nights`, degenerate: t`No estimable variation`, estimated: t`Exploratory interval estimated` }
   const statuses = { compared: t`Compared`, no_reference: t`No reference`, no_overlap: t`No overlap`, incompatible: t`Incompatible reference` }
+  const groups = { reference_points: t`Reference points`, reference_intervals: t`Reference intervals`, window_first_half: t`First half of each window`, window_second_half: t`Second half of each window` }
   const start = page * 10
   return (
     <section className="space-y-3" aria-label={t`Numerical errors by night`}>
@@ -36,6 +37,30 @@ export function NumericReport({ report, waveform = false }: { report: NumericRep
         : <p><Trans>These scores compare original stored readings. Identical numerical results across profiles do not validate numerical parameter changes.</Trans></p>}
       <p><Trans>Reference coverage is the fraction of eligible reference records paired. Output coverage is the fraction of observations with a value, not continuous time coverage. Sparse samples cannot establish whole-night accuracy.</Trans></p>
       <p><Trans>The window IBI variability index is not clinical beat-to-beat RMSSD. Only compatible metric definitions and aggregation windows are scored.</Trans></p>
+      {waveform && !!report.numericSubgroupSummary?.length
+        ? (
+            <details>
+              <summary><Trans>Reference-defined subgroup comparisons</Trans></summary>
+              <p><Trans>Groups use native reference timestamps and record types, independently of candidate output. Half-window groups exclude intervals crossing the midpoint. Groups overlap and are not independent experiments. These are not motion or artifact subgroups.</Trans></p>
+              {report.numericSubgroupSummary.map(group => (
+                <div key={`${group.name}:${group.summary.metric}:${group.summary.baseline}:${group.summary.candidate}`} className="space-y-1 border-t border-border py-2">
+                  <h5>
+                    {groups[group.name]}
+                    {' — '}
+                    {metrics[group.summary.metric]}
+                    {' — '}
+                    {labels[group.summary.candidate]}
+                    {' / '}
+                    {labels[group.summary.baseline]}
+                  </h5>
+                  <p>{t`Scored nights: ${group.summary.scoredNights}; unscored: ${group.summary.unscoredNights}`}</p>
+                  <p>{t`Equal-night mean MAE difference: ${number(group.summary.equalNightMeanMaeDifference)}`}</p>
+                  <p>{t`Reference intervals excluded at window midpoints: ${group.excludedBoundaryReferenceCount}`}</p>
+                </div>
+              ))}
+            </details>
+          )
+        : null}
       {waveform
         ? report.numericNightSummary?.map(summary => (
             <div key={`${summary.metric}:${summary.baseline}:${summary.candidate}:${summary.baselineHash}:${summary.candidateHash}`} className="space-y-2 border-t border-border pt-3">

@@ -73,3 +73,22 @@ it('shows whole-night uncertainty in metric units with missing scores preserved'
   expect(screen.getByText('Scored nights: 3; unscored: 1; coverage reduced: 1')).toBeTruthy()
   expect(screen.getByText(/baseline: Not scored; comparison: Not scored/)).toBeTruthy()
 })
+
+it('labels reference-defined subgroups, midpoint exclusions and a positive regression separately', () => {
+  render(
+    <I18nProvider i18n={i18n}>
+      <NumericReport
+        waveform
+        report={{ nights: [], numericSubgroupSummary: [{ name: 'window_second_half', version: 'reference-defined-numeric-subgroups-v1',
+          referenceMembershipBasis: 'native_reference_time', observationCoverageScope: 'complete_scoring_windows', excludedBoundaryReferenceCount: 2,
+          summary: { metric: 'heart_rate', baseline: 'default', candidate: 'candidate', baselineHash: 'a', candidateHash: 'b',
+            scoredNights: 3, unscoredNights: 1, equalNightMeanMaeDifference: 5 } }] }}
+      />
+    </I18nProvider>,
+  )
+  fireEvent.click(screen.getByText('Reference-defined subgroup comparisons'))
+  expect(screen.getByText(/Second half of each window/)).toBeTruthy()
+  expect(screen.getByText('Equal-night mean MAE difference: 5')).toBeTruthy()
+  expect(screen.getByText('Reference intervals excluded at window midpoints: 2')).toBeTruthy()
+  expect(screen.getByText(/These are not motion or artifact subgroups/)).toBeTruthy()
+})

@@ -1,3 +1,4 @@
+import { previewReferenceImport } from '../../references/normalize'
 // @vitest-environment node
 import { expect, it } from 'vitest'
 import { backtestFixture } from './fixtures/backtest'
@@ -97,4 +98,33 @@ it('retains measured waveform costs through compact report projection without cl
     expectedProcesses: outputs.length, measuredProcesses: outputs.length, totalWallMs: outputs.length * 120,
     totalCpuMs: outputs.length * 80, largestProcessPeakRssBytes: 102400, ingestionHealthMeasured: false,
   } } })
+})
+
+it('exposes a late-window regression hidden by lower whole-night error', () => {
+  const work = fixture(), start = work.dataset.snapshot.sessions[0].startMs
+  const baseline = work.waveform.outputs[0]
+  baseline.readings = [80, 60].map((heartRate, index) => ({ ...baseline.readings[0], heartRate, timestampMs: start + index * 300000 }))
+  baseline.run.counts.scored_outputs = 2
+  const candidate = structuredClone(defaultConfig)
+  candidate.heart_rate.trackingToleranceBpm = 20
+  const candidateHash = configHash(candidate)
+  const output = { ...baseline, configHash: candidateHash,
+    readings: baseline.readings.map((row, index) => ({ ...row, heartRate: index ? 65 : 60, configHash: candidateHash })),
+    run: { ...baseline.run, config_hashes: { ...baseline.run.config_hashes, left: candidateHash } } }
+  work.dataset.snapshot.references[0].measurements = previewReferenceImport({ side: 'left', source: 'fixture', subjectId: 'A', rows: [
+    { recordKey: 'early', metric: 'heart_rate', timestampMs: start, value: 60, unit: 'bpm' },
+    { recordKey: 'late', metric: 'heart_rate', timestampMs: start + 300000, value: 60, unit: 'bpm' },
+  ] }).measurements
+  const protocol = { ...work.job.protocol, objectivePolicy: { version: 'numeric-objective-v1' as const, qualificationId: 'test-only', metric: 'heart_rate' as const,
+    minimumNights: 3, minimumPairedReferencesPerNight: 1, maximumLostObservationFraction: 0, minimumMaeImprovement: 2,
+    maximumNightMaeRegression: 1, maximumRegressedNightFraction: 0, maximumSubgroupMaeRegression: 1, requiredSubgroups: ['window_second_half'],
+    operational: { maximumWallMs: 1000, maximumPeakRssBytes: 1000, maximumIngestionAgeMs: 1000 } } }
+  const outputs = [baseline, output]
+  const report = evaluateBacktest({ ...work, waveform: { outputs, hash: dataHash(outputs) }, job: { ...work.job,
+    datasetHash: dataHash(work.dataset), protocol, protocolHash: configHash(protocol),
+    configs: [...work.job.configs, { ...work.job.configs[0], label: 'candidate', resolved: candidate, resolvedHash: candidateHash }] } })
+  expect(report.numericNightSummary?.find(row => row.baseline === 'default' && row.candidate === 'candidate' && row.metric === 'heart_rate')?.equalNightMeanMaeDifference).toBe(-7.5)
+  expect(report.numericSubgroupSummary?.find(row => row.name === 'window_second_half' && row.summary.baseline === 'default' && row.summary.candidate === 'candidate')?.summary.equalNightMeanMaeDifference).toBe(5)
+  expect(report.objectiveAssessments[0].evidence.subgroups).toContainEqual({ name: 'window_second_half', pairedNights: 1, maeDifference: 5 })
+  expect(report.objectiveAssessments[0].evidence.subgroups).toContainEqual({ name: 'reference_intervals', pairedNights: 0, maeDifference: null })
 })

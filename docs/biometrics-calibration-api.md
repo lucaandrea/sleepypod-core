@@ -322,3 +322,28 @@ experiment's fixed clock offset only to recomputed timestamps. The source table
 keeps reference timestamps in UTC. Incompatible definitions remain visible in the
 table but are not plotted. Display overlap does not establish a new scored pair;
 use the report's frozen alignment and common-support scores for comparisons.
+
+### Numeric subgroup evidence
+
+Waveform experiments with a numeric objective additionally compute
+`reference-defined-numeric-subgroups-v1` for that objective's metric. Fixed IDs
+are `reference_points`, `reference_intervals`, `window_first_half`, and
+`window_second_half`. Membership uses native reference timestamps and temporal
+kind, never candidate values, errors, or missingness. Each disconnected scoring
+window has its own midpoint. A point at the midpoint belongs to the second half;
+an interval ending there belongs to the first. Intervals spanning the midpoint
+are excluded from both half-window groups without splitting or changing their
+aggregation; the report retains their excluded count.
+
+Each group uses the same all-configuration common timestamp support as the main
+numeric comparison. References are weighted within a night, then nights receive
+equal weight. Objective evidence requires the configured minimum paired records
+in every included night; an unsupported night makes that group's mean unavailable
+for promotion rather than silently dropping it. A required group with inadequate
+night support blocks improvement. Per-window observation coverage counters still
+refer to complete scoring windows, not inferred continuous coverage within a
+reference subgroup. The report UI shows subgroup means, night counts and boundary
+exclusions. Groups overlap and are not independent statistical experiments.
+They do not establish motion, pump, empty-bed, or artifact-specific performance;
+those require separately qualified context/fixture evidence. Unrecognized required
+group names remain unsupported and cannot award improvement.
