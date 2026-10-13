@@ -1,15 +1,18 @@
-# Prospective shadow storage
+# Prospective shadow monitoring
 
 `ShadowStore` is the storage component for prospective monitoring. It uses only
 `biometric_shadow_runs` and `biometric_shadow_samples`, added by a generated
 additive biometrics migration. It does not write canonical vitals, activate a
-profile, import algorithm code, or control hardware. It is not yet wired to a
-live worker or public API.
+profile, import algorithm code, or control hardware. The installed application
+service connects it to the shipped worker, bounded live sources and public
+inspection/submission APIs. Execution requires explicit deployment configuration
+and a matching release-installed qualification registry; neither is inferred
+from a synthetic benchmark. The sections below describe each layer.
 
 A frozen plan binds subject and side, active/candidate configuration hashes, reviewed
 qualification and engine-build identities, a prospective time window (at most
 seven days), selected metric definitions, and explicit point/byte limits.
-Identities alone do not establish qualification: the eventual controller must
+Identities alone do not establish qualification: the installed controller must
 resolve the release-installed build and qualification before admission.
 No CPU, RSS, free-space reserve, or production storage defaults are inferred.
 
@@ -38,7 +41,8 @@ There is no automatic deletion of reports, plans, or exposure history.
 `stop` supports host/operator cancellation even after deadline or worker loss,
 retaining the original terminal reason on retries. The controller must stop
 elapsed windows and enforce execution budgets separately. Heartbeat and sample identity feed the reporting component below. The live
-shadow processor, admission controller and public API are still to be connected.
+shadow processor, admission controller and public API use the installed service
+composition described below.
 
 ## Health and reference reporting
 
@@ -94,8 +98,8 @@ Sink errors stop further processing; the controller must resolve any uncertain
 write through the storage idempotency contract. Cancellation does not flush
 pending arbitration; normal finish flushes once. These checks cannot preempt an
 individual numerical call. The kernel entrypoint and parent supervisor below
-provide CPU/RSS/wall enforcement. The live source/controller/storage bridge is
-not yet connected.
+provide CPU/RSS/wall enforcement. The planned source factory and owned attempt host below connect the live
+source/controller/storage bridge.
 
 ## Subprocess transport
 
@@ -268,7 +272,8 @@ terminal store transition. Existing operator/quota/join termination is preserved
 If its lease expired during cleanup, `failExpired` can mark that same attempt
 failed; it cannot affect a replacement, unexpired lease or already terminal run.
 
-The host adapter is still to be implemented and wired to service/API lifecycle.
+The owned attempt host and application service below provide the host adapter
+and service/API lifecycle.
 The controller does not invent qualification, choose production budgets, subscribe
 to hardware on its own or recover orphan workers after host crashes. Completion
 now persists the validated worker receipt atomically with terminal state. Those integration obligations remain before
@@ -764,7 +769,8 @@ not replace them or serialize replay workers.
 Application instrumentation starts this service after migrations and hardware
 initialization when explicit deployment configuration is present. CI skips it
 along with hardware initialization. No production resource thresholds or
-qualification evidence are inferred by this service; API/UI wiring remains work.
+qualification evidence are inferred by this service. The inspection, creation
+and cancellation APIs and browser workflow use this service as described below.
 
 ### Deployment configuration
 
