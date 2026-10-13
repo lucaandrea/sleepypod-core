@@ -3,6 +3,7 @@ import { expect, it } from 'vitest'
 import { backtestFixture } from './fixtures/backtest'
 import { dataHash, configHash } from '../../algorithms/canonical'
 import { evaluateBacktest } from '../evaluator'
+import { summarizeBacktestResult } from '../report-summary'
 import { defaultConfig, manifestHash } from '../../algorithms/registry'
 
 function fixture() {
@@ -38,6 +39,12 @@ it('scores derived readings for matching labels without replacing immutable data
   expect(report.nights[0].evaluations[0].windows[0].numeric[0]).toMatchObject({ pairedCount: 1, metrics: { mae: 0 } })
   expect(report.nights[0].evaluations[1].windows).toEqual(report.nights[0].evaluations[0].windows)
   expect(report.nights[0].evaluations[0].windows[0].blocks).toEqual([])
+  expect(report.nights[0].numericComparisons?.[0].metrics).toEqual(expect.arrayContaining([
+    expect.objectContaining({ metric: 'heart_rate', baseline: 'default', candidate: 'current',
+      commonObservationCount: 1, differences: expect.objectContaining({ commonMae: 0 }), coverageReduced: false }),
+  ]))
+  const summary = summarizeBacktestResult({ available: true, report })
+  expect(summary?.report).toMatchObject({ nights: [expect.objectContaining({ numericComparisons: report.nights[0].numericComparisons })] })
   expect(work).toEqual(before)
 })
 it('rejects incomplete, mismatched or extraneous derived waveform evidence', () => {

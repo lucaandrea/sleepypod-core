@@ -1,3 +1,4 @@
+import { compareNumericConfigurations } from './numeric-comparison'
 import { z } from 'zod'
 import { waveformReadingSchema, waveformRunSchema } from './waveform-output'
 import { compareStageOutputs } from './stage-comparison'
@@ -151,6 +152,19 @@ export function createBacktestEvaluator(dependencies: { configHash: (value: unkn
               }),
             })))
         : []
+      const numericComparisons = signalReplay
+        ? windows.map(window => ({ ...window,
+            metrics: (['heart_rate', 'breathing_rate', 'window_ibi_variability_v1'] as const).flatMap(metric => compareNumericConfigurations(
+              metric, metric === 'window_ibi_variability_v1' ? 300000 : null,
+              configs.map(config => ({ label: config.label, configHash: config.resolvedHash,
+                observations: (waveformOutputs.get(`${assignment.cohortId}:${config.resolvedHash}`)?.readings ?? [])
+                  .filter(row => row.side === dataset.snapshot.side && row.timestampMs >= window.startMs && row.timestampMs < window.endMs)
+                  .map(row => ({ timestampMs: row.timestampMs, value: metric === 'heart_rate' ? row.heartRate : metric === 'breathing_rate' ? row.breathingRate : row.hrvIndex })),
+              })), references.filter(row => row.metric === metric && row.startMs >= window.startMs
+                && (row.temporalKind === 'point' ? row.startMs < window.endMs : row.endMs <= window.endMs)),
+              { ...DEFAULT_ALIGNMENT, pointToleranceMs: job.protocol.pointToleranceMs, clockOffsetMs: job.protocol.clockOffsetMs })),
+          }))
+        : []
       progress(nightIndex + 1, assignments.length)
       return { cohortId: assignment.cohortId, sessionIds: assignment.sessionIds,
         uniqueObservationCount: signalReplay
@@ -158,7 +172,7 @@ export function createBacktestEvaluator(dependencies: { configHash: (value: unkn
             .flatMap(output => output.readings.filter(row => row.side === dataset.snapshot.side
               && windows.some(window => row.timestampMs >= window.startMs && row.timestampMs < window.endMs)).map(row => row.timestampMs))).size
           : vitals.length,
-        ...(signalReplay ? { recordedObservationCount: vitals.length, observationCountBasis: 'union_of_derived_timestamps' } : {}), evaluations, comparisons }
+        ...(signalReplay ? { numericComparisons, recordedObservationCount: vitals.length, observationCountBasis: 'union_of_derived_timestamps' } : {}), evaluations, comparisons }
     })
     return { version: signalReplay ? 'waveform-backtest-report-v1' as const : 'processed-backtest-report-v1' as const,
       ...(signalReplay ? { waveform: { ...(job.waveform?.baselineProvenance ? { baselineProvenance: job.waveform.baselineProvenance } : {}), pythonBuildHash: job.waveform?.pythonBuildHash, otherSideConfigHash: job.waveform?.otherSide.resolvedHash, ...waveform } } : {}), datasetId: job.datasetId, datasetHash: job.datasetHash,
@@ -166,7 +180,7 @@ export function createBacktestEvaluator(dependencies: { configHash: (value: unkn
       status: 'insufficient_evidence' as const, evidence: job.evidence, nights, stageNightSummary: summarizeStageNights(nights, job.protocol.nightUncertainty),
       calibration: { source: 'explicit_assumption' as const, quality: job.protocol.assumedStageCalibrationQuality },
       limitations: ['This descriptive report does not establish validated improvement.',
-        ...(signalReplay ? ['Numeric scores use each configuration’s available observations; unequal output coverage must not be interpreted as improvement.'] : []),
+        ...(signalReplay ? ['Numeric comparisons retain own-support scores and scores on observation timestamps shared by all configurations; coverage loss and ambiguous timestamps are reported separately. Common-support differences remain descriptive, not validated improvement.'] : []),
         signalReplay
           ? 'Numeric readings are replayed from retained waveforms; missing historical context, event-time substitution and cold starts constrain parity.'
           : 'Numeric readings are original observations; parameter changes to waveform processing are not evaluated by processed-data replay.',
