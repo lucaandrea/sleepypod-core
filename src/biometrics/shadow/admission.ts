@@ -13,6 +13,7 @@ export const shadowQualificationSchema = z.object({ qualificationId: z.string().
   sampleRateHz: z.literal(500), activeConfigHash: hash, executionPolicyHash: hash,
   fixtureEvidenceHash: hash, podEvidenceHash: hash, heldOutEvidenceHash: hash,
   contextEvidence: z.literal('host_observations_not_live_processor_cache_attestation'),
+  maximumHardwareObservationAgeMs: integer.positive().max(300000),
   maximumRuntimeHeartbeatAgeMs: integer.positive().max(300000), healthPolicy: admissionPolicySchema,
 }).strict().refine(entry => entry.healthPolicy.qualificationId === entry.qualificationId, 'Qualification policy identity mismatch')
 export const shadowQualificationRegistrySchema = z.object({ version: z.literal('biometric-shadow-qualifications-v1'),

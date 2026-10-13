@@ -21,7 +21,7 @@ function setup() {
       context: { presenceStaleMs: 300000, pumpStaleMs: 5000, maximumPresenceBytes: 4096 } } }
   const entry = { qualificationId: 'reviewed-test-only', manifestHash, engineBuildHash: a, pythonBuildHash: b, hardwareId: 'fixture-hardware', sampleRateHz: 500,
     activeConfigHash: a, executionPolicyHash: dataHash(execution), fixtureEvidenceHash: a, podEvidenceHash: b, heldOutEvidenceHash: a,
-    contextEvidence: 'host_observations_not_live_processor_cache_attestation', maximumRuntimeHeartbeatAgeMs: 1000,
+    contextEvidence: 'host_observations_not_live_processor_cache_attestation', maximumRuntimeHeartbeatAgeMs: 1000, maximumHardwareObservationAgeMs: 1000,
     healthPolicy: { qualificationId: 'reviewed-test-only', minimumAvailableMemoryBytes: 100, minimumFreeDiskBytes: 100,
       maximumLoadPerCpu: 1, maximumEventLoopDelayMs: 100, maximumPiezoAgeMs: 1000, maximumTemperatureC: 70, maximumSampleAgeMs: 1000 } }
   const plan = { schema: 'biometric-shadow-plan-v1', side: 'left', subjectId: 'test', execution, startMs: now, endMs: now + 10000,

@@ -626,3 +626,21 @@ This covers shipped source, installed wheel metadata, and interpreter replacemen
 it is not a full native-library binary attestation. The guard must still be called
 by production admission alongside actual hardware identity. Service registration,
 crash recovery and current-build qualification remain outstanding.
+
+## Observed hardware identity
+
+`observedShadowHardware` reads the existing DAC monitor without starting it or
+sending commands. It requires running status, a successful poll timestamp within
+the qualification's explicit `maximumHardwareObservationAgeMs`, and a recognized
+H/I/J sensor revision consistent with the reported pod version. Unknown labels do
+not inherit the general status parser's Pod 3 fallback. The hardware ID contains
+pod version and exact sensor revision, never a serial number. The 500 Hz value is
+the shipped waveform protocol rate; frame admission separately rejects an explicit
+incompatible frequency.
+
+`installedShadowIdentity` combines that observation with the inspected Node/Python
+fingerprints and invokes the combined artifact guard on every call. Build or
+hardware mismatch rejects admission. This adapter lives on the application side
+of the package boundary, so hardware services remain excluded from the passive
+host bundle. Production service execution must still supply this collector and
+register cancellation/recovery and user-facing operations.
