@@ -1,0 +1,88 @@
+{
+  "scope": "30-minute synthetic worker resource smoke; not full-night, shadow, clinical or activation qualification",
+  "sourceCommit": "4453c0a5",
+  "architecture": "aarch64",
+  "nodeVersion": "24.16.0",
+  "pythonVersion": "3.10.4",
+  "completed": true,
+  "fixtureSeconds": 1800,
+  "compressedBytes": 5976451,
+  "canonicalObservationsUnchanged": true,
+  "readFailures": 0,
+  "replayBudget": {
+    "jobWallMs": 900000,
+    "waveformWallMs": 240000,
+    "waveformCpuSeconds": 180
+  },
+  "operations": [
+    {
+      "phase": "snapshot",
+      "succeeded": true,
+      "elapsedMs": 1560.2145219999984,
+      "eventLoopP95Ms": 21.987327,
+      "eventLoopMaxMs": 29.081599,
+      "parentPeakRssKiB": 129868
+    },
+    {
+      "phase": "retain",
+      "succeeded": true,
+      "elapsedMs": 16172.227184,
+      "eventLoopP95Ms": 22.233087,
+      "eventLoopMaxMs": 42.532863,
+      "parentPeakRssKiB": 129868
+    },
+    {
+      "phase": "waveform-replay",
+      "succeeded": true,
+      "elapsedMs": 202759.751582,
+      "eventLoopP95Ms": 28.049407,
+      "eventLoopMaxMs": 186.384383,
+      "parentPeakRssKiB": 129868
+    },
+    {
+      "phase": "summary",
+      "succeeded": true,
+      "elapsedMs": 1541.8592840000056,
+      "eventLoopP95Ms": 21.790719,
+      "eventLoopMaxMs": 24.936447,
+      "parentPeakRssKiB": 129868
+    },
+    {
+      "summaryBytes": 58915,
+      "resultHash": "ed2505dfb5cc91be94ebeea9f26bddc5ee214c95e9ca730eebb459dbff9c989d",
+      "compoundBuildHash": "3f9ee531c01c501f543278dfb5641eb57eea9cf2906d7ce2f94f01d6ab1a2e34",
+      "pythonBuildHash": "0eb411804b1b4ba608a1a8db11406dcf983f0ff9bea0f2d8c5eb027b6a187254"
+    }
+  ],
+  "concurrentReadMs": {
+    "count": 27,
+    "p95": 1859.888511000012,
+    "max": 1860.4550230000168
+  },
+  "internalApiMs": {
+    "count": 638,
+    "p95": 65.67037400000845,
+    "max": 305.6198179999999
+  },
+  "internalApiFailures": 0,
+  "externalApiMs": {
+    "count": 1545,
+    "p95": 41.55511000135448,
+    "max": 129.56501200096682
+  },
+  "externalApiFailures": 0,
+  "minimumAvailableMemoryBytes": 992690176,
+  "minimumFreeDiskBytes": 3450945536,
+  "maximumTemperatureC": 46.696,
+  "maximumIngestionAgeMs": 992,
+  "negativeSampleAgeCount": 9,
+  "peakObservedBenchmarkTreeRssBytes": 433369088,
+  "maximumBenchmarkProcessCount": 4,
+  "artifactSha256": {
+    "benchmark.cjs": "bcfd8e5024a606aa1ede8f33481a884d553cc4344eeeb4fcd7c610a943e69984",
+    "payload.tgz": "82ace2b631e042d8c0993c21d5923580df614357bd00fc598692588b6e485543",
+    "measurements.json": "d0eb400d98dd78c12921b2bc2f42c1471c3d6a4e529c4b01be863a3f64c95f7e",
+    "probe.json": "134ded3108c2f678cfa8aafec1bee782ab502820b632214c2ae280c9e581f330",
+    "fixture-1800.json": "861e719fb0c8bad1ddf89c625e7a19388e32dc35984ff90504c00b3c3e06e4a6"
+  }
+}

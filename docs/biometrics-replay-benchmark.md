@@ -499,3 +499,39 @@ mismatch prevent improvement. Threshold values and sampling semantics remain
 part of the frozen experiment protocol. This supplies operational evidence;
 a designated qualified policy, sufficient independent reference support, and
 subgroup checks are still required for validated promotion.
+
+### Current-build 30-minute smoke (2026-10-13 UTC)
+
+An isolated run of `4453c0a5` on the same aarch64 pod (Node 24.16.0, locked
+Python 3.10.4 environment) completed three distinct configurations over an
+1,800-second dual-channel 500 Hz synthetic fixture, 5,976,451 compressed bytes.
+It used the current packaged coordinator/evaluator and common Python sources,
+including numerical flock, shared application admission and process-group cleanup
+confirmation. Production services continued running; this was not a deployment.
+
+- Replay 202,760 ms; retention 16,172 ms; summary 1,542 ms.
+- 27 concurrent dataset reads, zero failures; p95 1,860 ms.
+- 638 internal API requests and 1,545 independent probe requests, zero failures;
+  respective p95 latencies 65.7 ms and 41.6 ms.
+- Peak sampled benchmark process-tree RSS 433,369,088 bytes (413 MiB).
+- Minimum available memory 992,690,176 bytes; minimum free disk 3,450,945,536 bytes.
+- Maximum temperature 46.696°C; maximum measured ingest age 992 ms. Nine negative
+  ages reflect collector/frame timing, as in the earlier full-night run.
+- Replay parent event-loop p95 28.0 ms, maximum 186.4 ms.
+
+Completion verifies a retained report, exact dataset/Python/configuration identities,
+and positive scored outputs for each configuration. Synthetic canonical rows
+remained unchanged. After termination, no process referenced the owned staging
+directory; it was removed. Core and piezo services remained active and the health
+API returned 200. No production databases, bindings or service configuration changed.
+
+The [compact measurement summary](performance/biometrics-replay-2026-10-13/smoke-4453c0a5.json)
+records exact result/build hashes, explicit test budgets and SHA256 identities of
+the inputs and telemetry. Full synthetic telemetry is retained locally at
+`/tmp/biometrics-qualification-4453c0a5/`. These are sampled observations, not exact
+kernel peaks or continuous guarantees. They verify this short replay workload;
+full-night current-build, representative-reference and prospective shadow
+qualification remain outstanding. The measured event-loop maximum also prevents
+interpreting the admission samples as a guarantee that all delays stayed below
+the benchmark's 100 ms admission threshold. No promotion registry or production
+budget defaults were derived from this smoke alone.
