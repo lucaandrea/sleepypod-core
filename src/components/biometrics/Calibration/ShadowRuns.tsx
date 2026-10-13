@@ -5,6 +5,7 @@ import { Trans, useLingui } from '@lingui/react/macro'
 import { Button, Card, CardHeader, InlineError, Skeleton } from '@/src/components/ds'
 import { trpc } from '@/src/utils/trpc'
 import { ShadowReport } from './ShadowReport'
+import { ShadowSchedule } from './ShadowSchedule'
 
 function useRunLabels() {
   const { t } = useLingui()
@@ -24,6 +25,7 @@ export function ShadowRuns({ side }: { side: 'left' | 'right' }) {
   return (
     <Card className="space-y-3">
       <CardHeader title={<Trans>Prospective observations</Trans>} subtitle={<Trans>Compare a candidate alongside active processing. Observations do not change your active profile.</Trans>} />
+      <ShadowSchedule side={side} />
       {runs.error
         ? <InlineError>{runs.error.message}</InlineError>
         : !runs.data

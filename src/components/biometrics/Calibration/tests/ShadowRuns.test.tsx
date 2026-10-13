@@ -4,6 +4,7 @@ import { I18nProvider } from '@lingui/react'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { ShadowRuns, ShadowRunDetails } from '../ShadowRuns'
 import { ShadowReport } from '../ShadowReport'
+vi.mock('../ShadowSchedule', () => ({ ShadowSchedule: () => <p>Scheduling controls</p> }))
 const mock = vi.hoisted(() => ({ list: vi.fn(), get: vi.fn(), report: vi.fn(), stop: vi.fn(), setData: vi.fn(), invalidate: vi.fn(), invalidateReport: vi.fn(), refresh: vi.fn(), error: null as Error | null }))
 vi.mock('@/src/utils/trpc', () => ({ trpc: {
   useUtils: () => ({ biometricShadow: { get: { setData: mock.setData }, list: { invalidate: mock.invalidate }, report: { invalidate: mock.invalidateReport } } }),

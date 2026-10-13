@@ -862,7 +862,7 @@ polling ends for terminal runs; list polling continues to discover new work.
 Reports are opened on request and refreshed explicitly rather than recomputed
 every status poll. They distinguish unavailable coverage/resource receipts from
 zero values and show operational issues without implying validated improvement.
-The UI still needs plan preparation/scheduling and reference-comparison controls;
+The UI still needs reference-comparison controls;
 browser verification and translation-catalog completion remain release work.
 
 ### Creation admission
@@ -910,3 +910,17 @@ the prepared plan stale rather than silently replacing its inputs.
 MCP exposes `shadow_templates` and `shadow_prepare` through the read-only
 `inspect_biometric_calibration` tool. Scheduling remains the separate explicit
 `schedule_biometric_shadow` operation with its immutable retry key.
+
+The Observations UI now provides template selection, explicit default or saved
+candidate selection with profile pagination, sleeper identity and UTC window
+inputs. It preserves exact sleeper IDs and subsecond timestamps. Preparation is
+a separate action from scheduling, and edits invalidate the prepared review.
+The review shows the server-captured window, generations, candidate and plan hash.
+No template is invented when deployment configuration is missing.
+
+Scheduling freezes the prepared plan and a random request key. After an uncertain
+response, the open form keeps those inputs locked and retries the same request
+without re-preparing it. Explicit bad-request or quota rejection unlocks editing;
+confirmed saves expose a separate new-plan action and refresh the run list. A
+saved request is never presented as proof that execution started. Retry state is
+held in the mounted form; browser navigation/reload recovery still needs review.
