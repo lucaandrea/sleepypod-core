@@ -231,8 +231,8 @@ export function createBacktestEvaluator(dependencies: { configHash: (value: unkn
       objectiveAssessments, stageObjectiveAssessments,
       status: 'insufficient_evidence' as const, evidence: job.evidence, nights, stageNightSummary,
       calibration: { source: 'explicit_assumption' as const, quality: job.protocol.assumedStageCalibrationQuality },
-      limitations: ['This descriptive report does not establish validated improvement.',
-        ...(signalReplay ? ['Numeric comparisons retain own-support scores and scores on observation timestamps shared by all configurations; coverage loss and ambiguous timestamps are reported separately. Common-support differences remain descriptive, not validated improvement.'] : []),
+      limitations: ['Only a qualified, complete independent evaluation can establish improvement in reference agreement.',
+        ...(signalReplay ? ['Numeric comparisons retain own-support scores and scores on observation timestamps shared by all configurations; coverage loss and ambiguous timestamps are reported separately. Common-support differences require qualified objective and coverage assessment before they support promotion.'] : []),
         signalReplay
           ? 'Numeric readings are replayed from retained waveforms; missing historical context, event-time substitution and cold starts constrain parity.'
           : 'Numeric readings are original observations; parameter changes to waveform processing are not evaluated by processed-data replay.',

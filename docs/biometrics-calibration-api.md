@@ -472,3 +472,15 @@ registry. Evidence hashes identify release-reviewed artifacts; loading a registr
 is not itself a qualification experiment. The publisher additionally rejects
 context outside the registered allowance before awarding metric-level statuses.
 No production registry has been generated or installed yet.
+
+
+The supervisor now derives the overall retained report status with the same
+assessment logic used for activation. `improved` requires complete qualified
+independent evidence for every changed domain and acceptable downstream stages.
+Supported failures produce `regressed`; insufficient support remains
+`insufficient_evidence`, incompatible metric evidence is `incompatible`, and
+supported outcomes below the improvement threshold are `no_material_change`.
+An identical candidate/current configuration is also reported as no material
+change. The supervisor replaces worker status claims. The UI displays these as
+historical evaluation outcomes; an improved report never substitutes for current
+activation review, holdout-exposure checks, or processor acknowledgement.

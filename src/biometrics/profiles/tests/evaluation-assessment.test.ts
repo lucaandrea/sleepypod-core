@@ -157,3 +157,18 @@ it('does not transfer threshold qualification to changed alignment, calibration 
   expect(() => verifyEvaluationAssessments(work.job, work.result(), work.expected, { ...work.designations, protocolHash: null }))
     .toThrow('qualified context')
 })
+
+it('derives aggregate status from reassessed evidence without accepting a claimed report status', async () => {
+  const { assessEvaluation } = await import('../evaluation-assessment')
+  const work = fixture()
+  expect(assessEvaluation(work.job, work.result(), work.expected, work.designations).status).toBe('improved')
+  work.report.stageObjectiveAssessments[0].status = 'improved'
+  work.report.stageObjectiveAssessments[0].evidence.intervalLower = 0
+  for (const night of work.report.stageObjectiveAssessments[0].evidence.nights) night.agreementDifference = 0
+  expect(assessEvaluation(work.job, work.result(), work.expected, work.designations).status).toBe('no_material_change')
+  work.report.stageObjectiveAssessments[0].evidence.nights[0].candidateOutputCoverage = 0.1
+  expect(assessEvaluation(work.job, work.result(), work.expected, work.designations).status).toBe('regressed')
+  work.report.jobOperations.memory.allSamplesAvailable = false
+  expect(assessEvaluation(work.job, work.result(), work.expected, work.designations).status).toBe('insufficient_evidence')
+  expect(() => verifyEvaluationAssessments(work.job, work.result(), work.expected, work.designations)).toThrow('does not support')
+})

@@ -142,3 +142,17 @@ it('preserves uncertain activation intent when the detailed report is released',
   await screen.findByText('Waiting for a processing boundary')
   expect(mock.activate.mock.calls[1][0]).toEqual(mock.activate.mock.calls[0][0])
 })
+
+it.each([
+  ['improved', 'Improved agreement under the qualified evaluation policy'],
+  ['no_material_change', 'No material improvement under the evaluation policy'],
+  ['regressed', 'Regression under the evaluation policy'],
+  ['incompatible', 'Incompatible evaluation evidence'],
+])('renders %s as retained evidence without claiming processor adoption', (status, label) => {
+  mock.get.mockReturnValue({ data: { ...descriptor, report: { ...report, status, qualificationWarning: 'Qualification context warning' } } })
+  render(view())
+  expect(screen.getByText(label)).toBeTruthy()
+  expect(screen.getByText('Qualification context warning')).toBeTruthy()
+  expect(screen.queryByText('Applied')).toBeNull()
+  if (status === 'improved') expect(screen.getByText(/not current activation approval or clinical accuracy/)).toBeTruthy()
+})

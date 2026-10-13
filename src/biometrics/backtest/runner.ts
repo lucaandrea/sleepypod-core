@@ -1,3 +1,5 @@
+import { assessEvaluation } from '../profiles/evaluation-assessment'
+import { dataHash } from '../algorithms/canonical'
 import { verifyReplayContext } from '../profiles/replay-context'
 import { datasetManifestSchema } from './contracts'
 import { installedPromotionPolicies, unqualifiedPolicies } from '../profiles/qualification-registry'
@@ -88,6 +90,8 @@ export async function executeNextBacktest(db: BetterSQLite3Database<typeof schem
       },
     })
     if (work.job.protocol.mode === 'signal_replay') await verifyWaveformJobBuild(work, { ...options, signal: controller.signal })
+    let policies = await installedPromotionPolicies(options.workerPath, { evaluatorBuildHash: work.job.evaluatorBuildHash,
+      pythonBuildHash: work.job.waveform?.pythonBuildHash, protocolHash: work.job.protocolHash })
     // Quiesce the periodic check before the final fresh check and publication.
     clearInterval(timer)
     await resourceCheck
@@ -98,8 +102,6 @@ export async function executeNextBacktest(db: BetterSQLite3Database<typeof schem
       || identity.nights.length !== progress.totalNights || progress.completedNights !== progress.totalNights) throw new Error('Worker report identity/progress mismatch')
     if (controller.signal.aborted) throw new Error('Replay cancelled')
     const jobOperations = operations.finish()
-    let policies = await installedPromotionPolicies(options.workerPath, { evaluatorBuildHash: work.job.evaluatorBuildHash,
-      pythonBuildHash: work.job.waveform?.pythonBuildHash, protocolHash: work.job.protocolHash })
     let qualificationWarning: string | null = null
     if (policies.protocolHash && work.job.waveform) {
       try {
@@ -115,7 +117,24 @@ export async function executeNextBacktest(db: BetterSQLite3Database<typeof schem
       }
     }
     const finalized = finalizeObjectiveReport(report, numericObjectivePolicies(work.job.protocol), jobOperations, policies.numeric)
-    jobs.complete(lease, { ...finalizeStageObjectiveReport(finalized, work.job.protocol.stageObjectivePolicy, jobOperations, policies.stages), jobOperations, qualificationWarning })
+    const measured = { ...finalizeStageObjectiveReport(finalized, work.job.protocol.stageObjectivePolicy, jobOperations, policies.stages), jobOperations, qualificationWarning }
+    let status: ReturnType<typeof assessEvaluation>['status'] = 'insufficient_evidence'
+    const candidate = work.job.configs.find(config => config.label === 'candidate')
+    const current = work.job.configs.find(config => config.label === 'current')
+    if (candidate?.revisionId && current) {
+      try {
+        status = assessEvaluation(work.job, { report: measured, contentHash: dataHash(measured), available: true,
+          currentHoldoutUseCount: jobs.holdoutUseCount(work.job.datasetId) }, {
+          side: retained.side, revisionId: candidate.revisionId, resolvedHash: candidate.resolvedHash, currentResolvedHash: current.resolvedHash,
+          evaluatorBuildHash: work.job.evaluatorBuildHash, dataset: { id: retained.id, contentHash: retained.contentHash, side: retained.side,
+            available: retained.available, holdoutCohortIds: datasetManifestSchema.parse(retained.manifest).splitProtocol.assignments.filter(row => row.split === 'holdout').map(row => row.cohortId) },
+          ...(work.job.waveform ? { waveform: { pythonBuildHash: work.job.waveform.pythonBuildHash, otherSideConfigHash: work.job.waveform.otherSide.resolvedHash } } : {}),
+        }, policies).status
+      }
+      catch { /* Exploratory, incomplete or incompatible evidence cannot claim improvement. */ }
+    }
+    if (candidate && current && candidate.resolvedHash === current.resolvedHash) status = 'no_material_change'
+    jobs.complete(lease, { ...measured, status, evidence: status === 'improved' ? 'qualified_reference_agreement' : work.job.evidence })
     return { state: 'succeeded' as const, jobId: claimed.id }
   }
   catch {

@@ -46,6 +46,13 @@ function BacktestReportContent({ id }: { id: string }) {
   const parsed = reportViewSchema.safeParse(descriptor.report)
   if (!parsed.success) return <InlineError><Trans>This report version or structure is not supported by this view.</Trans></InlineError>
   const report = parsed.data
+  const statusLabels = {
+    insufficient_evidence: t`Insufficient evidence for validated improvement`,
+    improved: t`Improved agreement under the qualified evaluation policy`,
+    no_material_change: t`No material improvement under the evaluation policy`,
+    regressed: t`Regression under the evaluation policy`,
+    incompatible: t`Incompatible evaluation evidence`,
+  }
   const waveform = report.protocol.mode === 'signal_replay'
   const hasStages = report.protocol.mode === 'stage_replay' || (waveform && report.protocol.waveformStages === true)
   const numeric = numericReportViewSchema.safeParse(descriptor.report)
@@ -61,7 +68,9 @@ function BacktestReportContent({ id }: { id: string }) {
   }
   return (
     <section className="space-y-3" aria-label={t`Evaluation report`}>
-      <p role="status" className="font-medium"><Trans>Insufficient evidence for validated improvement</Trans></p>
+      <p role="status" className="font-medium">{statusLabels[report.status]}</p>
+      {report.qualificationWarning ? <InlineError>{report.qualificationWarning}</InlineError> : null}
+      {report.status === 'improved' ? <p><Trans>This is the retained evaluation result, not current activation approval or clinical accuracy. Application checks current evidence and settings again.</Trans></p> : null}
       <p>{splits[report.split]}</p>
       <p>{t`Current holdout exposure count: ${descriptor.currentHoldoutUseCount}`}</p>
       {report.evidence === 'reused_holdout_is_validation' || descriptor.currentHoldoutUseCount > 1 ? <p><Trans>Repeated holdout exposure weakens independent evidence. Treat reused holdout results as validation, not untouched holdout evidence.</Trans></p> : null}

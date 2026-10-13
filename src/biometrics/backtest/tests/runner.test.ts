@@ -50,7 +50,7 @@ describe('durable replay execution', () => {
   it('runs retained data through a child and publishes an integrity-checked result without changing canonical observations', async () => {
     const before = sqlite.prepare('SELECT * FROM vitals').all()
     expect(await executeNextBacktest(db, options)).toEqual({ state: 'succeeded', jobId })
-    expect(jobs.result(jobId)?.report).toMatchObject({ version: 'processed-backtest-report-v1', nights: [{ uniqueObservationCount: 10 }] })
+    expect(jobs.result(jobId)?.report).toMatchObject({ version: 'processed-backtest-report-v1', status: 'insufficient_evidence', nights: [{ uniqueObservationCount: 10 }] })
     expect(jobs.result(jobId)?.report).toMatchObject({ jobOperations: { ingestion: { allChecksMeasured: false, samples: 0, maximumObservedAgeMs: null } } })
     expect(sqlite.prepare('SELECT * FROM vitals').all()).toEqual(before)
     expect(await executeNextBacktest(db, options)).toEqual({ state: 'idle' })
@@ -74,7 +74,7 @@ describe('durable replay execution', () => {
     const staged = jobs.enqueue({ evaluatorBuildHash, experimentId: experiment.id, idempotencyKey: 'stage-objective', split: 'tuning',
       configs: [...fixture.job.configs, { ...fixture.job.configs[0], label: 'candidate' }] })
     expect(await executeNextBacktest(db, options)).toEqual({ state: 'succeeded', jobId: staged.id })
-    expect(jobs.result(staged.id)?.report).toMatchObject({ stageObjectiveAssessments: [
+    expect(jobs.result(staged.id)?.report).toMatchObject({ status: 'no_material_change', stageObjectiveAssessments: [
       { baseline: 'default', status: 'insufficient_evidence', evidence: { operational: null } },
       { baseline: 'current', status: 'insufficient_evidence', evidence: { operational: null } },
     ] })

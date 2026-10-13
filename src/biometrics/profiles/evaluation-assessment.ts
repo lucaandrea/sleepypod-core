@@ -12,7 +12,7 @@ import { verifyEvaluationIdentity } from './evaluation-identity'
 const assessmentSchema = z.object({
   baseline: z.enum(['default', 'current']), candidate: z.literal('candidate'), baselineHash: z.string(), candidateHash: z.string(),
   status: z.enum(['improved', 'no_material_change', 'regressed', 'insufficient_evidence', 'incompatible']),
-  designated: z.literal(true), missingEvidence: z.array(z.string()).length(0), failedThresholds: z.array(z.string()).length(0),
+  designated: z.boolean(), missingEvidence: z.array(z.string()), failedThresholds: z.array(z.string()),
   evidence: z.object({ split: z.literal('holdout'), holdoutUse: z.literal(1), nights: z.array(z.object({ cohortId: z.string() })) }),
 })
 
@@ -28,7 +28,7 @@ export interface DesignatedEvaluationPolicies {
 /** Reassess retained evidence; claimed report statuses are never authority.
  * The caller still must commit activation under a current binding generation
  * and recheck holdout exposure immediately before that commit. */
-export function verifyEvaluationAssessments(
+export function assessEvaluation(
   rawJob: Parameters<typeof verifyEvaluationIdentity>[0],
   result: Parameters<typeof verifyEvaluationIdentity>[1],
   expected: Parameters<typeof verifyEvaluationIdentity>[2],
@@ -54,6 +54,7 @@ export function verifyEvaluationAssessments(
   const raw = z.record(z.string(), z.unknown()).parse(result.report)
   const numeric = finalizeObjectiveReport(raw, policies, raw.jobOperations, designations.numeric)
   const finalized = finalizeStageObjectiveReport(numeric, job.protocol.stageObjectivePolicy, raw.jobOperations, designations.stages)
+  const outcomes: Array<{ status: string, designated: boolean, missingEvidence: string[], failedThresholds: string[], improvementRequired: boolean }> = []
   const check = (rawAssessments: unknown, improvementRequired: boolean) => {
     const assessments = z.array(assessmentSchema).length(2).parse(rawAssessments)
     for (const assessment of assessments) {
@@ -62,7 +63,7 @@ export function verifyEvaluationAssessments(
       const cohorts = assessment.evidence.nights.map(row => row.cohortId)
       if (new Set(cohorts).size !== cohorts.length || cohorts.length !== identity.cohortIds.length
         || cohorts.some(id => !identity.cohortIds.includes(id))) reject('Objective evidence omits frozen holdout nights')
-      if (assessment.status !== 'improved' && (improvementRequired || assessment.status !== 'no_material_change')) reject('Objective evidence does not support this activation')
+      outcomes.push({ ...assessment, improvementRequired })
     }
     return assessments.map(row => ({ baseline: row.baseline, baselineHash: row.baselineHash, candidateHash: row.candidateHash, status: row.status }))
   }
@@ -75,12 +76,28 @@ export function verifyEvaluationAssessments(
     ? verifyReplayContext(raw.waveform, { ...expected.waveform, side: expected.side,
         cohortIds: identity.cohortIds, configHashes: job.configs.map(config => config.resolvedHash) }, designations.waveformContext)
     : null
-  return { version: 'verified-evaluation-v1' as const, interpretation: 'agreement_with_named_reference_not_clinical_validation' as const,
+  const status = outcomes.some(row => row.status === 'incompatible')
+    ? 'incompatible' as const
+    : outcomes.some(row => !row.designated || row.missingEvidence.length || row.status === 'insufficient_evidence')
+      ? 'insufficient_evidence' as const
+      : outcomes.some(row => row.failedThresholds.length || row.status === 'regressed')
+        ? 'regressed' as const
+        : outcomes.every(row => row.status === 'improved' || (!row.improvementRequired && row.status === 'no_material_change'))
+          ? 'improved' as const
+          : 'no_material_change' as const
+  return { status, audit: { version: 'verified-evaluation-v1' as const, interpretation: 'agreement_with_named_reference_not_clinical_validation' as const,
     reportHash: result.contentHash, revisionId: expected.revisionId, resolvedHash: expected.resolvedHash,
     currentResolvedHash: expected.currentResolvedHash, datasetId: job.datasetId, datasetHash: job.datasetHash,
     evaluatorBuildHash: job.evaluatorBuildHash, manifestHash: identity.report.manifestHash, protocolHash: job.protocolHash,
     changedDomains: domains, numericAssessments, stageAssessments, replayContext,
     policies: { numeric: job.protocol.objectivePolicies ?? job.protocol.objectivePolicy ?? null, stages: job.protocol.stageObjectivePolicy },
     ...(expected.waveform ? { waveform: expected.waveform } : {}),
-  }
+  } }
+}
+
+/** Activation requires the independently reassessed whole candidate to improve. */
+export function verifyEvaluationAssessments(...args: Parameters<typeof assessEvaluation>) {
+  const result = assessEvaluation(...args)
+  if (result.status !== 'improved') throw new ReferenceInputError('EVALUATION_NOT_VALIDATED', 'Objective evidence does not support this activation')
+  return result.audit
 }
