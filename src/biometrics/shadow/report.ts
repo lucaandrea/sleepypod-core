@@ -71,6 +71,7 @@ export function reportShadowRun(store: ShadowStore, runId: string, limits: Param
     capturedAtMs, state: run.state, reason: run.reason, health: issues.length ? 'issues_detected' as const : capturedAtMs < plan.startMs ? 'waiting' as const : 'within_observed_limits' as const,
     issues, expectedSlots, observedSamples: windowSamples.length, maximumGapMs,
     attemptsObserved: new Set(samples.map(sample => sample.attemptId)).size, metrics,
+    limitations: [...new Set(samples.flatMap(sample => sample.candidateProvenance?.limitations ?? []))].sort(),
     referenceSummary: reference?.summary ?? null, excludedBoundaryReferences: reference ? reference.measurements.length - measurements.length : 0,
     interpretation: 'prospective_observation_and_reference_agreement_not_activation_authorization' as const }
   return { ...report, reportHash: dataHash(report) }

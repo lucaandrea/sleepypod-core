@@ -26,6 +26,8 @@ const reading = z.object({ value: z.number().finite().nullable(), quality: z.num
 export const shadowSampleSchema = z.object({ sequence: integer, side: z.enum(['left', 'right']), timestampMs: integer, inputHash: hash,
   candidateConfigHash: hash, activeConfigHash: hash,
   readings: z.array(z.object({ metric, candidate: reading, active: reading }).strict()).min(1).max(3),
+  candidateProvenance: z.object({ sourceSide: z.enum(['left', 'right']), outputSequence: integer,
+    flags: z.array(z.string().max(200)).max(32).nullable(), limitations: z.array(z.string().max(200)).max(33) }).strict().optional(),
 }).strict()
 export const shadowStoragePolicySchema = z.object({ maximumRuns: positive, maximumPoints: positive, maximumBytes: positive }).strict()
 type Plan = z.infer<typeof shadowPlanSchema>

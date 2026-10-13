@@ -120,3 +120,30 @@ contemporaneous active readings separately, validate replies, enforce OS limits,
 and persist through the fenced shadow store. This bridge and live source
 supervision are still pending. CPU accounting now includes failed adapter calls;
 missing, invalid or regressing CPU clocks terminate the adapter.
+
+## Supervisor reply validation and fenced sink
+
+`ShadowWorkerProtocol` validates the parent side of the worker protocol. It
+requires the expected command/run/attempt/configuration identity, ordered frame
+acknowledgments and candidate output, selected logical side, observation window,
+all three metric/unit/window definitions, and consistent monotonic health/quota
+receipts. Source side may differ from logical side under single-sleeper routing.
+A rejected reply advances no counters; a terminal acknowledgment closes the
+protocol. A real locked-Python subprocess test checks this TypeScript/Python
+contract across 150 waveform frames.
+
+`ShadowWorkerSink` maps validated candidate output into the leased shadow store.
+Construct one sink per worker attempt. It preserves original source side,
+worker output sequence, flags and limitations, including cold start and missing
+context. The host supplies actual active readings with exact timestamp, side,
+configuration and metric contracts. It must not synthesize active readings by
+rerunning a baseline or move a nearby reading onto the candidate timestamp.
+Absent active data stays null with `missing_contemporaneous_active_reading`.
+Exact uncertain-write retries reuse the same candidate and active snapshot;
+changed retries fail. Replaced leases remain unable to write.
+
+This sink handles candidate output, not a complete live join: the supervisor
+must also retain active-only observation times, manage bounded joining and late
+arrival, and identify missing candidate output. Admission, live source capture,
+OS process supervision and public API integration remain unfinished. Reports
+must not be used as complete prospective evidence until those paths are wired.

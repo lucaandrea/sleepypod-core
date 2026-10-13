@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import { ShadowStore } from '../store'
 import { reportShadowRun } from '../report'
+import { ShadowWorkerSink } from '../worker-sink'
 
 const databases: Database.Database[] = []
 afterEach(() => databases.splice(0).forEach(db => db.close()))
@@ -180,6 +181,29 @@ describe('separate prospective shadow storage', () => {
     expect(reportShadowRun(store, run.id, { maximumPoints: 10, maximumBytes: 10000 })).toMatchObject({
       health: 'issues_detected', issues: expect.arrayContaining(['clock_skew']), metrics: [{ candidate: { coverage: null } }],
     })
+  })
+  it('bridges typed worker readings with exact active identity and preserves missing data and limitations', () => {
+    const { store, advance } = setup()
+    const lease = store.claim(store.create(plan, 'first').id, 1000, () => undefined)
+    const sink = new ShadowWorkerSink(store, lease)
+    const output = { sequence: 0, inputHash: hash, side: 'left', sourceSide: 'right', timestampMs: start, configHash: hash,
+      readings: [{ metric: 'heart_rate', unit: 'bpm', windowMs: null, value: 60, quality: 1 },
+        { metric: 'breathing_rate', unit: 'breaths/min', windowMs: null, value: 15, quality: 1 },
+        { metric: 'window_ibi_variability_v1', unit: 'ms', windowMs: 300000, value: null, quality: 0 }],
+      flags: null, limitations: ['cold_start_without_serialized_state'] }
+    const active = { side: 'left', timestampMs: start, configHash: plan.activeConfigHash, readings: output.readings }
+    for (const changed of [{ ...active, side: 'right' }, { ...active, timestampMs: start + 1 }, { ...active, configHash: hash }]) {
+      expect(() => sink.append(output, changed)).toThrow('not contemporaneous')
+    }
+    expect(store.get(lease.runId).point_count).toBe(0)
+    expect(sink.append(output, null)).toEqual({ state: 'recorded' })
+    expect(sink.append(output, null)).toEqual({ state: 'already_recorded' })
+    const snapshot = store.snapshot(lease.runId, { maximumPoints: 10, maximumBytes: 10000 })
+    expect(snapshot.samples[0]).toMatchObject({ readings: [{ active: { value: null, quality: 0 }, candidate: { value: 60 } }],
+      candidateProvenance: { sourceSide: 'right', limitations: expect.arrayContaining(['missing_contemporaneous_active_reading']) } })
+    expect(reportShadowRun(store, lease.runId, { maximumPoints: 10, maximumBytes: 10000 }).limitations).toContain('cold_start_without_serialized_state')
+    advance(1000)
+    expect(() => sink.append({ ...output, sequence: 1, timestampMs: start + 1000 }, null)).toThrow('Stale')
   })
   it('enforces byte quotas and terminal states', () => {
     const { store } = setup()
