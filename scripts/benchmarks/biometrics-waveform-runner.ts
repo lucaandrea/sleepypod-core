@@ -134,9 +134,21 @@ async function main() {
     })
     const job = jobs.enqueue({ experimentId: experiment.id, evaluatorBuildHash: build.hash, idempotencyKey: 'synthetic-signal', split: 'tuning', configs,
       waveform: { pythonBuildHash: build.python.hash, otherSide: { manifestHash, resolvedHash: configHash(defaultConfig), resolved: defaultConfig } } })
-    const outcome = await measure('waveform-replay', () => coordinator.request({ type: 'execute', owner: 'synthetic-qualification' }, { admit }))
-    if (outcome.state !== 'succeeded') throw new Error(`Waveform job stopped: ${jobs.get(job.id).error}`)
+    await measure('waveform-replay', async () => {
+      const outcome = await coordinator.request({ type: 'execute', owner: 'synthetic-qualification' }, { admit })
+      if (outcome.state !== 'succeeded') throw new Error(`Waveform job stopped: ${jobs.get(job.id).error}`)
+    })
     const summary = await measure('summary', () => coordinator.request({ type: 'readSummary', input: { id: job.id } }))
+    if (!summary?.available || !summary.contentHash) throw new Error('Committed report summary unavailable')
+    const report = z.object({ version: z.literal('waveform-backtest-report-v1'), datasetHash: z.string(),
+      waveform: z.object({ outputs: z.array(z.object({ configHash: z.string(), run: z.object({ build_hash: z.string(),
+        counts: z.object({ scored_outputs: z.number().int().positive() }) }) })).length(3) }),
+    }).parse(summary.report)
+    if (report.datasetHash !== published.dataset.contentHash
+      || new Set(report.waveform.outputs.map(output => output.configHash)).size !== 3
+      || report.waveform.outputs.some(output => output.run.build_hash !== build.python.hash || !configs.some(config => config.resolvedHash === output.configHash))) {
+      throw new Error('Qualification report identity or configuration coverage mismatch')
+    }
     operations.push({ summaryBytes: Buffer.byteLength(JSON.stringify(summary)), resultHash: summary?.contentHash,
       compoundBuildHash: build.hash, pythonBuildHash: build.python.hash })
     if (readFailures) throw new Error('Concurrent dataset reads failed')
