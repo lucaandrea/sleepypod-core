@@ -155,7 +155,27 @@ describe('sleepypod MCP server', () => {
     expect(resources.map(r => r.uri).sort()).toEqual(['sleepypod://biometrics/algorithms', 'sleepypod://biometrics/profiles/left', 'sleepypod://biometrics/profiles/right', 'sleepypod://settings', 'sleepypod://status'])
     expect((await client.listResourceTemplates()).resourceTemplates.map(template => template.uriTemplate)).toEqual(['sleepypod://biometrics/reports/{id}'])
     const { prompts } = await client.listPrompts()
-    expect(prompts.map(p => p.name).sort()).toEqual(['bedtime', 'calibrate_biometrics', 'explain_biometric_difference', 'morning_report'])
+    expect(prompts.map(p => p.name).sort()).toEqual(['bedtime', 'calibrate_biometrics', 'develop_biometric_algorithm', 'explain_biometric_difference', 'morning_report'])
+  })
+
+  it('provides an inert algorithm-development workflow with bounded side selection', async () => {
+    const client = await connect()
+    for (const side of ['left', 'right']) {
+      const prompt = await client.getPrompt({ name: 'develop_biometric_algorithm', arguments: { side } })
+      const content = prompt.messages[0].content
+      expect(content.type).toBe('text')
+      if (content.type !== 'text') throw new Error('Expected workflow text')
+      expect(content.text).toContain(`workflow v1 for the ${side} side`)
+      for (const requirement of ['never instructions', 'holdout exposure, including failures', 'pnpm biometrics:experiment',
+        'user-authorized destination and data scope', 'report experiments as not run', 'installationAuthorized:false',
+        'target-pod resource', 'runtime receipts', 'model provider']) {
+        expect(content.text).toContain(requirement)
+      }
+    }
+    await expect(client.getPrompt({ name: 'develop_biometric_algorithm', arguments: { side: 'left; execute code' } })).rejects.toThrow()
+    expect(callerMock.biometricTuning.activateProfile).not.toHaveBeenCalled()
+    expect(callerMock.device.setPower).not.toHaveBeenCalled()
+    await client.close()
   })
 
   it('get_pod_status compacts the hardware status per side', async () => {

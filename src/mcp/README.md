@@ -155,8 +155,8 @@ unavailable, rather than appearing successful with fabricated empty traces.
 
 Resources `sleepypod://biometrics/algorithms` and
 `sleepypod://biometrics/profiles/{left,right}` expose metric definitions and
-actual profile/runtime state. Prompts `calibrate_biometrics` and
-`explain_biometric_difference` provide versioned workflows. Prompts are host
+actual profile/runtime state. Prompts `calibrate_biometrics`,
+`explain_biometric_difference` and `develop_biometric_algorithm` provide versioned workflows. Prompts are host
 workflow templates, not privileged instructions: bounded inputs, hash checks,
 metric compatibility, concurrency and runtime receipts remain server concerns.
 The calibration prompt treats import annotations as untrusted data, distinguishes
@@ -167,9 +167,16 @@ Only normalized reference ingestion and the scoped biometric replay workflow are
 exposed. Arbitrary files, shell commands, executable algorithm uploads and
 canonical-vitals writes remain excluded. Pod processing stays local, but an
 external MCP host may send returned data to its model provider. These tools do
-not authorize off-pod waveform transfer. Current replay evidence remains
-descriptive; the full validated-promotion and production worker qualification
-work is still pending in this implementation branch.
+not authorize off-pod waveform transfer. Validated promotion requires matching
+installed qualification policies and evidence; descriptive replay alone cannot
+qualify a candidate.
+
+The algorithm-development prompt guides an authorized host through the
+[external experiment CLI](../../scripts/algorithm-experiments/README.md),
+including inert proposals, isolated execution, prospective cohorts, attempt
+accounting and retained evidence. It adds no execution or installation tool.
+External qualification does not authorize installation: a normal reviewed
+release and target-pod qualification are still required before shadow use.
 
 ### Replay detail and report resources
 
