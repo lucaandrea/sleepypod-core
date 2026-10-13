@@ -54,9 +54,9 @@ jobs:
             workdir: modules
             target: common
             cov_source: common
-            # cbor2 is needed to decode the real NATS capture fixtures through
-            # NatsFollower's decode path (test_nats_follower).
-            deps: "cbor2"
+            # Build-identity tests inspect installed NumPy/SciPy metadata;
+            # use the piezo module's locked environment, including cbor2.
+            deps: ""
           - name: cover-buttons
             workdir: modules/cover-buttons
             target: .
@@ -110,7 +110,10 @@ jobs:
       - name: Install test deps
         working-directory: ${{ matrix.module.workdir }}
         run: |
-          if [ -f uv.lock ]; then
+          if [ "${{ matrix.module.name }}" = "common" ]; then
+            # Keep common's cwd/import layout while using the numerical lock.
+            UV_PROJECT_ENVIRONMENT="$PWD/.venv" uv sync --project piezo-processor --locked --no-install-project
+          elif [ -f uv.lock ]; then
             uv sync --locked --no-install-project
           else
             uv venv .venv
