@@ -41,6 +41,7 @@ const callerMock = vi.hoisted(() => {
     },
     databases: { checkIntegrity: fn() },
     biometricTuning: {
+      getReplayAdmission: fn(), listRawSources: fn(), inspectRawSource: fn(), createWaveformDataset: fn(),
       getManifest: fn(), getProfileOverview: fn(), listSessions: fn(), getSessionCapabilities: fn(), listImports: fn(),
       getProfileRevision: fn(), listProfileRevisions: fn(), compareReadings: fn(), deleteImport: fn(), releaseDataset: fn(), releaseBacktestResult: fn(), getActivationStatus: fn(), listActivationHistory: fn(), previewImport: fn(), commitImport: fn(),
       createProfileRevision: fn(), createDataset: fn(), getDataset: fn(), listDatasets: fn(), createExperiment: fn(),
@@ -632,6 +633,18 @@ describe('sleepypod MCP server', () => {
     api.createProfileRevision.mockResolvedValue({ id, resolvedHash: hash })
     await call('propose_biometric_profile', { input: { side: 'left', overrides: [], requester: 'fixture', idempotencyKey: 'candidate' } })
     expect(api.createProfileRevision).toHaveBeenCalledWith(expect.objectContaining({ origin: 'agent', idempotencyKey: 'candidate' }))
+    api.getReplayAdmission.mockResolvedValue({ configured: false, admitted: false, reasons: ['unqualified'] })
+    expect(parse(await call('inspect_biometric_calibration', { request: { action: 'replay_admission' } }))).toMatchObject({ admitted: false })
+    api.inspectRawSource.mockResolvedValue({ status: 'deferred', nextCursor: null })
+    expect(parse(await call('manage_biometric_experiment', { request: { action: 'inspect_raw_source', input: { afterName: null } } }))).toMatchObject({ status: 'deferred' })
+    expect(api.inspectRawSource).toHaveBeenCalledWith({ afterName: null })
+    api.listRawSources.mockResolvedValue({ items: [], nextCursor: null })
+    await call('inspect_biometric_calibration', { request: { action: 'raw_sources', input: { startMs: 1000, endMs: 2000 } } })
+    expect(api.listRawSources).toHaveBeenCalledWith({ startMs: 1000, endMs: 2000 })
+    const selection = { parentDatasetId: id, expectedContentHash: hash, cohorts: [{ cohortId: 'night', sourceIds: [hash] }], idempotencyKey: 'waveforms' }
+    api.createWaveformDataset.mockResolvedValue({ status: 'published', dataset: { id } })
+    await call('manage_biometric_experiment', { request: { action: 'create_waveform_dataset', input: selection } })
+    expect(api.createWaveformDataset).toHaveBeenCalledWith(selection)
     api.createDataset.mockResolvedValue({ id })
     await call('manage_biometric_experiment', { request: { action: 'create_dataset', input: { side: 'left', subjectId: 'fixture', sessionIds: [1], referenceImportIds: [id], idempotencyKey: 'dataset' } } })
     api.createExperiment.mockResolvedValue({ id })

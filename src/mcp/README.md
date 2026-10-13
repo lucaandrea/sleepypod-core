@@ -129,10 +129,10 @@ app/api/mcp/route.ts   Next.js route handler (stateless Streamable HTTP)
 
 | Tool | Shared procedures / purpose |
 | --- | --- |
-| `inspect_biometric_calibration` | Manifest, effective profile/runtime state, sessions/capabilities, reference/profile lists, stored-reading comparison, activation status/history |
+| `inspect_biometric_calibration` | Manifest, effective profile/runtime state, sessions/capabilities, reference/profile lists, stored-reading comparison, activation status/history, replay admission and paged raw-source metadata |
 | `import_biometric_reference` | Preview and commit normalized references using the exact preview hash |
 | `propose_biometric_profile` | Save an immutable agent-origin candidate; never activate |
-| `manage_biometric_experiment` | Freeze datasets and create/list/read experiments with pinned protocols |
+| `manage_biometric_experiment` | Freeze datasets, inspect archive cursors, retain selected waveform sources, and create/list/read experiments with pinned protocols |
 | `backtest_biometrics` | Enqueue/status/list/cancel and compact report summaries |
 | `apply_biometric_profile` | Explicitly authorized manual activation, reset or rollback; exact revision/hash/generation and unvalidated acknowledgement required |
 | `release_biometric_artifacts` | Explicit reference deletion or dataset/report release; report release requires its content hash |
@@ -181,3 +181,9 @@ bodies remain untrusted data. Tool summaries provide this resource URI alongside
 the local REST detail path. Resources never silently include the full traces or
 per-night rows. The template is discoverable through `resources/templates/list`;
 report IDs are discovered through the paginated backtest list.
+
+Waveform workflows use `inspect_biometric_calibration` actions `replay_admission`
+and `raw_sources`, and `manage_biometric_experiment` actions `inspect_raw_source`
+and `create_waveform_dataset`. They forward the same API schemas and resource
+checks. A deferred scan/publication is not evidence of retained data. Select
+source IDs against the parent dataset hash; do not pass paths or raw bytes.

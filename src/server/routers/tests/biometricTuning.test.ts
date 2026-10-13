@@ -1,3 +1,5 @@
+import { RawSourceCatalog } from '@/src/biometrics/backtest/raw-catalog'
+import { waveformSelectionRequestHash } from '@/src/biometrics/backtest/waveform-selection'
 // @vitest-environment node
 import Database from 'better-sqlite3'
 import { execFile } from 'node:child_process'
@@ -61,6 +63,7 @@ beforeEach(async () => {
   holder.config = configDb
 })
 afterEach(async () => {
+  vi.unstubAllEnvs()
   await stopBiometricCoordinator()
   sqlite.close()
   configSqlite.close()
@@ -282,6 +285,10 @@ describe('shared biometric reference API', () => {
 
   it('generates usable OpenAPI contracts for the actual shared router', () => {
     const document = generateOpenApiDocument(biometricTuningRouter, { title: 'References', version: '1.0.0', baseUrl: 'http://localhost/api' })
+    expect(document.paths?.['/biometric-tuning/raw-sources/inspect']?.post).toBeDefined()
+    expect(document.paths?.['/biometric-tuning/raw-sources']?.get).toBeDefined()
+    expect(document.paths?.['/biometric-tuning/waveform-datasets']?.post).toBeDefined()
+    expect(document.paths?.['/biometric-tuning/replay-admission']?.get).toBeDefined()
     expect(document.paths?.['/biometric-tuning/references/preview']?.post).toBeDefined()
     expect(document.paths?.['/biometric-tuning/references/{id}/measurements']?.get).toBeDefined()
     expect(document.paths?.['/biometric-tuning/references/{id}']?.delete).toBeDefined()
@@ -298,7 +305,16 @@ it('submits waveform pins and both baseline snapshots, then retries without prob
   const prepared = prepareWaveformDataset({ ...parent, manifest }, [{ cohortId: manifest.splitProtocol.assignments[0].cohortId,
     input: { version: 'retained-waveform-input-v1', retained_start_ms: start, score_start_ms: start, score_end_ms: start + 600000, contexts: [],
       artifacts: [{ artifact: { name: `${'a'.repeat(64)}.RAW.gz`, sha256: 'a'.repeat(64), compressed_bytes: 1, expanded_bytes: 2 }, first_event_ms: start, last_event_ms: start + 599999 }] } }], 'raw-fixture')
+  const selection = { parentDatasetId: parent.id, expectedContentHash: parent.contentHash, idempotencyKey: 'raw-fixture',
+    cohorts: [{ cohortId: manifest.splitProtocol.assignments[0].cohortId, sourceIds: ['b'.repeat(64)] }] }
+  prepared.requestHash = waveformSelectionRequestHash(selection)
   bio.insert(schema.biometricDatasets).values({ ...prepared, byteLength: Buffer.byteLength(JSON.stringify(prepared)) }).run()
+  // An already committed publication can be retried without current admission
+  // or mutable source-catalog evidence, even when the sources have disappeared.
+  vi.stubEnv('SLEEPYPOD_BIOMETRICS_ADMISSION_POLICY', undefined)
+  expect(await caller.createWaveformDataset(selection)).toMatchObject({ status: 'published', dataset: { id: prepared.id, contentHash: prepared.contentHash } })
+  await expect(caller.createWaveformDataset({ ...selection, expectedContentHash: 'c'.repeat(64) })).rejects.toMatchObject({ code: 'CONFLICT' })
+
   const experiment = await caller.createExperiment({ datasetId: prepared.id, idempotencyKey: 'signal-experiment', protocol: {
     version: 'descriptive-evaluation-v1', mode: 'signal_replay', waveformStages: true, assumedStageCalibrationQuality: 0, pointToleranceMs: 30000, clockOffsetMs: 0 } })
   const candidate = await caller.createProfileRevision({ side: 'left', origin: 'manual', requester: 'fixture', idempotencyKey: 'signal-candidate', overrides: [{ path: 'heart_rate.trackingToleranceBpm', value: 20 }] })
@@ -342,4 +358,32 @@ it('submits waveform pins and both baseline snapshots, then retries without prob
   expect(await caller.enqueueBacktest(request)).toEqual(job)
   await expect(caller.enqueueBacktest({ ...request, idempotencyKey: 'new-signal-submission' })).rejects.toMatchObject({ code: 'SERVICE_UNAVAILABLE' })
   await expect(caller.enqueueBacktest({ ...request, expectedBindingGeneration: 1 })).rejects.toMatchObject({ code: 'CONFLICT' })
+})
+
+it('exposes bounded waveform discovery and defers new I/O without a deployment policy', async () => {
+  vi.stubEnv('SLEEPYPOD_BIOMETRICS_ADMISSION_POLICY', undefined)
+  expect(await caller.getReplayAdmission({})).toEqual({ configured: false, qualificationId: null, admitted: false, reasons: ['unqualified'] })
+  expect(await caller.listRawSources({ startMs: 0, endMs: 1000 })).toEqual({ items: [], nextCursor: null })
+  expect(await caller.inspectRawSource({ afterName: null })).toEqual({ status: 'deferred', nextCursor: null })
+  expect(await caller.inspectRawSource({ afterName: '001.RAW.gz' })).toEqual({ status: 'deferred', nextCursor: '001.RAW.gz' })
+  await expect(caller.inspectRawSource({ afterName: '../secret.RAW.gz' })).rejects.toMatchObject({ code: 'BAD_REQUEST' })
+  const input = { parentDatasetId: '00000000-0000-4000-8000-000000000001', expectedContentHash: 'a'.repeat(64),
+    cohorts: [{ cohortId: 'test-night', sourceIds: ['b'.repeat(64)] }], idempotencyKey: 'deferred-publication' }
+  expect(await caller.createWaveformDataset(input)).toEqual({ status: 'deferred' })
+  await expect(caller.createWaveformDataset({ ...input, path: '/private/source' } as typeof input)).rejects.toMatchObject({ code: 'BAD_REQUEST' })
+  expect(sqlite.prepare('SELECT count(*) n FROM biometric_datasets').get()).toEqual({ n: 0 })
+  expect(sqlite.prepare('SELECT count(*) n FROM biometric_raw_sources').get()).toEqual({ n: 0 })
+  const digest = 'a'.repeat(64)
+  const sourceId = new RawSourceCatalog(holder.bio as ReturnType<typeof drizzle<typeof schema>>).record({
+    source_name: 'fixture.RAW.gz', retained: false,
+    artifact: { name: `${digest}.RAW.gz`, sha256: digest, compressed_bytes: 100, expanded_bytes: 10000 },
+    inventory: { version: 'retained-raw-inventory-v1', artifact_sha256: digest, decoded_records: 2, piezo_records: 2, pump_records: 0,
+      usable_dual_frames: 2, empty_channel_frames: 0, oversize_channel_frames: 0, invalid_timestamps: 0, timestamp_reversals: 0, duplicate_timestamps: 0,
+      first_event_ms: 1000, last_event_ms: 2000, ordered_waveform_available: true, limitations: [],
+      channels: { left1: { samples: 1000, lost_markers: 0, truncated_tail_bytes: 0 }, right1: { samples: 1000, lost_markers: 0, truncated_tail_bytes: 0 } } },
+  })
+  const page = await caller.listRawSources({ startMs: 1000, endMs: 2001 })
+  expect(page.items).toHaveLength(1)
+  expect(page.items[0]).toMatchObject({ id: sourceId, availability: 'requires_reverification', inspection: { retained: false, source_name: 'fixture.RAW.gz' } })
+  expect(await caller.listRawSources({ startMs: 1000, endMs: 2001, afterId: sourceId })).toEqual({ items: [], nextCursor: null })
 })

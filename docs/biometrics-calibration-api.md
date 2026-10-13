@@ -185,3 +185,42 @@ stages. Filtering/pagination never changes evaluation scores.
 This bounds response detail, not artifact-read cost: the service currently
 verifies the entire retained report before selecting a page. Parent-process
 artifact parsing and hashing remain part of the target performance qualification.
+
+
+## Retained waveform discovery and publication
+
+`getReplayAdmission` (`GET /biometric-tuning/replay-admission`) reports whether
+server policy is configured, its operator-supplied qualification ID, and current
+admission reasons. `SLEEPYPOD_BIOMETRICS_ADMISSION_POLICY` is server-owned JSON
+matching `admissionPolicySchema`; missing or malformed policy denies admission.
+Supplying an ID does not itself qualify hardware. Each check uses fresh process,
+storage, thermal, and live piezo receipt evidence; no caller can supply health
+samples or override admission through an RPC parameter.
+
+`inspectRawSource` (`POST /biometric-tuning/raw-sources/inspect`) accepts only
+`afterName`, initially null, and inspects at most one server-owned archive.
+Persisted evidence is a mutation even though scanning does not modify the
+archive. Reuse `nextCursor` until `complete`; `source_unavailable` advances past
+an unreadable source, and `archive_unavailable` reports a missing archive root.
+`deferred` preserves the cursor and means no new scan was admitted. This API
+accepts neither filesystem paths nor executable code.
+
+`listRawSources` (`GET /biometric-tuning/raw-sources`) accepts `startMs`, `endMs`,
+and optional `afterId`, returning at most fifty descriptors and a cursor. Query
+all selected cohort windows including five minutes of pre-roll. Catalog event
+bounds indicate possible overlap, not continuous support. Descriptors explicitly
+say `requires_reverification`; inventory alone has not retained any waveforms.
+
+`createWaveformDataset` (`POST /biometric-tuning/waveform-datasets`) accepts a
+parent dataset ID, its exact `expectedContentHash`, an idempotency key, and
+`cohorts: [{ cohortId, sourceIds }]`. The server derives context from that frozen
+parent, re-verifies selected archives, and atomically retains inputs and publishes
+the immutable dataset. New publication requires ongoing admission; a `deferred`
+response contains no dataset. A retry of already committed publication returns
+the original descriptor even when current admission is unavailable or original
+archives have disappeared. Changed selections under the same key conflict.
+Released descriptors remain released; retries never recreate their bytes.
+
+Create a `signal_replay` experiment using the published dataset, then submit and
+poll a durable backtest. Publication does not start a worker host or activate a
+profile. Host qualification and scheduling remain separate operational gates.

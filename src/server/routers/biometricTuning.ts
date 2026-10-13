@@ -1,3 +1,7 @@
+import { replayAdmission, replayAdmissionSchema, replayAdmitter } from '@/src/biometrics/backtest/admission-service'
+import { rawSourceDescriptorSchema, rawSourcePageSchema, rawSourcePageResultSchema } from '@/src/biometrics/backtest/raw-catalog'
+import { rawScanInputSchema, rawSourceNameSchema } from '@/src/biometrics/backtest/raw-inspection-child'
+import { createWaveformDatasetSchema } from '@/src/biometrics/backtest/waveform-selection'
 import { z } from 'zod'
 import { TRPCError } from '@trpc/server'
 import { publicProcedure, router } from '@/src/server/trpc'
@@ -190,6 +194,39 @@ export const biometricTuningRouter = router({
     .input(importIdSchema.extend({ expectedContentHash: z.string().regex(/^[a-f0-9]{64}$/) }))
     .output(resultDescriptorSchema.nullable())
     .mutation(({ input }) => references(() => coordinatorRequest(biometricsDb, { type: 'releaseResult', input }))),
+
+  getReplayAdmission: publicProcedure
+    .meta({ openapi: { method: 'GET', path: '/biometric-tuning/replay-admission', protect: false, tags: ['Biometric tuning'] } })
+    .input(z.object({}).strict())
+    .output(replayAdmissionSchema)
+    .query(() => replayAdmission(biometricsDb)),
+
+  inspectRawSource: publicProcedure
+    .meta({ openapi: { method: 'POST', path: '/biometric-tuning/raw-sources/inspect', protect: false, tags: ['Biometric tuning'] } })
+    .input(rawScanInputSchema)
+    .output(z.discriminatedUnion('status', [
+      z.object({ status: z.literal('inspected'), nextCursor: rawSourceNameSchema, source: rawSourceDescriptorSchema }).strict(),
+      z.object({ status: z.literal('source_unavailable'), nextCursor: rawSourceNameSchema }).strict(),
+      z.object({ status: z.literal('archive_unavailable'), nextCursor: z.null() }).strict(),
+      z.object({ status: z.literal('complete'), nextCursor: z.null() }).strict(),
+      z.object({ status: z.literal('deferred'), nextCursor: rawSourceNameSchema.nullable() }).strict(),
+    ]))
+    .mutation(({ input }) => references(() => coordinatorRequest(biometricsDb, { type: 'inspectRawSource', input }, { admit: replayAdmitter(biometricsDb) }))),
+
+  listRawSources: publicProcedure
+    .meta({ openapi: { method: 'GET', path: '/biometric-tuning/raw-sources', protect: false, tags: ['Biometric tuning'] } })
+    .input(rawSourcePageSchema)
+    .output(rawSourcePageResultSchema)
+    .query(({ input }) => references(() => coordinatorRequest(biometricsDb, { type: 'pageRawSources', input }))),
+
+  createWaveformDataset: publicProcedure
+    .meta({ openapi: { method: 'POST', path: '/biometric-tuning/waveform-datasets', protect: false, tags: ['Biometric tuning'] } })
+    .input(createWaveformDatasetSchema)
+    .output(z.discriminatedUnion('status', [
+      z.object({ status: z.literal('published'), dataset: datasetDescriptorSchema }).strict(),
+      z.object({ status: z.literal('deferred') }).strict(),
+    ]))
+    .mutation(({ input }) => references(() => coordinatorRequest(biometricsDb, { type: 'createWaveformDataset', input }, { admit: replayAdmitter(biometricsDb) }).then(result => result.status === 'published' ? { ...result, dataset: datasetDescriptorSchema.parse(result.dataset) } : result))),
 
   createDataset: publicProcedure
     .meta({ openapi: { method: 'POST', path: '/biometric-tuning/datasets', protect: false, tags: ['Biometric tuning'] } })

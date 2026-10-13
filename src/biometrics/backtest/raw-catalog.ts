@@ -36,6 +36,12 @@ export const rawInspectionSchema = z.object({
   retained: z.literal(false), artifact: rawArtifactDescriptorSchema, inventory: rawInventorySchema,
 }).strict().refine(value => value.artifact.sha256 === value.inventory.artifact_sha256, 'Inventory must identify the inspected bytes')
 
+export const rawSourceDescriptorSchema = z.object({
+  id: hash, inspection: rawInspectionSchema, inspectedAtMs: count, unavailableAtMs: count.nullable(),
+  availability: z.enum(['requires_reverification', 'unavailable']),
+}).strict()
+export const rawSourcePageResultSchema = z.object({ items: z.array(rawSourceDescriptorSchema).max(50), nextCursor: hash.nullable() }).strict()
+
 export const rawSourcePageSchema = z.object({ startMs: count, endMs: count, afterId: hash.optional() }).strict()
   .refine(value => value.endMs > value.startMs, 'Expected a nonempty time window')
 
