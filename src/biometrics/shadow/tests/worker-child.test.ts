@@ -91,7 +91,7 @@ describe('shadow child supervision', () => {
   it('uses fixed shipped entrypoint, sanitized environment and bounded sequential replies', async () => {
     const result = await run()
     expect(result).toMatchObject({ health: { state: 'completed', records: 1 }, peakObservedRssBytes: 1000, exactKernelPeak: false })
-    expect(state.launches[0]).toMatchObject(['/trusted/python', ['-B', '-m', 'common.biometrics.shadow_process', '--cpu-seconds', '2', '--address-space-bytes', '100000000'], { detached: true }])
+    expect(state.launches[0]).toMatchObject(['/trusted/python', ['-B', '-m', 'common.biometrics.shadow_process', '--parent-pid', String(process.pid), '--cpu-seconds', '2', '--address-space-bytes', '100000000'], { detached: true }])
     const env = (state.launches[0][2] as { env: Record<string, string> }).env
     expect(Object.keys(env).sort()).toEqual(['LANG', 'MKL_NUM_THREADS', 'NODE_ENV', 'NUMEXPR_NUM_THREADS', 'OMP_NUM_THREADS', 'OPENBLAS_NUM_THREADS', 'PYTHONPATH', 'TZ'])
     reaped()

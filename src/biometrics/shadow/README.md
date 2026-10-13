@@ -665,3 +665,20 @@ operations identify an existing run and saved candidate revision. This entry poi
 does not register background scheduling or public routes, and does not establish
 cross-process orphan recovery or concurrent resource admission. Those lifecycle
 requirements and current-build qualification remain before production enablement.
+
+## Host-crash worker termination
+
+The Node supervisor now passes its own PID to the fixed Python bootstrap. Before
+resource-limit setup or numerical imports, the bootstrap requires Linux and arms
+`PR_SET_PDEATHSIG` with `SIGKILL`. It checks the expected parent before and after
+arming, so a host that dies during startup cannot leave an unprotected worker
+processing frames. Missing ctypes/libc support or kernel refusal stops startup.
+The expected PID is launch metadata, not a request field.
+
+A real Linux test launches a detached worker, waits for it to arm protection,
+kills its launcher and verifies that the worker terminates. Existing CPU and
+address-space kernel tests also pass. This is process-local protection, not a
+process-group inheritance guarantee: Linux clears it in forked children. The
+shipped numerical worker does not launch candidate subprocess trees. Parent-side
+group cleanup remains required, along with durable attempt recovery and resource
+admission across concurrent service processes.
