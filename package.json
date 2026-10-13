@@ -29,7 +29,8 @@
     "tsc": "tsc --noEmit",
     "prepare": "git rev-parse --git-dir >/dev/null 2>&1 && git config core.hooksPath .githooks || true",
     "build:biometrics-worker": "node scripts/build/biometrics-worker.mjs",
-    "biometrics:experiment": "tsx scripts/algorithm-experiments/cli.ts"
+    "biometrics:experiment": "tsx scripts/algorithm-experiments/cli.ts",
+    "test:browser": "node tests/browser/run.mjs"
   },
   "lint-staged": {
     "*.{ts,tsx}": "eslint --fix",
@@ -91,6 +92,7 @@
     "@lingui/loader": "^6.0.0",
     "@lingui/swc-plugin": "^6.0.0",
     "@lingui/vite-plugin": "^6.0.0",
+    "@playwright/test": "1.58.2",
     "@rolldown/plugin-babel": "^0.2.4",
     "@semantic-release/commit-analyzer": "^13.0.1",
     "@semantic-release/git": "^11.0.0",
