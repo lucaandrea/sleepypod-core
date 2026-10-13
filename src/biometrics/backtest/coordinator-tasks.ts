@@ -1,3 +1,4 @@
+import { referenceTraceRequestSchema } from './reference-trace-page'
 import { sql } from 'drizzle-orm'
 import { dirname, join } from 'node:path'
 import { runRawCollectionChild } from './raw-collection-child'
@@ -8,7 +9,7 @@ import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3'
 import type * as schema from '@/src/db/biometrics-schema'
 import { DatasetStore, createDatasetSchema } from './datasets'
 import { BacktestJobStore, experimentProtocolSchema } from './jobs'
-import { readStageTraces, readNumericTraces } from './traces'
+import { readStageTraces, readNumericTraces, readReferenceTraces } from './traces'
 import { traceRequestSchema } from './trace-contracts'
 import { executeNextBacktest } from './runner'
 
@@ -27,6 +28,7 @@ export const coordinatorTaskSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('datasetDescriptor'), input: idInput }).strict(),
   z.object({ type: z.literal('readResult'), input: idInput }).strict(),
   z.object({ type: z.literal('readSummary'), input: idInput }).strict(),
+  z.object({ type: z.literal('readReferenceTrace'), input: referenceTraceRequestSchema }).strict(),
   z.object({ type: z.literal('readNumericTrace'), input: traceRequestSchema }).strict(),
   z.object({ type: z.literal('readTrace'), input: traceRequestSchema }).strict(),
   z.object({ type: z.literal('releaseDataset'), input: idInput }).strict(),
@@ -44,6 +46,7 @@ export interface CoordinatorResults {
   datasetDescriptor: ReturnType<DatasetStore['descriptor']>
   readResult: ReturnType<BacktestJobStore['result']>
   readSummary: ReturnType<typeof summarizeBacktestResult<NonNullable<ReturnType<BacktestJobStore['result']>>>>
+  readReferenceTrace: ReturnType<typeof readReferenceTraces>
   readNumericTrace: ReturnType<typeof readNumericTraces>
   readTrace: ReturnType<typeof readStageTraces>
   releaseDataset: ReturnType<DatasetStore['release']>
@@ -70,6 +73,7 @@ export async function performCoordinatorTask(db: BetterSQLite3Database<typeof sc
     case 'datasetDescriptor': return new DatasetStore(db).descriptor(task.input.id)
     case 'readResult': return new BacktestJobStore(db).result(task.input.id)
     case 'readSummary': return summarizeBacktestResult(new BacktestJobStore(db).result(task.input.id))
+    case 'readReferenceTrace': return readReferenceTraces(db, task.input)
     case 'readNumericTrace': return readNumericTraces(db, task.input)
     case 'readTrace': return readStageTraces(db, task.input)
     case 'releaseDataset': return new DatasetStore(db).release(task.input.id)

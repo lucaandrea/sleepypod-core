@@ -142,6 +142,13 @@ print(json.dumps({'start':start,'artifacts':artifacts,'inspections':inspections}
     expect(JSON.stringify(summary?.report)).not.toContain('"readings"')
     expect(JSON.stringify(report)).toContain('"readings"')
     if (!summary) throw new Error('Missing retained report')
+    const referenceTraceInput = { id: job.id, expectedContentHash: summary.contentHash,
+      cohortId: prepared.manifest.splitProtocol.assignments[0].cohortId, metric: 'heart_rate' as const }
+    const references = await runCoordinatorTask(options, { type: 'readReferenceTrace', input: referenceTraceInput })
+    expect(references).toMatchObject({ provenance: 'frozen_dataset_reference', datasetHash: published.contentHash, items: [], totalItems: 0 })
+    await expect(runCoordinatorTask(options, { type: 'readReferenceTrace', input: {
+      ...referenceTraceInput, expectedContentHash: '0'.repeat(64),
+    } })).rejects.toMatchObject({ code: 'REVISION_CONFLICT' })
     const numericTrace = await runCoordinatorTask(options, { type: 'readNumericTrace', input: {
       id: job.id, expectedContentHash: summary.contentHash, configuration: 'candidate', limit: 2,
     } })
@@ -156,6 +163,7 @@ print(json.dumps({'start':start,'artifacts':artifacts,'inspections':inspections}
     expect(jobs.get(wrongBuild.id).state).toBe('failed')
     expect(jobs.result(wrongBuild.id)).toBeNull()
     jobs.releaseResult(job.id, summary.contentHash)
+    await expect(runCoordinatorTask(options, { type: 'readReferenceTrace', input: referenceTraceInput })).rejects.toMatchObject({ code: 'RESULT_RELEASED' })
     await expect(runCoordinatorTask(options, { type: 'readNumericTrace', input: {
       id: job.id, expectedContentHash: summary.contentHash, configuration: 'candidate',
     } })).rejects.toMatchObject({ code: 'RESULT_RELEASED' })

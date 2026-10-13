@@ -1,3 +1,5 @@
+import { DatasetStore } from './datasets'
+import { pageReferenceTraces, referenceTraceIdentity, referenceTraceRequestSchema } from './reference-trace-page'
 import { pageNumericTraces } from './numeric-trace-page'
 import type { z } from 'zod'
 import { pageStageTraces } from './trace-page'
@@ -24,4 +26,15 @@ export function readNumericTraces(db: BetterSQLite3Database<typeof schema>, raw:
   if (result.contentHash !== input.expectedContentHash) throw new ReferenceInputError('REVISION_CONFLICT', 'Trace report hash changed')
   if (!result.available) throw new ReferenceInputError('RESULT_RELEASED', 'Replay report was released')
   return pageNumericTraces(result.report, input)
+}
+
+export function readReferenceTraces(db: BetterSQLite3Database<typeof schema>, raw: z.input<typeof referenceTraceRequestSchema>) {
+  const input = referenceTraceRequestSchema.parse(raw)
+  const result = new BacktestJobStore(db).result(input.id)
+  if (!result) throw new ReferenceInputError('INVALID_STATE', 'Wait for a successful replay before reading references')
+  if (result.contentHash !== input.expectedContentHash) throw new ReferenceInputError('REVISION_CONFLICT', 'Reference report hash changed')
+  if (!result.available) throw new ReferenceInputError('RESULT_RELEASED', 'Replay report was released')
+  const identity = referenceTraceIdentity(result.report)
+  const dataset = new DatasetStore(db).read(identity.datasetId)
+  return pageReferenceTraces(result.report, dataset, input)
 }

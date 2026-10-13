@@ -298,3 +298,19 @@ night, configuration, and metric; the chart shows only that page's individual
 readings. The exact-value table includes missing values, quality, flags, source
 channel, and limitations. Changing night/configuration resets the cursor. The
 processed-only demo does not fabricate waveform readings for this view.
+
+### Frozen reference pages
+
+`getBacktestReferenceTrace` / `GET .../backtests/{id}/reference-trace` and MCP
+`backtest_biometrics` action `reference_trace` require a report hash, cohort,
+metric, and bounded offset/limit. They read the immutable dataset selected by
+that report, verify its hash, and expose the frozen import revision, source,
+normalized measurement, compatibility reason, and original reference times.
+They never resolve the current revision of an import. Original submitted payloads,
+annotations, and subject fields are excluded.
+
+These are display records, not newly matched pairs or independent evidence.
+Point/interval and aggregation semantics remain explicit. HRV-family records
+with an incompatible definition remain inspectable with their compatibility
+reason. Scoring-window boundaries are preserved. A released report or dataset
+makes this detail unavailable; it does not silently fall back to live data.

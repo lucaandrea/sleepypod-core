@@ -1,3 +1,4 @@
+import { referenceTracePageSchema, referenceTraceRequestSchema } from '@/src/biometrics/backtest/reference-trace-page'
 import { numericTracePageSchema } from '@/src/biometrics/backtest/numeric-trace-page'
 import { replayAdmission, replayAdmissionSchema, replayAdmitter } from '@/src/biometrics/backtest/admission-service'
 import { rawSourceDescriptorSchema, rawSourcePageSchema, rawSourcePageResultSchema } from '@/src/biometrics/backtest/raw-catalog'
@@ -189,6 +190,12 @@ export const biometricTuningRouter = router({
     .input(traceRequestSchema)
     .output(tracePageSchema)
     .query(({ input }) => references(() => coordinatorRequest(biometricsDb, { type: 'readTrace', input }))),
+
+  getBacktestReferenceTrace: publicProcedure
+    .meta({ openapi: { method: 'GET', path: '/biometric-tuning/backtests/{id}/reference-trace', protect: false, tags: ['Biometric tuning'] } })
+    .input(referenceTraceRequestSchema)
+    .output(referenceTracePageSchema)
+    .query(({ input }) => references(() => coordinatorRequest(biometricsDb, { type: 'readReferenceTrace', input }))),
 
   getBacktestNumericTrace: publicProcedure
     .meta({ openapi: { method: 'GET', path: '/biometric-tuning/backtests/{id}/numeric-trace', protect: false, tags: ['Biometric tuning'] } })

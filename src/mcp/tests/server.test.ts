@@ -46,7 +46,7 @@ const callerMock = vi.hoisted(() => {
       getProfileRevision: fn(), listProfileRevisions: fn(), compareReadings: fn(), deleteImport: fn(), releaseDataset: fn(), releaseBacktestResult: fn(), getActivationStatus: fn(), listActivationHistory: fn(), previewImport: fn(), commitImport: fn(),
       createProfileRevision: fn(), createDataset: fn(), getDataset: fn(), listDatasets: fn(), createExperiment: fn(),
       getExperiment: fn(), listExperiments: fn(), enqueueBacktest: fn(), getBacktest: fn(), cancelBacktest: fn(), listBacktests: fn(),
-      getBacktestSummary: fn(), getBacktestTrace: fn(), getBacktestNumericTrace: fn(), activateProfile: fn(), rollbackProfile: fn(), resetProfile: fn(),
+      getBacktestSummary: fn(), getBacktestTrace: fn(), getBacktestNumericTrace: fn(), getBacktestReferenceTrace: fn(), activateProfile: fn(), rollbackProfile: fn(), resetProfile: fn(),
     },
   }
 })
@@ -666,6 +666,9 @@ describe('sleepypod MCP server', () => {
     api.getBacktestNumericTrace.mockResolvedValue({ totalItems: 1, items: [{ heartRate: null }], nextCursor: null })
     await call('backtest_biometrics', { request: { action: 'numeric_trace', input: { id, expectedContentHash: hash, configuration: 'candidate', limit: 2 } } })
     expect(api.getBacktestNumericTrace).toHaveBeenCalledWith({ id, expectedContentHash: hash, configuration: 'candidate', limit: 2, offset: 0 })
+    api.getBacktestReferenceTrace.mockResolvedValue({ items: [], nextCursor: null })
+    await call('backtest_biometrics', { request: { action: 'reference_trace', input: { id, expectedContentHash: hash, cohortId: 'night', metric: 'heart_rate', limit: 2 } } })
+    expect(api.getBacktestReferenceTrace).toHaveBeenCalledWith({ id, expectedContentHash: hash, cohortId: 'night', metric: 'heart_rate', limit: 2, offset: 0 })
     expect(api.activateProfile).not.toHaveBeenCalled()
     expect(api.rollbackProfile).not.toHaveBeenCalled()
     const intent = { side: 'left', revisionId: id, expectedGeneration: 0, expectedResolvedHash: hash, boundary: 'next_session', requester: 'fixture', idempotencyKey: 'apply', allowUnvalidated: true }
