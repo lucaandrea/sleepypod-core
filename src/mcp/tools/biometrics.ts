@@ -50,6 +50,8 @@ export function registerBiometricTools(server: McpServer) {
       z.object({ action: z.literal('manifest') }).strict(),
       z.object({ action: z.literal('shadow_runs'), side, maximumRuns: z.number().int().min(1).max(50).optional(), afterId: z.string().uuid().optional() }).strict(),
       z.object({ action: z.literal('shadow_run'), id: z.string().uuid() }).strict(),
+      z.object({ action: z.literal('shadow_report'), id: z.string().uuid() }).strict(),
+      z.object({ action: z.literal('shadow_compare'), id: z.string().uuid(), reference: referenceImportSchema }).strict(),
       z.object({ action: z.literal('replay_admission') }).strict(),
       z.object({ action: z.literal('raw_sources'), input: rawSourcePageSchema }).strict(),
       z.object({ action: z.literal('overview'), side }).strict(),
@@ -68,6 +70,8 @@ export function registerBiometricTools(server: McpServer) {
       case 'manifest': return jsonResult(await api.getManifest({}))
       case 'shadow_runs': return jsonResult(await getCaller().biometricShadow.list({ side: request.side, maximumRuns: request.maximumRuns, afterId: request.afterId }))
       case 'shadow_run': return jsonResult(await getCaller().biometricShadow.get({ id: request.id }))
+      case 'shadow_report': return jsonResult(await getCaller().biometricShadow.report({ id: request.id }))
+      case 'shadow_compare': return jsonResult(await getCaller().biometricShadow.compare({ id: request.id, reference: request.reference }))
       case 'replay_admission': return jsonResult(await api.getReplayAdmission({}))
       case 'raw_sources': return jsonResult(await api.listRawSources(request.input))
       case 'overview': return jsonResult(await api.getProfileOverview({ side: request.side }))

@@ -1,7 +1,7 @@
 import { dataHash } from '../algorithms/canonical'
 import { compareNumericConfigurations } from '../backtest/numeric-comparison'
 import { referenceImportSchema } from '../references/contracts'
-import { normalizeReferenceImport } from '../references/normalize-core'
+import { previewReferenceImport } from '../references/normalize'
 import { referenceCompatibility } from '../references/alignment'
 import type { ShadowStore } from './store'
 
@@ -12,7 +12,7 @@ export function reportShadowRun(store: ShadowStore, runId: string, limits: Param
   const { plan } = run, policy = plan.monitoring
   const referenceInput = rawReference === undefined ? null : referenceImportSchema.parse(rawReference)
   if (referenceInput && (referenceInput.subjectId !== plan.subjectId || referenceInput.side !== plan.side)) throw new Error('Shadow reference subject or side mismatch')
-  const reference = referenceInput ? normalizeReferenceImport(referenceInput) : null
+  const reference = referenceInput ? previewReferenceImport(referenceInput) : null
   const until = Math.max(plan.startMs, Math.min(plan.endMs, capturedAtMs))
   const expectedSlots = capturedAtMs < plan.startMs
     ? 0

@@ -814,6 +814,11 @@ The `biometricShadow` tRPC router and corresponding LAN REST endpoints expose:
 - `GET /api/biometric-tuning/shadow-runs/{id}`: integrity-checked metadata.
 - `POST /api/biometric-tuning/shadow-runs/{id}/stop`: durable stop followed by
   awaited local attempt cancellation. Repeated calls preserve terminal evidence.
+- `GET /api/biometric-tuning/shadow-runs/{id}/report`: aggregate health, coverage,
+  pairing, resource receipt and evidence hashes.
+- `POST /api/biometric-tuning/shadow-runs/{id}/compare`: the same report with an
+  explicit `reference` import matching the saved sleeper and side. Submitted
+  reference measurements are compared without persisting an import.
 
 Inspection and stop use the application's database and remain available without
 execution configuration, an installed worker, current health or qualification.
@@ -827,7 +832,21 @@ response's `localAttemptSettled` indicates whether a locally owned attempt was
 awaited; it does not claim that another process's worker was reaped. Retained
 samples and completed/failed results are preserved.
 
+Reports execute in the shipped coordinator process's bounded read lane, leaving
+the application's event loop free. They require a complete integrity-checked
+snapshot of at most 100000 points and 32 MiB; larger evidence is refused rather
+than sampled. The coordinator also enforces its 64 KiB request, 17 MiB response,
+384 MiB Node heap and wall-clock limits. These bounds are not claims of measured
+pod resource qualification. Reports require the installed coordinator package but
+do not launch a waveform processor or require execution qualification.
+
+The public response has an explicit schema. Reference summaries include the
+shared normalized import content hash; the report hash covers that summary,
+snapshot identity and comparison results. No raw samples or submitted reference
+annotations are returned. Agreement remains descriptive, never activation
+authorization or an independent holdout claim.
+
 MCP uses these same router operations: `inspect_biometric_calibration` actions
-`shadow_runs` and `shadow_run` are read-only; `stop_biometric_shadow` is an explicit
-idempotent mutation. Creation, full report/reference comparison and UI flows are
-not yet exposed by these endpoints.
+`shadow_runs`, `shadow_run`, `shadow_report` and `shadow_compare` are read-only;
+`stop_biometric_shadow` is an explicit idempotent mutation. Creation and UI flows
+are not yet exposed by these endpoints.

@@ -1,4 +1,7 @@
 import type { AdmissionReceipt } from './job-operations'
+import type Database from 'better-sqlite3'
+import { shadowReportRequestSchema } from '../shadow/report-contracts'
+import { readShadowReport } from '../shadow/report-operation'
 import { referenceTraceRequestSchema } from './reference-trace-page'
 import { sql } from 'drizzle-orm'
 import { dirname, join } from 'node:path'
@@ -22,6 +25,7 @@ import { publishSelectedWaveformDataset } from './waveform-publication'
 
 const idInput = z.object({ id: z.string().uuid() }).strict()
 export const coordinatorTaskSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('readShadowReport'), input: shadowReportRequestSchema }).strict(),
   z.object({ type: z.literal('createWaveformDataset'), input: createWaveformDatasetSchema }).strict(),
   z.object({ type: z.literal('inspectRawSource'), input: rawScanInputSchema }).strict(),
   z.object({ type: z.literal('pageRawSources'), input: rawSourcePageSchema }).strict(),
@@ -40,6 +44,7 @@ export const coordinatorTaskSchema = z.discriminatedUnion('type', [
 ])
 export type CoordinatorTask = z.input<typeof coordinatorTaskSchema>
 export interface CoordinatorResults {
+  readShadowReport: ReturnType<typeof readShadowReport>
   createWaveformDataset: Awaited<ReturnType<typeof publishSelectedWaveformDataset>>
   inspectRawSource: Awaited<ReturnType<typeof inspectRawSource>>
   pageRawSources: ReturnType<RawSourceCatalog['page']>
@@ -58,7 +63,7 @@ export interface CoordinatorResults {
 }
 
 /** Fixed shipped operations; neither executable code nor paths come from RPC input. */
-export async function performCoordinatorTask(db: BetterSQLite3Database<typeof schema>, raw: unknown, options: {
+export async function performCoordinatorTask(db: BetterSQLite3Database<typeof schema> & { $client: Database.Database }, raw: unknown, options: {
   workerPath: string
   rawLocation?: RawInspectionLocation
   replayBudget?: ReplayBudget
@@ -68,6 +73,7 @@ export async function performCoordinatorTask(db: BetterSQLite3Database<typeof sc
 }) {
   const task = coordinatorTaskSchema.parse(raw)
   switch (task.type) {
+    case 'readShadowReport': return readShadowReport(db.$client, task.input)
     case 'createWaveformDataset': return publishSelectedWaveformDataset(db, task.input, options)
     case 'inspectRawSource': return inspectRawSource(db, task.input, options)
     case 'pageRawSources': return new RawSourceCatalog(db).page(task.input)

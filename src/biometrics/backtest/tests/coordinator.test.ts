@@ -10,6 +10,8 @@ import { promisify } from 'node:util'
 import { afterAll, beforeAll, expect, it } from 'vitest'
 import { runCoordinatorTask } from '../coordinator'
 import { BacktestJobStore } from '../jobs'
+import { ShadowStore } from '../../shadow/store'
+import { dataHash } from '../../algorithms/canonical'
 import { DatasetStore } from '../datasets'
 import { workerBuildHash } from '../child'
 import { backtestFixture } from './fixtures/backtest'
@@ -18,6 +20,34 @@ let directory: string
 let databasePath: string
 let coordinatorPath: string
 let workerPath: string
+
+it('computes shadow health and reference agreement in the shipped coordinator without canonical writes', async () => {
+  const sqlite = new Database(databasePath)
+  const at = 1700000000000, hash = 'a'.repeat(64)
+  const store = new ShadowStore(sqlite, { maximumRuns: 10, maximumPoints: 10, maximumBytes: 100000 }, () => at)
+  const run = store.create({ schema: 'biometric-shadow-plan-v1', side: 'left', subjectId: 'shadow-fixture', startMs: at, endMs: at + 1000,
+    candidateConfigHash: hash, activeConfigHash: hash, engineBuildHash: hash, qualificationHash: hash,
+    maximumPoints: 10, maximumBytes: 10000, metrics: ['heart_rate'],
+    monitoring: { expectedIntervalMs: 1000, maximumGapMs: 2000, heartbeatStaleMs: 2000, minimumCandidateCoverage: 0.8, maximumCoverageLoss: 0.1, minimumQuality: 0.8,
+      alignment: { version: 'reference-alignment-v1', pointToleranceMs: 0, clockOffsetMs: 0, offsetSource: 'fixed' } } }, 'shadow-report')
+  const lease = store.claim(run.id, 10000, () => {})
+  store.append(lease, { sequence: 0, side: 'left', timestampMs: at, inputHash: null, candidateConfigHash: hash, activeConfigHash: hash,
+    readings: [{ metric: 'heart_rate', candidate: { value: 62, quality: 1 }, active: { value: 60, quality: 1 } }] })
+  store.finish(lease, 'completed', 'complete')
+  const before = sqlite.prepare('SELECT * FROM vitals').all()
+  try {
+    const reference = { side: 'left' as const, subjectId: 'shadow-fixture', source: 'test', rows: [{ recordKey: 'hr', metric: 'heart_rate', value: 63, unit: 'bpm', timestampMs: at }] }
+    const report = await runCoordinatorTask(options(), { type: 'readShadowReport', input: { id: run.id, reference } })
+    expect(report.metrics[0].comparison.differences.commonMae).toBe(-2)
+    expect(report.metrics[0].comparison.commonSupport.candidate.pairedCount).toBe(1)
+    expect(report.interpretation).toBe('prospective_observation_and_reference_agreement_not_activation_authorization')
+    const { reportHash, ...body } = report
+    expect(reportHash).toBe(dataHash(body))
+    expect(sqlite.prepare('SELECT * FROM vitals').all()).toEqual(before)
+    await expect(runCoordinatorTask(options(), { type: 'readShadowReport', input: { id: run.id, reference: { ...reference, side: 'right' } } })).rejects.toMatchObject({ code: 'SUBJECT_MISMATCH' })
+  }
+  finally { sqlite.close() }
+})
 beforeAll(async () => {
   directory = await mkdtemp(join(tmpdir(), 'biometric-coordinator-test-'))
   await promisify(execFile)(process.execPath, ['scripts/build/biometrics-worker.mjs', directory])

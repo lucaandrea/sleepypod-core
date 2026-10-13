@@ -42,7 +42,7 @@ const callerMock = vi.hoisted(() => {
       delete: fn(), create: fn(), update: fn(),
     },
     databases: { checkIntegrity: fn() },
-    biometricShadow: { list: fn(), get: fn(), stop: fn() },
+    biometricShadow: { list: fn(), get: fn(), stop: fn(), report: fn(), compare: fn() },
     biometricTuning: {
       getReplayAdmission: fn(), listRawSources: fn(), inspectRawSource: fn(), createWaveformDataset: fn(),
       getManifest: fn(), getProfileOverview: fn(), listSessions: fn(), getSessionCapabilities: fn(), listImports: fn(),
@@ -656,6 +656,13 @@ describe('sleepypod MCP server', () => {
     expect(api.list).toHaveBeenCalledWith({ side: 'left', maximumRuns: 5, afterId: undefined })
     await client.callTool({ name: 'inspect_biometric_calibration', arguments: { request: { action: 'shadow_run', id } } })
     expect(api.get).toHaveBeenCalledWith({ id })
+    api.report.mockResolvedValue({ runId: id, health: 'issues_detected' })
+    api.compare.mockResolvedValue({ runId: id, referenceSummary: { accepted: 1 } })
+    await client.callTool({ name: 'inspect_biometric_calibration', arguments: { request: { action: 'shadow_report', id } } })
+    expect(api.report).toHaveBeenCalledWith({ id })
+    const reference = { side: 'left', subjectId: 'sleeper', source: 'test', rows: [{ recordKey: 'hr', metric: 'heart_rate', value: 63, unit: 'bpm', timestampMs: 1700000000000 }] }
+    await client.callTool({ name: 'inspect_biometric_calibration', arguments: { request: { action: 'shadow_compare', id, reference } } })
+    expect(api.compare).toHaveBeenCalledWith({ id, reference: expect.objectContaining(reference) })
     expect(api.stop).not.toHaveBeenCalled()
     const stopped = await client.callTool({ name: 'stop_biometric_shadow', arguments: { id } }) as CallToolResult
     expect(parse(stopped)).toMatchObject({ run: { state: 'stopped' }, localAttemptSettled: false })

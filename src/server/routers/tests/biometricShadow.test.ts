@@ -5,6 +5,7 @@ import { migrate } from 'drizzle-orm/better-sqlite3/migrator'
 import { generateOpenApiDocument } from 'trpc-to-openapi'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { ShadowStore } from '@/src/biometrics/shadow/store'
+import { readShadowReport } from '@/src/biometrics/shadow/report-operation'
 import { cancelShadowServiceAttempt } from '@/src/biometrics/shadow/service-host'
 import { biometricShadowRouter } from '../biometricShadow'
 
@@ -13,6 +14,7 @@ vi.mock('@/src/db', () => ({ get biometricsDb() {
   return { $client: holder.db }
 } }))
 vi.mock('@/src/biometrics/shadow/service-host', () => ({ cancelShadowServiceAttempt: vi.fn() }))
+vi.mock('@/src/biometrics/backtest/coordinator-service', () => ({ coordinatorRequest: async (_db: unknown, task: { input: Parameters<typeof readShadowReport>[1] }) => readShadowReport(holder.db as Database.Database, task.input) }))
 const now = 1700000000000, hash = 'a'.repeat(64)
 const plan = { schema: 'biometric-shadow-plan-v1', side: 'left', subjectId: 'sleeper', startMs: now, endMs: now + 60000,
   candidateConfigHash: hash, activeConfigHash: hash, engineBuildHash: hash, qualificationHash: hash,
@@ -101,4 +103,15 @@ it('publishes concrete REST contracts for inspection and stop', () => {
   expect(document.paths?.['/biometric-tuning/shadow-runs']?.get).toBeDefined()
   expect(document.paths?.['/biometric-tuning/shadow-runs/{id}']?.get).toBeDefined()
   expect(document.paths?.['/biometric-tuning/shadow-runs/{id}/stop']?.post).toBeDefined()
+  expect(document.paths?.['/biometric-tuning/shadow-runs/{id}/report']?.get).toBeDefined()
+  expect(document.paths?.['/biometric-tuning/shadow-runs/{id}/compare']?.post).toBeDefined()
+})
+
+it('returns bounded report contracts and rejects reference sleeper substitution', async () => {
+  const run = store.create(plan, 'report')
+  const report = await caller.report({ id: run.id })
+  expect(report).toMatchObject({ runId: run.id, observedSamples: 0, referenceSummary: null, issues: expect.arrayContaining(['no_observations']) })
+  const reference = { side: 'left' as const, subjectId: 'sleeper', source: 'test', rows: [{ recordKey: 'hr', metric: 'heart_rate', value: 63, unit: 'bpm', timestampMs: now }] }
+  expect(await caller.compare({ id: run.id, reference })).toMatchObject({ referenceSummary: { accepted: 1 }, interpretation: 'prospective_observation_and_reference_agreement_not_activation_authorization' })
+  await expect(caller.compare({ id: run.id, reference: { ...reference, subjectId: 'other' } })).rejects.toMatchObject({ code: 'BAD_REQUEST' })
 })
