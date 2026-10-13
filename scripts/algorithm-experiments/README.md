@@ -90,3 +90,42 @@ result is only one qualification dimension: it does not approve dependency
 compatibility, resource fitness, artifact/noise behavior, held-out agreement,
 shadow use, installation, or live activation. Those checks and reviewed release
 promotion remain required.
+
+## File-based command line
+
+Run these commands on the external experiment host, from the repository:
+
+```sh
+pnpm biometrics:experiment lock sha256:<reviewed-local-image-id> environment.lock.json
+pnpm biometrics:experiment inspect proposal.json intake.json
+pnpm biometrics:experiment input-hash frames.jsonl 33554432 input-identity.json
+pnpm biometrics:experiment run proposal.json request.json frames.jsonl operator-policy.json experiment.json
+pnpm biometrics:experiment determinism proposal.json request.json frames.jsonl operator-policy.json 2 determinism.json
+```
+
+The proposal is a single inert JSON envelope with `schema` equal to
+`biometric-package-proposal-v1`, a complete `manifest`, and `files` containing
+`{ "path": "engine.py", "base64": "..." }` entries for every declared artifact.
+Include the captured environment lock as the manifest's `dependencyLock` file;
+its exact bytes, like all package files, must match the artifact size and hash.
+`inspect` verifies the proposal without launching Docker or executing its code.
+
+`frames.jsonl` contains one `biometric-signal-frame-v1` object per line.
+`request.json` follows `packageRunRequestSchema` in `protocol.ts`: set its
+`packageHash` from the intake report and `inputHash` from the input-identity
+report, plus explicit hardware, sample rate, side, configuration, and seed.
+
+`operator-policy.json` is separate from candidate artifacts and contains the
+reviewed image ID and positive integer ceilings: `maximumWallMs` (at most one
+hour), `maximumMemoryBytes`, `maximumProcesses`, `maximumOutputBytes`, and
+`maximumInputBytes`. Select these for the external host; they do not establish
+that an algorithm fits the pod. Candidate resource requests must fit the policy.
+
+All file inputs must be bounded regular files, not symlinks, devices or FIFOs.
+JSONL has a separate per-line cap. Reports are mode 0600, written completely
+before atomic publication, and never overwrite an existing path. Errors return
+nonzero and do not publish a success report. The report includes raw candidate
+outputs and should be treated as private biometric data. No command sends it to
+a reviewer or installs the package. A successful `run` is explicitly marked
+`experiment_only`; use the remaining qualification checks and normal reviewed
+release process before promotion.

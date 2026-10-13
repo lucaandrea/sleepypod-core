@@ -1,0 +1,53 @@
+import { pathToFileURL } from 'node:url'
+import { z } from 'zod'
+import { packageInputHash } from './input'
+import { inspectPythonEnvironment } from './environment'
+import { executePackageExperiment } from './container'
+import { checkPackageDeterminism } from './determinism'
+import { publishJson, readJsonFile, readJsonLines, readPackageProposal } from './files'
+
+const positive = z.number().int().positive().max(Number.MAX_SAFE_INTEGER)
+const policySchema = z.object({ image: z.string().regex(/^sha256:[a-f0-9]{64}$/), maximumWallMs: positive.max(3600000),
+  maximumMemoryBytes: positive, maximumProcesses: positive, maximumOutputBytes: positive, maximumInputBytes: positive,
+}).strict()
+const usage = 'Usage: lock IMAGE OUTPUT | input-hash FRAMES MAX_BYTES OUTPUT | inspect PROPOSAL OUTPUT | run PROPOSAL REQUEST FRAMES POLICY OUTPUT | determinism PROPOSAL REQUEST FRAMES POLICY REPETITIONS OUTPUT'
+
+export async function runExperimentCli(args: string[]) {
+  const [command, ...paths] = args
+  if (command === 'lock' && paths.length === 2) {
+    await publishJson(paths[1], await inspectPythonEnvironment(paths[0]))
+    return
+  }
+  if (command === 'input-hash' && paths.length === 3) {
+    const maximumBytes = positive.parse(Number(paths[1]))
+    const hash = packageInputHash(readJsonLines(paths[0], maximumBytes))
+    await publishJson(paths[2], { schema: 'biometric-package-input-v1', hash })
+    return
+  }
+  if (command === 'inspect' && paths.length === 2) {
+    const proposal = readPackageProposal(paths[0])
+    await publishJson(paths[1], { schema: 'biometric-package-intake-v1', packageHash: proposal.packageHash,
+      status: proposal.status, manifest: proposal.manifest, totalBytes: proposal.totalBytes })
+    return
+  }
+  if ((command === 'run' && paths.length === 5) || (command === 'determinism' && paths.length === 6)) {
+    const policy = policySchema.parse(readJsonFile(paths[3], 16384))
+    const proposal = readPackageProposal(paths[0])
+    const request = readJsonFile(paths[1], 65536)
+    const frames = () => readJsonLines(paths[2], policy.maximumInputBytes)
+    const options = { manifest: proposal.manifest, files: proposal.files, request, policy }
+    const report = command === 'run'
+      ? { schema: 'biometric-package-experiment-v1', status: 'experiment_only', ...await executePackageExperiment({ ...options, frames: frames() }) }
+      : await checkPackageDeterminism({ ...options, frames }, Number(paths[4]))
+    await publishJson(paths[paths.length - 1], report)
+    return
+  }
+  throw new Error(usage)
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  runExperimentCli(process.argv.slice(2)).catch((error: unknown) => {
+    process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`)
+    process.exitCode = 1
+  })
+}

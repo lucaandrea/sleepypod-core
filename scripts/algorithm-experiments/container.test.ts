@@ -1,4 +1,8 @@
 // @vitest-environment node
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { join } from 'node:path'
+import { tmpdir } from 'node:os'
+import { runExperimentCli } from './cli'
 import { createHash } from 'node:crypto'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { configHash } from '../../src/biometrics/algorithms/canonical'
@@ -71,6 +75,24 @@ s.close()
     expect(result.execution.environment.image).toBe(image)
     expect(result.results).toHaveLength(2)
     expect(result.execution.isolation).toBe('docker-restricted-v1')
+  }, 20000)
+  it('runs a complete file-based CLI experiment and publishes a reviewable report', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'package-cli-test-'))
+    try {
+      const input = options(program)
+      const proposal = { schema: 'biometric-package-proposal-v1', manifest: input.manifest,
+        files: [...input.files].map(([path, bytes]) => ({ path, base64: bytes.toString('base64') })) }
+      for (const [name, value] of [['proposal', proposal], ['request', input.request], ['policy', input.policy]] as const) {
+        await writeFile(join(root, name), JSON.stringify(value))
+      }
+      await writeFile(join(root, 'frames'), input.frames.map(frame => JSON.stringify(frame)).join('\n') + '\n')
+      await runExperimentCli(['run', ...['proposal', 'request', 'frames', 'policy', 'report'].map(name => join(root, name))])
+      const report = JSON.parse(await readFile(join(root, 'report'), 'utf8'))
+      expect(report).toMatchObject({ schema: 'biometric-package-experiment-v1', status: 'experiment_only', packageHash: input.request.packageHash,
+        frozenInput: { hash: input.request.inputHash, frameCount: 2 } })
+      expect(report.results).toHaveLength(2)
+    }
+    finally { await rm(root, { recursive: true, force: true }) }
   }, 20000)
   it('repeats in fresh containers and detects changing state even with identical readings', async () => {
     const input = options(program)

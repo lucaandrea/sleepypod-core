@@ -28,7 +28,8 @@
     "test:mutation:incremental": "stryker run --incremental",
     "tsc": "tsc --noEmit",
     "prepare": "git rev-parse --git-dir >/dev/null 2>&1 && git config core.hooksPath .githooks || true",
-    "build:biometrics-worker": "node scripts/build/biometrics-worker.mjs"
+    "build:biometrics-worker": "node scripts/build/biometrics-worker.mjs",
+    "biometrics:experiment": "tsx scripts/algorithm-experiments/cli.ts"
   },
   "lint-staged": {
     "*.{ts,tsx}": "eslint --fix",
