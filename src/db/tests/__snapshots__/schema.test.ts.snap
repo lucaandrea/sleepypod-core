@@ -291,6 +291,8 @@ exports[`complete Drizzle schema contracts > pins every biometrics table, column
   {
     "checks": 0,
     "columns": [
+      "worker_receipt | sql:text | logical:json/SQLiteTextJson | nullable | default:none | not-primary-key | not-unique | not-autoincrement | enum:none",
+      "worker_receipt_hash | sql:text | logical:string/SQLiteText | nullable | default:none | not-primary-key | not-unique | not-autoincrement | enum:none",
       "id | sql:text | logical:string/SQLiteText | not-null | default:none | primary-key | not-unique | not-autoincrement | enum:none",
       "idempotency_key | sql:text | logical:string/SQLiteText | not-null | default:none | not-primary-key | unique:biometric_shadow_runs_idempotency_key_unique | not-autoincrement | enum:none",
       "plan_hash | sql:text | logical:string/SQLiteText | not-null | default:none | not-primary-key | not-unique | not-autoincrement | enum:none",

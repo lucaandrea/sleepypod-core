@@ -32,6 +32,24 @@ it('publishes, verifies, replays, releases and collects a retained waveform data
   const retained = join(directory, 'biometric-raw')
   const sqlite = new Database(database)
   try {
+    // Keep the kernel lock real but isolate its inode from /run and other tests.
+    // Production has no CLI/environment override for the host execution lock.
+    const fixturePython = join(directory, 'fixture-python')
+    writeFileSync(fixturePython, `#!${python}
+import runpy, sys
+args = sys.argv[1:]
+if args[0] == '-B':
+    args = args[1:]
+assert args[0] == '-m'
+module = args[1]
+sys.argv = [module, *args[2:]]
+if module == 'common.biometrics.replay_worker':
+    from common.biometrics import replay_worker
+    from common.biometrics.execution_lock import acquire_execution_lock
+    replay_worker.acquire_execution_lock = lambda: acquire_execution_lock(${JSON.stringify(join(directory, 'execution.lock'))})
+    sys.exit(replay_worker.main())
+runpy.run_module(module, run_name='__main__')
+`, { mode: 0o700 })
     const db = drizzle(sqlite, { schema })
     migrate(db, { migrationsFolder: 'src/db/biometrics-migrations' })
     const fixture = JSON.parse(execFileSync(python, ['-B', '-c', `
@@ -80,7 +98,7 @@ print(json.dumps({'start':start,'artifacts':artifacts,'inspections':inspections}
     const { prepared } = prepareSelectedWaveformDataset(db, request, now)
     execFileSync(process.execPath, ['scripts/build/biometrics-worker.mjs', directory])
     const options = { replayBudget: { jobWallMs: 300000, waveformWallMs: 200000, waveformCpuSeconds: 180 }, databasePath: database, coordinatorPath: join(directory, 'coordinator.cjs'), workerPath: join(directory, 'worker.cjs'),
-      modulePath: resolve('node_modules'), rawLocation: { pythonPath: python, modulesPath: resolve('modules'), archiveDirectory: archive } }
+      modulePath: resolve('node_modules'), rawLocation: { pythonPath: fixturePython, modulesPath: resolve('modules'), archiveDirectory: archive } }
     expect(await runCoordinatorTask(options, { type: 'createWaveformDataset', input: request })).toEqual({ status: 'deferred' })
     let admissionChecks = 0
     expect(await runCoordinatorTask(options, { type: 'createWaveformDataset', input: request }, { admit: async () => ++admissionChecks === 1 })).toEqual({ status: 'deferred' })
@@ -110,7 +128,7 @@ print(json.dumps({'start':start,'artifacts':artifacts,'inspections':inspections}
     expect(retryWithoutAdmission).toMatchObject({ status: 'published', dataset: { id: published.id } })
     if (frozen.snapshot.version !== 'waveform-dataset-v1') throw new Error('Missing waveform inputs')
     const build = await waveformEvaluatorBuildIdentity(options.coordinatorPath, options.workerPath, options.rawLocation)
-    const replay = await runWaveformChild({ pythonPath: python, modulesPath: resolve('modules'), retainedDirectory: retained }, {
+    const replay = await runWaveformChild({ pythonPath: fixturePython, modulesPath: resolve('modules'), retainedDirectory: retained }, {
       version: 'retained-waveform-work-v1', input: frozen.snapshot.waveformInputs[0].input,
       configs: { left: defaultConfig, right: defaultConfig },
     }, { expectedBuildHash: build.python.hash })
