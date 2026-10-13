@@ -41,6 +41,7 @@ const dbMock = vi.hoisted(() => {
     chain.orderBy = vi.fn(() => chain)
     chain.limit = vi.fn(() => chain)
     chain.from = vi.fn(() => chain)
+    chain.leftJoin = vi.fn(() => chain)
     chain.values = vi.fn((v: unknown) => {
       dbState.insertValues.push(v)
       return chain
@@ -934,6 +935,7 @@ describe('biometrics error wrapping (INTERNAL_SERVER_ERROR catches)', () => {
       orderBy: vi.fn(() => failingChain),
       limit: vi.fn(() => failingChain),
       from: vi.fn(() => failingChain),
+      leftJoin: vi.fn(() => failingChain),
       values: vi.fn(() => failingChain),
       set: vi.fn(() => failingChain),
       onConflictDoNothing: vi.fn(() => failingChain),

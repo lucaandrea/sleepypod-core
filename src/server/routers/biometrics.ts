@@ -1,10 +1,11 @@
+import { vitalProvenance, vitalProvenanceSchema } from '@/src/biometrics/profiles/vital-provenance'
 import { z } from 'zod'
 import { TRPCError } from '@trpc/server'
 import { publicProcedure, router } from '@/src/server/trpc'
 import { biometricsDb, db } from '@/src/db'
-import { sleepRecords, vitals, movement, referenceStages, referenceVitals } from '@/src/db/biometrics-schema'
+import { sleepRecords, vitals, movement, referenceStages, referenceVitals, biometricProcessingRuns } from '@/src/db/biometrics-schema'
 import { deviceSettings } from '@/src/db/schema'
-import { eq, and, gt, gte, lt, lte, desc, asc, avg, min, max, count, sql } from 'drizzle-orm'
+import { eq, and, gt, gte, lt, lte, desc, asc, avg, min, max, count, sql, getTableColumns } from 'drizzle-orm'
 import { sideSchema, idSchema, validateDateRange } from '@/src/server/validation-schemas'
 import { listRawFiles } from './raw'
 import { loadStageView, loadStageInputs } from './sleepStages'
@@ -187,7 +188,7 @@ export const biometricsRouter = router({
    *
    * Vitals Data:
    * - heartRate: Beats per minute, detected via ballistocardiography
-   * - hrv: Heart rate variability in milliseconds (higher = better recovery)
+   * - hrv: Stored HRV value in milliseconds; the pod currently emits a window IBI variability index, not clinical RMSSD. Legacy definitions may be unknown.
    * - breathingRate: Breaths per minute
    * - Fields may be null if sensor couldn't get reliable reading
    *
@@ -211,6 +212,8 @@ export const biometricsRouter = router({
       heartRate: z.number().nullable(),
       hrv: z.number().nullable(),
       breathingRate: z.number().nullable(),
+      processingRunId: z.string().nullable().optional(),
+      provenance: vitalProvenanceSchema.optional(),
     })))
     .input(
       z
@@ -246,13 +249,22 @@ export const biometricsRouter = router({
         }
 
         const records = await biometricsDb
-          .select()
+          .select({
+            ...getTableColumns(vitals),
+            recordedRunId: biometricProcessingRuns.id,
+            recordedSide: biometricProcessingRuns.side,
+            recordedKind: biometricProcessingRuns.kind,
+            recordedConfigHash: biometricProcessingRuns.configHash,
+            recordedHrvMetricId: sql<unknown>`CASE WHEN json_valid(${biometricProcessingRuns.bundle}) THEN json_extract(${biometricProcessingRuns.bundle}, '$.components.hrv_index.metricId') ELSE NULL END`,
+          })
           .from(vitals)
+          .leftJoin(biometricProcessingRuns, and(eq(vitals.processingRunId, biometricProcessingRuns.id), eq(vitals.side, biometricProcessingRuns.side)))
           .where(conditions.length > 0 ? and(...conditions) : undefined)
           .orderBy(desc(vitals.timestamp))
           .limit(input.limit)
 
-        return records
+        return records.map(row => ({ id: row.id, side: row.side, timestamp: row.timestamp, heartRate: row.heartRate,
+          hrv: row.hrv, breathingRate: row.breathingRate, processingRunId: row.processingRunId ?? null, provenance: vitalProvenance(row) }))
       }
       catch (error) {
         throw new TRPCError({

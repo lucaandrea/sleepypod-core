@@ -1,5 +1,7 @@
 'use client'
 
+import { generateVitalsCSV } from './vitals-csv'
+
 import { useState, useCallback, useMemo } from 'react'
 import { Download, FileText, HardDrive, Trash2, Database, Package } from 'lucide-react'
 import { Button, Card, GhostIcon, InlineError, Modal } from '@/src/components/ds'
@@ -10,15 +12,6 @@ import { useWeekNavigator } from '@/src/hooks/useWeekNavigator'
 
 function formatCSVDate(date: Date): string {
   return new Date(date).toISOString()
-}
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function generateVitalsCSV(vitals: any[]): string {
-  const header = 'timestamp,heart_rate,hrv,breathing_rate,side'
-  const rows = vitals.map(v =>
-    `${formatCSVDate(v.timestamp)},${v.heartRate ?? ''},${v.hrv ?? ''},${v.breathingRate ?? ''},${v.side}`
-  )
-  return [header, ...rows].join('\n')
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

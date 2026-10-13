@@ -484,3 +484,31 @@ An identical candidate/current configuration is also reported as no material
 change. The supervisor replaces worker status claims. The UI displays these as
 historical evaluation outcomes; an improved report never substitutes for current
 activation review, holdout-exposure checks, or processor acknowledgement.
+
+## Original vitals provenance and CSV compatibility
+
+`biometrics.getVitals` retains its array and existing numerical fields. It now
+adds nullable `processingRunId` and `provenance` metadata for each original
+observation: `interpretation: original_observation`, a status, the recorded
+configuration hash, and the recorded HRV metric identifier. The run must belong
+to the same side and be a live run. Missing associations are `unavailable`; rows
+without a run remain `legacy_unknown`. A missing, malformed, or unavailable HRV
+definition stays null. The current shipped manifest is never used to infer an
+old row's metric identity. This metadata describes the recorded association;
+it is not validation evidence or a current processor-health receipt.
+
+Only bounded scalar metadata is projected from the processing bundle. The raw
+bundle, input identity, and unrelated fields are not returned. A future recorded
+HRV metric identifier is preserved rather than relabelled as the current window
+IBI variability index. Consumers must keep different/unknown definitions
+separate when computing comparable baselines. The legacy summary/baseline
+endpoints do not yet expose grouped metric/configuration provenance; clients
+needing that distinction must use the per-observation metadata.
+
+The vitals CSV keeps its original five columns first and appends interpretation,
+processing-run ID, provenance status, configuration hash, and HRV metric ID.
+Unavailable definitions are written as `unknown`, never inferred as clinical
+RMSSD. Missing numerical values remain empty. Metadata cells are CSV-escaped
+and spreadsheet-formula prefixes are neutralized. Older consumers can continue
+using the original named columns; positional consumers must accept appended
+columns. Demo/older responses without metadata export unknown provenance.
