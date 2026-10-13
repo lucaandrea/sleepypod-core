@@ -45,7 +45,7 @@ export async function runPackagePreflight(options: Pick<Parameters<typeof execut
   }
   const failed = fixtureReport.status === 'failed' || determinism.some(row => !row.report?.deterministic || row.resources.some(resource => resource.status === 'failed'))
   const incomplete = fixtureReport.status === 'incomplete' || determinism.some(row => row.resources.some(resource => resource.status !== 'within_observed_limits'))
-  return { schema: 'biometric-package-preflight-report-v1' as const, packageHash: verified.packageHash, image: stable.policy.image,
+  return { schema: 'biometric-package-preflight-report-v1' as const, packageHash: verified.packageHash, manifest: verified.manifest, image: stable.policy.image,
     plan, planHash: configHash(plan), fixtureReport, determinism,
     status: failed ? 'failed' as const : incomplete ? 'incomplete' as const : 'external_checks_passed' as const,
     interpretation: 'requires_heldout_accuracy_target_pod_compatibility_and_reviewed_release' as const }

@@ -13,11 +13,13 @@ import { readJsonFile, readJsonLines, readPackageProposal } from './files'
 const sourcePath = z.string().min(1).max(4096)
 export const managedDescriptorSchema = z.object({ schema: z.literal('biometric-managed-descriptor-v1'),
   study: packageStudySchema, protocol: managedProtocolSchema, split: z.enum(['tuning', 'validation', 'holdout']),
+  preflightSuite: sourcePath.optional(),
   idempotencyKey: z.string().min(1).max(200),
   variants: z.array(z.object({ label: z.enum(['default', 'current', 'candidate']), proposal: sourcePath,
     config: z.record(z.string(), z.unknown()), seed: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER), policy: experimentPolicySchema }).strict()).length(3),
   nights: z.array(z.object({ id: z.string().min(1).max(200), frames: sourcePath, referenceImport: sourcePath }).strict()).min(1).max(60),
 }).strict().superRefine((value, context) => {
+  if (Boolean(value.protocol.preflightPlan) !== Boolean(value.preflightSuite)) context.addIssue({ code: 'custom', message: 'Preflight plan and suite must be supplied together' })
   if (new Set(value.variants.map(variant => variant.label)).size !== 3) context.addIssue({ code: 'custom', message: 'All three variants are required' })
   const selected = value.study.nights.filter(night => night.split === value.split)
   if (new Set(value.nights.map(night => night.id)).size !== value.nights.length || selected.length !== value.nights.length
@@ -72,6 +74,7 @@ export async function runManagedFiles(workspace: string, descriptorPath: string)
         configHash: configHash({ config: variant.config, seed: variant.seed }), image: variant.policy.image })) }, descriptor.idempotencyKey)
     const maximumInputBytes = Math.min(...variants.map(variant => variant.policy.maximumInputBytes))
     const result = await runManagedTrial({ ledger, trialId, protocol: descriptor.protocol, variants, reportDirectory: reports,
+      preflightSuite: descriptor.preflightSuite && ledger.trial(trialId).state !== 'succeeded' ? readJsonFile(resolve(base, descriptor.preflightSuite), 32 * 1024 * 1024) : undefined,
       loadNight: async (id) => {
         const source = descriptor.nights.find(night => night.id === id)
         if (!source) throw new Error('Missing retained night source')
@@ -80,7 +83,7 @@ export async function runManagedFiles(workspace: string, descriptorPath: string)
       } })
     const reviewed = assessManagedAccuracy(ledger, trialId, reports)
     return { schema: 'biometric-managed-receipt-v1' as const, studyId: study.id, trialId, ...result,
-      currentEvidence: reviewed.currentEvidence, accuracy: reviewed.assessment, reportFile: join(reports, `${result.reportHash}.json`) }
+      currentEvidence: reviewed.currentEvidence, accuracy: reviewed.assessment, preflight: reviewed.preflight, reportFile: join(reports, `${result.reportHash}.json`) }
   }
   finally { db.close() }
 }

@@ -1,3 +1,4 @@
+import { verifyPreflightEvidence } from './preflight-evidence'
 import { createHash } from 'node:crypto'
 import { join } from 'node:path'
 import { z } from 'zod'
@@ -14,6 +15,7 @@ const hash = z.string().regex(/^[a-f0-9]{64}$/)
 const summarySchema = z.object({ nightId: z.string(), reportHash: hash, comparison: z.unknown(), resources: z.unknown() }).strict()
 const trialSchema = z.object({ schema: z.literal('biometric-managed-trial-v1'), trialId: z.string().uuid(), attemptId: z.string().uuid(),
   study: packageStudySchema, protocol: managedProtocolSchema, request: z.unknown(), nights: z.array(summarySchema).min(1).max(60),
+  preflight: z.object({ reportHash: hash, status: z.enum(['failed', 'incomplete', 'external_checks_passed']) }).strict().optional(),
   uncertainty: z.unknown(), exposureAtClaim: z.unknown(),
   interpretation: z.literal('requires_current_ledger_exposure_check_and_full_qualification_review'),
 }).strict()
@@ -47,6 +49,16 @@ export function readManagedEvidence(ledger: PackageExperimentLedger, trialId: st
   same(report.study, study, 'study')
   same(report.request, trial.request, 'request')
   if (configHash(report.protocol) !== study.protocolHash) throw new Error('Retained protocol integrity mismatch')
+  let preflight: ReturnType<typeof verifyPreflightEvidence> | null = null
+  if (report.protocol.preflightPlan) {
+    const plan = report.protocol.preflightPlan
+    const candidate = trial.request.variants.find(variant => variant.label === 'candidate')
+    if (!candidate || !report.preflight || plan.configHash !== candidate.configHash || plan.side !== study.side
+      || plan.hardwareId !== report.protocol.hardwareId || plan.sampleRateHz !== report.protocol.sampleRateHz) throw new Error('Retained preflight binding mismatch')
+    preflight = verifyPreflightEvidence(retained(directory, report.preflight.reportHash), { plan, packageHash: candidate.packageHash, image: candidate.image })
+    same(preflight.status, report.preflight.status, 'preflight status')
+  }
+  else if (report.preflight) throw new Error('Unexpected retained preflight evidence')
   const selected = study.nights.filter(night => night.split === trial.request.split)
   if (report.nights.length !== selected.length || new Set(report.nights.map(night => night.nightId)).size !== selected.length
     || selected.some(night => !report.nights.some(row => row.nightId === night.id))) throw new Error('Retained night set integrity mismatch')
@@ -83,6 +95,6 @@ export function readManagedEvidence(ledger: PackageExperimentLedger, trialId: st
   const currentEvidence = ledger.currentEvidence(trialId)
   if (currentEvidence.state !== 'succeeded' || currentEvidence.reportHash !== trial.report_hash) throw new Error('Trial changed during evidence verification')
   return { schema: 'biometric-managed-evidence-v1' as const, trialId, reportHash: trial.report_hash,
-    study, protocol: report.protocol, request: trial.request, nights, uncertainty: uncertaintyReports, currentEvidence,
+    study, protocol: report.protocol, request: trial.request, preflight, nights, uncertainty: uncertaintyReports, currentEvidence,
     interpretation: 'verified_retained_evidence_requires_full_qualification_and_review' as const }
 }

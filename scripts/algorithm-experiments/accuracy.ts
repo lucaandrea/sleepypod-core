@@ -62,5 +62,5 @@ export function assessPackageAccuracy(evidence: AccuracyInput) {
 export function assessManagedAccuracy(...args: Parameters<typeof readManagedEvidence>) {
   const evidence = readManagedEvidence(...args)
   return { trialId: evidence.trialId, reportHash: evidence.reportHash, currentEvidence: evidence.currentEvidence,
-    assessment: assessPackageAccuracy(evidence) }
+    assessment: assessPackageAccuracy(evidence), preflight: evidence.preflight }
 }

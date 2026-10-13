@@ -15,6 +15,7 @@ import { runManagedFiles } from './managed-files'
 import { runManagedTrial } from './managed'
 import { readManagedEvidence } from './managed-evidence'
 import { runPackagePreflight } from './preflight'
+import { verifyPreflightEvidence } from './preflight-evidence'
 import { fixtureResourceTestPolicy } from './resource-test-policy'
 const image = process.env.BIOMETRIC_EXPERIMENT_TEST_IMAGE
 let environmentBytes: Buffer<ArrayBuffer>
@@ -22,7 +23,7 @@ beforeAll(async () => {
   if (image) environmentBytes = Buffer.from(JSON.stringify(await inspectPythonEnvironment(image)))
 })
 const start = 1791673200000
-function fixture(ledger: PackageExperimentLedger) {
+function fixture(ledger: PackageExperimentLedger, withPreflight = false) {
   const { manifest, files } = packageFixture()
   const code = `import json, sys
 init = json.loads(sys.stdin.readline())
@@ -39,7 +40,15 @@ for line in sys.stdin:
   const frames = [0, 1].map(sequence => ({ schema: 'biometric-signal-frame-v1', sequence, timestampMs: start + sequence * 1000,
     samples: { left: [1, 2, 3], right: null }, context: { occupied: true, pumpActive: false } }))
   const referenceImport = { side: 'left' as const, subjectId: 'fixture', source: 'synthetic', rows: [0, 1].map(index => ({ recordKey: String(index), metric: 'heart_rate', value: 60, unit: 'bpm', timestampMs: start + index * 1000 })) }
-  const protocol = { schema: 'biometric-managed-protocol-v1', hardwareId: 'pod4', sampleRateHz: 500, metricId: 'heart_rate', minimumQuality: 0.8,
+  const preflightSuite = { schema: 'biometric-package-fixtures-v1', resourcePolicy: fixtureResourceTestPolicy,
+    fixtures: [{ id: 'clean', category: 'clean_signal', frames,
+      request: { schema: 'biometric-package-run-v1', packageHash: configHash(declared), inputHash: packageInputHash(frames),
+        hardwareId: 'pod4', sampleRateHz: 500, side: 'left', config: { offset: 0 }, seed: 1 },
+      expectations: [{ kind: 'numeric', metric: 'heart_rate', startMs: start, endMs: start + 1006,
+        minimum: 59, maximum: 61, minimumReadings: 2, minimumQuality: 0.8 }] }] }
+  const preflightPlan = { schema: 'biometric-package-preflight-plan-v1', suiteHash: dataHash(preflightSuite), repetitions: 2,
+    configHash: configHash({ config: { offset: 0 }, seed: 1 }), hardwareId: 'pod4', sampleRateHz: 500, side: 'left' }
+  const protocol = { schema: 'biometric-managed-protocol-v1', hardwareId: 'pod4', sampleRateHz: 500, metricId: 'heart_rate', minimumQuality: 0.8, ...(withPreflight ? { preflightPlan } : {}),
     alignment: { version: 'reference-alignment-v1', pointToleranceMs: 0, clockOffsetMs: 0, offsetSource: 'fixed' },
     uncertainty: { version: 'paired-night-percentile-v1', seed: 'fixture', resamples: 200, minimumNights: 3 }, resourcePolicy: fixtureResourceTestPolicy }
   const study = ledger.createStudy({ schema: 'biometric-package-study-v1', subjectId: 'fixture', side: 'left', protocolHash: configHash(protocol),
@@ -49,7 +58,7 @@ for line in sys.stdin:
     policy: { image: image ?? '', maximumWallMs: 10000, maximumMemoryBytes: 128 * 1024 * 1024, maximumProcesses: 4, maximumOutputBytes: 32768, maximumInputBytes: 32768 } }))
   const request = { studyId: study.id, split: 'holdout', variants: variants.map(variant => ({ label: variant.label, packageHash: configHash(declared),
     configHash: configHash({ config: variant.config, seed: variant.seed }), image: variant.policy.image })) }
-  return { trialId: ledger.reserveTrial(request, 'first'), request, protocol, variants, referenceImport, frames }
+  return { trialId: ledger.reserveTrial(request, 'first'), request, protocol, variants, referenceImport, frames, ...(withPreflight ? { preflightSuite } : {}) }
 }
 describe.skipIf(!image)('managed package trials through real Docker', () => {
   it('executes combined fixture and determinism preflight for the exact candidate configuration', async () => {
@@ -68,6 +77,15 @@ describe.skipIf(!image)('managed package trials through real Docker', () => {
       expect(result).toMatchObject({ status: 'incomplete', packageHash: configHash(candidate.manifest), planHash: configHash(plan),
         fixtureReport: { missingCategories: expect.arrayContaining(['empty_bed', 'motion']) },
         determinism: [{ fixtureId: 'clean', error: null, report: { deterministic: true, runs: expect.any(Array) } }] })
+      expect(verifyPreflightEvidence(result, { plan, packageHash: configHash(candidate.manifest), image: candidate.policy.image }).status).toBe('incomplete')
+      const changed = structuredClone(result)
+      changed.status = 'external_checks_passed'
+      expect(() => verifyPreflightEvidence(changed, { plan, packageHash: result.packageHash, image: result.image })).toThrow('integrity mismatch')
+      const changedRuns = structuredClone(result)
+      const repeated = changedRuns.determinism[0].report
+      if (!repeated) throw new Error('Missing determinism fixture')
+      repeated.runs[1].outputHash = 'f'.repeat(64)
+      expect(() => verifyPreflightEvidence(changedRuns, { plan, packageHash: result.packageHash, image: result.image })).toThrow('integrity mismatch')
       expect(result.determinism[0].report?.runs).toHaveLength(2)
       expect(result.determinism[0].resources).toHaveLength(2)
       const failingSuite = structuredClone(suite)
@@ -90,7 +108,7 @@ describe.skipIf(!image)('managed package trials through real Docker', () => {
     const db = new Database(':memory:'), root = await mkdtemp(join(tmpdir(), 'managed-trial-test-'))
     try {
       const ledger = new PackageExperimentLedger(db)
-      const input = fixture(ledger)
+      const input = fixture(ledger, true)
       let loads = 0
       const options = { ...input, ledger, reportDirectory: root, loadNight: async () => {
         loads++
@@ -102,6 +120,14 @@ describe.skipIf(!image)('managed package trials through real Docker', () => {
       expect(result).toMatchObject({ state: 'succeeded', evidence: { uniqueHoldoutAttempt: true } })
       const report = JSON.parse(await readFile(join(root, `${result.reportHash}.json`), 'utf8'))
       expect(dataHash(report)).toBe(result.reportHash)
+      expect(report.preflight.status).toBe('incomplete')
+      const preflightPath = join(root, `${report.preflight.reportHash}.json`)
+      const preflightBytes = await readFile(preflightPath)
+      await rm(preflightPath)
+      await expect(runManagedTrial(options)).rejects.toThrow()
+      expect(loads).toBe(1)
+      await writeFile(preflightPath, preflightBytes)
+      expect(readManagedEvidence(ledger, input.trialId, root).preflight?.status).toBe('incomplete')
       expect(report.uncertainty.map((row: { report: { estimate: number } }) => row.report.estimate)).toEqual([-4, -2])
       const night = JSON.parse(await readFile(join(root, `${report.nights[0].reportHash}.json`), 'utf8'))
       expect(dataHash(night)).toBe(report.nights[0].reportHash)
@@ -157,16 +183,17 @@ describe.skipIf(!image)('managed package trials through real Docker', () => {
   it('runs a managed descriptor through persistent storage and reuses it without reopening night files', async () => {
     const db = new Database(':memory:'), root = await mkdtemp(join(tmpdir(), 'managed-files-test-'))
     try {
-      const ledger = new PackageExperimentLedger(db), input = fixture(ledger)
+      const ledger = new PackageExperimentLedger(db), input = fixture(ledger, true)
       const variant = input.variants[0]
       const proposal = { schema: 'biometric-package-proposal-v1', manifest: variant.manifest,
         files: [...variant.files].map(([path, bytes]) => ({ path, base64: bytes.toString('base64') })) }
       const descriptor = { schema: 'biometric-managed-descriptor-v1', study: ledger.study(input.request.studyId), protocol: input.protocol,
-        split: 'holdout', idempotencyKey: 'managed-files',
+        split: 'holdout', idempotencyKey: 'managed-files', preflightSuite: 'suite.json',
         variants: input.variants.map(variant => ({ label: variant.label, proposal: 'proposal.json', config: variant.config, seed: variant.seed, policy: variant.policy })),
         nights: [{ id: 'night', frames: 'frames.jsonl', referenceImport: 'references.json' }] }
       await writeFile(join(root, 'proposal.json'), JSON.stringify(proposal))
       await writeFile(join(root, 'descriptor.json'), JSON.stringify(descriptor))
+      await writeFile(join(root, 'suite.json'), JSON.stringify(input.preflightSuite))
       await writeFile(join(root, 'references.json'), JSON.stringify(input.referenceImport))
       await writeFile(join(root, 'frames.jsonl'), input.frames.map(frame => JSON.stringify(frame)).join('\n'))
       const workspace = join(root, 'workspace')
@@ -175,6 +202,8 @@ describe.skipIf(!image)('managed package trials through real Docker', () => {
         accuracy: { status: 'insufficient_evidence', missing: expect.arrayContaining(['no_frozen_accuracy_policy']) } })
       expect((await stat(join(workspace, 'experiments.sqlite'))).mode & 0o777).toBe(0o600)
       expect(dataHash(JSON.parse(await readFile(first.reportFile, 'utf8')))).toBe(first.reportHash)
+      expect(first.preflight?.status).toBe('incomplete')
+      await rm(join(root, 'suite.json'))
       await rm(join(root, 'frames.jsonl'))
       await rm(join(root, 'references.json'))
       const repeated = await runManagedFiles(workspace, join(root, 'descriptor.json'))

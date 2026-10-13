@@ -1,3 +1,5 @@
+import { packageFixtureSuiteSchema } from './fixtures'
+import { runPackagePreflight } from './preflight'
 import { readManagedEvidence } from './managed-evidence'
 import { managedProtocolSchema } from './managed-protocol'
 export { managedProtocolSchema } from './managed-protocol'
@@ -33,6 +35,7 @@ export async function runManagedTrial(options: {
   ledger: PackageExperimentLedger
   trialId: string
   protocol: unknown
+  preflightSuite?: unknown
   variants: Variant[]
   reportDirectory: string
   loadNight: (id: string) => Promise<{ referenceImport: unknown, frames: () => Iterable<unknown> }>
@@ -55,6 +58,13 @@ export async function runManagedTrial(options: {
     return { ...variant, manifest: verified.manifest, packageHash: verified.packageHash, config, seed,
       files: new Map([...variant.files].map(([path, bytes]) => [path, Buffer.from(bytes)])), policy: structuredClone(variant.policy) }
   })
+  const candidate = variants.find(variant => variant.label === 'candidate')
+  if (protocol.preflightPlan && (!candidate || protocol.preflightPlan.configHash !== configHash({ config: candidate.config, seed: candidate.seed })
+    || protocol.preflightPlan.hardwareId !== protocol.hardwareId || protocol.preflightPlan.sampleRateHz !== protocol.sampleRateHz
+    || protocol.preflightPlan.side !== study.side)) throw new Error('Managed preflight candidate mismatch')
+  if (Boolean(protocol.preflightPlan) !== (options.preflightSuite !== undefined)) throw new Error('Managed preflight plan and suite must be supplied together')
+  const preflightSuite = options.preflightSuite === undefined ? undefined : packageFixtureSuiteSchema.parse(structuredClone(options.preflightSuite))
+  if (protocol.preflightPlan && dataHash(preflightSuite) !== protocol.preflightPlan.suiteHash) throw new Error('Managed preflight suite mismatch')
   await mkdir(options.reportDirectory, { recursive: true, mode: 0o700 })
   const lease = options.ledger.claim(options.trialId, 30000)
   const controller = new AbortController()
@@ -70,7 +80,15 @@ export async function runManagedTrial(options: {
     comparison: ReturnType<typeof comparePackageOutputs>
     resources: { label: Variant['label'], assessment: ReturnType<typeof assessPackageResources> }[]
   }[] = []
+  let preflight: { reportHash: string, status: 'failed' | 'incomplete' | 'external_checks_passed' } | undefined
   try {
+    if (protocol.preflightPlan && candidate) {
+      const report = await runPackagePreflight({ ...candidate, signal: controller.signal }, protocol.preflightPlan, preflightSuite)
+      const reportHash = dataHash(report)
+      options.ledger.renew(lease, 30000)
+      await publishJson(join(options.reportDirectory, `${reportHash}.json`), report)
+      preflight = { reportHash, status: report.status }
+    }
     for (const night of study.nights.filter(night => night.split === trial.request.split)) {
       controller.signal.throwIfAborted()
       options.ledger.renew(lease, 30000)
@@ -108,7 +126,7 @@ export async function runManagedTrial(options: {
       report: uncertainty(nights.map(night => ({ cohortId: night.nightId,
         difference: night.comparison.comparisons.find(comparison => comparison.candidate === 'candidate' && comparison.baseline === baseline)?.differences.commonMae ?? null })), protocol.uncertainty) }))
     const report = { schema: 'biometric-managed-trial-v1', trialId: lease.trialId, attemptId: lease.attemptId,
-      study, protocol, request: trial.request, nights, uncertainty: uncertaintyReports, exposureAtClaim: lease,
+      study, protocol, request: trial.request, ...(preflight ? { preflight } : {}), nights, uncertainty: uncertaintyReports, exposureAtClaim: lease,
       interpretation: 'requires_current_ledger_exposure_check_and_full_qualification_review' }
     const reportHash = dataHash(report)
     options.ledger.renew(lease, 30000)
@@ -118,7 +136,7 @@ export async function runManagedTrial(options: {
   }
   catch (error) {
     controller.abort()
-    const report = { schema: 'biometric-managed-trial-failure-v1', trialId: lease.trialId, attemptId: lease.attemptId, nights,
+    const report = { schema: 'biometric-managed-trial-failure-v1', trialId: lease.trialId, attemptId: lease.attemptId, ...(preflight ? { preflight } : {}), nights,
       error: error instanceof Error ? error.message.slice(0, 1000) : 'Managed trial failed' }
     const reportHash = dataHash(report)
     await publishJson(join(options.reportDirectory, `${reportHash}.json`), report)

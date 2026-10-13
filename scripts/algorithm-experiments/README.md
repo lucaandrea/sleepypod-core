@@ -442,9 +442,36 @@ it incomplete. Cancellation propagates to active experiments and stops further
 fixtures/repeats. Reports retain the exact plan and its hash, fixture report,
 per-fixture determinism reports, resource assessments and bounded errors.
 
-`external_checks_passed` is external preflight only. Connecting the preflight
-artifact to the durable study's frozen qualification plan and final decision
-remains required; standalone reports cannot prove holdout independence or pod
-fitness. The candidate still needs representative fixture review, current
+`external_checks_passed` is external preflight only. Managed studies can bind
+the preflight artifact as described below; standalone reports cannot prove
+holdout independence or pod fitness. The final combined qualification decision
+remains separate. The candidate still needs representative fixture review, current
 held-out accuracy, target-pod compatibility/resources, and normal reviewed
 release promotion before it can become live.
+
+## Binding preflight to a managed study
+
+Include `preflightPlan` in the managed protocol and `preflightSuite` (a suite-file
+path relative to the descriptor) in the managed descriptor. Both are required
+together. The study protocol hash freezes the plan, including suite identity,
+repetitions and candidate configuration/seed. Its hardware, rate and side must
+match the managed study. The runner snapshots the suite before asynchronous work
+and rejects mismatches before claiming a trial.
+
+During the leased attempt, preflight runs under the same cancellation heartbeat
+before night comparisons. Its complete report, including candidate manifest, is
+published by content hash and referenced by the final trial report. Failed or
+incomplete preflight remains visible alongside the night results; completing a
+trial does not imply that preflight passed. Failure reports retain a completed
+preflight reference if a later step fails. Legacy trials without a plan have no
+preflight evidence and cannot supply that qualification dimension.
+
+The retained-evidence verifier reopens the bound preflight artifact and checks
+its plan, candidate/image, exact fixture set, fixture inputs and output protocol,
+resource limits and measurements, repeat count, run identities and determinism
+hashes. It recomputes fixture outcomes, resource assessments, missing categories
+and overall status. Missing, altered or inconsistent artifacts fail cached reuse.
+Completed file workflows do not reread the original suite or night input files.
+The managed receipt exposes verified preflight status alongside accuracy; target
+pod compatibility, representative-fixture review and release promotion remain
+required before an algorithm can become live.
