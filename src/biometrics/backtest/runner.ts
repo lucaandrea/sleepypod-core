@@ -1,3 +1,6 @@
+import { verifyReplayContext } from '../profiles/replay-context'
+import { datasetManifestSchema } from './contracts'
+import { installedPromotionPolicies, unqualifiedPolicies } from '../profiles/qualification-registry'
 import { numericObjectivePolicies } from './contracts'
 import { finalizeObjectiveReport, finalizeStageObjectiveReport } from './objective-finalization'
 import { createJobOperations, type AdmissionReceipt } from './job-operations'
@@ -95,8 +98,24 @@ export async function executeNextBacktest(db: BetterSQLite3Database<typeof schem
       || identity.nights.length !== progress.totalNights || progress.completedNights !== progress.totalNights) throw new Error('Worker report identity/progress mismatch')
     if (controller.signal.aborted) throw new Error('Replay cancelled')
     const jobOperations = operations.finish()
-    const finalized = finalizeObjectiveReport(report, numericObjectivePolicies(work.job.protocol), jobOperations, null)
-    jobs.complete(lease, { ...finalizeStageObjectiveReport(finalized, work.job.protocol.stageObjectivePolicy, jobOperations, null), jobOperations })
+    let policies = await installedPromotionPolicies(options.workerPath, { evaluatorBuildHash: work.job.evaluatorBuildHash,
+      pythonBuildHash: work.job.waveform?.pythonBuildHash, protocolHash: work.job.protocolHash })
+    let qualificationWarning: string | null = null
+    if (policies.protocolHash && work.job.waveform) {
+      try {
+        verifyReplayContext(z.object({ waveform: z.unknown() }).parse(report).waveform, {
+          cohortIds: datasetManifestSchema.parse(retained.manifest).splitProtocol.assignments.filter(row => row.split === work.job.split).map(row => row.cohortId),
+          configHashes: work.job.configs.map(config => config.resolvedHash), side: retained.side,
+          pythonBuildHash: work.job.waveform.pythonBuildHash, otherSideConfigHash: work.job.waveform.otherSide.resolvedHash,
+        }, policies.waveformContext)
+      }
+      catch {
+        policies = unqualifiedPolicies()
+        qualificationWarning = 'Replay context is outside the installed qualification; this report is descriptive.'
+      }
+    }
+    const finalized = finalizeObjectiveReport(report, numericObjectivePolicies(work.job.protocol), jobOperations, policies.numeric)
+    jobs.complete(lease, { ...finalizeStageObjectiveReport(finalized, work.job.protocol.stageObjectivePolicy, jobOperations, policies.stages), jobOperations, qualificationWarning })
     return { state: 'succeeded' as const, jobId: claimed.id }
   }
   catch {

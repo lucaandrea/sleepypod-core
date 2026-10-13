@@ -458,3 +458,17 @@ limitation codes cannot be designated until the contract is reviewed. Activation
 audit evidence records both the accepted list and the limitations actually observed.
 No production replay-context allowance is installed yet; this gate does not by
 itself qualify any approximation.
+
+
+The publisher and activation service share a release-installed qualification
+registry, `promotion-qualifications.json`, beside the packaged replay worker.
+Its version is `biometric-promotion-qualifications-v1`; each entry pins the full
+protocol, manifest hash, evaluator build hash, optional Python build hash,
+qualification ID, fixture and pod evidence hashes, and replay-context allowance.
+Every objective policy must use the entry's qualification ID. Exactly one matching
+entry is required. Missing, malformed, oversized, duplicate or mismatched entries
+grant no designation. Reads are capped at 256 KiB; no public endpoint writes this
+registry. Evidence hashes identify release-reviewed artifacts; loading a registry
+is not itself a qualification experiment. The publisher additionally rejects
+context outside the registered allowance before awarding metric-level statuses.
+No production registry has been generated or installed yet.
