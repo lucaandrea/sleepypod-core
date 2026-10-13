@@ -1,3 +1,4 @@
+import { recoveryLabelArguments } from './recovery'
 import { execFile } from 'node:child_process'
 import { createHash, randomUUID } from 'node:crypto'
 import { promisify } from 'node:util'
@@ -28,7 +29,7 @@ export async function inspectPythonEnvironment(image: string) {
   imageId.parse(image)
   const name = `sleepypod-environment-${randomUUID()}`
   try {
-    await exec('docker', ['create', '--name', name, '--network', 'none', '--ipc', 'none', '--read-only',
+    await exec('docker', ['create', '--name', name, ...recoveryLabelArguments('environment', 10000), '--network', 'none', '--ipc', 'none', '--read-only',
       '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges=true', '--user', '65534:65534',
       '--pids-limit', '16', '--memory', '134217728', '--memory-swap', '134217728', '--cpus', '1',
       '--ulimit', 'core=0', '--ulimit', 'cpu=5', '--log-driver', 'none', '--restart', 'no', '--no-healthcheck',

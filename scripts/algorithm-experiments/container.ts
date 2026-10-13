@@ -1,3 +1,4 @@
+import { recoveryLabelArguments } from './recovery'
 import { spawn, execFile } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
@@ -86,7 +87,7 @@ export async function executePackageExperiment(options: {
     const deadlineMs = Math.min(resources.wallMs, resources.cpuMs)
     options.signal?.throwIfAborted()
     created = true
-    const creation = await exec('docker', ['create', '--name', name, '--network', 'none', '--ipc', 'none', '--read-only',
+    const creation = await exec('docker', ['create', '--name', name, ...recoveryLabelArguments('experiment', deadlineMs), '--network', 'none', '--ipc', 'none', '--read-only',
       '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges=true', '--user', '65534:65534',
       '--pids-limit', String(resources.processes), '--memory', String(resources.memoryBytes),
       '--memory-swap', String(resources.memoryBytes), '--cpus', '1', '--ulimit', 'core=0',

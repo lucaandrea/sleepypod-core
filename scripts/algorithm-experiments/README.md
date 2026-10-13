@@ -62,8 +62,8 @@ Input hash validation does not establish a clinical reference or holdout split;
 those associations still need the qualification dataset pipeline.
 Package files and outputs are never imported as host code. Cleanup removes the
 owned container and staging directory on normal completion and caught errors;
-hard host termination still needs stale-job recovery before this can become a
-durable service. No arbitrary dependency installation occurs during execution.
+hard host termination is handled by the explicit container recovery sweep
+described below; private staging-file recovery remains separate. No arbitrary dependency installation occurs during execution.
 
 Run the opt-in Docker regression tests with a reviewed Python image:
 
@@ -346,3 +346,26 @@ report without rereading night files. Reusing its idempotency key with changed
 configuration or study fails. Review current exposure again at any later
 promotion decision, since other trials can invalidate first-use evidence.
 A receipt is not an installation or qualification approval.
+
+## Recovery after a terminated experiment controller
+
+```sh
+pnpm biometrics:experiment recover recovery-report.json
+```
+
+Experiment and environment-probe containers carry immutable version, invoking
+host UID, kind and expiry labels. Expiry includes the maximum execution deadline
+plus two minutes for startup and cleanup. Run this command after restarting an
+experiment host and periodically while accepting work. It checks labels, names
+and full container IDs on the currently selected Docker daemon, then force-removes
+only overdue owned containers by immutable ID. Unexpired, unlabelled and foreign
+containers remain untouched. The private report records inspected count and
+removed IDs; repeating a sweep is safe. A daemon outage fails the command and
+must be retried. Legacy containers without these labels require manual review.
+
+Recovery does not retroactively qualify an interrupted trial or erase exposure.
+The ledger's expired lease permits a fresh fenced attempt, with earlier holdout
+access still counted. This sweep does not delete retained reports or staging
+files, and is not a background supervisor: the external host must schedule it.
+Host clock correctness is required for absolute expiry. Storage quotas and
+abandoned private staging-file cleanup remain separate work.
