@@ -736,3 +736,23 @@ Python probe, worker or hardware operation and needs no admission qualification.
 Periodic service scheduling must retain the returned cursor until a sweep ends,
 then start another sweep. Recovery revokes authority; process cleanup confirmation
 and shared replay/shadow resource ownership are separate lifecycle requirements.
+
+## Application service ownership
+
+`startShadowService` creates one `globalThis` service using explicit installation,
+storage and maintenance policy. Repeated starts reuse the same configuration;
+configuration changes require stopping/restarting it. The service snapshots its
+configuration, runs bounded recovery pages at the configured cadence, retains its
+cursor after a failed transaction, and restarts the scan after a completed sweep.
+Recovery continues during a prospective attempt.
+
+Only one local attempt may execute. Cancellation and shutdown abort that attempt
+and await the installed runner's cleanup before releasing its slot. Application
+shutdown calls `stopShadowService` before database closure. The database lease and
+Linux worker lock still enforce authority across processes; this local owner does
+not replace them or serialize replay workers.
+
+This provides an explicit service entry point, not automatic production startup
+or a durable queue. Scheduling still needs a saved candidate revision identity,
+qualified deployment configuration and API/UI wiring. No production resource
+thresholds or qualification evidence are inferred by this service.

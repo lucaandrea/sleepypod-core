@@ -148,6 +148,15 @@ async function gracefulShutdown(signal: string): Promise<void> {
     console.error('Error stopping biometrics retention:', error)
   }
 
+  // Drain shadow workers before closing database connections.
+  try {
+    const { stopShadowService } = await import('@/src/biometrics/shadow/service-host')
+    await stopShadowService()
+  }
+  catch (error) {
+    console.error('Error stopping biometric shadow service:', error)
+  }
+
   // Drain replay work before closing its database connections.
   try {
     await stopBacktestHost()
