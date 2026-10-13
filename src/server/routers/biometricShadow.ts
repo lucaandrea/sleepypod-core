@@ -1,13 +1,15 @@
 import { z } from 'zod'
 import { TRPCError } from '@trpc/server'
 import { publicProcedure, router } from '@/src/server/trpc'
-import { biometricsDb } from '@/src/db'
+import { biometricsDb, db } from '@/src/db'
 import { ShadowStore } from '@/src/biometrics/shadow/store'
 import { describeShadowRun, shadowRunDescriptorSchema, shadowRunPageSchema } from '@/src/biometrics/shadow/descriptors'
-import { cancelShadowServiceAttempt } from '@/src/biometrics/shadow/service-host'
+import { cancelShadowServiceAttempt, startShadowService } from '@/src/biometrics/shadow/service-host'
 import { coordinatorRequest } from '@/src/biometrics/backtest/coordinator-service'
 import { ReferenceInputError } from '@/src/biometrics/references/time'
 import { shadowReportRequestSchema, shadowReportSchema } from '@/src/biometrics/shadow/report-contracts'
+import { submitShadowSchema, submitInstalledShadow } from '@/src/biometrics/shadow/submission'
+import { configuredShadowServiceOptions } from '@/src/biometrics/shadow/startup'
 
 const idSchema = z.object({ id: z.string().uuid() }).strict()
 async function inspect<T>(action: (store: ShadowStore) => T | Promise<T>) {
@@ -16,6 +18,9 @@ async function inspect<T>(action: (store: ShadowStore) => T | Promise<T>) {
     return await action(new ShadowStore(biometricsDb.$client))
   }
   catch (error) {
+    if (error instanceof Error && error.message === 'Shadow idempotency conflict') throw new TRPCError({ code: 'CONFLICT', message: 'Shadow idempotency conflict' })
+    if (error instanceof Error && error.message === 'Shadow window must be prospective') throw new TRPCError({ code: 'BAD_REQUEST', message: error.message })
+    if (error instanceof Error && ['Shadow plan exceeds storage policy', 'Shadow run quota exceeded'].includes(error.message)) throw new TRPCError({ code: 'PAYLOAD_TOO_LARGE', message: error.message })
     if (error instanceof ReferenceInputError) throw new TRPCError({ code: error.code === 'NOT_FOUND'
       ? 'NOT_FOUND'
       : error.code === 'RESOURCE_LIMIT' ? 'PAYLOAD_TOO_LARGE' : error.code === 'SUBJECT_MISMATCH' ? 'BAD_REQUEST' : 'SERVICE_UNAVAILABLE',
@@ -26,6 +31,15 @@ async function inspect<T>(action: (store: ShadowStore) => T | Promise<T>) {
 }
 
 export const biometricShadowRouter = router({
+  create: publicProcedure
+    .meta({ openapi: { method: 'POST', path: '/biometric-tuning/shadow-runs', protect: false, tags: ['Biometric tuning'] } })
+    .input(submitShadowSchema).output(shadowRunDescriptorSchema)
+    .mutation(({ input }) => inspect(async () => {
+      const options = configuredShadowServiceOptions(db, biometricsDb)
+      if (!options) throw new ReferenceInputError('WORKER_UNAVAILABLE', 'Shadow execution is not configured')
+      startShadowService(options)
+      return describeShadowRun(await submitInstalledShadow(input, options.installation, options.storagePolicy, options.busyTimeoutMs))
+    })),
   report: publicProcedure
     .meta({ openapi: { method: 'GET', path: '/biometric-tuning/shadow-runs/{id}/report', protect: false, tags: ['Biometric tuning'] } })
     .input(idSchema).output(shadowReportSchema)

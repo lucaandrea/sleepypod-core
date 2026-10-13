@@ -9,6 +9,8 @@ const integer = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER)
 const positive = integer.positive()
 const hash = z.string().regex(/^[a-f0-9]{64}$/)
 const metric = z.enum(['heart_rate', 'breathing_rate', 'window_ibi_variability_v1'])
+const binding = z.object({ generation: positive, resolvedHash: hash }).strict()
+export const shadowExpectedBindingsSchema = z.object({ left: binding, right: binding }).strict()
 export const shadowMonitoringSchema = z.object({
   expectedIntervalMs: positive, maximumGapMs: positive, heartbeatStaleMs: positive,
   minimumCandidateCoverage: z.number().positive().max(1), maximumCoverageLoss: z.number().min(0).max(1), minimumQuality: z.number().min(0).max(1),
@@ -19,6 +21,7 @@ export const shadowPlanSchema = z.object({ schema: z.literal('biometric-shadow-p
   execution: shadowExecutionPolicySchema.optional(),
   // Absent on legacy evidence; null explicitly selects the shipped default.
   candidateRevisionId: z.string().uuid().nullable().optional(),
+  expectedBindings: shadowExpectedBindingsSchema.optional(),
   subjectId: z.string().min(1).max(200), monitoring: shadowMonitoringSchema,
   windowIbiWindowMs: positive.max(86400000).optional(),
   joining: z.object({ maximumPendingPoints: positive.max(10000), maximumLatenessMs: positive.max(120000),
@@ -146,21 +149,35 @@ export class ShadowStore {
     }).deferred()
   }
 
-  create(raw: unknown, idempotencyKey: string) {
+  findCreated(raw: unknown, idempotencyKey: string) {
+    const plan = shadowPlanSchema.parse(raw)
+    z.string().min(1).max(200).parse(idempotencyKey)
+    const previous = this.db.prepare('SELECT id, plan_hash FROM biometric_shadow_runs WHERE idempotency_key = ?').get(idempotencyKey) as { id: string, plan_hash: string } | undefined
+    if (!previous) return null
+    if (previous.plan_hash !== dataHash(plan)) throw new Error('Shadow idempotency conflict')
+    return this.get(previous.id)
+  }
+
+  create(raw: unknown, idempotencyKey: string, admit?: (plan: Plan) => void) {
     const policy = this.executionPolicy()
     const plan = shadowPlanSchema.parse(raw), planHash = dataHash(plan)
     z.string().min(1).max(200).parse(idempotencyKey)
     return this.db.transaction(() => {
-      const previous = this.db.prepare('SELECT id, plan_hash FROM biometric_shadow_runs WHERE idempotency_key = ?').get(idempotencyKey) as { id: string, plan_hash: string } | undefined
+      const previous = this.findCreated(plan, idempotencyKey)
       if (previous) {
-        if (previous.plan_hash !== planHash) throw new Error('Shadow idempotency conflict')
-        return this.get(previous.id)
+        return previous
       }
       const now = this.now()
       if (plan.startMs < now) throw new Error('Shadow window must be prospective')
       if (plan.maximumPoints > policy.maximumPoints || plan.maximumBytes > policy.maximumBytes) throw new Error('Shadow plan exceeds storage policy')
       const count = (this.db.prepare('SELECT COUNT(*) AS count FROM biometric_shadow_runs').get() as { count: number }).count
       if (count >= policy.maximumRuns) throw new Error('Shadow run quota exceeded')
+      const admitted: unknown = admit?.(structuredClone(plan))
+      if (admitted !== undefined) {
+        void Promise.resolve(admitted).catch(() => {})
+        throw new Error('Shadow admission must complete synchronously')
+      }
+      if (plan.startMs < this.now()) throw new Error('Shadow window must be prospective')
       const id = randomUUID()
       this.db.prepare(`INSERT INTO biometric_shadow_runs
         (id, idempotency_key, plan_hash, plan, side, state, created_at_ms) VALUES (?, ?, ?, ?, ?, 'pending', ?)`).run(id, idempotencyKey, planHash, canonicalJson(plan), plan.side, now)
@@ -182,7 +199,7 @@ export class ShadowStore {
         if (row.state !== 'pending') continue
         const run = this.get(row.id)
         if (run.attempt_id !== null || run.lease_until_ms !== null) throw new Error('Invalid pending shadow authority')
-        if (!run.plan.execution || run.plan.candidateRevisionId === undefined || now < run.plan.startMs || now >= run.plan.endMs) continue
+        if (!run.plan.execution || !run.plan.expectedBindings || run.plan.candidateRevisionId === undefined || now < run.plan.startMs || now >= run.plan.endMs) continue
         return { run: { runId: run.id, revisionId: run.plan.candidateRevisionId }, nextCursor: row.id }
       }
       return { run: null, nextCursor: rows.length > input.maximumRuns ? batch.at(-1)?.id ?? null : null }

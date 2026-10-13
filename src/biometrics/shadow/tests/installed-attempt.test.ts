@@ -14,7 +14,7 @@ const paths = { workerPath: '/trusted/shadow-host.cjs', pythonPath: '/trusted/py
   configurationDatabase: '/trusted/config.db', biometricsDatabase: '/trusted/bio.db', presenceFile: '/trusted/presence' }
 function setup() {
   const entry = { qualificationId: 'test' }
-  const plan = { candidateRevisionId: null as string | null | undefined, qualificationHash: dataHash(entry), execution: { sources: { databaseBusyTimeoutMs: 50 } } }
+  const plan = { expectedBindings: { left: { generation: 1, resolvedHash: 'a'.repeat(64) }, right: { generation: 1, resolvedHash: 'a'.repeat(64) } }, candidateRevisionId: null as string | null | undefined, qualificationHash: dataHash(entry), execution: { sources: { databaseBusyTimeoutMs: 50 } } }
   const get = vi.fn(() => ({ plan })), execute = vi.fn().mockResolvedValue('completed')
   const registry = vi.fn(() => ({ entries: [entry] })), guard = vi.fn()
   const recover = vi.fn(() => ({ scanned: 1, recovered: [], nextCursor: null }))

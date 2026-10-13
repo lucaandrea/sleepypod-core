@@ -136,6 +136,13 @@ it('allows explicit default candidates but refuses unstored active defaults', ()
   config.prepare('DELETE FROM biometric_profile_bindings WHERE side = \'right\'').run()
   expect(() => resolveShadowProfiles(configReader, bioReader, savedPlan(), null, () => {}, at)).toThrow()
 })
+it('refuses a same-hash active generation change from a queued plan', () => {
+  const { configReader, bioReader } = setup()
+  const expectedBindings = { left: { generation: 1, resolvedHash: hash }, right: { generation: 1, resolvedHash: hash } }
+  expect(resolveShadowProfiles(configReader, bioReader, { ...savedPlan(), expectedBindings }, null, () => {}, at).expectedBindings).toEqual(expectedBindings)
+  expectedBindings.right.generation = 2
+  expect(() => resolveShadowProfiles(configReader, bioReader, { ...savedPlan(), expectedBindings }, null, () => {}, at)).toThrow('generations differ')
+})
 it('rejects wrong-side or corrupted revisions and frozen physical-channel substitution', () => {
   const { configDb, config, configReader, bioReader } = setup()
   const revision = new ProfileStore(configDb).createRevision({ side: 'right', overrides: [], origin: 'manual', requester: 'test', idempotencyKey: 'candidate' })

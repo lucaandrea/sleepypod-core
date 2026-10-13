@@ -811,6 +811,9 @@ The `biometricShadow` tRPC router and corresponding LAN REST endpoints expose:
 
 - `GET /api/biometric-tuning/shadow-runs`: required side, optional `afterId`
   primary-key cursor and `maximumRuns` (1–50, default 20).
+- `POST /api/biometric-tuning/shadow-runs`: a complete proposed `plan` and
+  `idempotencyKey`. The plan must include candidate revision (or explicit default),
+  both active generations/hashes, execution policy and prospective window.
 - `GET /api/biometric-tuning/shadow-runs/{id}`: integrity-checked metadata.
 - `POST /api/biometric-tuning/shadow-runs/{id}/stop`: durable stop followed by
   awaited local attempt cancellation. Repeated calls preserve terminal evidence.
@@ -848,5 +851,25 @@ authorization or an independent holdout claim.
 
 MCP uses these same router operations: `inspect_biometric_calibration` actions
 `shadow_runs`, `shadow_run`, `shadow_report` and `shadow_compare` are read-only;
-`stop_biometric_shadow` is an explicit idempotent mutation. Creation and UI flows
-are not yet exposed by these endpoints.
+`stop_biometric_shadow` is an explicit idempotent mutation.
+`schedule_biometric_shadow` submits a proposed plan through the same creation
+operation. UI flows still need integration.
+
+### Creation admission
+
+Submitted hashes, generations and policy are assertions, not authority. Creation
+loads the verified installed package, checks its Python identity and unique
+installed qualification, resolves the stored candidate and acknowledged active
+profiles, and observes current hardware and health. It opens admission resources
+without claiming a lease, launching a numerical worker or subscribing to sensor
+frames. Final admission runs synchronously inside the creation transaction;
+failure leaves no queued run. Handles and health sampling close on every exit.
+Execution repeats these checks at the actual observation window.
+
+Both active generations are frozen in the plan. A same-hash reset/rollback on
+either side invalidates subsequent profile resolution. Legacy plans lacking
+candidate or generation identity remain inspectable but are not scheduled by the
+installed execution path. Exact idempotent retries return existing evidence before
+new Python/health probes; changed requests with the same key conflict. Creation
+still requires explicit server deployment configuration and the installed package.
+There are no caller-supplied executable paths, numerical configs or health flags.

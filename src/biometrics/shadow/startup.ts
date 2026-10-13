@@ -36,20 +36,27 @@ export function configuredShadowService() {
 export function startConfiguredShadowService(configuration: BetterSQLite3Database<typeof configSchema>,
   biometrics: BetterSQLite3Database<typeof biometricsSchema>) {
   try {
-    const options = configuredShadowService()
-    if (!options) return null
-    const configurationDatabase = absolutePath.parse(configuration.all<{ name: string, file: string }>(sql`PRAGMA database_list`).find(row => row.name === 'main')?.file)
-    const biometricsDatabase = absolutePath.parse(biometrics.all<{ name: string, file: string }>(sql`PRAGMA database_list`).find(row => row.name === 'main')?.file)
-    if (configurationDatabase === biometricsDatabase) throw new Error('Shadow databases must be separate')
-    return startShadowService({ installation: { workerPath: packagedShadowHostPath(),
-      pythonPath: options.pythonPath, modulesPath: options.modulesPath, presenceFile: options.presenceFile,
-      configurationDatabase, biometricsDatabase }, storagePolicy: options.storagePolicy,
-    busyTimeoutMs: options.busyTimeoutMs, recoveryIntervalMs: options.recoveryIntervalMs,
-    recoveryMaximumRuns: options.recoveryMaximumRuns })
+    const options = configuredShadowServiceOptions(configuration, biometrics)
+    return options ? startShadowService(options) : null
   }
   catch {
     // Avoid exposing deployment paths or arbitrary environment content in logs.
     console.warn('[biometrics] Shadow service unavailable; check deployment configuration and installed package')
     return null
   }
+}
+
+/** Resolve server-owned paths for submission without starting background work. */
+export function configuredShadowServiceOptions(configuration: BetterSQLite3Database<typeof configSchema>,
+  biometrics: BetterSQLite3Database<typeof biometricsSchema>) {
+  const options = configuredShadowService()
+  if (!options) return null
+  const configurationDatabase = absolutePath.parse(configuration.all<{ name: string, file: string }>(sql`PRAGMA database_list`).find(row => row.name === 'main')?.file)
+  const biometricsDatabase = absolutePath.parse(biometrics.all<{ name: string, file: string }>(sql`PRAGMA database_list`).find(row => row.name === 'main')?.file)
+  if (configurationDatabase === biometricsDatabase) throw new Error('Shadow databases must be separate')
+  return { installation: { workerPath: packagedShadowHostPath(),
+    pythonPath: options.pythonPath, modulesPath: options.modulesPath, presenceFile: options.presenceFile,
+    configurationDatabase, biometricsDatabase }, storagePolicy: options.storagePolicy,
+  busyTimeoutMs: options.busyTimeoutMs, recoveryIntervalMs: options.recoveryIntervalMs,
+  recoveryMaximumRuns: options.recoveryMaximumRuns }
 }

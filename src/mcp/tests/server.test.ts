@@ -42,7 +42,7 @@ const callerMock = vi.hoisted(() => {
       delete: fn(), create: fn(), update: fn(),
     },
     databases: { checkIntegrity: fn() },
-    biometricShadow: { list: fn(), get: fn(), stop: fn(), report: fn(), compare: fn() },
+    biometricShadow: { list: fn(), get: fn(), stop: fn(), report: fn(), compare: fn(), create: fn() },
     biometricTuning: {
       getReplayAdmission: fn(), listRawSources: fn(), inspectRawSource: fn(), createWaveformDataset: fn(),
       getManifest: fn(), getProfileOverview: fn(), listSessions: fn(), getSessionCapabilities: fn(), listImports: fn(),
@@ -139,6 +139,7 @@ describe('sleepypod MCP server', () => {
       'release_biometric_artifacts',
       'resume_schedule',
       'run_once_curve',
+      'schedule_biometric_shadow',
       'set_device_settings',
       'set_power',
       'set_side_settings',
@@ -649,6 +650,12 @@ describe('sleepypod MCP server', () => {
     const client = await connect(), api = callerMock.biometricShadow
     const id = '11111111-1111-4111-8111-111111111111'
     api.list.mockResolvedValue({ items: [{ id }], nextCursor: null })
+    const { submissionFixture } = await import('@/src/biometrics/shadow/tests/fixtures/submission')
+    const proposed = submissionFixture()
+    api.create.mockResolvedValue({ id, state: 'pending' })
+    const scheduled = await client.callTool({ name: 'schedule_biometric_shadow', arguments: proposed }) as CallToolResult
+    expect(parse(scheduled)).toMatchObject({ id, state: 'pending' })
+    expect(api.create).toHaveBeenCalledWith(proposed)
     api.get.mockResolvedValue({ id, state: 'running' })
     api.stop.mockResolvedValue({ run: { id, state: 'stopped' }, localAttemptSettled: false })
     const listed = await client.callTool({ name: 'inspect_biometric_calibration', arguments: { request: { action: 'shadow_runs', side: 'left', maximumRuns: 5 } } }) as CallToolResult

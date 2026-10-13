@@ -31,6 +31,7 @@ function sample(sequence = 0) {
 }
 const joining = { maximumPendingPoints: 10, maximumLatenessMs: 1000, drainGraceMs: 2000 }
 const executable = { ...plan, joining, candidateRevisionId: null,
+  expectedBindings: { left: { generation: 1, resolvedHash: hash }, right: { generation: 1, resolvedHash: hash } },
   execution: { version: 'shadow-execution-policy-v1', configHashes: { left: hash, right: hash },
     maximumRecords: 10, maximumOutputs: 10, maximumCpuMs: 1000, maximumInputBytes: 100000, maximumOutputBytes: 100000,
     budgets: { cpuSeconds: 2, addressSpaceBytes: 100000000, maximumRssBytes: 100000000, wallMs: 10000, acknowledgmentMs: 1000, idleMs: 1000, rssIntervalMs: 100, rssTimeoutMs: 100 },

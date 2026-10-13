@@ -103,7 +103,18 @@ export async function runPlannedShadowAttempt(store: ShadowStore, runId: string,
  * captured generations after these snapshot handles have been closed. */
 export async function runProfiledShadowAttempt(store: ShadowStore, runId: string,
   installation: Omit<ShadowHostInstallation, 'configs' | 'expectedBindings'>, revisionId: string | null, signal?: AbortSignal) {
-  const plan = store.get(runId).plan
+  const owned = await openProfiledShadowHost(store.get(runId).plan, installation, revisionId, signal)
+  try {
+    return await runShadowAttempt(store, runId, owned.host, owned.signal)
+  }
+  finally { owned.close() }
+}
+
+/** Admission-only preparation for a proposed plan. Does not launch a worker,
+ * claim a lease or open sensor sources. Caller owns the returned resources. */
+export async function openProfiledShadowHost(rawPlan: unknown,
+  installation: Omit<ShadowHostInstallation, 'configs' | 'expectedBindings'>, revisionId: string | null, signal?: AbortSignal) {
+  const plan = shadowPlanSchema.parse(rawPlan)
   if (!plan.execution) throw new Error('Shadow profile resolution requires execution policy')
   if (signal?.aborted) throw new Error('Shadow attempt cancelled before profile resolution')
   const options = { busyTimeoutMs: plan.execution.sources.databaseBusyTimeoutMs }
@@ -124,5 +135,5 @@ export async function runProfiledShadowAttempt(store: ShadowStore, runId: string
     }
     finally { biometrics?.close() }
   }
-  return runPlannedShadowAttempt(store, runId, { ...installation, configs: resolved.configs, expectedBindings: resolved.expectedBindings }, signal)
+  return openPlannedShadowHost(plan, { ...installation, configs: resolved.configs, expectedBindings: resolved.expectedBindings }, signal)
 }

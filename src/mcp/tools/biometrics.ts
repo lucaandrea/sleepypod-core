@@ -14,6 +14,7 @@ import { createDatasetSchema } from '@/src/biometrics/backtest/datasets'
 import { experimentProtocolSchema } from '@/src/biometrics/backtest/contracts'
 import { traceRequestSchema } from '@/src/biometrics/backtest/trace-contracts'
 import { submitBacktestSchema } from '@/src/biometrics/backtest/submission'
+import { submitShadowSchema } from '@/src/biometrics/shadow/submission-contracts'
 
 const side = z.enum(['left', 'right'])
 const id = z.object({ id: z.string().uuid() }).strict()
@@ -37,6 +38,11 @@ async function getReportSummary(id: string) {
 }
 
 export function registerBiometricTools(server: McpServer) {
+  server.registerTool('schedule_biometric_shadow', {
+    title: 'Schedule a qualified prospective shadow run',
+    description: 'Save a future shadow observation plan after verifying installed qualification, candidate revision, both active generations and fresh health. Uses separate sinks and quotas; does not activate profiles or control hardware. Reuse the exact idempotency key and plan for an uncertain retry.',
+    inputSchema: submitShadowSchema.shape, annotations: write,
+  }, input => runTool(async () => jsonResult(await getCaller().biometricShadow.create(input))))
   server.registerTool('stop_biometric_shadow', {
     title: 'Stop a prospective shadow run',
     description: 'Stop a saved shadow run when requested. Revokes its write authority and waits for local worker cleanup. Preserves samples and terminal evidence; does not activate profiles or change hardware. A settled local attempt is not proof of cleanup in another process.',

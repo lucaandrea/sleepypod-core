@@ -45,6 +45,7 @@ export function resolveShadowProfiles(configuration: Database.Database, biometri
     }
     const left = capture('left'), right = capture('right')
     const expectedBindings = { left: left.expected, right: right.expected }
+    if (plan.expectedBindings && dataHash(plan.expectedBindings) !== dataHash(expectedBindings)) throw new Error('Shadow active generations differ from saved plan')
     const binding = shadowRuntimeBindingReader(configuration, biometrics, { side: plan.side, expected: expectedBindings, assertCurrent: check, now: () => now })()
     if (binding.resolvedHash !== plan.activeConfigHash) throw new Error('Shadow active baseline differs from saved plan')
     const configs = { left: left.resolved, right: right.resolved, [plan.side]: candidate }

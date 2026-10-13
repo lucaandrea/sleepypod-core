@@ -43,7 +43,7 @@ it('packages the host without live service imports and binds its exact bytes', a
     const loaded = loadInstalledShadowHost(path), api = loaded.api
     loaded.assertCurrent()
     expect(loadInstalledShadowHost(path).api).toBe(api)
-    expect(Object.keys(api).sort()).toEqual(['ShadowStore', 'readInstalledShadowQualifications', 'runProfiledShadowAttempt',
+    expect(Object.keys(api).sort()).toEqual(['ShadowStore', 'openProfiledShadowHost', 'readInstalledShadowQualifications', 'runProfiledShadowAttempt',
       'shadowEngineBuildIdentity', 'shadowHostApiVersion', 'shadowPlanSchema', 'shadowStoragePolicySchema'].sort())
     const dependencies = JSON.parse(await readFile(join(directory, 'shadow-host-dependencies.json'), 'utf8')) as string[]
     expect(dependencies).toContain('src/biometrics/algorithms/registry.ts')

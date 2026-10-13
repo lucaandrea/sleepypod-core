@@ -6,14 +6,17 @@ import { generateOpenApiDocument } from 'trpc-to-openapi'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { ShadowStore } from '@/src/biometrics/shadow/store'
 import { readShadowReport } from '@/src/biometrics/shadow/report-operation'
-import { cancelShadowServiceAttempt } from '@/src/biometrics/shadow/service-host'
+import { cancelShadowServiceAttempt, startShadowService } from '@/src/biometrics/shadow/service-host'
 import { biometricShadowRouter } from '../biometricShadow'
+import * as submission from '@/src/biometrics/shadow/submission'
+import * as startup from '@/src/biometrics/shadow/startup'
+import { submissionFixture } from '@/src/biometrics/shadow/tests/fixtures/submission'
 
 const holder = vi.hoisted(() => ({ db: null as unknown }))
-vi.mock('@/src/db', () => ({ get biometricsDb() {
+vi.mock('@/src/db', () => ({ db: {}, get biometricsDb() {
   return { $client: holder.db }
 } }))
-vi.mock('@/src/biometrics/shadow/service-host', () => ({ cancelShadowServiceAttempt: vi.fn() }))
+vi.mock('@/src/biometrics/shadow/service-host', () => ({ cancelShadowServiceAttempt: vi.fn(), startShadowService: vi.fn() }))
 vi.mock('@/src/biometrics/backtest/coordinator-service', () => ({ coordinatorRequest: async (_db: unknown, task: { input: Parameters<typeof readShadowReport>[1] }) => readShadowReport(holder.db as Database.Database, task.input) }))
 const now = 1700000000000, hash = 'a'.repeat(64)
 const plan = { schema: 'biometric-shadow-plan-v1', side: 'left', subjectId: 'sleeper', startMs: now, endMs: now + 60000,
@@ -34,6 +37,7 @@ beforeEach(() => {
 afterEach(() => {
   db.close()
   vi.resetAllMocks()
+  vi.restoreAllMocks()
 })
 
 it('lists bounded side-specific metadata and preserves legacy identity ambiguity', async () => {
@@ -101,10 +105,26 @@ it('cannot create, claim or append with an inspection-only store', () => {
 it('publishes concrete REST contracts for inspection and stop', () => {
   const document = generateOpenApiDocument(biometricShadowRouter, { title: 'Shadow', version: '1.0.0', baseUrl: 'http://localhost/api' })
   expect(document.paths?.['/biometric-tuning/shadow-runs']?.get).toBeDefined()
+  expect(document.paths?.['/biometric-tuning/shadow-runs']?.post).toBeDefined()
   expect(document.paths?.['/biometric-tuning/shadow-runs/{id}']?.get).toBeDefined()
   expect(document.paths?.['/biometric-tuning/shadow-runs/{id}/stop']?.post).toBeDefined()
   expect(document.paths?.['/biometric-tuning/shadow-runs/{id}/report']?.get).toBeDefined()
   expect(document.paths?.['/biometric-tuning/shadow-runs/{id}/compare']?.post).toBeDefined()
+})
+
+it('passes creation only to installed admission with server-owned deployment options', async () => {
+  const input = submissionFixture()
+  const options = { installation: { workerPath: '/installed/shadow-host.cjs', pythonPath: '/installed/python', modulesPath: '/installed/modules',
+    configurationDatabase: '/installed/config.db', biometricsDatabase: '/installed/bio.db', presenceFile: '/run/presence' },
+  storagePolicy: { maximumRuns: 10, maximumPoints: 100, maximumBytes: 100000 }, busyTimeoutMs: 50, recoveryIntervalMs: 1000, recoveryMaximumRuns: 10 }
+  vi.spyOn(startup, 'configuredShadowServiceOptions').mockReturnValue(options)
+  const submit = vi.spyOn(submission, 'submitInstalledShadow').mockImplementation(async proposed => store.create(proposed.plan, proposed.idempotencyKey))
+  expect(await caller.create(input)).toMatchObject({ state: 'pending', candidateIdentitySaved: true })
+  expect(submit).toHaveBeenCalledWith(input, options.installation, options.storagePolicy, 50)
+  expect(startShadowService).toHaveBeenCalledWith(options)
+  vi.mocked(startup.configuredShadowServiceOptions).mockReturnValue(null)
+  await expect(caller.create(input)).rejects.toMatchObject({ code: 'SERVICE_UNAVAILABLE' })
+  expect(submit).toHaveBeenCalledOnce()
 })
 
 it('returns bounded report contracts and rejects reference sleeper substitution', async () => {

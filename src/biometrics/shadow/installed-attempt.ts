@@ -26,6 +26,7 @@ export async function runInstalledShadowAttempt(runId: string, revisionId: strin
   try {
     const store = new inspected.api.ShadowStore(database.db, policy)
     const plan = store.get(runId).plan
+    if (!plan.expectedBindings) throw new Error('Shadow active generations missing from saved plan')
     if (plan.candidateRevisionId === undefined || plan.candidateRevisionId !== revisionId) throw new Error('Shadow candidate revision differs from saved plan')
     if (!plan.execution || busyTimeoutMs > plan.execution.sources.databaseBusyTimeoutMs) throw new Error('Shadow store timeout exceeds saved execution policy')
     const entries = inspected.api.readInstalledShadowQualifications(paths.workerPath).entries.filter(entry => dataHash(entry) === plan.qualificationHash)

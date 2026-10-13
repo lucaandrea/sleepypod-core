@@ -50,7 +50,7 @@ export function loadInstalledShadowHost(hostPath: string) {
     if (require.cache[path]) throw new Error('Shadow host was loaded without installed identity verification')
     const api = require(path) as Partial<API>
     if (signature(path) !== before) throw new Error('Shadow host changed while loading')
-    if (api.shadowHostApiVersion !== 'shadow-host-api-v1' || ['runProfiledShadowAttempt', 'ShadowStore', 'shadowEngineBuildIdentity', 'readInstalledShadowQualifications']
+    if (api.shadowHostApiVersion !== 'shadow-host-api-v1' || ['runProfiledShadowAttempt', 'openProfiledShadowHost', 'ShadowStore', 'shadowEngineBuildIdentity', 'readInstalledShadowQualifications']
       .some(name => typeof api[name as keyof API] !== 'function') || !api.shadowPlanSchema || !api.shadowStoragePolicySchema) throw new Error('Invalid installed shadow host API')
     cached = { path, signature: before, hostHash, api: api as API }
     state.__sleepypodInstalledShadowHostV1 = cached
