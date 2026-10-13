@@ -10,9 +10,10 @@ import { validateShadowWorkerReceipt } from '../receipt'
 import { ShadowStore } from '../store'
 import { runShadowAttempt, type ShadowAttemptHost } from '../attempt'
 
-const worker = vi.hoisted(() => ({ calls: 0, cleaned: false, fail: false, corruptReceipt: false }))
+const worker = vi.hoisted(() => ({ calls: 0, cleaned: false, fail: false, corruptReceipt: false, cleanupUnconfirmed: false }))
 vi.mock('../worker-child', () => ({ runShadowChild: async (_location: unknown, init: { side: string, configHashes: Record<string, string> }, frames: AsyncIterable<{ observedAtMs: number }>, output: (row: unknown) => void, options: { budgets: unknown }) => {
   worker.calls++
+  let result
   try {
     let sequence = 0
     for await (const frame of frames) {
@@ -24,13 +25,18 @@ vi.mock('../worker-child', () => ({ runShadowChild: async (_location: unknown, i
           { metric: 'window_ibi_variability_v1', unit: 'ms', windowMs: 300000, value: null, quality: 0 },
         ] })
     }
-    return { health: { state: 'completed', reason: 'window_complete', records: sequence, outputs: sequence, cpu_ms: 1,
+    result = { health: { state: 'completed', reason: 'window_complete', records: sequence, outputs: sequence, cpu_ms: 1,
       input_hash: 'a'.repeat(64), counts: { records: sequence, accepted_frames: sequence, empty_channel_frames: 0,
         pump_gated_frames: 0, preroll_outputs: 0, scored_outputs: sequence }, limitations: [] },
     inputBytes: worker.corruptReceipt ? 100001 : 100, outputBytes: 100, peakObservedRssBytes: 1000, rssSamples: 2, maximumObservationGapMs: 100,
     budgets: options.budgets, memoryScope: 'sum_rss_of_shadow_process_group', exactKernelPeak: false }
   }
+  catch (error) {
+    if (!worker.cleanupUnconfirmed) throw error
+  }
   finally { worker.cleaned = true }
+  if (worker.cleanupUnconfirmed) throw Object.assign(new Error('shadow_worker_cleanup_unconfirmed'), { code: 'SHADOW_CLEANUP_UNCONFIRMED' })
+  return result
 } }))
 const start = 1700000000000, hash = configHash(defaultConfig)
 const databases: Database.Database[] = []
@@ -41,6 +47,7 @@ beforeEach(() => {
   worker.cleaned = false
   worker.fail = false
   worker.corruptReceipt = false
+  worker.cleanupUnconfirmed = false
 })
 afterEach(() => {
   vi.useRealTimers()
@@ -369,4 +376,16 @@ it('fails completion after cleanup when the worker receipt violates the saved bu
   await rejected
   expect(worker.cleaned).toBe(true)
   expect(store.get(run.id)).toMatchObject({ state: 'failed', workerReceipt: null, reason: 'shadow_completion_failed' })
+})
+
+it('preserves cleanup uncertainty through cancellation and durable failure evidence', async () => {
+  const { store, run, host } = setup()
+  worker.cleanupUnconfirmed = true
+  const abort = new AbortController()
+  const task = runShadowAttempt(store, run.id, host, abort.signal)
+  const rejected = expect(task).rejects.toMatchObject({ code: 'SHADOW_CLEANUP_UNCONFIRMED' })
+  await vi.advanceTimersByTimeAsync(0)
+  abort.abort()
+  await rejected
+  expect(store.get(run.id)).toMatchObject({ state: 'failed', reason: 'shadow_worker_cleanup_unconfirmed', workerReceipt: null })
 })

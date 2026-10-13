@@ -947,3 +947,22 @@ and definite rejections clear the record. A failed storage write prevents sendin
 invalid or inaccessible recovery blocks new scheduling while preserving the record.
 Closing the tab, clearing browser data, or moving to another origin does not carry
 recovery forward. The record contains plan metadata, not reference rows or waveforms.
+
+
+### Unconfirmed local cleanup
+
+A process-group kill refusal or direct-child cleanup deadline now raises
+`SHADOW_CLEANUP_UNCONFIRMED`, preserving the original worker failure as its cause.
+This result takes precedence over an earlier cancellation or processing error;
+the attempt writes `shadow_worker_cleanup_unconfirmed` when its fenced state
+still permits a failure update. Existing terminal operator-stop evidence is not
+rewritten. Reports label this failure as unconfirmed cleanup.
+
+The local service quarantines numerical scheduling after that result, while
+continuing bounded database recovery. Local cancellation returns false instead
+of claiming settlement; ordinary task failures with settled cleanup still release
+the slot. The marker is recognized across the separately packaged host boundary.
+This is local service state, not durable proof of OS cleanup: restarting a host
+must not be treated as verification that old processes are gone. Successful
+SIGKILL delivery and direct-child closure also do not prove that every descendant
+has been reaped. The shared kernel lock remains required across hosts.

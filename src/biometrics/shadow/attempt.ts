@@ -1,4 +1,5 @@
 import type { ShadowExecutionPolicy } from './execution-policy'
+import { isShadowCleanupError } from './cleanup-error'
 import { z } from 'zod'
 import { configHash, dataHash } from '../algorithms/canonical'
 import { validateConfig } from '../algorithms/registry'
@@ -173,7 +174,12 @@ export async function runShadowAttempt(store: ShadowStore, runId: string, host: 
     }
     catch { stop('shadow_source_cleanup_failed') }
     // The subprocess supervisor bounds its own cleanup, including on abortion.
-    if (worker) await worker.catch(() => {})
+    if (worker) await worker.catch((error: unknown) => {
+      if (isShadowCleanupError(error)) {
+        failure = error
+        terminalState = 'failed'
+      }
+    })
   }
   if (!failure) {
     try {
@@ -186,7 +192,7 @@ export async function runShadowAttempt(store: ShadowStore, runId: string, host: 
       store.finish(lease, terminalState, failure.message)
     }
     catch {
-      // Cleanup is complete. An expired original attempt can be marked failed,
+      // The supervisor has settled; cleanup may be unconfirmed. An expired attempt can be marked failed,
       // but this compare-and-set cannot touch a replacement or terminal run.
       try {
         store.failExpired(lease, failure.message)

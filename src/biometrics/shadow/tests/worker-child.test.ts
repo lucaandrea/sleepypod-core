@@ -243,3 +243,25 @@ it('does not send frames beyond the frozen record quota', async () => {
     () => {}, { budgets })).rejects.toThrow(/record quota/)
   reaped()
 })
+
+it('does not hide failed process-group cleanup behind the original protocol error', async () => {
+  state.mode = 'bad'
+  const kill = process.kill.bind(process)
+  const spy = vi.spyOn(process, 'kill').mockImplementation((pid, signal) => {
+    if (pid < 0 && signal === 'SIGKILL') throw Object.assign(new Error('denied'), { code: 'EPERM' })
+    return kill(pid, signal)
+  })
+  try {
+    await expect(run()).rejects.toMatchObject({ code: 'SHADOW_CLEANUP_UNCONFIRMED',
+      message: 'shadow_worker_cleanup_unconfirmed', cause: expect.objectContaining({ message: 'Shadow worker emitted an invalid response' }) })
+  }
+  finally {
+    spy.mockRestore()
+    if (state.pid) {
+      try {
+        kill(-state.pid, 'SIGKILL')
+      }
+      catch { /* The direct child may have exited when its pipes closed. */ }
+    }
+  }
+})

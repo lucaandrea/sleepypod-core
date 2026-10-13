@@ -1,3 +1,4 @@
+import { isShadowCleanupError } from './cleanup-error'
 import { z } from 'zod'
 import type { ShadowStore } from './store'
 
@@ -16,6 +17,7 @@ interface ShadowServiceOptions {
  * execution has finished cleanup. Scheduling reads saved pending plans only. */
 export class ShadowService {
   private stopped = false
+  private cleanupUnconfirmed = false
   private timer: ReturnType<typeof setTimeout> | null = null
   private cursor: string | undefined
   private pendingCursor: string | undefined
@@ -45,7 +47,7 @@ export class ShadowService {
       }
       catch { /* Logging must not disable recovery. */ }
     }
-    if (!this.stopped && !this.active && this.options.pending) {
+    if (!this.stopped && !this.cleanupUnconfirmed && !this.active && this.options.pending) {
       try {
         const result = this.options.pending({ maximumRuns: this.options.recoveryMaximumRuns,
           ...(this.pendingCursor ? { afterId: this.pendingCursor } : {}) })
@@ -74,12 +76,16 @@ export class ShadowService {
     z.string().uuid().parse(runId)
     z.string().uuid().nullable().parse(revisionId)
     if (this.stopped) throw new Error('Shadow service stopped')
+    if (this.cleanupUnconfirmed) throw new Error('Shadow service worker cleanup unconfirmed')
     if (this.active) throw new Error('Shadow service busy')
     const controller = new AbortController()
     // Defer execution so even synchronous failure cannot leave a stale slot.
     const done = Promise.resolve().then(() => {
       if (controller.signal.aborted) throw new Error('Shadow attempt cancelled')
       return this.options.execute(runId, revisionId, controller.signal)
+    }).catch((error: unknown) => {
+      if (isShadowCleanupError(error)) this.cleanupUnconfirmed = true
+      throw error
     }).finally(() => {
       if (this.active?.done === done) this.active = null
     })
@@ -93,7 +99,7 @@ export class ShadowService {
     if (!active || active.runId !== runId) return false
     active.controller.abort()
     await active.done.catch(() => {})
-    return true
+    return !this.cleanupUnconfirmed
   }
 
   async stop() {

@@ -153,3 +153,24 @@ it('cancels before starting a deferred worker and releases synchronous failures'
   expect(await service.run(otherId, null)).toBe('complete')
   await service.stop()
 })
+
+it('quarantines scheduling after unconfirmed cleanup while maintenance continues', async () => {
+  vi.useFakeTimers()
+  const { execute, recover } = setup()
+  const pending = vi.fn(() => ({ run: { runId, revisionId: null }, nextCursor: runId }))
+  let reject!: (error: Error) => void
+  execute.mockImplementation(() => new Promise((_resolve, fail) => {
+    reject = fail
+  }))
+  const service = new ShadowService({ execute, recover, pending, recoveryIntervalMs: 100, recoveryMaximumRuns: 7 })
+  service.start()
+  await Promise.resolve()
+  const cancelled = service.cancel(runId)
+  reject(Object.assign(new Error('shadow_worker_cleanup_unconfirmed'), { code: 'SHADOW_CLEANUP_UNCONFIRMED' }))
+  expect(await cancelled).toBe(false)
+  await vi.advanceTimersByTimeAsync(300)
+  expect(pending).toHaveBeenCalledOnce()
+  expect(recover).toHaveBeenCalledTimes(4)
+  expect(() => service.run(otherId, null)).toThrow('cleanup unconfirmed')
+  await service.stop()
+})

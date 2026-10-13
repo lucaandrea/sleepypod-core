@@ -1,4 +1,5 @@
 import { shadowChildBudgetsSchema as budgetsSchema } from './execution-policy'
+import { ShadowCleanupError } from './cleanup-error'
 import { spawn } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { z } from 'zod'
@@ -43,6 +44,7 @@ export async function runShadowChild(location: { pythonPath: string, modulesPath
     env: { NODE_ENV: 'production', PYTHONPATH: location.modulesPath, LANG: 'C.UTF-8', TZ: 'UTC',
       OPENBLAS_NUM_THREADS: '1', OMP_NUM_THREADS: '1', MKL_NUM_THREADS: '1', NUMEXPR_NUM_THREADS: '1' },
   })
+  let cleanupUnconfirmed = false
   let failure: Error | undefined, closed = false, terminal = false, stopping = false
   let inputBytes = 0, outputBytes = 0, diagnosticBytes = 0, peakRssBytes = 0, rssSamples = 0
   let lastRssAt = performance.now(), maximumObservationGapMs = 0
@@ -186,7 +188,7 @@ export async function runShadowChild(location: { pythonPath: string, modulesPath
         process.kill(-child.pid, 'SIGKILL')
       }
       catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== 'ESRCH') fail('Shadow process group cleanup failed')
+        if ((error as NodeJS.ErrnoException).code !== 'ESRCH') cleanupUnconfirmed = true
       }
     }
     child.stdin.destroy()
@@ -200,11 +202,12 @@ export async function runShadowChild(location: { pythonPath: string, modulesPath
         await Promise.race([exited, new Promise<void>((resolve) => {
           timer = setTimeout(resolve, 5000)
         })])
-        if (!closed) fail('Shadow worker cleanup deadline exceeded')
+        if (!closed) cleanupUnconfirmed = true
       }
       finally { clearTimeout(timer) }
     }
   }
+  if (cleanupUnconfirmed) throw new ShadowCleanupError(failure)
   if (failure) throw failure
   if (!result) throw new Error('Shadow completion missing')
   return result
