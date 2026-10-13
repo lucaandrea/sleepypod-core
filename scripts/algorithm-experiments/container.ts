@@ -2,7 +2,7 @@ import { recoveryLabelArguments } from './recovery'
 import { spawn, execFile } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
-import { mkdtemp, mkdir, writeFile, rm, chmod } from 'node:fs/promises'
+import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { promisify } from 'node:util'
@@ -74,7 +74,9 @@ export async function executePackageExperiment(options: {
     if (frozenInput.hash !== validator.request.inputHash) throw new Error('Experiment input identity mismatch')
     const packagePath = join(root, 'package')
     await mkdir(packagePath, { mode: 0o755 })
-    await chmod(root, 0o755)
+    // Docker mounts only packagePath; its container UID needs access inside that
+    // mount, not traversal of the host parent. Keep the mkdtemp root at 0700 so
+    // host users cannot list package source or the private frozen sensor input.
     for (const artifact of verified.manifest.artifacts) {
       const path = join(packagePath, artifact.path)
       await mkdir(dirname(path), { recursive: true, mode: 0o755 })

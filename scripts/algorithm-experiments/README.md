@@ -60,6 +60,11 @@ from that frozen copy. The hash encoding is UTF-8
 `biometric-package-input-v1\n` followed by each canonical frame plus LF.
 Input hash validation does not establish a clinical reference or holdout split;
 those associations still need the qualification dataset pipeline.
+The host staging parent stays mode 0700, with frozen input mode 0600. Only its
+`package/` subdirectory (0755, files 0444) is bind-mounted read-only. The container
+UID can traverse that mount without granting other host users access through the
+private parent. An opt-in real-Docker test verifies these modes after container
+creation, successful execution as UID 65534, and removal after completion.
 Package files and outputs are never imported as host code. Cleanup removes the
 owned container and staging directory on normal completion and caught errors;
 hard host termination is handled by the explicit container recovery sweep

@@ -1,12 +1,15 @@
 import { fixtureResourceTestPolicy } from './resource-test-policy'
 // @vitest-environment node
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
+import { statSync } from 'node:fs'
+import * as frozenInput from './input'
+import * as resourceReader from './resources'
 import { tmpdir } from 'node:os'
 import { runPackageFixtures } from './fixtures'
 import { runExperimentCli } from './cli'
 import { createHash } from 'node:crypto'
-import { beforeAll, describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, it, vi } from 'vitest'
 import { configHash } from '../../src/biometrics/algorithms/canonical'
 import { packageFixture } from '../../src/biometrics/packages/tests/fixture'
 import { inspectPythonEnvironment } from './environment'
@@ -81,6 +84,34 @@ s.close()
     expect(result.execution.measurements).toMatchObject({ source: 'host_docker_engine_stats', exactPeakMemory: false, exactLifetimeCpu: false })
     expect(result.results).toHaveLength(2)
     expect(result.execution.isolation).toBe('docker-restricted-v1')
+  }, 20000)
+  it('keeps the host staging parent private while the unprivileged container reads its package mount', async () => {
+    let parent: string | undefined
+    let modes: number[] | undefined
+    const freeze = frozenInput.freezePackageInput
+    const readResources = resourceReader.dockerResourceReader
+    const capture = vi.spyOn(frozenInput, 'freezePackageInput').mockImplementation(async (path, frames, maximumBytes) => {
+      parent = dirname(path)
+      return freeze(path, frames, maximumBytes)
+    })
+    const observe = vi.spyOn(resourceReader, 'dockerResourceReader').mockImplementation(async (id) => {
+      if (!parent) throw new Error('Missing staged input')
+      // This runs after Docker create, when all host permissions are final.
+      modes = [parent, join(parent, 'input.jsonl'), join(parent, 'package')].map(path => statSync(path).mode & 0o777)
+      return readResources(id)
+    })
+    try {
+      expect((await executePackageExperiment(options(program))).results).toHaveLength(2)
+      expect(observe).toHaveBeenCalledOnce()
+      expect(modes).toEqual([0o700, 0o600, 0o755])
+      const stagedParent = parent
+      if (!stagedParent) throw new Error('Missing staging')
+      expect(() => statSync(stagedParent)).toThrow()
+    }
+    finally {
+      capture.mockRestore()
+      observe.mockRestore()
+    }
   }, 20000)
   it('runs a complete file-based CLI experiment and publishes a reviewable report', async () => {
     const root = await mkdtemp(join(tmpdir(), 'package-cli-test-'))
