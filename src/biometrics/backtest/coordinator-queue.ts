@@ -5,7 +5,7 @@ import type { CoordinatorTask, CoordinatorResults } from './coordinator-tasks'
 interface Control { signal?: AbortSignal, admit?: () => Promise<boolean> }
 type Lane = 'read' | 'work'
 const taskLanes: Record<CoordinatorTask['type'], Lane> = {
-  pageRawSources: 'read', datasetDescriptor: 'read', readResult: 'read', readSummary: 'read', readTrace: 'read',
+  pageRawSources: 'read', datasetDescriptor: 'read', readResult: 'read', readSummary: 'read', readTrace: 'read', readNumericTrace: 'read',
   createWaveformDataset: 'work', inspectRawSource: 'work', createDataset: 'work', releaseDataset: 'work',
   releaseResult: 'work', createExperiment: 'work', collectArtifacts: 'work', execute: 'work',
 }

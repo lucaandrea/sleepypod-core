@@ -120,12 +120,13 @@ export function registerBiometricTools(server: McpServer) {
 
   server.registerTool('backtest_biometrics', {
     title: 'Start, inspect or cancel a biometric evaluation',
-    description: 'Durable replay never applies a profile or changes hardware. Start pins the candidate and expected binding generation. Report returns compact evidence and a report resource; trace returns at most 500 exact intervals using a pinned report hash and cursor; descriptive or insufficient evidence is not validated improvement.',
+    description: 'Durable replay never applies a profile or changes hardware. Start pins the candidate and expected binding generation. Report returns compact evidence and a report resource; trace returns at most 500 exact stage intervals and numeric_trace returns at most 500 exact recomputed readings for the dataset side using a pinned report hash and cursor; descriptive or insufficient evidence is not validated improvement.',
     inputSchema: { request: z.discriminatedUnion('action', [
       z.object({ action: z.literal('start'), input: submitBacktestSchema }).strict(),
       z.object({ action: z.literal('status'), input: id }).strict(),
       z.object({ action: z.literal('cancel'), input: id }).strict(),
       z.object({ action: z.literal('report'), input: id }).strict(),
+      z.object({ action: z.literal('numeric_trace'), input: traceRequestSchema }).strict(),
       z.object({ action: z.literal('trace'), input: traceRequestSchema }).strict(),
       z.object({ action: z.literal('list'), input: page }).strict(),
     ]) }, annotations: { ...write, destructiveHint: true },
@@ -134,6 +135,7 @@ export function registerBiometricTools(server: McpServer) {
     switch (request.action) {
       case 'start': return jsonResult(await api.enqueueBacktest(request.input))
       case 'status': return jsonResult(await api.getBacktest(request.input))
+      case 'numeric_trace': return jsonResult(await api.getBacktestNumericTrace(request.input))
       case 'trace': return jsonResult(await api.getBacktestTrace(request.input))
       case 'cancel': return jsonResult(await api.cancelBacktest(request.input))
       case 'list': return jsonResult(await api.listBacktests(request.input))

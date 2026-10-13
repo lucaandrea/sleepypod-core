@@ -141,10 +141,24 @@ print(json.dumps({'start':start,'artifacts':artifacts,'inspections':inspections}
     const summary = await runCoordinatorTask(options, { type: 'readSummary', input: { id: job.id } })
     expect(JSON.stringify(summary?.report)).not.toContain('"readings"')
     expect(JSON.stringify(report)).toContain('"readings"')
+    if (!summary) throw new Error('Missing retained report')
+    const numericTrace = await runCoordinatorTask(options, { type: 'readNumericTrace', input: {
+      id: job.id, expectedContentHash: summary.contentHash, configuration: 'candidate', limit: 2,
+    } })
+    expect(numericTrace).toMatchObject({ provenance: 'retained_waveform_recomputation', side: 'left', downsampled: false })
+    expect(numericTrace.totalItems).toBeGreaterThan(0)
+    expect(numericTrace.items.every(row => row.side === 'left')).toBe(true)
+    await expect(runCoordinatorTask(options, { type: 'readNumericTrace', input: {
+      id: job.id, expectedContentHash: '0'.repeat(64), configuration: 'candidate',
+    } })).rejects.toMatchObject({ code: 'REVISION_CONFLICT' })
     const wrongBuild = jobs.enqueue({ ...jobInput, evaluatorBuildHash: '0'.repeat(64), idempotencyKey: 'wrong-signal-build' })
     expect(await runCoordinatorTask(options, { type: 'execute', owner: 'wrong-build' }, { admit: async () => true })).toEqual({ state: 'stopped', jobId: wrongBuild.id })
     expect(jobs.get(wrongBuild.id).state).toBe('failed')
     expect(jobs.result(wrongBuild.id)).toBeNull()
+    jobs.releaseResult(job.id, summary.contentHash)
+    await expect(runCoordinatorTask(options, { type: 'readNumericTrace', input: {
+      id: job.id, expectedContentHash: summary.contentHash, configuration: 'candidate',
+    } })).rejects.toMatchObject({ code: 'RESULT_RELEASED' })
     expect(sqlite.prepare('SELECT heart_rate FROM vitals').all()).toEqual([{ heart_rate: 65 }])
     const reused = await publish({ ...request, idempotencyKey: 'reuse-retained' })
     expect(reused.contentHash).toBe(published.contentHash)

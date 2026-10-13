@@ -275,3 +275,20 @@ a service restart to start a previously disabled host or replace that budget.
 New waveform dataset manifests advertise retained-input replay capability.
 Execution availability remains a separate, current admission query. Older
 immutable manifests and their hashes are not rewritten by this change.
+
+### Exact numeric trace pages
+
+`GET /api/biometric-tuning/backtests/{id}/numeric-trace` (tRPC
+`getBacktestNumericTrace`, MCP `backtest_biometrics` action `numeric_trace`)
+returns up to 500 exact recomputed readings per page. Supply the immutable report
+`expectedContentHash`, configuration label, optional cohort, and offset/limit.
+The next cursor carries the same hash. Released results and stale hashes fail;
+paging does not rerun an experiment or change its scores.
+
+Pages contain only the report dataset's side, within its scoring windows. They
+preserve null readings, quality, flags, routing provenance, and the original
+replay timestamp; `clockOffsetMs` is metadata for reference alignment and is not
+applied to the returned timestamp. Opposite-side readings and internal `hrRaw`
+values are excluded. No downsampling is performed. Historical reports without
+explicit side provenance cannot supply this projection. Numeric trace UI and
+reference overlays remain separate consumers of this API.

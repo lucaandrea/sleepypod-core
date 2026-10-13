@@ -1,3 +1,4 @@
+import { pageNumericTraces } from './numeric-trace-page'
 import type { z } from 'zod'
 import { pageStageTraces } from './trace-page'
 export { pageStageTraces } from './trace-page'
@@ -14,4 +15,13 @@ export function readStageTraces(db: BetterSQLite3Database<typeof schema>, raw: z
   if (result.contentHash !== input.expectedContentHash) throw new ReferenceInputError('REVISION_CONFLICT', 'Trace report hash changed')
   if (!result.available) throw new ReferenceInputError('RESULT_RELEASED', 'Replay report was released')
   return pageStageTraces(result.report, input)
+}
+
+export function readNumericTraces(db: BetterSQLite3Database<typeof schema>, raw: z.input<typeof traceRequestSchema>) {
+  const input = traceRequestSchema.parse(raw)
+  const result = new BacktestJobStore(db).result(input.id)
+  if (!result) throw new ReferenceInputError('INVALID_STATE', 'Wait for a successful replay before reading traces')
+  if (result.contentHash !== input.expectedContentHash) throw new ReferenceInputError('REVISION_CONFLICT', 'Trace report hash changed')
+  if (!result.available) throw new ReferenceInputError('RESULT_RELEASED', 'Replay report was released')
+  return pageNumericTraces(result.report, input)
 }
