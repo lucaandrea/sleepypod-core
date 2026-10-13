@@ -38,8 +38,10 @@ export async function runManagedTrial(options: {
   preflightSuite?: unknown
   variants: Variant[]
   reportDirectory: string
+  publishReport?: typeof publishJson
   loadNight: (id: string) => Promise<{ referenceImport: unknown, frames: () => Iterable<unknown> }>
 }) {
+  const publishReport = options.publishReport ?? publishJson
   const trial = options.ledger.trial(options.trialId)
   if (trial.state === 'succeeded') {
     const evidence = readManagedEvidence(options.ledger, trial.id, options.reportDirectory)
@@ -86,7 +88,7 @@ export async function runManagedTrial(options: {
       const report = await runPackagePreflight({ ...candidate, signal: controller.signal }, protocol.preflightPlan, preflightSuite)
       const reportHash = dataHash(report)
       options.ledger.renew(lease, 30000)
-      await publishJson(join(options.reportDirectory, `${reportHash}.json`), report)
+      await publishReport(join(options.reportDirectory, `${reportHash}.json`), report)
       preflight = { reportHash, status: report.status }
     }
     for (const night of study.nights.filter(night => night.split === trial.request.split)) {
@@ -119,7 +121,7 @@ export async function runManagedTrial(options: {
         resources: outputs.map(output => ({ label: output.label, assessment: assessPackageResources(output.result.execution, protocol.resourcePolicy) })) }
       const reportHash = dataHash(report)
       options.ledger.renew(lease, 30000)
-      await publishJson(join(options.reportDirectory, `${reportHash}.json`), report)
+      await publishReport(join(options.reportDirectory, `${reportHash}.json`), report)
       nights.push({ nightId: night.id, reportHash, comparison, resources: report.resources })
     }
     const uncertaintyReports = (['default', 'current'] as const).map(baseline => ({ baseline,
@@ -130,7 +132,7 @@ export async function runManagedTrial(options: {
       interpretation: 'requires_current_ledger_exposure_check_and_full_qualification_review' }
     const reportHash = dataHash(report)
     options.ledger.renew(lease, 30000)
-    await publishJson(join(options.reportDirectory, `${reportHash}.json`), report)
+    await publishReport(join(options.reportDirectory, `${reportHash}.json`), report)
     options.ledger.finish(lease, 'succeeded', reportHash)
     return { state: 'succeeded' as const, reportHash, evidence: options.ledger.currentEvidence(lease.trialId) }
   }
@@ -142,7 +144,7 @@ export async function runManagedTrial(options: {
     let published = false
     const secondaryErrors: unknown[] = []
     try {
-      await publishJson(join(options.reportDirectory, `${reportHash}.json`), report)
+      await publishReport(join(options.reportDirectory, `${reportHash}.json`), report)
       published = true
     }
     catch (publicationError) { secondaryErrors.push(publicationError) }

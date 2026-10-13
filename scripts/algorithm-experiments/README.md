@@ -324,6 +324,41 @@ for future decisions. Existing public directories, symlinked workspace/report
 paths, symlinked database/sidecar files, and foreign databases are rejected.
 No pod database is opened or migrated.
 
+Managed execution acquires an OS-released SQLite write lock in `.writer.sqlite`
+for the entire workspace operation. Competing controllers fail before changing
+the ledger or starting containers. Never unlink this lock file to resolve a busy
+workspace: doing so would create a second lock inode. A killed controller releases
+the database lock automatically; container and private-staging recovery are still
+separate responsibilities. Low-level trial APIs are trusted building blocks;
+`managed` is the bounded persistent-workspace entry point.
+
+The default workstation storage policy allows 2,048 report files, 1 GiB of total
+report bytes, 32 MiB per report and a 64 MiB ledger, while requiring 1 GiB of free
+space plus room for ledger growth/rollback and the next report. These are off-pod
+storage limits, not production pod resource budgets. Supply a strict JSON policy
+as the optional fourth managed argument to override them:
+
+```sh
+pnpm biometrics:experiment managed WORKSPACE DESCRIPTOR RECEIPT STORAGE_POLICY
+```
+
+Policy fields are `maximumReportFiles`, `maximumReportBytes`,
+`maximumSingleReportBytes`, `maximumDatabaseBytes`, and `minimumFreeBytes`.
+Checks run before work, before each retained-night load, and before each report
+publication. They bound managed report files, including abandoned temporary files,
+and SQLite growth via `max_page_count` with DELETE-mode rollback journals. The
+report directory must contain only private, owned, single-link regular files.
+Symlinks, subdirectories and unsafe database/lock files are rejected. No existing
+reports or exposure history are deleted to satisfy a quota. When publication is
+refused, the failure-finalization behavior below still applies.
+
+Free-space checks are admission snapshots; unrelated applications can consume
+space afterward. The ledger cap plus its rollback journal is accounted separately
+from report bytes. Operator source files, the output receipt path, Docker storage,
+and container input staging outside this workspace are not covered by these
+workspace limits. Their existing per-input/output limits still apply; aggregate
+staging quotas and crash recovery require separate controls.
+
 A descriptor uses `biometric-managed-descriptor-v1` with:
 
 - `study`: the frozen `biometric-package-study-v1`, including all chronological

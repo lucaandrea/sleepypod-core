@@ -1,3 +1,4 @@
+import { defaultWorkspacePolicy } from './workspace'
 // @vitest-environment node
 import Database from 'better-sqlite3'
 import { createHash } from 'node:crypto'
@@ -218,6 +219,7 @@ describe.skipIf(!image)('managed package trials through real Docker', () => {
       await rm(join(root, 'references.json'))
       const repeated = await runManagedFiles(workspace, join(root, 'descriptor.json'))
       expect(repeated).toMatchObject({ state: 'already_completed', trialId: first.trialId, reportHash: first.reportHash, assessmentHash: first.assessmentHash })
+      await expect(runManagedFiles(workspace, join(root, 'descriptor.json'), { ...defaultWorkspacePolicy, maximumReportFiles: 1 })).rejects.toThrow('file quota')
       descriptor.variants[2].config.offset++
       await writeFile(join(root, 'descriptor.json'), JSON.stringify(descriptor))
       await expect(runManagedFiles(workspace, join(root, 'descriptor.json'))).rejects.toThrow('idempotency conflict')

@@ -13,7 +13,7 @@ import { checkPackageDeterminism } from './determinism'
 import { publishJson, readJsonFile, readJsonLines, readPackageProposal } from './files'
 
 const positive = z.number().int().positive().max(Number.MAX_SAFE_INTEGER)
-const usage = 'Usage: preflight PROPOSAL PLAN SUITE POLICY OUTPUT | recover OUTPUT | managed WORKSPACE DESCRIPTOR RECEIPT | compare INPUT OUTPUT | fixtures PROPOSAL SUITE POLICY OUTPUT | lock IMAGE OUTPUT | input-hash FRAMES MAX_BYTES OUTPUT | inspect PROPOSAL OUTPUT | run PROPOSAL REQUEST FRAMES POLICY OUTPUT | determinism PROPOSAL REQUEST FRAMES POLICY REPETITIONS OUTPUT'
+const usage = 'Usage: preflight PROPOSAL PLAN SUITE POLICY OUTPUT | recover OUTPUT | managed WORKSPACE DESCRIPTOR RECEIPT [STORAGE_POLICY] | compare INPUT OUTPUT | fixtures PROPOSAL SUITE POLICY OUTPUT | lock IMAGE OUTPUT | input-hash FRAMES MAX_BYTES OUTPUT | inspect PROPOSAL OUTPUT | run PROPOSAL REQUEST FRAMES POLICY OUTPUT | determinism PROPOSAL REQUEST FRAMES POLICY REPETITIONS OUTPUT'
 
 export async function runExperimentCli(args: string[]) {
   const [command, ...paths] = args
@@ -29,8 +29,8 @@ export async function runExperimentCli(args: string[]) {
     await publishJson(paths[0], await recoverExpiredContainers())
     return
   }
-  if (command === 'managed' && paths.length === 3) {
-    await publishJson(paths[2], await runManagedFiles(paths[0], paths[1]))
+  if (command === 'managed' && (paths.length === 3 || paths.length === 4)) {
+    await publishJson(paths[2], await runManagedFiles(paths[0], paths[1], paths[3] ? readJsonFile(paths[3], 16384) : undefined))
     return
   }
   if (command === 'compare' && paths.length === 2) {

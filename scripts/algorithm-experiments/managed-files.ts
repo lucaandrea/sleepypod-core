@@ -1,3 +1,4 @@
+import { withExperimentWorkspace, defaultWorkspacePolicy } from './workspace'
 import { assessManagedQualification } from './qualification'
 import Database from 'better-sqlite3'
 import { constants } from 'node:fs'
@@ -36,7 +37,7 @@ async function privateDirectory(path: string) {
 
 /** CLI storage boundary. Candidate bytes never choose this workspace or its
  * database path; the operator passes the dedicated private workspace argument. */
-export async function runManagedFiles(workspace: string, descriptorPath: string) {
+export async function runManagedFiles(workspace: string, descriptorPath: string, storagePolicy: unknown = defaultWorkspacePolicy) {
   const descriptor = managedDescriptorSchema.parse(readJsonFile(descriptorPath, 2 * 1024 * 1024))
   const base = dirname(resolve(descriptorPath))
   const variants = descriptor.variants.map((variant) => {
@@ -44,47 +45,51 @@ export async function runManagedFiles(workspace: string, descriptorPath: string)
     return { ...variant, manifest: proposal.manifest, files: proposal.files, packageHash: proposal.packageHash }
   })
   await privateDirectory(workspace)
-  const reports = join(workspace, 'reports')
-  await privateDirectory(reports)
-  const databasePath = join(workspace, 'experiments.sqlite')
-  // Refuse symlinked SQLite files and sidecars before opening SQLite. The
-  // private owned directory excludes mutation by candidate/other-user code.
-  for (const path of [databasePath, databasePath + '-wal', databasePath + '-shm', databasePath + '-journal']) {
+  return withExperimentWorkspace(workspace, storagePolicy, async (owned) => {
+    const reports = join(workspace, 'reports')
+    await privateDirectory(reports)
+    const databasePath = join(workspace, 'experiments.sqlite')
+    // Refuse symlinked SQLite files and sidecars before opening SQLite. The
+    // private owned directory excludes mutation by candidate/other-user code.
+    for (const path of [databasePath, databasePath + '-wal', databasePath + '-shm', databasePath + '-journal']) {
+      try {
+        const stat = await lstat(path)
+        if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1 || (stat.mode & 0o077) !== 0 || (process.getuid && stat.uid !== process.getuid())) throw new Error('Unsafe experiment database file')
+      }
+      catch (error) {
+        if (!(error instanceof Error) || !('code' in error) || error.code !== 'ENOENT') throw error
+      }
+    }
     try {
-      const stat = await lstat(path)
-      if (!stat.isFile() || stat.isSymbolicLink() || (stat.mode & 0o077) !== 0 || (process.getuid && stat.uid !== process.getuid())) throw new Error('Unsafe experiment database file')
+      const created = await open(databasePath, constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY | constants.O_NOFOLLOW, 0o600)
+      await created.close()
     }
     catch (error) {
-      if (!(error instanceof Error) || !('code' in error) || error.code !== 'ENOENT') throw error
+      if (!(error instanceof Error) || !('code' in error) || error.code !== 'EEXIST') throw error
     }
-  }
-  try {
-    const created = await open(databasePath, constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY | constants.O_NOFOLLOW, 0o600)
-    await created.close()
-  }
-  catch (error) {
-    if (!(error instanceof Error) || !('code' in error) || error.code !== 'EEXIST') throw error
-  }
-  const db = new Database(databasePath)
-  try {
-    const ledger = new PackageExperimentLedger(db)
-    const study = ledger.createStudy(descriptor.study)
-    const trialId = ledger.reserveTrial({ studyId: study.id, split: descriptor.split,
-      variants: variants.map(variant => ({ label: variant.label, packageHash: variant.packageHash,
-        configHash: configHash({ config: variant.config, seed: variant.seed }), image: variant.policy.image })) }, descriptor.idempotencyKey)
-    const maximumInputBytes = Math.min(...variants.map(variant => variant.policy.maximumInputBytes))
-    const result = await runManagedTrial({ ledger, trialId, protocol: descriptor.protocol, variants, reportDirectory: reports,
-      preflightSuite: descriptor.preflightSuite && ledger.trial(trialId).state !== 'succeeded' ? readJsonFile(resolve(base, descriptor.preflightSuite), 32 * 1024 * 1024) : undefined,
-      loadNight: async (id) => {
-        const source = descriptor.nights.find(night => night.id === id)
-        if (!source) throw new Error('Missing retained night source')
-        return { referenceImport: readJsonFile(resolve(base, source.referenceImport), 2 * 1024 * 1024),
-          frames: () => readJsonLines(resolve(base, source.frames), maximumInputBytes) }
-      } })
-    const reviewed = assessManagedQualification(ledger, trialId, reports)
-    return { schema: 'biometric-managed-receipt-v1' as const, studyId: study.id, trialId, ...result,
-      currentEvidence: reviewed.currentEvidence, accuracy: reviewed.qualification.accuracy, preflight: reviewed.qualification.preflight,
-      qualification: reviewed.qualification, assessmentHash: reviewed.assessmentHash, reportFile: join(reports, `${result.reportHash}.json`) }
-  }
-  finally { db.close() }
+    const db = new Database(databasePath)
+    try {
+      owned.configureDatabase(db)
+      const ledger = new PackageExperimentLedger(db)
+      const study = ledger.createStudy(descriptor.study)
+      const trialId = ledger.reserveTrial({ studyId: study.id, split: descriptor.split,
+        variants: variants.map(variant => ({ label: variant.label, packageHash: variant.packageHash,
+          configHash: configHash({ config: variant.config, seed: variant.seed }), image: variant.policy.image })) }, descriptor.idempotencyKey)
+      const maximumInputBytes = Math.min(...variants.map(variant => variant.policy.maximumInputBytes))
+      const result = await runManagedTrial({ ledger, trialId, protocol: descriptor.protocol, variants, reportDirectory: reports, publishReport: owned.publishReport,
+        preflightSuite: descriptor.preflightSuite && ledger.trial(trialId).state !== 'succeeded' ? readJsonFile(resolve(base, descriptor.preflightSuite), 32 * 1024 * 1024) : undefined,
+        loadNight: async (id) => {
+          await owned.checkCapacity()
+          const source = descriptor.nights.find(night => night.id === id)
+          if (!source) throw new Error('Missing retained night source')
+          return { referenceImport: readJsonFile(resolve(base, source.referenceImport), 2 * 1024 * 1024),
+            frames: () => readJsonLines(resolve(base, source.frames), maximumInputBytes) }
+        } })
+      const reviewed = assessManagedQualification(ledger, trialId, reports)
+      return { schema: 'biometric-managed-receipt-v1' as const, studyId: study.id, trialId, ...result,
+        currentEvidence: reviewed.currentEvidence, accuracy: reviewed.qualification.accuracy, preflight: reviewed.qualification.preflight,
+        qualification: reviewed.qualification, assessmentHash: reviewed.assessmentHash, reportFile: join(reports, `${result.reportHash}.json`) }
+    }
+    finally { db.close() }
+  })
 }
