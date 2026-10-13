@@ -28,6 +28,41 @@ describe('migrations smoke test', () => {
     }
   })
 
+  it('upgrades a stage-editor database without losing its change history', () => {
+    const migrationsDir = path.resolve(process.cwd(), 'src/db/migrations')
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'calibration-upgrade-'))
+    const raw = new Database(':memory:')
+    try {
+      fs.cpSync(migrationsDir, tmpDir, { recursive: true })
+      const journalPath = path.join(tmpDir, 'meta/_journal.json')
+      const journal = JSON.parse(fs.readFileSync(journalPath, 'utf-8')) as {
+        entries: Array<{ idx: number, when: number, tag: string }>
+      }
+      for (let i = 1; i < journal.entries.length; i++) {
+        expect(journal.entries[i].when).toBeGreaterThan(journal.entries[i - 1].when)
+      }
+      journal.entries = journal.entries.filter(entry => entry.idx <= 23)
+      fs.writeFileSync(journalPath, JSON.stringify(journal))
+      const db = drizzle(raw, { schema })
+      migrate(db, { migrationsFolder: tmpDir })
+      raw.prepare('INSERT INTO stage_classifier_changes (side, summary) VALUES (?, ?)')
+        .run('left', 'Existing rules')
+      expect(() => migrate(db, { migrationsFolder: migrationsDir })).not.toThrow()
+      expect(raw.prepare('SELECT side, summary FROM stage_classifier_changes').all())
+        .toEqual([{ side: 'left', summary: 'Existing rules' }])
+      for (const name of ['biometric_profile_revisions', 'biometric_profile_bindings',
+        'biometric_activation_events', 'biometric_config_outbox']) {
+        expect(raw.prepare('SELECT name FROM sqlite_master WHERE type = ? AND name = ?')
+          .get('table', name)).toEqual({ name })
+      }
+      expect(() => migrate(db, { migrationsFolder: migrationsDir })).not.toThrow()
+    }
+    finally {
+      raw.close()
+      fs.rmSync(tmpDir, { recursive: true, force: true })
+    }
+  })
+
   it('biometrics DB migrations apply cleanly from empty', () => {
     const raw = new Database(':memory:')
     try {

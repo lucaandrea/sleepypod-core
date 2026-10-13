@@ -118,7 +118,7 @@ export async function demoStageSettings(side: Side) {
     : null }
 }
 
-export function writeDemoStageClassifier(side: Side, classifier: StageClassifier | null) {
+export function writeDemoStageClassifier(side: Side, classifier: StageClassifier | null, recordChange?: (before: StageClassifier | null) => void) {
   return serializeMutation(async () => {
     const parsed = classifier === null ? null : stageClassifierSchema.parse(classifier)
     const binding = bindings[side]
@@ -133,6 +133,8 @@ export function writeDemoStageClassifier(side: Side, classifier: StageClassifier
     const event = await activateNow({ side, action: revision ? 'activate' : 'reset', revisionId: revision?.id ?? null,
       expectedGeneration: binding.generation, expectedResolvedHash: revision?.resolvedHash ?? await hash(defaultConfig),
       boundary: 'immediate', requester: 'legacy-stage-settings', idempotencyKey: key, allowUnvalidated: true })
+    const stagePersonalized = current?.overrides.some(override => override.path.startsWith('sleep_stages.'))
+    recordChange?.(stagePersonalized && current ? resolveOverrides(current.overrides).resolved.sleep_stages : null)
     return { classifier: parsed ?? defaultConfig.sleep_stages, isDefault: parsed === null,
       activation: { generation: event.generation, revisionId: revision?.id ?? null, state: event.state } }
   })

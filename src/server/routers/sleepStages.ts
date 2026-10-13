@@ -7,21 +7,25 @@ import { consumeStageView, stageViewSchema } from '@/src/biometrics/profiles/sta
 import { writeLegacyStageClassifier } from '@/src/biometrics/profiles/legacy-stage'
 import { ReferenceInputError } from '@/src/biometrics/references/time'
 import { ProfileStore } from '@/src/biometrics/profiles/store'
+import type { Override } from '@/src/biometrics/algorithms/registry'
+import { sideSettings, stageClassifierChanges } from '@/src/db/schema'
 import { and, asc, desc, eq, gt, gte, lte } from 'drizzle-orm'
 import { sideSchema } from '@/src/server/validation-schemas'
 import {
-  calculateDistribution,
-  calculateQualityScore,
-  classifySleepStages,
-  mergeIntoBlocks,
+  changedSegments,
+  classifyNights,
   piezoCalibrationQuality,
-  scoreAgainstReference,
+  type NightInputs,
+  type SleepStageBlock,
 } from '@/src/lib/sleep-stages'
 import {
   DEFAULT_STAGE_CLASSIFIER,
+  resolveStageClassifier,
   stageClassifierSchema,
   STAGE_ENGINES,
+  STAGE_METRICS,
   STAGE_RULESET_PRESETS,
+  summarizeRulesetChange,
   type StageClassifier,
 } from '@/src/lib/sleep-stage-rules'
 
@@ -76,18 +80,64 @@ export async function loadStageInputs(side: Side, windowStart: Date, windowEnd: 
   return { vitalsData, movementData, calibrationQuality: piezoCalibrationQuality(piezoProfile) }
 }
 
+async function loadReference(side: Side, windowStart: Date, windowEnd: Date): Promise<SleepStageBlock[]> {
+  const rows = await biometricsDb
+    .select()
+    .from(referenceStages)
+    .where(
+      and(
+        eq(referenceStages.side, side),
+        lte(referenceStages.start, windowEnd),
+        gt(referenceStages.end, windowStart)
+      )
+    )
+    .orderBy(asc(referenceStages.start))
+  return rows.map(r => ({ start: r.start.getTime(), end: r.end.getTime(), stage: r.stage }))
+}
+
 const stageEnum = z.enum(['wake', 'light', 'deep', 'rem'])
+const stageNumbers = z.object({ wake: z.number(), light: z.number(), deep: z.number(), rem: z.number() })
+const rangeSchema = z.object({ min: z.number(), max: z.number() })
+
+const ruleListStatsSchema = z.object({
+  epochs: z.number(),
+  hits: z.array(z.number()),
+  matches: z.array(z.number()),
+  shadowedBy: z.array(z.number().nullable()),
+  fallbackHits: z.number(),
+})
+
+const runSummarySchema = z.object({
+  epochs: z.number(),
+  nights: z.number(),
+  lowSignalNights: z.number(),
+  rules: ruleListStatsSchema.nullable(),
+  lowSignalRules: ruleListStatsSchema.nullable(),
+  metricRanges: z.object(Object.fromEntries(STAGE_METRICS.map(m => [m, rangeSchema.nullable()])) as Record<typeof STAGE_METRICS[number], z.ZodNullable<typeof rangeSchema>>),
+  heartRateReadings: z.number(),
+  spikesDropped: z.number(),
+  smoothed: z.number(),
+  transitionFixes: z.number(),
+})
+
+const agreementSchema = z.object({
+  epochs: z.number(),
+  accuracy: z.number(),
+  kappa: z.number().nullable(),
+}).nullable()
 
 const nightStagesSchema = z.object({
+  /** Stage blocks of the latest night. */
   blocks: z.array(z.object({ start: z.number(), end: z.number(), stage: stageEnum })),
-  distribution: z.object({ wake: z.number(), light: z.number(), deep: z.number(), rem: z.number() }),
+  /** Percent of epochs per stage, over every night previewed. */
+  distribution: stageNumbers,
+  /** Mean quality score over the nights previewed. */
   qualityScore: z.number(),
   totalSleepMs: z.number(),
-  agreement: z.object({
-    epochs: z.number(),
-    accuracy: z.number(),
-    kappa: z.number().nullable(),
-  }).nullable(),
+  /** Mean time per stage per night, ms. */
+  durations: stageNumbers,
+  agreement: agreementSchema,
+  stats: runSummarySchema,
 })
 
 const classifierStateSchema = z.object({
@@ -95,10 +145,70 @@ const classifierStateSchema = z.object({
   isDefault: z.boolean(),
 })
 
+const changeSchema = z.object({
+  id: z.number(),
+  changedAt: z.number(),
+  summary: z.string(),
+  before: stageClassifierSchema.nullable(),
+  agreementBefore: z.number().nullable(),
+  agreementAfter: z.number().nullable(),
+})
+
+type LoadedNight = NightInputs & { record: typeof sleepRecords.$inferSelect }
+
+async function loadNights(side: Side, sleepRecordId: number | undefined, nights: number): Promise<LoadedNight[]> {
+  const records = await biometricsDb
+    .select()
+    .from(sleepRecords)
+    .where(sleepRecordId === undefined
+      ? eq(sleepRecords.side, side)
+      : and(eq(sleepRecords.id, sleepRecordId), eq(sleepRecords.side, side)))
+    .orderBy(desc(sleepRecords.enteredBedAt))
+    .limit(sleepRecordId === undefined ? nights : 1)
+
+  if (records.length === 0 && sleepRecordId !== undefined) {
+    throw new TRPCError({
+      code: 'NOT_FOUND',
+      message: `Sleep record ${sleepRecordId} not found for side '${side}'`,
+    })
+  }
+
+  return Promise.all(records.map(async record => ({
+    record,
+    ...await loadStageInputs(side, record.enteredBedAt, record.leftBedAt),
+    reference: await loadReference(side, record.enteredBedAt, record.leftBedAt),
+  })))
+}
+
+/** Agreement with reference stages on the latest night, or null without any. */
+async function latestAgreement(side: Side, classifier: StageClassifier): Promise<number | null> {
+  const nights = await loadNights(side, undefined, 1)
+  if (nights.length === 0 || nights[0].reference.length === 0) return null
+  return classifyNights(nights, classifier.ruleset)?.summary.agreement?.accuracy ?? null
+}
+
+async function listChanges(side: Side) {
+  const rows = await db
+    .select()
+    .from(stageClassifierChanges)
+    .where(eq(stageClassifierChanges.side, side))
+    .orderBy(desc(stageClassifierChanges.changedAt), desc(stageClassifierChanges.id))
+    .limit(10)
+  return rows.map(r => ({
+    id: r.id,
+    changedAt: r.changedAt.getTime(),
+    summary: r.summary,
+    before: r.before === null ? null : resolveStageClassifier(r.before),
+    agreementBefore: r.agreementBefore,
+    agreementAfter: r.agreementAfter,
+  }))
+}
+
 export const sleepStagesRouter = router({
   /**
    * How a side's sleep stages are classified, plus the defaults, the
-   * available engines, and the built-in presets to start a custom ruleset from.
+   * available engines, the built-in presets to start a custom ruleset from,
+   * and the side's recent changes.
    */
   getClassifier: publicProcedure
     .meta({ openapi: { method: 'GET', path: '/sleep-stages/classifier', protect: false, tags: ['Sleep stages'] } })
@@ -108,6 +218,7 @@ export const sleepStagesRouter = router({
       defaults: stageClassifierSchema,
       engines: z.array(z.object({ id: z.string(), label: z.string(), description: z.string() })),
       presets: z.array(z.object({ id: z.string(), label: z.string(), description: z.string(), classifier: stageClassifierSchema })),
+      changes: z.array(changeSchema),
     }))
     .query(async ({ input }) => {
       try {
@@ -127,6 +238,7 @@ export const sleepStagesRouter = router({
             description: p.description,
             classifier: { engine: 'rules' as const, ruleset: p.ruleset },
           })),
+          changes: await listChanges(input.side),
         }
       }
       catch (error) {
@@ -140,7 +252,9 @@ export const sleepStagesRouter = router({
 
   /**
    * Save a side's classifier, or pass null to go back to the defaults. Stages
-   * are classified on read, so every stored night re-scores with it.
+   * are classified on read, so every stored night re-scores with it. Each
+   * save that changes something is recorded with its effect on the latest
+   * night's agreement with reference stages.
    */
   setClassifier: publicProcedure
     .meta({ openapi: { method: 'PUT', path: '/sleep-stages/classifier', protect: false, tags: ['Sleep stages'] } })
@@ -148,7 +262,41 @@ export const sleepStagesRouter = router({
     .output(classifierStateSchema.extend({ activation: z.object({ generation: z.number().int(), revisionId: z.string().nullable(), state: z.string() }) }))
     .mutation(async ({ input }) => {
       try {
-        return writeLegacyStageClassifier(db, input.side, input.classifier)
+        const row = db.select({ stageClassifier: sideSettings.stageClassifier }).from(sideSettings)
+          .where(eq(sideSettings.side, input.side)).get()
+        if (!row) throw new TRPCError({ code: 'NOT_FOUND', message: `Side settings for ${input.side} not found` })
+        const profiles = new ProfileStore(db)
+        const desired = profiles.effective(input.side)
+        const revision = desired.binding.desiredRevisionId && !desired.warning
+          ? profiles.validateRevision(desired.binding.desiredRevisionId, input.side).revision
+          : null
+        const personalized = (revision?.overrides as Override[] | undefined)?.some(override => override.path.startsWith('sleep_stages.')) ?? false
+        const legacyBefore = desired.binding.generation === 0 && stageClassifierSchema.safeParse(row.stageClassifier).success
+          ? resolveStageClassifier(row.stageClassifier)
+          : null
+        const storedBefore = personalized ? desired.resolved.sleep_stages : legacyBefore
+        const before = storedBefore ?? DEFAULT_STAGE_CLASSIFIER
+        const after = input.classifier ?? DEFAULT_STAGE_CLASSIFIER
+        const summary = input.classifier === null
+          ? (storedBefore === null ? 'No change' : 'Reset to default')
+          : summarizeRulesetChange(before.ruleset, after.ruleset)
+        const agreementBefore = summary === 'No change' ? null : await latestAgreement(input.side, before)
+        const agreementAfter = summary === 'No change' ? null : await latestAgreement(input.side, after)
+        return db.transaction((tx) => {
+          const current = profiles.effective(input.side)
+          const legacy = tx.select({ stageClassifier: sideSettings.stageClassifier }).from(sideSettings)
+            .where(eq(sideSettings.side, input.side)).get()
+          if (!legacy || JSON.stringify(legacy.stageClassifier) !== JSON.stringify(row.stageClassifier)
+            || current.binding.generation !== desired.binding.generation || current.hash !== desired.hash) {
+            throw new TRPCError({ code: 'CONFLICT', message: `Stage classifier for ${input.side} changed during save; reload and try again` })
+          }
+          const result = writeLegacyStageClassifier(db, input.side, input.classifier)
+          if (summary !== 'No change') {
+            tx.insert(stageClassifierChanges).values({ side: input.side, before: storedBefore,
+              after: input.classifier, summary, agreementBefore, agreementAfter }).run()
+          }
+          return result
+        }, { behavior: 'immediate' })
       }
       catch (error) {
         if (error instanceof TRPCError) throw error
@@ -162,83 +310,54 @@ export const sleepStagesRouter = router({
     }),
 
   /**
-   * Classify one night with the side's saved classifier and with a candidate,
-   * without saving. Each result carries its agreement with reference stages
-   * (Apple Watch) when the night has any. Defaults to the latest night.
+   * Classify recent nights with the side's saved classifier and with a
+   * candidate, without saving. Each result carries its agreement with
+   * reference stages (Apple Watch) when the nights have any, and the
+   * per-rule statistics the editor shows. Defaults to the latest night;
+   * `nights` widens it to the latest N, `sleepRecordId` picks one.
    */
   previewClassifier: publicProcedure
     .meta({ openapi: { method: 'POST', path: '/sleep-stages/classifier/preview', protect: false, tags: ['Sleep stages'] } })
     .input(z.object({
       side: sideSchema,
       sleepRecordId: z.number().int().optional(),
+      nights: z.number().int().min(1).max(14).optional(),
       classifier: stageClassifierSchema,
     }).strict())
     .output(z.object({
       sleepRecordId: z.number().nullable(),
       enteredBedAt: z.number().nullable(),
       leftBedAt: z.number().nullable(),
+      nights: z.number(),
       hasReference: z.boolean(),
       saved: nightStagesSchema.nullable(),
       candidate: nightStagesSchema.nullable(),
+      /** Where the candidate disagrees with the saved rules on the latest night. */
+      changed: z.object({
+        segments: z.array(z.object({ start: z.number(), end: z.number() })),
+        changed: z.number(),
+        total: z.number(),
+      }).nullable(),
     }))
     .mutation(async ({ input }) => {
       try {
-        const [record] = await biometricsDb
-          .select()
-          .from(sleepRecords)
-          .where(input.sleepRecordId === undefined
-            ? eq(sleepRecords.side, input.side)
-            : and(eq(sleepRecords.id, input.sleepRecordId), eq(sleepRecords.side, input.side)))
-          .orderBy(desc(sleepRecords.enteredBedAt))
-          .limit(1)
-
-        if (!record) {
-          if (input.sleepRecordId !== undefined) {
-            throw new TRPCError({
-              code: 'NOT_FOUND',
-              message: `Sleep record ${input.sleepRecordId} not found for side '${input.side}'`,
-            })
-          }
-          return { sleepRecordId: null, enteredBedAt: null, leftBedAt: null, hasReference: false, saved: null, candidate: null }
+        const nights = await loadNights(input.side, input.sleepRecordId, input.nights ?? 1)
+        if (nights.length === 0) {
+          return { sleepRecordId: null, enteredBedAt: null, leftBedAt: null, nights: 0, hasReference: false, saved: null, candidate: null, changed: null }
         }
-
-        const windowStart = record.enteredBedAt
-        const windowEnd = record.leftBedAt
-        const { vitalsData, movementData, calibrationQuality } = await loadStageInputs(input.side, windowStart, windowEnd)
-        const reference = (await biometricsDb
-          .select()
-          .from(referenceStages)
-          .where(
-            and(
-              eq(referenceStages.side, input.side),
-              lte(referenceStages.start, windowEnd),
-              gt(referenceStages.end, windowStart)
-            )
-          )
-          .orderBy(asc(referenceStages.start)))
-          .map(r => ({ start: r.start.getTime(), end: r.end.getTime(), stage: r.stage }))
-        const saved = await loadStageClassifier(input.side)
-
-        const classify = (classifier: StageClassifier) => {
-          const epochs = classifySleepStages(vitalsData, movementData, calibrationQuality, classifier.ruleset)
-          if (epochs.length === 0) return null
-          const distribution = calculateDistribution(epochs)
-          return {
-            blocks: mergeIntoBlocks(epochs),
-            distribution,
-            qualityScore: calculateQualityScore(distribution, calibrationQuality),
-            totalSleepMs: epochs.reduce((sum, e) => sum + e.duration, 0),
-            agreement: scoreAgainstReference(epochs, reference),
-          }
-        }
+        const latest = nights[0].record
+        const saved = classifyNights(nights, (await loadStageClassifier(input.side)).ruleset)
+        const candidate = classifyNights(nights, input.classifier.ruleset)
 
         return {
-          sleepRecordId: record.id,
-          enteredBedAt: record.enteredBedAt.getTime(),
-          leftBedAt: record.leftBedAt.getTime(),
-          hasReference: reference.length > 0,
-          saved: classify(saved),
-          candidate: classify(input.classifier),
+          sleepRecordId: latest.id,
+          enteredBedAt: latest.enteredBedAt.getTime(),
+          leftBedAt: latest.leftBedAt.getTime(),
+          nights: nights.length,
+          hasReference: nights.some(n => n.reference.length > 0),
+          saved: saved?.summary ?? null,
+          candidate: candidate?.summary ?? null,
+          changed: saved && candidate ? changedSegments(saved.latestEpochs, candidate.latestEpochs) : null,
         }
       }
       catch (error) {

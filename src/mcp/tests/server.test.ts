@@ -24,7 +24,7 @@ const callerMock = vi.hoisted(() => {
     },
     biometrics: {
       getLatestSleep: fn(), getSleepRecord: fn(), getSleepRecords: fn(), getSleepStages: fn(), getVitalsSummary: fn(),
-      getMovementSummary: fn(), getVitalsBaseline: fn(), getOccupancy: fn(),
+      getMovementSummary: fn(), getVitalsBaseline: fn(), getOccupancy: fn(), importReferenceVitals: fn(), importReferenceStages: fn(),
     },
     environment: {
       getSummary: fn(), getAmbientLightSummary: fn(), getLatestBedTemp: fn(), getLatestFreezerTemp: fn(),
@@ -120,6 +120,7 @@ describe('sleepypod MCP server', () => {
       'get_sleep_history',
       'get_sleep_summary',
       'get_vitals_trend',
+      'import_apple_watch_data',
       'import_biometric_reference',
       'inspect_biometric_calibration',
       'manage_alarm',
@@ -718,4 +719,52 @@ describe('sleepypod MCP server', () => {
     expect(api.releaseBacktestResult).toHaveBeenCalledWith({ id, expectedContentHash: 'a'.repeat(64) })
     await client.close()
   })
+})
+
+it('imports Watch batches through the shared procedures and reports partial stage failure', async () => {
+  callerMock.biometrics.importReferenceVitals.mockResolvedValue({ written: 1 })
+  callerMock.biometrics.importReferenceStages.mockRejectedValue(new TRPCError({ code: 'BAD_REQUEST', message: 'overlap' }))
+  const client = await connect()
+  try {
+    const result = await client.callTool({ name: 'import_apple_watch_data', arguments: {
+      side: 'right', samples: [{ timestamp: 1791700000, heartRate: 60 }],
+      segments: [{ start: 1791700000, end: 1791700060, stage: 'deep' }],
+    } }) as CallToolResult
+    expect(JSON.parse(text(result))).toMatchObject({ vitals: 1, stages: 0, stageError: 'Stage import failed: overlap' })
+    expect(callerMock.biometrics.importReferenceVitals).toHaveBeenCalledWith({ side: 'right', source: 'apple_watch', samples: [{ timestamp: 1791700000, heartRate: 60 }] })
+  }
+  finally { await client.close() }
+})
+
+it('does not expose internal errors from Watch stage import', async () => {
+  callerMock.biometrics.importReferenceStages.mockRejectedValue(new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'private database path' }))
+  const client = await connect()
+  try {
+    const result = await client.callTool({ name: 'import_apple_watch_data', arguments: {
+      side: 'left', segments: [{ start: 1791700000, end: 1791700060, stage: 'deep' }],
+    } }) as CallToolResult
+    expect(JSON.parse(text(result))).toMatchObject({ vitals: 0, stages: 0, stageError: expect.stringContaining('stored stages were preserved') })
+    expect(text(result)).not.toContain('private database path')
+  }
+  finally { await client.close() }
+})
+
+it('imports stage-only Watch data and rejects empty import requests', async () => {
+  callerMock.biometrics.importReferenceStages.mockResolvedValue({ written: 1 })
+  const client = await connect()
+  try {
+    const result = await client.callTool({ name: 'import_apple_watch_data', arguments: {
+      side: 'left', segments: [{ start: 1791700000, end: 1791700060, stage: 'deep' }],
+    } }) as CallToolResult
+    expect(JSON.parse(text(result))).toEqual({ vitals: 0, stages: 1, stageError: null })
+    const empty = await client.callTool({ name: 'import_apple_watch_data', arguments: { side: 'left' } }) as CallToolResult
+    expect(empty.isError).toBe(true)
+    expect(text(empty)).toContain('Provide samples or segments')
+    callerMock.biometrics.importReferenceVitals.mockResolvedValue({ written: 1 })
+    const vitalsOnly = await client.callTool({ name: 'import_apple_watch_data', arguments: {
+      side: 'left', samples: [{ timestamp: 1791700000, heartRate: 60 }],
+    } }) as CallToolResult
+    expect(JSON.parse(text(vitalsOnly))).toEqual({ vitals: 1, stages: 0, stageError: null })
+  }
+  finally { await client.close() }
 })

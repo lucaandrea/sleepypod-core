@@ -129,7 +129,7 @@ function SectionBody({ section, side, onSideChange }: {
     case 'biometric-calibration':
       return <BiometricCalibration side={side} onSideChange={onSideChange} />
     case 'sleep-stages':
-      return <SleepStageRules side={side} onSideChange={onSideChange} />
+      return <SleepStageRules key={side} side={side} onSideChange={onSideChange} />
     case 'appearance':
       return (
         <WithSettings>

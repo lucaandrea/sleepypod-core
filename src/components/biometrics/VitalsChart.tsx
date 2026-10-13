@@ -16,8 +16,8 @@ import { useTimeFormat } from '@/src/providers/TimeFormatProvider'
 
 import { useEffect, useId, useMemo, useRef, useState, type PointerEvent } from 'react'
 import {
-  BREAK_PX, clampTo, clock, fmtDuration, fmtGap, layoutAxis, METRICS, nearestIndex, rollingMean, segmentTicks, sessionHeader,
-  type MetricKey, type Session,
+  axisTicks, timeAtX, clampTo, clock, fmtDuration, fmtGap, layoutAxis, METRICS, nearestIndex, rollingMean, sessionHeader,
+  type MetricKey, type RangeWindow, type Session,
 } from './biometricsLogic'
 
 const LABEL_W = 130
@@ -26,7 +26,7 @@ const ROW_H = 78
 const ROW_GAP = 18
 const HEAD_H = 24
 const AXIS_H = 26
-const PLOT_H = METRICS.length * ROW_H + (METRICS.length - 1) * ROW_GAP
+const VITALS_H = METRICS.length * ROW_H + (METRICS.length - 1) * ROW_GAP
 
 type Band = { lo: number, hi: number } | null
 
@@ -57,6 +57,12 @@ function pathOf(xs: number[], ys: Array<number | null>): string {
     pen = true
   }
   return d
+}
+
+const rowTop = (i: number) => HEAD_H + i * (ROW_H + ROW_GAP)
+const yOf = (i: number, v: number) => {
+  const [lo, hi] = METRICS[i].domain
+  return rowTop(i) + ROW_H - ((clampTo(v, METRICS[i].domain) - lo) / (hi - lo)) * ROW_H
 }
 
 export interface ReferencePoint { t: number, hr: number }
@@ -92,14 +98,17 @@ export function referenceRuns(points: ReferencePoint[], gapMs = REFERENCE_GAP_MS
 const REFERENCE_TOL_MS = 5 * 60_000
 const REFERENCE_STROKE = 'var(--text-2)'
 
-export function VitalsChart({ sessions, stall, bands, reference = [] }: {
+export function VitalsChart({ sessions, stall, bands, reference = [], movement = [], onSelectWindow }: {
   sessions: Session[]
   /** In bed with no vitals: from the last reading to now. */
   stall: { start: number, end: number } | null
   bands: Record<MetricKey, Band>
   /** Imported Apple Watch heart rate, time-sorted. */
   reference?: ReferencePoint[]
+  movement?: Array<{ bucketStart: Date, eventCount: number }>
+  onSelectWindow?: (window: RangeWindow) => void
 }) {
+  const PLOT_H = VITALS_H + 76
   const timeFormat = useTimeFormat()
   const [wrapRef, wrapW] = useWidth<HTMLDivElement>()
   const hatchId = useId()
@@ -113,16 +122,17 @@ export function VitalsChart({ sessions, stall, bands, reference = [] }: {
   const [hover, setHover] = useState<{ seg: number, idx: number } | null>(null)
   const referenceBySession = useMemo(() => sessions.map(s => referenceInSession(reference, s)), [sessions, reference])
 
-  const rowTop = (i: number) => HEAD_H + i * (ROW_H + ROW_GAP)
-  const yOf = (i: number, v: number) => {
-    const [lo, hi] = METRICS[i].domain
-    return rowTop(i) + ROW_H - ((clampTo(v, METRICS[i].domain) - lo) / (hi - lo)) * ROW_H
-  }
+  const [brush, setBrush] = useState<{ start: number, end: number } | null>(null)
+  const brushStart = useRef<number | null>(null)
+  const ticks = axisTicks(axis, timeFormat)
+  const multiNight = sessions.length > 1 && (sessions.at(-1)?.end ?? 0) - sessions[0].start > 24 * 60 * 60_000
+  const maxMovement = Math.max(1, ...movement.map(b => b.eventCount))
 
   const onMove = (e: PointerEvent<SVGRectElement>) => {
     const box = e.currentTarget.getBoundingClientRect()
     const x = e.clientX - box.left
-    const seg = axis.segments.find(s => s.kind === 'session' && x >= s.x - BREAK_PX / 2 && x <= s.x + s.w + BREAK_PX / 2)
+    if (brushStart.current != null) setBrush({ start: brushStart.current, end: Math.max(0, Math.min(plotW, x)) })
+    const seg = axis.segments.find(s => s.kind === 'session' && x >= s.x && x <= s.x + s.w)
     if (!seg) return setHover(null)
     const session = sessions[seg.index]
     const t = seg.start + ((Math.min(Math.max(x, seg.x), seg.x + seg.w) - seg.x) / Math.max(1, seg.w)) * (seg.end - seg.start)
@@ -135,21 +145,89 @@ export function VitalsChart({ sessions, stall, bands, reference = [] }: {
   const hoverX = hovered && hoverSeg ? axis.xOf(hoverSeg, hovered.t) : null
   const hoverReference = hovered && hover ? nearestReference(referenceBySession[hover.seg] ?? [], hovered.t) : null
 
+  const traces = useMemo(() => axis.segments.filter(s => s.kind === 'session').map((seg) => {
+    const session = sessions[seg.index]
+    const xs = session.points.map(p => axis.xOf(seg, p.t))
+    return (
+      <g key={`s${seg.index}`}>
+        {METRICS.map((m, i) => {
+          const band = bands[m.key]
+          const raw = session.points.map(p => (p[m.key] == null ? null : yOf(i, p[m.key] as number)))
+          const sm = smooth[seg.index][m.key].map(v => (v == null ? null : yOf(i, v)))
+          return (
+            <g key={m.key}>
+              {band && (
+                <rect x={seg.x} width={seg.w} y={yOf(i, band.hi)} height={Math.max(0, yOf(i, band.lo) - yOf(i, band.hi))} fill={m.color} fillOpacity={0.07} />
+              )}
+              <path d={pathOf(xs, raw)} fill="none" stroke={m.color} strokeOpacity={0.3} strokeWidth={1} />
+              <path d={pathOf(xs, sm)} fill="none" stroke={m.color} strokeWidth={1.75} strokeLinejoin="round" />
+            </g>
+          )
+        })}
+        {referenceBySession[seg.index]?.length > 0 && (() => {
+          // Lift the pen across sampling gaps (Watch taken off) and
+          // mark samples with no neighbour, which a path cannot show.
+          const runs = referenceRuns(referenceBySession[seg.index])
+          const xs: number[] = []
+          const ys: Array<number | null> = []
+          runs.forEach((run, r) => {
+            if (r > 0) {
+              xs.push(0)
+              ys.push(null)
+            }
+            for (const p of run) {
+              xs.push(axis.xOf(seg, p.t))
+              ys.push(yOf(0, p.hr))
+            }
+          })
+          return (
+            <>
+              <path
+                data-testid="vitals-reference"
+                d={pathOf(xs, ys)}
+                fill="none"
+                stroke={REFERENCE_STROKE}
+                strokeWidth={1.25}
+                strokeDasharray="3 3"
+                strokeLinejoin="round"
+              />
+              {runs.filter(run => run.length === 1).map(([p]) => (
+                <circle key={p.t} data-testid="vitals-reference-dot" cx={axis.xOf(seg, p.t)} cy={yOf(0, p.hr)} r={1.5} fill={REFERENCE_STROKE} />
+              ))}
+            </>
+          )
+        })()}
+      </g>
+    )
+  }), [axis, sessions, bands, smooth, referenceBySession])
+
   return (
     <div ref={wrapRef} className="relative w-full" style={{ height: HEAD_H + PLOT_H + AXIS_H }} data-testid="vitals-chart">
-      {/* Row labels */}
-      {METRICS.map((m, i) => (
-        <div key={m.key} className="absolute left-0 flex flex-col" style={{ top: rowTop(i) + 8, width: LABEL_W }}>
-          <span className="flex items-center gap-2 text-[13px]">
-            <span className="h-0.5 w-2.5 rounded" style={{ background: m.color }} />
-            {m.label}
-          </span>
-          <span className="pl-[18px] font-mono text-[11px] text-fg-2">{m.unit}</span>
-        </div>
-      ))}
+      {/* Keep units and scales visible while the time axis pans underneath. */}
+      <div className="sticky left-0 z-10 h-full bg-surface" style={{ width: LABEL_W + GUTTER }}>
+        {METRICS.flatMap((m, i) => m.ticks.map(v => (
+          <span key={`${m.key}-${v}`} className="absolute right-2 font-mono text-[10px] text-fg-3" style={{ top: yOf(i, v) - 7 }}>{v}</span>
+        )))}
+        <span className="absolute right-2 font-mono text-[10px] text-fg-3" style={{ top: HEAD_H + PLOT_H - 10 }}>0</span>
+        <span className="absolute right-2 font-mono text-[10px] text-fg-3" style={{ top: HEAD_H + VITALS_H + 18 }}>{maxMovement}</span>
+        {/* Row labels */}
+        {METRICS.map((m, i) => (
+          <div key={m.key} className="absolute left-0 flex flex-col" style={{ top: rowTop(i) + 8, width: LABEL_W }}>
+            <span className="flex items-center gap-2 text-[13px]">
+              <span className="h-0.5 w-2.5 rounded" style={{ background: m.color }} />
+              {m.label}
+            </span>
+            <span className="pl-[18px] font-mono text-[11px] text-fg-2">{m.unit}</span>
+          </div>
+        ))}
 
+        <div className="absolute left-0 flex flex-col text-[13px]" style={{ top: HEAD_H + VITALS_H + 22, width: LABEL_W }}>
+          <span>Movement</span>
+          <span className="font-mono text-[11px] text-fg-2">changes / 5 min</span>
+        </div>
+      </div>
       {plotW > 0 && (
-        <svg className="absolute top-0 overflow-visible" style={{ left: LABEL_W }} width={plotW + GUTTER} height={HEAD_H + PLOT_H + AXIS_H} role="img" aria-label="Heart rate, HRV and breathing per session">
+        <svg className="absolute top-0 overflow-visible" style={{ left: LABEL_W }} width={plotW + GUTTER} height={HEAD_H + PLOT_H + AXIS_H} role="img" aria-label="Heart rate, HRV, breathing and movement per session">
           <defs>
             <pattern id={hatchId} width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
               <line x1="0" y1="0" x2="0" y2="6" stroke="var(--status-warn)" strokeOpacity="0.45" strokeWidth="1" />
@@ -160,7 +238,6 @@ export function VitalsChart({ sessions, stall, bands, reference = [] }: {
             {METRICS.map((m, i) => m.ticks.map(v => (
               <g key={`${m.key}-${v}`}>
                 <line x1={0} x2={plotW} y1={yOf(i, v)} y2={yOf(i, v)} stroke="var(--border-grid)" />
-                <text x={-8} y={yOf(i, v) + 3.5} textAnchor="end" className="fill-fg-3 font-mono" fontSize={10}>{v}</text>
               </g>
             )))}
 
@@ -168,7 +245,7 @@ export function VitalsChart({ sessions, stall, bands, reference = [] }: {
             {axis.segments.map(seg => seg.kind === 'session'
               ? (
                   <text key={`h${seg.index}`} x={seg.x} y={12} className="fill-fg-2 font-mono" fontSize={10}>
-                    {seg.w >= 130 ? sessionHeader(seg) : seg.w >= 56 ? fmtDuration(seg.end - seg.start) : ''}
+                    {!multiNight && seg.w >= 200 ? sessionHeader(seg) : ''}
                   </text>
                 )
               : (
@@ -177,66 +254,12 @@ export function VitalsChart({ sessions, stall, bands, reference = [] }: {
             {axis.breaks.map(b => (
               <g key={b.x}>
                 <line x1={b.x} x2={b.x} y1={HEAD_H} y2={HEAD_H + PLOT_H} stroke="var(--text-3)" strokeDasharray="2 3" opacity={0.6} />
-                <text x={b.x - 6} y={12} textAnchor="end" className="fill-fg-3 font-mono" fontSize={10}>{fmtGap(b.gapMs)}</text>
+                {!multiNight && <text x={b.x - 6} y={12} textAnchor="end" className="fill-fg-3 font-mono" fontSize={10}>{fmtGap(b.gapMs)}</text>}
               </g>
             ))}
 
             {/* Bands, raw and smoothed lines per session */}
-            {axis.segments.filter(s => s.kind === 'session').map((seg) => {
-              const session = sessions[seg.index]
-              const xs = session.points.map(p => axis.xOf(seg, p.t))
-              return (
-                <g key={`s${seg.index}`}>
-                  {METRICS.map((m, i) => {
-                    const band = bands[m.key]
-                    const raw = session.points.map(p => (p[m.key] == null ? null : yOf(i, p[m.key] as number)))
-                    const sm = smooth[seg.index][m.key].map(v => (v == null ? null : yOf(i, v)))
-                    return (
-                      <g key={m.key}>
-                        {band && (
-                          <rect x={seg.x} width={seg.w} y={yOf(i, band.hi)} height={Math.max(0, yOf(i, band.lo) - yOf(i, band.hi))} fill={m.color} fillOpacity={0.07} />
-                        )}
-                        <path d={pathOf(xs, raw)} fill="none" stroke={m.color} strokeOpacity={0.3} strokeWidth={1} />
-                        <path d={pathOf(xs, sm)} fill="none" stroke={m.color} strokeWidth={1.75} strokeLinejoin="round" />
-                      </g>
-                    )
-                  })}
-                  {referenceBySession[seg.index]?.length > 0 && (() => {
-                    // Lift the pen across sampling gaps (Watch taken off) and
-                    // mark samples with no neighbour, which a path cannot show.
-                    const runs = referenceRuns(referenceBySession[seg.index])
-                    const xs: number[] = []
-                    const ys: Array<number | null> = []
-                    runs.forEach((run, r) => {
-                      if (r > 0) {
-                        xs.push(0)
-                        ys.push(null)
-                      }
-                      for (const p of run) {
-                        xs.push(axis.xOf(seg, p.t))
-                        ys.push(yOf(0, p.hr))
-                      }
-                    })
-                    return (
-                      <>
-                        <path
-                          data-testid="vitals-reference"
-                          d={pathOf(xs, ys)}
-                          fill="none"
-                          stroke={REFERENCE_STROKE}
-                          strokeWidth={1.25}
-                          strokeDasharray="3 3"
-                          strokeLinejoin="round"
-                        />
-                        {runs.filter(run => run.length === 1).map(([p]) => (
-                          <circle key={p.t} data-testid="vitals-reference-dot" cx={axis.xOf(seg, p.t)} cy={yOf(0, p.hr)} r={1.5} fill={REFERENCE_STROKE} />
-                        ))}
-                      </>
-                    )
-                  })()}
-                </g>
-              )
-            })}
+            {traces}
 
             {/* Stalled period */}
             {axis.segments.filter(s => s.kind === 'stall').map(seg => (
@@ -247,20 +270,32 @@ export function VitalsChart({ sessions, stall, bands, reference = [] }: {
               </g>
             ))}
 
-            {/* X axis ticks */}
-            {axis.segments.filter(s => s.kind === 'session').map(seg => segmentTicks(seg, undefined, timeFormat).map(tk => (
+            {/* Movement shares the exact same compressed time axis, with its own units. */}
+            <line x1={0} x2={plotW} y1={HEAD_H + PLOT_H} y2={HEAD_H + PLOT_H} stroke="var(--border-grid)" />
+            {axis.segments.filter(s => s.kind === 'session').flatMap(seg => movement.filter((b) => {
+              const t = new Date(b.bucketStart).getTime()
+              return t + 300_000 > seg.start && t <= seg.end && b.eventCount > 0
+            }).map((b) => {
+              const t = new Date(b.bucketStart).getTime()
+              const x = axis.xOf(seg, t)
+              const h = b.eventCount / maxMovement * 48
+              return <rect key={`${seg.index}-${t}`} data-testid="movement-bar" x={x} y={HEAD_H + PLOT_H - h} width={Math.max(1, axis.xOf(seg, t + 300_000) - x)} height={h} fill="var(--text-3)"><title>{`${clock(t, timeFormat)} · ${b.eventCount} position changes`}</title></rect>
+            }))}
+
+            {/* Globally spaced date labels for multiple nights, clock labels for one night. */}
+            {ticks.map(tick => (
               <text
-                key={`${seg.index}-${tk.t}`}
-                x={axis.xOf(seg, tk.t)}
+                key={tick.x}
+                x={tick.x}
                 y={HEAD_H + PLOT_H + 17}
-                textAnchor={tk.t === seg.start ? 'start' : 'middle'}
+                textAnchor="start"
                 className="fill-fg-3 font-mono"
                 fontSize={10}
-                opacity={hoverX != null && Math.abs(axis.xOf(seg, tk.t) - hoverX) < 40 ? 0 : 1}
+                opacity={hoverX != null && Math.abs(tick.x - hoverX) < 60 ? 0 : 1}
               >
-                {tk.label}
+                {tick.label}
               </text>
-            )))}
+            ))}
 
             {/* Crosshair */}
             {hovered && hoverX != null && (
@@ -289,20 +324,43 @@ export function VitalsChart({ sessions, stall, bands, reference = [] }: {
                     </text>
                   </g>
                 )}
-                <rect x={hoverX - 34} y={HEAD_H + PLOT_H + 4} width={68} height={18} rx={3} fill="var(--border-2)" />
-                <text x={hoverX} y={HEAD_H + PLOT_H + 17} textAnchor="middle" className="fill-fg font-mono" fontSize={11}>{clock(hovered.t, timeFormat)}</text>
+                <rect x={Math.min(Math.max(0, hoverX - 70), Math.max(0, plotW - 140))} y={HEAD_H + PLOT_H + 4} width={140} height={18} rx={3} fill="var(--border-2)" />
+                <text x={Math.min(Math.max(70, hoverX), Math.max(70, plotW - 70))} y={HEAD_H + PLOT_H + 17} textAnchor="middle" className="fill-fg font-mono" fontSize={11}>{`${new Date(hovered.t).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} · ${clock(hovered.t, timeFormat)}`}</text>
               </g>
             )}
 
+            {brush && <rect x={Math.min(brush.start, brush.end)} y={HEAD_H} width={Math.abs(brush.end - brush.start)} height={PLOT_H} fill="var(--text-2)" fillOpacity={0.15} stroke="var(--text-2)" pointerEvents="none" data-testid="vitals-selection" />}
             <rect
               x={0}
               y={HEAD_H}
               width={plotW}
               height={PLOT_H}
               fill="transparent"
-              style={{ touchAction: 'pan-y' }}
+              style={{ touchAction: 'pan-x pan-y', cursor: onSelectWindow ? 'crosshair' : undefined }}
               onPointerMove={onMove}
-              onPointerDown={onMove}
+              onPointerDown={(e) => {
+                onMove(e)
+                if (!onSelectWindow || e.shiftKey || e.button !== 0 || e.pointerType === 'touch') return
+                const x = e.clientX - e.currentTarget.getBoundingClientRect().left
+                brushStart.current = x
+                setBrush({ start: x, end: x })
+                e.currentTarget.setPointerCapture(e.pointerId)
+              }}
+              onPointerUp={(e) => {
+                const startX = brushStart.current
+                brushStart.current = null
+                setBrush(null)
+                if (startX == null) return
+                const endX = Math.max(0, Math.min(plotW, e.clientX - e.currentTarget.getBoundingClientRect().left))
+                if (Math.abs(endX - startX) < 8) return
+                const start = timeAtX(axis, Math.min(startX, endX))
+                const end = timeAtX(axis, Math.max(startX, endX))
+                if (start != null && end != null && end > start) onSelectWindow?.({ start, end })
+              }}
+              onPointerCancel={() => {
+                brushStart.current = null
+                setBrush(null)
+              }}
               onPointerLeave={e => e.pointerType === 'mouse' && setHover(null)}
             />
           </g>

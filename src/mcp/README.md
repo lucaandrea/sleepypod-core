@@ -47,6 +47,7 @@ claude mcp add --transport http sleepypod http://192.168.1.88:3000/api/mcp
 | "How did I sleep?" / "Resting HR last night?" / "How much deep sleep?" | `get_sleep_summary` | `biometrics.getLatestSleep`, `getSleepRecords`, `getSleepStages`, `getVitalsSummary`, `getMovementSummary` |
 | "Bedtime this week?" / "How many nights did I get up?" | `get_sleep_history` | `biometrics.getSleepRecords` |
 | "Is my HRV trending down?" / "Was last night unusual?" | `get_vitals_trend` | `biometrics.getVitalsBaseline`, `getVitalsSummary` |
+| "Import my Apple Watch data" | [`import_apple_watch_data`](#apple-watch-imports) | `biometrics.importReferenceVitals`, `biometrics.importReferenceStages` |
 
 ### Control tonight
 
@@ -187,3 +188,36 @@ and `raw_sources`, and `manage_biometric_experiment` actions `inspect_raw_source
 and `create_waveform_dataset`. They forward the same API schemas and resource
 checks. A deferred scan/publication is not evidence of retained data. Select
 source IDs against the parent dataset hash; do not pass paths or raw bytes.
+
+### Apple Watch imports
+
+`import_apple_watch_data` imports extracted Watch heart-rate `samples` and/or sleep-stage
+`segments` for an explicit `side`. Timestamps are Unix seconds; each array accepts up to
+2,000 records. It uses the existing reference-vitals and reference-stages procedures,
+so repeats skip duplicates and never overwrite pod measurements. Check `stageError`
+for partial success before reporting completion.
+
+For a full Apple Health export, use the upload API instead of passing a large archive
+through model context. The Biometrics page exposes the same flow under **Upload Apple
+Watch data**:
+
+```sh
+curl --fail-with-body -X POST \
+  'http://POD:3000/api/biometrics/watch-upload?side=left&days=30' \
+  -H 'Content-Type: application/octet-stream' \
+  --data-binary @export.zip
+```
+
+The body is raw `export.zip` or `export.xml`, not multipart. `side` is required;
+`days` defaults to 30 and accepts 1–90. Uploads are limited to 512 MiB and ZIP XML
+members to 1 GiB uncompressed. Only Apple Watch heart rate and sleep stages in the
+chosen period are imported. A ZIP must contain `apple_health_export/export.xml` or
+`export.xml`; unrelated members are never extracted. Files are staged on persistent
+storage and deleted on completion or failure. Only one upload/import runs at a time.
+
+The response includes `vitals` and `stages` (new rows), `matchedVitals` and
+`matchedStages` (eligible records), and `rejectedStageBatches` (conflicting stage
+batches skipped while heart rate still imports). A disconnect or timeout can leave
+some batches imported; retrying the same export is safe. Upload has a 30-minute
+budget, followed by a separate 10-minute import budget. The browser allows 41
+minutes for both phases and response cleanup. Like the existing API, this is LAN-only.

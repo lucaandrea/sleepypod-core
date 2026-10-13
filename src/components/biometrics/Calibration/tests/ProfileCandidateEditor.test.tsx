@@ -76,7 +76,8 @@ it('refuses to rebase an old-engine or wrong-side candidate silently', () => {
 it('saves ordered stage edits in the candidate alongside numerical settings', async () => {
   view()
   fireEvent.click(screen.getByText('Candidate sleep-stage rules'))
-  fireEvent.click(screen.getByRole('button', { name: 'Move rule 2 up' }))
+  fireEvent.click(screen.getByLabelText('Candidate rule 2 stage'))
+  fireEvent.click(screen.getByRole('button', { name: 'Move candidate rule 2 up' }))
   fireEvent.click(screen.getByRole('button', { name: 'Review candidate' }))
   await screen.findByText('resolved-hash')
   expect(mock.create).not.toHaveBeenCalled()

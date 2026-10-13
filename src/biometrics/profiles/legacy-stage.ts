@@ -15,10 +15,12 @@ import { ProfileStore } from './store'
 export function writeLegacyStageClassifier(db: BetterSQLite3Database<typeof schema>, side: 'left' | 'right', classifier: StageClassifier | null, now = Date.now()) {
   const parsed = classifier === null ? null : stageClassifierSchema.parse(classifier)
   return db.transaction((tx) => {
-    const settings = tx.select({ side: schema.sideSettings.side }).from(schema.sideSettings).where(eq(schema.sideSettings.side, side)).get()
+    const settings = tx.select({ side: schema.sideSettings.side, classifier: schema.sideSettings.stageClassifier }).from(schema.sideSettings).where(eq(schema.sideSettings.side, side)).get()
     if (!settings) throw new ReferenceInputError('NOT_FOUND', `Side settings for ${side} not found`)
     const profiles = new ProfileStore(db, () => now)
-    profiles.migrateLegacy(side)
+    // An invalid legacy value already resolves to defaults. An explicit new
+    // save can replace it without trying to create an invalid pinned revision.
+    if (settings.classifier === null || stageClassifierSchema.safeParse(settings.classifier).success) profiles.migrateLegacy(side)
     const binding = profiles.binding(side)
     const current = binding.desiredRevisionId ? profiles.validateRevision(binding.desiredRevisionId, side) : null
     const overrides: Override[] = current
