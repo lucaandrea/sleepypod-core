@@ -20,3 +20,9 @@ it('accepts actual stage and stored-reading reports without retaining detailed t
   expect(comparison.protocol.mode).toBe('comparison')
   expect(comparison.stageNightSummary).toEqual([])
 })
+it('rejects mismatched report mode and version', () => {
+  const report = evaluateBacktest(backtestFixture())
+  expect(reportViewSchema.safeParse({ ...report, version: 'waveform-backtest-report-v1' }).success).toBe(false)
+  expect(reportViewSchema.safeParse({ ...report, protocol: { mode: 'signal_replay' } }).success).toBe(false)
+  expect(reportViewSchema.safeParse({ ...report, version: 'waveform-backtest-report-v1', protocol: { mode: 'signal_replay', waveformStages: false } }).success).toBe(true)
+})

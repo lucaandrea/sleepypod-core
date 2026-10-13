@@ -72,3 +72,16 @@ it('does not interpret unknown report versions or released payloads as valid sco
   expect(screen.getByText(/This report was released/)).toBeTruthy()
   expect(screen.queryByRole('button', { name: 'Release detailed report' })).toBeNull()
 })
+it('renders waveform reports with truthful provenance and optional stages', () => {
+  const waveformReport = { ...report, version: 'waveform-backtest-report-v1', protocol: { mode: 'signal_replay', waveformStages: false }, stageNightSummary: [], nights: [] }
+  mock.get.mockReturnValue({ data: { ...descriptor, report: waveformReport } })
+  const rendered = render(view())
+  expect(screen.getByText(/Numerical readings were recomputed from retained waveforms/)).toBeTruthy()
+  expect(screen.queryByText(/Original stored readings were compared/)).toBeNull()
+  expect(screen.queryByRole('button', { name: 'Inspect stage traces' })).toBeNull()
+  expect(screen.getByRole('region', { name: 'Numerical errors by night' })).toBeTruthy()
+  mock.get.mockReturnValue({ data: { ...descriptor, report: { ...waveformReport, protocol: { mode: 'signal_replay', waveformStages: true } } } })
+  rendered.rerender(view())
+  expect(screen.getByRole('button', { name: 'Inspect stage traces' })).toBeTruthy()
+  expect(screen.getByText('Assumed stage calibration quality: 0')).toBeTruthy()
+})

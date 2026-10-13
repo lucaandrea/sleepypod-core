@@ -29,9 +29,11 @@ export function BacktestReport({ id }: { id: string }) {
   const parsed = reportViewSchema.safeParse(descriptor.report)
   if (!parsed.success) return <InlineError><Trans>This report version or structure is not supported by this view.</Trans></InlineError>
   const report = parsed.data
+  const waveform = report.protocol.mode === 'signal_replay'
+  const hasStages = report.protocol.mode === 'stage_replay' || (waveform && report.protocol.waveformStages === true)
   const numeric = numericReportViewSchema.safeParse(descriptor.report)
   const stages = stageReportViewSchema.safeParse(descriptor.report)
-  const labels: Record<string, string> = { default: t`System defaults`, current: t`Current stage view`, candidate: t`Candidate` }
+  const labels: Record<string, string> = { default: t`System defaults`, current: waveform ? t`Current baseline` : t`Current stage view`, candidate: t`Candidate` }
   const splits = { tuning: t`Tuning`, validation: t`Validation`, holdout: t`Holdout` }
   const uncertaintyLabels = { not_requested: t`Not requested`, insufficient_nights: t`Insufficient paired nights`, degenerate: t`No estimable variation`, estimated: t`Exploratory interval estimated` }
   const percent = (value: number | null) => value === null ? t`Not scored` : new Intl.NumberFormat(i18n.locale || 'en', { style: 'percent', maximumFractionDigits: 2 }).format(value)
@@ -46,7 +48,8 @@ export function BacktestReport({ id }: { id: string }) {
       <p>{splits[report.split]}</p>
       <p>{t`Current holdout exposure count: ${descriptor.currentHoldoutUseCount}`}</p>
       {report.evidence === 'reused_holdout_is_validation' || descriptor.currentHoldoutUseCount > 1 ? <p><Trans>Repeated holdout exposure weakens independent evidence. Treat reused holdout results as validation, not untouched holdout evidence.</Trans></p> : null}
-      {report.protocol.mode === 'stage_replay' ? <p>{t`Assumed stage calibration quality: ${report.calibration.quality}`}</p> : <p><Trans>Original stored readings were compared; numerical parameter changes were not replayed.</Trans></p>}
+      {hasStages ? <p>{t`Assumed stage calibration quality: ${report.calibration.quality}`}</p> : null}
+      {waveform ? <p><Trans>Numerical readings were recomputed from retained waveforms. Original stored readings remain unchanged.</Trans></p> : report.protocol.mode === 'comparison' ? <p><Trans>Original stored readings were compared; numerical parameter changes were not replayed.</Trans></p> : null}
       {report.limitations.map(limitation => <p key={limitation} className="text-sm text-fg-2">{limitation}</p>)}
       {report.stageNightSummary.map(summary => (
         <div key={`${summary.baselineHash}:${summary.candidateHash}:${summary.baseline}:${summary.candidate}`} className="space-y-2 border-t border-border pt-3">
@@ -86,9 +89,9 @@ export function BacktestReport({ id }: { id: string }) {
           {summary.uncertainty.limitations.map(limitation => <p key={limitation} className="text-xs text-fg-2">{limitation}</p>)}
         </div>
       ))}
-      {report.protocol.mode === 'stage_replay' ? (stages.success ? <StageReport key={`stages:${descriptor.contentHash}`} report={stages.data} /> : <InlineError><Trans>Stage details are unavailable or incompatible.</Trans></InlineError>) : null}
-      {numeric.success ? <NumericReport key={`numeric:${descriptor.contentHash}`} report={numeric.data} /> : <InlineError><Trans>Numerical details are unavailable or incompatible.</Trans></InlineError>}
-      {report.protocol.mode === 'stage_replay' && numeric.success
+      {hasStages ? (stages.success ? <StageReport key={`stages:${descriptor.contentHash}`} report={stages.data} /> : <InlineError><Trans>Stage details are unavailable or incompatible.</Trans></InlineError>) : null}
+      {numeric.success ? <NumericReport key={`numeric:${descriptor.contentHash}`} report={numeric.data} waveform={waveform} /> : <InlineError><Trans>Numerical details are unavailable or incompatible.</Trans></InlineError>}
+      {hasStages && numeric.success
         ? (
             <div>
               <Button onClick={() => setShowTrace(!showTrace)} aria-expanded={showTrace}><Trans>Inspect stage traces</Trans></Button>

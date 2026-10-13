@@ -7,7 +7,7 @@ import { trpc } from '@/src/utils/trpc'
 import { useTimeFormat } from '@/src/providers/TimeFormatProvider'
 import type { NumericReportView } from './report-view'
 
-export function NumericReport({ report }: { report: NumericReportView }) {
+export function NumericReport({ report, waveform = false }: { report: NumericReportView, waveform?: boolean }) {
   const { t, i18n } = useLingui()
   const [page, setPage] = useState(0)
   const timeFormat = useTimeFormat()
@@ -23,21 +23,88 @@ export function NumericReport({ report }: { report: NumericReportView }) {
   }
   const number = (value: number | null | undefined) => value == null ? t`Not scored` : new Intl.NumberFormat(i18n.locale || 'en', { maximumFractionDigits: 3 }).format(value)
   const percent = (value: number | null) => value === null ? t`Not scored` : new Intl.NumberFormat(i18n.locale || 'en', { style: 'percent', maximumFractionDigits: 2 }).format(value)
-  const labels = { default: t`System defaults`, current: t`Current stage view`, candidate: t`Candidate` }
+  const labels = { default: t`System defaults`, current: waveform ? t`Current baseline` : t`Current stage view`, candidate: t`Candidate` }
   const metrics = { heart_rate: t`Heart rate (bpm)`, breathing_rate: t`Breathing rate (breaths/min)`, window_ibi_variability_v1: t`Window IBI variability index (ms)` }
   const statuses = { compared: t`Compared`, no_reference: t`No reference`, no_overlap: t`No overlap`, incompatible: t`Incompatible reference` }
   const start = page * 10
   return (
     <section className="space-y-3" aria-label={t`Numerical errors by night`}>
       <h4 className="font-medium"><Trans>Numerical errors by night</Trans></h4>
-      <p><Trans>These scores compare original stored readings. Identical numerical results across profiles do not validate numerical parameter changes.</Trans></p>
-      <p><Trans>Reference coverage is the fraction of eligible reference records paired. Output coverage is the fraction of stored observations with a value, not continuous time coverage. Sparse samples cannot establish whole-night accuracy.</Trans></p>
+      {waveform
+        ? <p><Trans>These scores compare readings recomputed from retained waveforms. Shared-timestamp scores use observations available in every configuration. Differences describe agreement with the reference and do not establish validated improvement.</Trans></p>
+        : <p><Trans>These scores compare original stored readings. Identical numerical results across profiles do not validate numerical parameter changes.</Trans></p>}
+      <p><Trans>Reference coverage is the fraction of eligible reference records paired. Output coverage is the fraction of observations with a value, not continuous time coverage. Sparse samples cannot establish whole-night accuracy.</Trans></p>
       <p><Trans>The window IBI variability index is not clinical beat-to-beat RMSSD. Only compatible metric definitions and aggregation windows are scored.</Trans></p>
       <p>{t`Times shown in ${timezone}`}</p>
       {report.nights.length === 0 ? <p><Trans>No nights in this report.</Trans></p> : null}
       {report.nights.slice(start, start + 10).map(night => (
         <details key={night.cohortId}>
           <summary>{t`Night ${night.cohortId}`}</summary>
+          {waveform && !night.numericComparisons ? <p><Trans>Shared-timestamp comparisons are unavailable in this report.</Trans></p> : null}
+          {waveform
+            ? night.numericComparisons?.map(window => (
+                <div key={`comparison:${window.startMs}:${window.endMs}`} className="space-y-2 overflow-x-auto">
+                  <p>
+                    {dates.format(window.startMs)}
+                    {' – '}
+                    {dates.format(window.endMs)}
+                  </p>
+                  <table className="w-full text-left text-sm">
+                    <caption className="text-left"><Trans>Shared-timestamp comparisons. Differences are comparison minus baseline; negative error differences mean lower error on shared observations.</Trans></caption>
+                    <thead>
+                      <tr>
+                        <th scope="col"><Trans>Metric</Trans></th>
+                        <th scope="col"><Trans>Comparison / baseline</Trans></th>
+                        <th scope="col"><Trans>Shared observations</Trans></th>
+                        <th scope="col"><Trans>Baseline shared MAE</Trans></th>
+                        <th scope="col"><Trans>Comparison shared MAE</Trans></th>
+                        <th scope="col"><Trans>Shared MAE difference</Trans></th>
+                        <th scope="col"><Trans>Own-support MAE difference</Trans></th>
+                        <th scope="col"><Trans>Lost readings</Trans></th>
+                        <th scope="col"><Trans>Added readings</Trans></th>
+                        <th scope="col"><Trans>Ambiguous timestamps (baseline / comparison)</Trans></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {window.metrics.map(row => (
+                        <tr key={`${row.metric}:${row.baseline}:${row.candidate}`}>
+                          <th scope="row">{metrics[row.metric]}</th>
+                          <td>
+                            {labels[row.candidate]}
+                            {' / '}
+                            {labels[row.baseline]}
+                          </td>
+                          <td>{number(row.commonObservationCount)}</td>
+                          <td>{number(row.commonSupport.baseline.metrics?.mae)}</td>
+                          <td>{number(row.commonSupport.candidate.metrics?.mae)}</td>
+                          <td>{number(row.differences.commonMae)}</td>
+                          <td>{number(row.differences.ownMae)}</td>
+                          <td>
+                            {number(row.lostObservationTimestamps)}
+                            {row.coverageReduced
+                              ? (
+                                  <>
+                                    {' '}
+                                    —
+                                    <Trans>Coverage reduced</Trans>
+                                  </>
+                                )
+                              : null}
+                          </td>
+                          <td>{number(row.addedObservationTimestamps)}</td>
+                          <td>
+                            {number(row.ambiguousObservationTimestamps.baseline)}
+                            {' / '}
+                            {number(row.ambiguousObservationTimestamps.candidate)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <p><Trans>Dropping readings can lower own-support error. Duplicate timestamps are excluded from shared support. These counts do not measure continuous time coverage.</Trans></p>
+                </div>
+              ))
+            : null}
           {night.evaluations.map(evaluation => (
             <div key={evaluation.label} className="space-y-2 py-2">
               <h5 className="font-medium">{labels[evaluation.label]}</h5>
@@ -49,7 +116,7 @@ export function NumericReport({ report }: { report: NumericReportView }) {
                     {' – '}
                     {dates.format(window.endMs)}
                   </p>
-                  <p>{t`Stored observations: ${window.observationCount}`}</p>
+                  <p>{waveform ? t`Recomputed observations: ${window.observationCount}` : t`Stored observations: ${window.observationCount}`}</p>
                   <table className="w-full text-left text-sm">
                     <caption className="text-left"><Trans>Errors use the metric unit; signed bias is pod minus reference.</Trans></caption>
                     <thead>

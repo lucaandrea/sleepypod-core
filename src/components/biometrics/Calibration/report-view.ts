@@ -4,10 +4,10 @@ const score = z.number().finite().nullable()
 const pooled = z.object({ agreement: score, macroF1: score, pairedDurationMs: z.number().nonnegative() })
 /** A bounded UI projection of the retained versioned report; unknown versions fail closed. */
 export const reportViewSchema = z.object({
-  version: z.literal('processed-backtest-report-v1'), status: z.literal('insufficient_evidence'),
+  version: z.enum(['processed-backtest-report-v1', 'waveform-backtest-report-v1']), status: z.literal('insufficient_evidence'),
   datasetHash: z.string(), protocolHash: z.string(), manifestHash: z.string(), evaluatorBuildHash: z.string(),
   split: z.enum(['tuning', 'validation', 'holdout']), evidence: z.string(), holdoutUse: z.number(),
-  protocol: z.object({ mode: z.enum(['comparison', 'stage_replay']) }),
+  protocol: z.object({ mode: z.enum(['comparison', 'stage_replay', 'signal_replay']), waveformStages: z.boolean().optional() }),
   calibration: z.object({ source: z.literal('explicit_assumption'), quality: z.number() }),
   limitations: z.array(z.string()),
   stageNightSummary: z.array(z.object({ baseline: z.string(), candidate: z.string(), baselineHash: z.string(), candidateHash: z.string(),
@@ -18,12 +18,35 @@ export const reportViewSchema = z.object({
     uncertainty: z.object({ status: z.enum(['not_requested', 'insufficient_nights', 'degenerate', 'estimated']),
       interval: z.object({ lower: z.number().finite(), upper: z.number().finite() }).nullable(), limitations: z.array(z.string()) }),
   })).max(3),
-})
+}).refine(report => (report.version === 'waveform-backtest-report-v1') === (report.protocol.mode === 'signal_replay'), 'Report mode and version disagree')
 
-/** Numerical scores describe original readings, regardless of candidate parameters. */
+const numericMetric = z.enum(['heart_rate', 'breathing_rate', 'window_ibi_variability_v1'])
+const configuration = z.enum(['default', 'current', 'candidate'])
+const count = z.number().int().nonnegative()
+const numericSupport = z.object({
+  metrics: z.object({ mae: score, medianAbsoluteError: score, p95AbsoluteError: score, signedBias: score }).nullable(),
+  pairedCount: count, referenceCoverage: score,
+})
+export const numericComparisonViewSchema = z.object({
+  version: z.literal('paired-numeric-support-v1'), metric: numericMetric,
+  baseline: configuration, candidate: configuration, baselineHash: z.string(), candidateHash: z.string(),
+  commonSupportScope: z.literal('all_configurations'), supportDefinition: z.literal('identical_unambiguous_observation_timestamps'),
+  commonObservationCount: count,
+  ownSupport: z.object({ baseline: numericSupport, candidate: numericSupport }),
+  commonSupport: z.object({ baseline: numericSupport, candidate: numericSupport }),
+  differences: z.object({ commonMae: score, commonMedianAbsoluteError: score, commonP95AbsoluteError: score,
+    commonSignedBias: score, ownMae: score, referenceCoverage: score }),
+  lostObservationTimestamps: count, addedObservationTimestamps: count,
+  ambiguousObservationTimestamps: z.object({ baseline: count, candidate: count }), coverageReduced: z.boolean(),
+  interpretation: z.literal('descriptive_numeric_agreement_not_validated_improvement'),
+})
+/** Bounded scores only; readings and reference records remain outside this projection. */
 export const numericReportViewSchema = z.object({
   nights: z.array(z.object({
     cohortId: z.string(),
+    numericComparisons: z.array(z.object({ startMs: z.number().finite(), endMs: z.number().finite(),
+      metrics: z.array(numericComparisonViewSchema).max(9),
+    })).max(60).optional(),
     evaluations: z.array(z.object({
       label: z.enum(['default', 'current', 'candidate']), configHash: z.string(),
       windows: z.array(z.object({
