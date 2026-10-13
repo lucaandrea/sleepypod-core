@@ -45,6 +45,7 @@ it('scores derived readings for matching labels without replacing immutable data
   ]))
   const summary = summarizeBacktestResult({ available: true, report })
   expect(summary?.report).toMatchObject({ nights: [expect.objectContaining({ numericComparisons: report.nights[0].numericComparisons })] })
+  expect(report.numericNightSummary?.[0]).toMatchObject({ metric: 'heart_rate', scoredNights: 1, equalNightMeanMaeDifference: 0, uncertainty: { statistic: 'equal_night_mean_common_mae_difference', status: 'not_requested' } })
   expect(work).toEqual(before)
 })
 it('rejects incomplete, mismatched or extraneous derived waveform evidence', () => {

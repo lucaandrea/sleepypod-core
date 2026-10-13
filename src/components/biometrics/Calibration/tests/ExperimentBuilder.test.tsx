@@ -61,3 +61,12 @@ it('uses retained signal replay and requires a quality assumption only when stag
   await waitFor(() => expect(mock.create).toHaveBeenCalledTimes(2))
   expect(mock.create.mock.calls[1][0].protocol).toMatchObject({ mode: 'signal_replay', waveformStages: true, assumedStageCalibrationQuality: 0.5 })
 })
+it('pins numeric night uncertainty without requiring stage replay', async () => {
+  render(<I18nProvider i18n={i18n}><ExperimentBuilder datasetId="waveforms" stageReplay waveformReplay /></I18nProvider>)
+  fireEvent.click(screen.getByLabelText('Estimate exploratory whole-night uncertainty'))
+  fireEvent.change(screen.getByLabelText('Reproducible sampling seed'), { target: { value: 'numeric-nights' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Save evaluation protocol' }))
+  await waitFor(() => expect(mock.create).toHaveBeenCalledOnce())
+  expect(mock.create.mock.calls[0][0].protocol).toMatchObject({ mode: 'signal_replay', waveformStages: false,
+    nightUncertainty: { version: 'paired-night-percentile-v1', seed: 'numeric-nights', minimumNights: 3, resamples: 1000 } })
+})

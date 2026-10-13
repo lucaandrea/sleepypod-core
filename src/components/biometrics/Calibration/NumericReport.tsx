@@ -25,6 +25,7 @@ export function NumericReport({ report, waveform = false }: { report: NumericRep
   const percent = (value: number | null) => value === null ? t`Not scored` : new Intl.NumberFormat(i18n.locale || 'en', { style: 'percent', maximumFractionDigits: 2 }).format(value)
   const labels = { default: t`System defaults`, current: waveform ? t`Current baseline` : t`Current stage view`, candidate: t`Candidate` }
   const metrics = { heart_rate: t`Heart rate (bpm)`, breathing_rate: t`Breathing rate (breaths/min)`, window_ibi_variability_v1: t`Window IBI variability index (ms)` }
+  const uncertaintyLabels = { not_requested: t`Not requested`, insufficient_nights: t`Insufficient paired nights`, degenerate: t`No estimable variation`, estimated: t`Exploratory interval estimated` }
   const statuses = { compared: t`Compared`, no_reference: t`No reference`, no_overlap: t`No overlap`, incompatible: t`Incompatible reference` }
   const start = page * 10
   return (
@@ -35,6 +36,27 @@ export function NumericReport({ report, waveform = false }: { report: NumericRep
         : <p><Trans>These scores compare original stored readings. Identical numerical results across profiles do not validate numerical parameter changes.</Trans></p>}
       <p><Trans>Reference coverage is the fraction of eligible reference records paired. Output coverage is the fraction of observations with a value, not continuous time coverage. Sparse samples cannot establish whole-night accuracy.</Trans></p>
       <p><Trans>The window IBI variability index is not clinical beat-to-beat RMSSD. Only compatible metric definitions and aggregation windows are scored.</Trans></p>
+      {waveform
+        ? report.numericNightSummary?.map(summary => (
+            <div key={`${summary.metric}:${summary.baseline}:${summary.candidate}:${summary.baselineHash}:${summary.candidateHash}`} className="space-y-2 border-t border-border pt-3">
+              <h5 className="font-medium">
+                {metrics[summary.metric]}
+                {' — '}
+                {labels[summary.candidate]}
+                {' / '}
+                {labels[summary.baseline]}
+              </h5>
+              <p>{t`Scored nights: ${summary.scoredNights}; unscored: ${summary.unscoredNights}; coverage reduced: ${summary.coverageReducedNights}`}</p>
+              <p>{t`Lower error: ${summary.improvedErrorNights}; higher: ${summary.regressedErrorNights}; unchanged: ${summary.unchangedErrorNights}`}</p>
+              <p>{t`Equal-night mean MAE difference: ${number(summary.equalNightMeanMaeDifference)}`}</p>
+              <p>{t`Pooled shared MAE — baseline: ${number(summary.pooledCommonSupport.baseline.mae)}; comparison: ${number(summary.pooledCommonSupport.candidate.mae)}`}</p>
+              <p><Trans>Errors use the metric unit. Reference pairs are weighted equally within each night; nights are weighted equally in the mean difference. Pooled scores weight all reference pairs equally.</Trans></p>
+              <p>{uncertaintyLabels[summary.uncertainty.status]}</p>
+              {summary.uncertainty.interval ? <p>{t`Exploratory 95% interval for MAE difference: ${number(summary.uncertainty.interval.lower)} to ${number(summary.uncertainty.interval.upper)}`}</p> : null}
+              {summary.uncertainty.limitations.map(limitation => <p key={limitation} className="text-xs text-fg-2">{limitation}</p>)}
+            </div>
+          ))
+        : null}
       <p>{t`Times shown in ${timezone}`}</p>
       {report.nights.length === 0 ? <p><Trans>No nights in this report.</Trans></p> : null}
       {report.nights.slice(start, start + 10).map(night => (

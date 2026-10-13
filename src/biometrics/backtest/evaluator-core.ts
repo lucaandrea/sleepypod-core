@@ -1,3 +1,4 @@
+import { createNumericNightSummary } from './numeric-night-summary'
 import { compareNumericConfigurations } from './numeric-comparison'
 import { z } from 'zod'
 import { waveformReadingSchema, waveformRunSchema } from './waveform-output'
@@ -42,6 +43,7 @@ function mergeWindows(windows: Array<{ startMs: number, endMs: number }>) {
 export function createBacktestEvaluator(dependencies: { configHash: (value: unknown) => string, dataHash: (value: unknown) => string, digest: (text: string) => Uint8Array }) {
   const { configHash, dataHash, digest } = dependencies
   const manifestHash = configHash(biometricManifest)
+  const summarizeNumericNights = createNumericNightSummary(createNightUncertainty(digest, 'equal_night_mean_common_mae_difference'))
   const summarizeStageNights = createNightSummary(createNightUncertainty(digest))
   return function evaluateBacktest(raw: z.input<typeof backtestWorkSchema>, progress: (completed: number, total: number) => void = () => {}) {
     const { job, dataset, waveform } = backtestWorkSchema.parse(raw)
@@ -177,6 +179,7 @@ export function createBacktestEvaluator(dependencies: { configHash: (value: unkn
     return { version: signalReplay ? 'waveform-backtest-report-v1' as const : 'processed-backtest-report-v1' as const,
       ...(signalReplay ? { waveform: { ...(job.waveform?.baselineProvenance ? { baselineProvenance: job.waveform.baselineProvenance } : {}), pythonBuildHash: job.waveform?.pythonBuildHash, otherSideConfigHash: job.waveform?.otherSide.resolvedHash, ...waveform } } : {}), datasetId: job.datasetId, datasetHash: job.datasetHash,
       evaluatorBuildHash: job.evaluatorBuildHash, protocol: job.protocol, protocolHash: job.protocolHash, manifestHash, support: signalReplay ? 'identical_retained_waveform_inputs' as const : 'identical_retained_epoch_intervals' as const, split: job.split, holdoutUse: job.holdoutUse,
+      ...(signalReplay ? { numericNightSummary: summarizeNumericNights(nights, job.protocol.nightUncertainty) } : {}),
       status: 'insufficient_evidence' as const, evidence: job.evidence, nights, stageNightSummary: summarizeStageNights(nights, job.protocol.nightUncertainty),
       calibration: { source: 'explicit_assumption' as const, quality: job.protocol.assumedStageCalibrationQuality },
       limitations: ['This descriptive report does not establish validated improvement.',

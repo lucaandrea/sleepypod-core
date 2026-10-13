@@ -11,6 +11,7 @@ export function ExperimentBuilder({ datasetId, stageReplay, waveformReplay = fal
   const [mode, setMode] = useState<'comparison' | 'stage_replay' | 'signal_replay'>(waveformReplay ? 'signal_replay' : 'comparison')
   const [waveformStages, setWaveformStages] = useState(false)
   const stages = mode === 'stage_replay' || (mode === 'signal_replay' && waveformStages)
+  const supportsUncertainty = stages || mode === 'signal_replay'
   const [quality, setQuality] = useState('')
   const [tolerance, setTolerance] = useState('30000')
   const [offset, setOffset] = useState('0')
@@ -27,7 +28,7 @@ export function ExperimentBuilder({ datasetId, stageReplay, waveformReplay = fal
     assumedStageCalibrationQuality: stages ? numeric(quality) : 0,
     pointToleranceMs: numeric(tolerance), clockOffsetMs: numeric(offset),
     ...(mode === 'signal_replay' ? { waveformStages } : {}),
-    ...(uncertainty && stages ? { nightUncertainty: { version: 'paired-night-percentile-v1', seed, resamples: numeric(resamples), minimumNights: numeric(minimumNights) } } : {}),
+    ...(uncertainty && supportsUncertainty ? { nightUncertainty: { version: 'paired-night-percentile-v1', seed, resamples: numeric(resamples), minimumNights: numeric(minimumNights) } } : {}),
   })
   const compatible = waveformReplay === (mode === 'signal_replay') && (mode !== 'stage_replay' || stageReplay)
   const fingerprint = protocol.success ? JSON.stringify({ datasetId, protocol: protocol.data }) : undefined
@@ -77,11 +78,11 @@ export function ExperimentBuilder({ datasetId, stageReplay, waveformReplay = fal
           <input type="number" min={-3600000} max={3600000} step={1} value={offset} onChange={event => setOffset(event.target.value)} />
         </label>
         <label className="block">
-          <input type="checkbox" disabled={!stages} checked={uncertainty && stages} onChange={event => setUncertainty(event.target.checked)} />
+          <input type="checkbox" disabled={!supportsUncertainty} checked={uncertainty && supportsUncertainty} onChange={event => setUncertainty(event.target.checked)} />
           {' '}
           <Trans>Estimate exploratory whole-night uncertainty</Trans>
         </label>
-        {uncertainty && stages
+        {uncertainty && supportsUncertainty
           ? (
               <div className="space-y-2">
                 <label className="block">

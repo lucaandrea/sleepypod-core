@@ -27,15 +27,15 @@ function quantile(sorted: number[], probability: number) {
 
 /** Resample paired whole-night differences, never correlated epochs. An
  * exploratory interval alone cannot award improvement or validate activation. */
-export function createNightUncertainty(digest: (text: string) => Uint8Array) {
+export function createNightUncertainty(digest: (text: string) => Uint8Array, statistic: 'equal_night_mean_common_agreement_difference' | 'equal_night_mean_common_mae_difference' = 'equal_night_mean_common_agreement_difference') {
   return function nightUncertainty(input: Array<{ cohortId: string, difference: number | null }>, rawPolicy?: NightBootstrapPolicy) {
     if (input.length > 60 || new Set(input.map(row => row.cohortId)).size !== input.length
-      || input.some(row => row.difference !== null && (!Number.isFinite(row.difference) || Math.abs(row.difference) > 1))) throw new Error('Invalid paired-night uncertainty input')
+      || input.some(row => row.difference !== null && (!Number.isFinite(row.difference) || Math.abs(row.difference) > (statistic === 'equal_night_mean_common_agreement_difference' ? 1 : 2 * Number.MAX_SAFE_INTEGER)))) throw new Error('Invalid paired-night uncertainty input')
     const policy = rawPolicy === undefined ? null : nightBootstrapSchema.parse(rawPolicy)
     const ordered = [...input].sort((a, b) => a.cohortId < b.cohortId ? -1 : a.cohortId > b.cohortId ? 1 : 0)
     const values = ordered.flatMap(row => row.difference === null ? [] : [row.difference])
     const metadata = { policy, confidenceLevel: 0.95, samplingUnit: 'whole_night_cohort' as const,
-      statistic: 'equal_night_mean_common_agreement_difference' as const, scoredNights: values.length, omittedNights: input.length - values.length,
+      statistic, scoredNights: values.length, omittedNights: input.length - values.length,
       estimate: values.length ? average(values) : null,
       limitations: ['Exploratory interval assumes exchangeable nights; serial dependence may understate uncertainty.',
         'The requested minimum night count is a reporting threshold, not proof of sufficient evidence.',

@@ -59,3 +59,17 @@ it('shows dropped readings beside own and shared errors for waveform results', (
   expect(screen.queryByText(/Identical numerical results across profiles/)).toBeNull()
   expect(screen.getByRole('columnheader', { name: 'Shared MAE difference' })).toBeTruthy()
 })
+
+it('shows whole-night uncertainty in metric units with missing scores preserved', () => {
+  const report = numericReportViewSchema.parse({ nights: [], numericNightSummary: [{ version: 'numeric-night-summary-v1',
+    metric: 'heart_rate', baseline: 'default', candidate: 'candidate', baselineHash: 'a', candidateHash: 'b',
+    totalNights: 4, scoredNights: 3, unscoredNights: 1, coverageReducedNights: 1, improvedErrorNights: 2, regressedErrorNights: 1, unchangedErrorNights: 0,
+    equalNightMeanMaeDifference: -2, pooledCommonSupport: { baseline: { mae: null, signedBias: null, pairedCount: 0 }, candidate: { mae: null, signedBias: null, pairedCount: 0 } },
+    uncertainty: { statistic: 'equal_night_mean_common_mae_difference', status: 'estimated', interval: { lower: -4, upper: 1 }, limitations: ['Exploratory fixture'] },
+  }] })
+  render(<I18nProvider i18n={i18n}><NumericReport report={report} waveform /></I18nProvider>)
+  expect(screen.getByText('Equal-night mean MAE difference: -2')).toBeTruthy()
+  expect(screen.getByText('Exploratory 95% interval for MAE difference: -4 to 1')).toBeTruthy()
+  expect(screen.getByText('Scored nights: 3; unscored: 1; coverage reduced: 1')).toBeTruthy()
+  expect(screen.getByText(/baseline: Not scored; comparison: Not scored/)).toBeTruthy()
+})

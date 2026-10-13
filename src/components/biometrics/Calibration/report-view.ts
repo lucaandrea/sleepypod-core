@@ -42,6 +42,18 @@ export const numericComparisonViewSchema = z.object({
 })
 /** Bounded scores only; readings and reference records remain outside this projection. */
 export const numericReportViewSchema = z.object({
+  numericNightSummary: z.array(z.object({
+    version: z.literal('numeric-night-summary-v1'), metric: numericMetric, baseline: configuration, candidate: configuration,
+    baselineHash: z.string(), candidateHash: z.string(), totalNights: count, scoredNights: count, unscoredNights: count,
+    coverageReducedNights: count, improvedErrorNights: count, regressedErrorNights: count, unchangedErrorNights: count,
+    equalNightMeanMaeDifference: score,
+    pooledCommonSupport: z.object({ baseline: z.object({ pairedCount: count, mae: score, signedBias: score }),
+      candidate: z.object({ pairedCount: count, mae: score, signedBias: score }) }),
+    uncertainty: z.object({ statistic: z.literal('equal_night_mean_common_mae_difference'),
+      status: z.enum(['not_requested', 'insufficient_nights', 'degenerate', 'estimated']),
+      interval: z.object({ lower: z.number().finite(), upper: z.number().finite() }).nullable(), limitations: z.array(z.string()),
+    }),
+  })).max(9).optional(),
   nights: z.array(z.object({
     cohortId: z.string(),
     numericComparisons: z.array(z.object({ startMs: z.number().finite(), endMs: z.number().finite(),
