@@ -450,3 +450,21 @@ current aggregate receipt contract is not itself proof that those components ran
 Production integration must also guard relevant opposite-side binding changes.
 No production entry or collector is installed here, and the admission module
 does not authorize activation or provide an API for writing qualification files.
+
+`shadowRuntimeBindingReader` supplies the aggregate binding observation from
+read-only configuration and biometrics handles. It freezes expected generations
+and hashes for both physical channels, validates desired activation hashes and
+bounded runtime projections against the shipped manifest and resolved config,
+then requires the latest heart-rate, breathing-rate and HRV receipts to be applied
+at those exact generations. It never falls back to an older applied generation.
+Missing or pending receipts, future boundaries/heartbeats, and changed opposite-side
+bindings refuse observation. The minimum of all six heartbeats lets the admission
+policy enforce freshness for every component. Sleep-stage receipts are on-demand,
+so they are not evidence of continuous numerical health.
+
+The collector uses nested read snapshots and checks caller-owned database identity
+before and after capture. These are observations, not a cross-database lock or a
+promise that activation cannot occur after a read; the attempt must keep checking
+admission. It opens no files and writes no runtime state. Host construction still
+needs to capture both expected baselines, provide file-identity guards, and connect
+this collector with installed build identity and resource-health observations.
