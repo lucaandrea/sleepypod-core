@@ -12,11 +12,12 @@ import { ProfileLibrary } from './ProfileLibrary'
 import { ProfileRecovery } from './ProfileRecovery'
 import { CalibrationBacktests } from './CalibrationBacktests'
 import { CalibrationHistory } from './CalibrationHistory'
+import { ShadowRuns } from './ShadowRuns'
 
 type Side = 'left' | 'right'
 export function BiometricCalibration({ side, onSideChange }: { side: Side, onSideChange: (side: Side) => void }) {
   const { t } = useLingui()
-  const [view, setView] = useState<'overview' | 'references' | 'backtests' | 'profiles' | 'history'>('overview')
+  const [view, setView] = useState<'overview' | 'references' | 'backtests' | 'profiles' | 'history' | 'observations'>('overview')
   return (
     <div className="space-y-4">
       <Card className="space-y-3">
@@ -27,6 +28,7 @@ export function BiometricCalibration({ side, onSideChange }: { side: Side, onSid
           <Button aria-pressed={view === 'profiles'} onClick={() => setView('profiles')}><Trans>Profiles</Trans></Button>
           <Button aria-pressed={view === 'backtests'} onClick={() => setView('backtests')}><Trans>Backtests</Trans></Button>
           <Button aria-pressed={view === 'history'} onClick={() => setView('history')}><Trans>History</Trans></Button>
+          <Button aria-pressed={view === 'observations'} onClick={() => setView('observations')}><Trans>Observations</Trans></Button>
         </nav>
       </Card>
       {view === 'overview'
@@ -45,15 +47,17 @@ export function BiometricCalibration({ side, onSideChange }: { side: Side, onSid
             )
           : view === 'backtests'
             ? <CalibrationBacktests key={side} side={side} />
-            : view === 'history'
-              ? <CalibrationHistory key={side} side={side} />
-              : (
-                  <>
-                    <ProfileLibrary key={side} side={side} />
-                    <p className="text-sm text-fg-2"><Trans>Direct sleep-stage changes are unvalidated manual settings. Saving requests a profile change; processor adoption is reported separately in Overview.</Trans></p>
-                    <SleepStageRules side={side} onSideChange={onSideChange} />
-                  </>
-                )}
+            : view === 'observations'
+              ? <ShadowRuns key={side} side={side} />
+              : view === 'history'
+                ? <CalibrationHistory key={side} side={side} />
+                : (
+                    <>
+                      <ProfileLibrary key={side} side={side} />
+                      <p className="text-sm text-fg-2"><Trans>Direct sleep-stage changes are unvalidated manual settings. Saving requests a profile change; processor adoption is reported separately in Overview.</Trans></p>
+                      <SleepStageRules side={side} onSideChange={onSideChange} />
+                    </>
+                  )}
     </div>
   )
 }

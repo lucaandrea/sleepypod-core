@@ -853,7 +853,16 @@ MCP uses these same router operations: `inspect_biometric_calibration` actions
 `shadow_runs`, `shadow_run`, `shadow_report` and `shadow_compare` are read-only;
 `stop_biometric_shadow` is an explicit idempotent mutation.
 `schedule_biometric_shadow` submits a proposed plan through the same creation
-operation. UI flows still need integration.
+operation.
+
+The calibration screen's Observations tab lists runs for the selected side,
+shows UTC windows and saved identities, and can record a stop request. Detail
+polling ends for terminal runs; list polling continues to discover new work.
+Reports are opened on request and refreshed explicitly rather than recomputed
+every status poll. They distinguish unavailable coverage/resource receipts from
+zero values and show operational issues without implying validated improvement.
+The UI still needs plan preparation/scheduling and reference-comparison controls;
+browser verification and translation-catalog completion remain release work.
 
 ### Creation admission
 

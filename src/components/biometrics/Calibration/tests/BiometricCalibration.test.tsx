@@ -17,6 +17,7 @@ vi.mock('@/src/utils/trpc', () => ({ trpc: {
   settings: { getAll: { useQuery: () => ({ data: { device: { timezone: 'UTC' } } }) } },
 } }))
 vi.mock('../ProfileRecovery', () => ({ ProfileRecovery: () => <p>Recovery controls</p> }))
+vi.mock('../ShadowRuns', () => ({ ShadowRuns: ({ side }: { side: string }) => <p>{`Prospective runs ${side}`}</p> }))
 vi.mock('../ProfileLibrary', () => ({ ProfileLibrary: () => <p>Candidate editor</p> }))
 vi.mock('@/src/hooks/useSideNames', () => ({ useSideNames: () => ({ leftName: 'Left', rightName: 'Right' }) }))
 vi.mock('@/src/components/Settings/SleepStageRules', () => ({ SleepStageRules: ({ side }: { side: string }) => <p>{`Existing stage editor ${side}`}</p> }))
@@ -46,6 +47,13 @@ it('reuses the existing stage editor and keeps manual activation semantics visib
   fireEvent.click(screen.getByRole('button', { name: 'Profiles' }))
   expect(screen.getByText('Existing stage editor left')).toBeTruthy()
   expect(screen.getByText(/unvalidated manual settings/)).toBeTruthy()
+})
+it('opens prospective observations for the selected side', () => {
+  const rendered = render(view())
+  fireEvent.click(screen.getByRole('button', { name: 'Observations' }))
+  expect(screen.getByText('Prospective runs left')).toBeTruthy()
+  rendered.rerender(view('right'))
+  expect(screen.getByText('Prospective runs right')).toBeTruthy()
 })
 it('resets history pagination on side changes and labels historical acknowledgements', () => {
   mock.history = { items: [{ id: 'event', generation: 4, action: 'rollback', state: 'applied', createdAtMs: 1791673200000,
