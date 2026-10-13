@@ -557,3 +557,36 @@ not installed qualification or recommended deployment limits.
 This measures synthetic processing and supervision only. It does not establish
 live capture/sink performance, representative artifact robustness, held-out
 accuracy or permission to install a shadow qualification registry.
+
+### Current worker eight-hour run (2026-10-13)
+
+The current worker/coordinator bytes completed three configurations over 28,800
+synthetic seconds at 500 Hz on the same four-core ARM64, 2 GiB pod. The staged
+source was `db52f1da`; subsequent API/UI/prompt changes leave the measured worker
+and coordinator hashes unchanged. Exact hashes and artifact identities are in
+[the compact evidence](performance/biometrics-replay-2026-10-13/fullnight-db52f1da.json).
+
+- Replay: 2,756.7 seconds (45.94 minutes); retention: 21.74 seconds; summary:
+  2.99 seconds. All operations completed and fixture canonical rows were unchanged.
+- 363 concurrent report reads: no failures, p95 1,943.7 ms, maximum 2,183.3 ms.
+- 7,390 internal HTTP observations: no failures, p95 57.1 ms, maximum 300.8 ms.
+  The independent probe recorded 17,568 observations, also without failures,
+  p95 39.6 ms and maximum 500.1 ms.
+- Peak sampled process-tree RSS: 443.1 MiB; minimum available memory: 902.6 MiB;
+  minimum filesystem space: 3.02 GiB; maximum temperature: 49.965 °C.
+- Aggregate CPU busy averaged 68.1%, peaking at 99.0% over a sampling interval.
+  Maximum one-minute load per CPU was 1.0575. These include live services and
+  the probe, not just the replay child.
+- Maximum observed piezo arrival age: 1,560 ms. There were 71 negative age
+  differences because the collector records its start before asynchronous reads
+  and can observe a newer frame afterward; those are not negative ingest latency.
+- Parent event-loop p95 during replay: 27.28 ms, maximum 154.01 ms. A 100 ms
+  admission check is therefore not a continuous event-loop latency guarantee.
+
+The original process handle exited successfully and no owned worker descendants
+remained before the separate shadow measurement started. Core and piezo services
+were active afterward. The read-only HTTP probes do not prove actuator-write
+latency or clinical performance. Raw measurements remain under
+`/tmp/biometrics-qualification-db52f1da/` on the measurement workstation; the
+committed evidence records their SHA-256 hashes. No live database or profile was
+changed by this benchmark.

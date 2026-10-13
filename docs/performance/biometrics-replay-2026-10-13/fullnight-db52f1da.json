@@ -1,0 +1,93 @@
+{
+  "scope": "Eight-hour synthetic replay resource measurement; not shadow, clinical or activation qualification",
+  "sourceCommit": "db52f1da",
+  "architecture": "aarch64",
+  "nodeVersion": "24.16.0",
+  "pythonVersion": "3.10.4",
+  "completed": true,
+  "fixtureSeconds": 28800,
+  "compressedBytes": 95621299,
+  "canonicalObservationsUnchanged": true,
+  "readFailures": 0,
+  "replayBudget": {
+    "jobWallMs": 7200000,
+    "waveformWallMs": 1800000,
+    "waveformCpuSeconds": 1200
+  },
+  "operations": [
+    {
+      "phase": "snapshot",
+      "succeeded": true,
+      "elapsedMs": 1512.0559429999994,
+      "eventLoopP95Ms": 23.134207,
+      "eventLoopMaxMs": 39.550975,
+      "parentPeakRssKiB": 130780
+    },
+    {
+      "phase": "retain",
+      "succeeded": true,
+      "elapsedMs": 21739.24188,
+      "eventLoopP95Ms": 22.036479,
+      "eventLoopMaxMs": 51.937279,
+      "parentPeakRssKiB": 130780
+    },
+    {
+      "phase": "waveform-replay",
+      "succeeded": true,
+      "elapsedMs": 2756681.940805,
+      "eventLoopP95Ms": 27.279359,
+      "eventLoopMaxMs": 154.009599,
+      "parentPeakRssKiB": 153608
+    },
+    {
+      "phase": "summary",
+      "succeeded": true,
+      "elapsedMs": 2994.1249830001034,
+      "eventLoopP95Ms": 22.020095,
+      "eventLoopMaxMs": 34.865151,
+      "parentPeakRssKiB": 153752
+    },
+    {
+      "summaryBytes": 59919,
+      "resultHash": "bda8d03d158b04bb3669ff613e0936ed46822c0083c4d37f9f30e5338bc95f97",
+      "compoundBuildHash": "2b6514629ca87fc82753d6b0940b1c94d754f834585ef115387eaf536ef58df1",
+      "pythonBuildHash": "212c5643dd24cae1cbf9c346b0729d7ea144c453cd56370ec810223c508a5bc3"
+    }
+  ],
+  "concurrentReadMs": {
+    "count": 363,
+    "p95": 1943.6675560000003,
+    "max": 2183.3170790000004
+  },
+  "internalApiMs": {
+    "count": 7390,
+    "p95": 57.09343400015496,
+    "max": 300.81892600000015
+  },
+  "internalApiFailures": 0,
+  "externalApiMs": {
+    "count": 17568,
+    "p95": 39.62092199799372,
+    "max": 500.0740819959901
+  },
+  "externalApiFailures": 0,
+  "minimumAvailableMemoryBytes": 946417664,
+  "minimumFreeDiskBytes": 3243700224,
+  "maximumTemperatureC": 49.965,
+  "maximumIngestionAgeMs": 1560,
+  "negativeSampleAgeCount": 71,
+  "peakObservedBenchmarkTreeRssBytes": 464650240,
+  "maximumBenchmarkProcessCount": 4,
+  "artifactSha256": {
+    "benchmark.cjs": "bc1dc66c597b020480830548c2de7368a7bdbe2e68a440779c7de79b8254145f",
+    "payload.tgz": "9cf50a0a8488a1ef8f79ccc41bdd7d086c9dd68bcbba61156d11d8f768813a36",
+    "measurements.json": "696bdd6462504844c90936afcfe1c8cac7429d141f16893270292cdcc59c29bc",
+    "probe-28800.json": "e9865a8019e8e3360b022daab587ff5397d317bb9e17c362231ebc3288747af3",
+    "fixture-28800.json": "165071ec9b67e9dd2143575e8c2758b99090d47c1fb6412291b778d4be59dce0"
+  },
+  "workerSha256": "c635a135ad0cfc2a327292968d08ab043ca8b523dd4c0149be6b793c8a192a5e",
+  "coordinatorSha256": "c31f3e6dc614cc688d06d25158318cea9c48f3f9ca3d157b576f1269e7672c05",
+  "maximumLoadPerCpu": 1.0575,
+  "meanAggregateCpuBusyPercent": 68.06810450124667,
+  "maximumAggregateCpuBusyPercent": 99.00497512437812
+}
