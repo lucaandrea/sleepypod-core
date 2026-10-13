@@ -117,3 +117,30 @@ def test_real_outputs_stop_at_quota_and_sink_failure_never_retries_silently():
     with pytest.raises(ValueError, match='stopped'):
         failed.finish()
     assert len(attempted) == 1
+
+
+def test_failed_processing_retains_measured_cpu_and_clock_failures_stop_adapter():
+    ticks = iter([10_000_000, 13_000_000])
+    candidate = shadow(lambda _: pytest.fail('Failed input emitted output'),
+                       cpu_clock=lambda: next(ticks))
+    with pytest.raises(ValueError, match='Invalid shadow record'):
+        candidate.feed(START, {'type': 'unknown'}, CONTEXT)
+    assert candidate.health()['cpu_ms'] == 3
+    assert candidate.health()['state'] == 'failed'
+
+    for ticks in ([None], [True], [-1], [10, 9]):
+        clock = iter(ticks)
+        broken = shadow(lambda _: pytest.fail('Invalid clock emitted output'),
+                        cpu_clock=lambda: next(clock))
+        with pytest.raises(ValueError, match='CPU clock'):
+            broken.feed(START, {'type': 'frzHealth'}, CONTEXT)
+        assert broken.health()['state'] == 'failed'
+        with pytest.raises(ValueError, match='stopped'):
+            broken.feed(START + 1, {'type': 'frzHealth'}, CONTEXT)
+
+    def unavailable():
+        raise RuntimeError('clock unavailable')
+    unavailable_clock = shadow(lambda _: None, cpu_clock=unavailable)
+    with pytest.raises(RuntimeError, match='clock unavailable'):
+        unavailable_clock.feed(START, {'type': 'frzHealth'}, CONTEXT)
+    assert unavailable_clock.health()['state'] == 'failed'

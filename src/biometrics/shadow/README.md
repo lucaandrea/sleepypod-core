@@ -96,3 +96,27 @@ pending arbitration; normal finish flushes once. These checks cannot preempt an
 individual numerical call. An isolated worker with host CPU/RSS/wall limits and
 health supervision is still required before enabling live shadow processing.
 The worker/source/controller/storage bridge is not yet connected.
+
+## Subprocess transport
+
+`python -m common.biometrics.shadow_worker` exposes the shipped adapter through
+bounded JSON lines. Initialization binds run/attempt UUIDs, both configurations
+and their canonical hashes, selected side, observation window, processor quotas,
+and input/output transport ceilings. Frames have an ordered sequence, explicit
+observed-arrival timestamp, record and context. Binary channel values are base64,
+validated before conversion and bounded to the core's existing channel limit.
+
+The worker replies once per frame, with the same run/attempt identity, input
+sequence, candidate-only outputs and health. Output readings include metric,
+canonical unit and explicit window definition (the shipped variability index's
+window comes from the shared processor constant). It accepts explicit finish or
+cancel; unexpected EOF, bad identities/order/encoding, or transport overflow
+fails instead of publishing a completion acknowledgment. Lines are capped at
+128 KiB and cumulative transport is bounded by the initialization request.
+
+The worker does not receive database handles or hardware access and does not
+open the configured biometrics database. The supervisor must supply actual
+contemporaneous active readings separately, validate replies, enforce OS limits,
+and persist through the fenced shadow store. This bridge and live source
+supervision are still pending. CPU accounting now includes failed adapter calls;
+missing, invalid or regressing CPU clocks terminate the adapter.

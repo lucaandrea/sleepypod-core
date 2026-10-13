@@ -49,19 +49,29 @@ class ProspectiveShadow:
             raise ValueError('Shadow output budget exceeded')
         self._staged.append(reading)
 
+    def _read_cpu(self):
+        value = self._cpu_clock()
+        if type(value) is not int or value < 0:
+            raise ValueError('Invalid shadow CPU clock')
+        return value
+
     def _execute(self, action):
         if self.state != 'running':
             raise ValueError('Shadow processor is stopped')
         self._staged = []
-        before = self._cpu_clock()
         try:
+            before = self._read_cpu()
             if self._cpu_ns >= self.maximum_cpu_ns:
                 raise ValueError('Shadow CPU budget exceeded')
-            action()
-            elapsed = self._cpu_clock() - before
-            if elapsed < 0:
-                raise ValueError('Shadow CPU clock regressed')
-            self._cpu_ns += elapsed
+            try:
+                action()
+            finally:
+                # Failed numerical/validation calls still consumed CPU. Do not
+                # report a zero-cost failure or permit reuse after clock failure.
+                elapsed = self._read_cpu() - before
+                if elapsed < 0:
+                    raise ValueError('Shadow CPU clock regressed')
+                self._cpu_ns += elapsed
             if self._cpu_ns > self.maximum_cpu_ns:
                 raise ValueError('Shadow CPU budget exceeded')
             # Do not publish this frame's provisional output after a budget or
