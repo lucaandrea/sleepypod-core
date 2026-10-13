@@ -68,7 +68,7 @@ creation, successful execution as UID 65534, and removal after completion.
 Package files and outputs are never imported as host code. Cleanup removes the
 owned container and staging directory on normal completion and caught errors;
 hard host termination is handled by the explicit container recovery sweep
-described below; private staging-file recovery remains separate. No arbitrary dependency installation occurs during execution.
+described below, followed by ownership-checked private staging recovery. No arbitrary dependency installation occurs during execution.
 
 Run the opt-in Docker regression tests with a reviewed Python image:
 
@@ -414,10 +414,10 @@ must be retried. Legacy containers without these labels require manual review.
 
 Recovery does not retroactively qualify an interrupted trial or erase exposure.
 The ledger's expired lease permits a fresh fenced attempt, with earlier holdout
-access still counted. This sweep does not delete retained reports or staging
-files, and is not a background supervisor: the external host must schedule it.
-Host clock correctness is required for absolute expiry. Storage quotas and
-abandoned private staging-file cleanup remain separate work.
+access still counted. The container sweep does not delete retained reports; its subsequent staging
+sweep is described below. This is not a background supervisor: the external host
+must schedule it. Host clock correctness is required for absolute expiry. Aggregate
+temporary-staging quotas and periodic recovery scheduling remain separate work.
 
 ## Retained evidence verification
 
@@ -548,3 +548,29 @@ representative-fixture review, target-pod compatibility and resource qualificati
 prospective health/reference comparison, and reviewed shipped-registry release.
 A future promotion step must recheck authoritative evidence at publication; an
 old exported assessment must never substitute for that current check.
+
+
+### Abandoned private staging
+
+Before freezing inputs, the executor writes a private, fsynced ownership receipt
+inside its mode-0700 staging directory. It binds the directory name/device/inode,
+host UID, controller PID, exact container name, and wall deadline plus two-minute
+grace. These receipts require a Unix host UID (macOS or Linux). Package code cannot
+read or modify them through its package-only mount.
+
+`recover OUTPUT` first performs the existing expired-container sweep, then scans
+host temporary staging. Its output is `biometric-experiment-recovery-v1` with
+separate `containers` and `staging` results. Staging is removed only when the
+receipt is valid and expired, its controller PID is confirmed absent with ESRCH,
+and Docker confirms the named container does not exist. A present container or
+an unavailable daemon never proves absence. PID reuse/permission errors retain
+staging conservatively. Directory and marker identities are rechecked before
+removal; markers must be private, owned, bounded regular files with one link.
+The sweep is bounded to 16,384 temporary-directory entries and 128 candidates.
+
+Normal cleanup also preserves staging if container removal fails. Legacy or
+unmarked directories, damaged receipts, symlinks, and unproven ownership are left
+untouched. A crash between creating the empty directory and writing its receipt
+can leave an unmarked empty directory; recovery will not guess its ownership.
+Reports and exposure ledgers are not touched. This is an explicit recovery sweep;
+a periodic host service and aggregate temporary-staging quotas remain separate.

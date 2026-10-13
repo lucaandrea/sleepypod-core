@@ -1,3 +1,4 @@
+import { recordExperimentStaging } from './staging-recovery'
 import { recoveryLabelArguments } from './recovery'
 import { spawn, execFile } from 'node:child_process'
 import { existsSync } from 'node:fs'
@@ -69,6 +70,7 @@ export async function executePackageExperiment(options: {
   const name = `sleepypod-experiment-${randomUUID()}`
   let created = false
   try {
+    await recordExperimentStaging(root, name, Math.min(resources.wallMs, resources.cpuMs))
     const inputPath = join(root, 'input.jsonl')
     const frozenInput = await freezePackageInput(inputPath, options.frames, policy.maximumInputBytes)
     if (frozenInput.hash !== validator.request.inputHash) throw new Error('Experiment input identity mismatch')
@@ -189,11 +191,8 @@ export async function executePackageExperiment(options: {
     }
   }
   finally {
-    try {
-      if (created) await removeContainer(name)
-    }
-    finally {
-      await rm(root, { recursive: true, force: true })
-    }
+    // Keep ownership metadata and files if Docker cleanup is unconfirmed.
+    if (created) await removeContainer(name)
+    await rm(root, { recursive: true, force: true })
   }
 }

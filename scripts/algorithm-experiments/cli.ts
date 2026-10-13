@@ -1,3 +1,4 @@
+import { recoverExperimentStaging } from './staging-recovery'
 import { runPackagePreflight } from './preflight'
 import { recoverExpiredContainers } from './recovery'
 import { pathToFileURL } from 'node:url'
@@ -26,7 +27,9 @@ export async function runExperimentCli(args: string[]) {
     return
   }
   if (command === 'recover' && paths.length === 1) {
-    await publishJson(paths[0], await recoverExpiredContainers())
+    const containers = await recoverExpiredContainers()
+    const staging = await recoverExperimentStaging()
+    await publishJson(paths[0], { schema: 'biometric-experiment-recovery-v1', containers, staging })
     return
   }
   if (command === 'managed' && (paths.length === 3 || paths.length === 4)) {
