@@ -206,3 +206,36 @@ incomplete. Missing measurements never mean zero cost. A passing signal check
 with incomplete resource evidence makes the overall fixture report incomplete;
 a resource failure makes it fail. These sampled observations plus hard limits
 still do not establish exact lifetime costs or target-pod fitness.
+
+## Reference comparison
+
+```sh
+pnpm biometrics:experiment compare comparison-input.json comparison-report.json
+```
+
+This command reuses the application's reference normalization, point/interval
+alignment, and common-support numeric comparison. The input uses schema
+`biometric-package-comparison-v1`, a `metricId`, whole-night `startMs`/`endMs`
+(up to 24 hours), explicit `minimumQuality`, raw `referenceImport`, frozen
+`alignment`, and exactly three `outputs` labelled `default`, `current`, and
+`candidate`. Each output supplies its `manifest`, run `request`, and complete
+executor `result`. Inputs are bounded to 32 MiB. Run IDs include configuration;
+reported baseline/candidate hashes in the shared comparison are those run IDs.
+
+Each selected manifest metric must declare a `reference` contract with a
+supported metric definition and nullable `windowMs`. HRV definitions require
+an explicit window, and units must be canonical (`bpm`, `breaths/min`, or `ms`).
+A free-text description or a coincidentally matching output name is insufficient.
+All packages must agree on that contract, input identity, hardware, sample rate,
+side and input-frame sequence. Different HRV definitions or windows cannot be
+compared as the same metric.
+
+Reference rows are normalized using the shared adapter. Out-of-night rows and
+compatibility exclusions are reported explicitly. Comparisons use identical,
+unambiguous observation timestamps shared by all three runs before reference
+pairing; rejected/low-quality readings remain missing support, never filled
+values. MAE, bias and coverage differences are descriptive reference agreement.
+The command does not trust file-provided results as execution attestations,
+record holdout access, estimate whole-night uncertainty, designate an objective,
+or authorize promotion. Those require the authoritative experiment/qualification
+workflow, not a report assembled from arbitrary files.

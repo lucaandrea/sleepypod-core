@@ -58,3 +58,11 @@ whitespace), enforce process resources independently, and expose only the curren
 frame and previously returned state. The validator cannot prove that code obeys
 causality, initialization, reset, or determinism; those need the executor and
 repeated qualification runs. This protocol is not itself an isolation boundary.
+
+A metric can optionally declare a structured `reference` contract for external
+comparison: `metric` is one of `heart_rate`, `breathing_rate`,
+`window_ibi_variability_v1`, `hrv_rmssd`, or `hrv_sdnn`; `windowMs` is required and
+may be null only for non-HRV metrics. The declaration requires canonical units
+and participates in package identity. Metrics without this declaration remain
+valid experimental outputs but cannot enter reference comparison based on their
+name or prose definition alone.

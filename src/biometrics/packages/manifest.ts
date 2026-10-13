@@ -8,10 +8,16 @@ const positiveInteger = z.number().int().positive().max(Number.MAX_SAFE_INTEGER)
 const relativePath = z.string().min(1).max(240).refine(path =>
   path.split('/').every(part => /^[A-Za-z0-9_][A-Za-z0-9_.-]*$/.test(part)), 'Expected a relative package file path')
 const artifactSchema = z.object({ path: relativePath, sha256: hash, bytes: positiveInteger }).strict()
+const referenceContractSchema = z.object({
+  metric: z.enum(['heart_rate', 'breathing_rate', 'window_ibi_variability_v1', 'hrv_rmssd', 'hrv_sdnn']),
+  windowMs: z.number().int().positive().max(86400000).nullable(),
+}).strict().refine(value => !['window_ibi_variability_v1', 'hrv_rmssd', 'hrv_sdnn'].includes(value.metric) || value.windowMs !== null, 'HRV comparison requires an explicit window')
 const metricSchema = z.object({
   id: identifier, definition: z.string().min(1).max(2000), unit: z.string().min(1).max(80),
   minimum: z.number().finite(), maximum: z.number().finite(),
+  reference: referenceContractSchema.optional(),
 }).strict().refine(metric => metric.minimum < metric.maximum, 'Metric bounds must be ordered')
+  .refine(metric => !metric.reference || metric.unit === (metric.reference.metric === 'heart_rate' ? 'bpm' : metric.reference.metric === 'breathing_rate' ? 'breaths/min' : 'ms'), 'Reference metric requires canonical units')
 
 /** Inert proposal metadata. Passing this schema grants no execution or installation rights. */
 export const algorithmPackageManifestSchema = z.object({

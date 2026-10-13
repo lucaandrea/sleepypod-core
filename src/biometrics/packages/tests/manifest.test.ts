@@ -38,6 +38,16 @@ describe('inert algorithm package intake', () => {
     manifest.entrypoint = path
     expect(algorithmPackageManifestSchema.safeParse(manifest).success).toBe(false)
   })
+  it('requires canonical units and explicit HRV windows for comparable metrics', () => {
+    const { manifest } = fixture()
+    const metric = manifest.metrics[0]
+    const parse = (unit: string, reference: unknown) => algorithmPackageManifestSchema.safeParse({ ...manifest, metrics: [{ ...metric, unit, reference }] }).success
+    expect(parse('bpm', { metric: 'heart_rate', windowMs: null })).toBe(true)
+    expect(parse('ms', { metric: 'hrv_rmssd', windowMs: 300000 })).toBe(true)
+    expect(parse('bpm', { metric: 'hrv_rmssd', windowMs: 300000 })).toBe(false)
+    expect(parse('ms', { metric: 'hrv_rmssd', windowMs: null })).toBe(false)
+    expect(parse('ms', { metric: 'hrv_unknown', windowMs: 300000 })).toBe(false)
+  })
   it('rejects ambiguous identity, unhashed entrypoints, missing locks and unknown privileges', () => {
     const { manifest } = fixture()
     for (const altered of [
