@@ -590,3 +590,25 @@ latency or clinical performance. Raw measurements remain under
 `/tmp/biometrics-qualification-db52f1da/` on the measurement workstation; the
 committed evidence records their SHA-256 hashes. No live database or profile was
 changed by this benchmark.
+
+### Shadow supervisor measurement (2026-10-13)
+
+After the full-night replay released its worker slot, the staged shadow harness
+processed 1,800 synthetic seconds at 500 Hz through the shipped Linux process
+wrapper and Node supervisor. It completed in 61.34 seconds, producing 30 outputs
+and reporting 29.17 seconds of numerical CPU time. The child process-group RSS
+peaked at a sampled 113.15 MiB; the independent probe observed 256.5 MiB for the
+whole benchmark tree. The completion receipt retains cold-start and insufficient
+preroll limitations.
+
+The probe recorded 456 read-only HTTP observations with no failures (p95 45.41 ms,
+maximum 130.39 ms). Minimum available memory was 1,019.5 MiB and maximum temperature
+47.513 °C. Parent event-loop p95 was 26.10 ms and maximum 68.62 ms. RSS observation
+gaps reached 333.42 ms; this is sampled memory evidence, not an exact kernel peak.
+
+[The compact receipt](performance/biometrics-replay-2026-10-13/shadow-4ee74c25.json)
+retains build identities, completion/cleanup observations, limits and raw-artifact
+hashes. The original SSH handle exited zero, no owned descendants remained, and
+both live services were active before the owned staging directory was removed.
+This run does not exercise the live source/database sink, establish held-out
+accuracy or authorize a shadow qualification registry.

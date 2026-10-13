@@ -1,0 +1,117 @@
+{
+  "version": "synthetic-shadow-supervisor-measurement-v1",
+  "scope": "accelerated synthetic frames through shipped supervisor and kernel-limited child; no live capture, database sink, held-out accuracy or installation qualification",
+  "runnerHash": "aaf032040970edf5758d0dbb358afe7044ce0274ee82492b5fd6a62925ef930d",
+  "pythonBuildHash": "b16390a3796398903b80db34a1e758d6e8ee3fb30dcfc4034e4b30bbdb13d0e9",
+  "node": {
+    "version": "v24.16.0",
+    "platform": "linux",
+    "arch": "arm64"
+  },
+  "manifestHash": "96c2f01a329b4346b4a3f2801ba973650d7235a5c4bd00bd0ded96f1a5768b9b",
+  "configHash": "933fb4329b8c24091565b43388576d641f2806e0fda52bad44f2a2968b997aba",
+  "seconds": 1800,
+  "sampleRateHz": 500,
+  "channels": 2,
+  "wallMs": 61340.47504500001,
+  "outputCount": 30,
+  "outputHash": "e75ead5601fc3c5da660c9778dea0f6a2c999900a4d345754a0ed07f0b4970cf",
+  "receipt": {
+    "health": {
+      "state": "completed",
+      "reason": "window_complete",
+      "records": 1800,
+      "outputs": 30,
+      "cpu_ms": 29170.628042,
+      "input_hash": "a523ceeec2382b220c9f95874c22d74922c21db93dcb313d10824b60e8c27ad2",
+      "counts": {
+        "records": 1800,
+        "accepted_frames": 1800,
+        "empty_channel_frames": 0,
+        "pump_gated_frames": 0,
+        "preroll_outputs": 0,
+        "scored_outputs": 30
+      },
+      "limitations": [
+        "cold_start_without_serialized_state",
+        "less_than_five_minutes_preroll"
+      ]
+    },
+    "inputBytes": 9997366,
+    "outputBytes": 998314,
+    "peakObservedRssBytes": 118648832,
+    "rssSamples": 347,
+    "maximumObservationGapMs": 333.41997099999935,
+    "budgets": {
+      "cpuSeconds": 1200,
+      "addressSpaceBytes": 805306368,
+      "maximumRssBytes": 402653184,
+      "wallMs": 1800000,
+      "acknowledgmentMs": 30000,
+      "idleMs": 30000,
+      "rssIntervalMs": 100,
+      "rssTimeoutMs": 1000
+    },
+    "memoryScope": "sum_rss_of_shadow_process_group",
+    "exactKernelPeak": false
+  },
+  "partial": {
+    "kind": "partial_supervisor_observation",
+    "health": {
+      "state": "completed",
+      "reason": "window_complete",
+      "records": 1800,
+      "outputs": 30,
+      "cpu_ms": 29170.628042,
+      "input_hash": "a523ceeec2382b220c9f95874c22d74922c21db93dcb313d10824b60e8c27ad2",
+      "counts": {
+        "records": 1800,
+        "accepted_frames": 1800,
+        "empty_channel_frames": 0,
+        "pump_gated_frames": 0,
+        "preroll_outputs": 0,
+        "scored_outputs": 30
+      },
+      "limitations": [
+        "cold_start_without_serialized_state",
+        "less_than_five_minutes_preroll"
+      ]
+    },
+    "inputBytes": 9997366,
+    "outputBytes": 998314,
+    "diagnosticBytes": 0,
+    "peakObservedRssBytes": 118648832,
+    "rssSamples": 347,
+    "maximumObservationGapMs": 333.41997099999935,
+    "budgets": {
+      "cpuSeconds": 1200,
+      "addressSpaceBytes": 805306368,
+      "maximumRssBytes": 402653184,
+      "wallMs": 1800000,
+      "acknowledgmentMs": 30000,
+      "idleMs": 30000,
+      "rssIntervalMs": 100,
+      "rssTimeoutMs": 1000
+    },
+    "cleanupConfirmed": true,
+    "memoryScope": "sum_rss_of_shadow_process_group",
+    "exactKernelPeak": false
+  },
+  "failure": null,
+  "parentEventLoopP95Ms": 26.099711,
+  "parentEventLoopMaxMs": 68.616191,
+  "parentPeakRssKiB": 150836,
+  "probe": {
+    "requests": 456,
+    "failures": 0,
+    "p95Ms": 45.41382499883184,
+    "maximumMs": 130.38527100434294,
+    "maximumTemperatureC": 47.513,
+    "minimumAvailableMemoryBytes": 1069072384,
+    "peakBenchmarkTreeRssBytes": 268959744
+  },
+  "artifactSha256": {
+    "shadow-measurements.json": "e57bf3bd10374b31059f60e39f8645d2be158ab88d2eb9a1abf1baa9b9a786bd",
+    "shadow-probe.json": "13fd0f3723b6ebc5650cc52868d8c02f5f4bee6cb0629303b53998f09ee883cd"
+  }
+}

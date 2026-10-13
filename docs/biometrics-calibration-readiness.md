@@ -45,10 +45,10 @@ acceptance is separate from fixture and browser results.
 
 ## Outstanding release evidence
 
-- Finish and retain the current eight-hour synthetic replay measurement, including
-  exact worker identities, resource observations and live-service responsiveness.
-- Execute the shadow supervisor measurement on the target pod; separately assess
-  live source/sink behavior. Its synthetic output cannot supply held-out accuracy.
+- The current eight-hour replay and 30-minute synthetic shadow supervisor runs
+  completed successfully; their receipts are linked in the measurement document.
+  Live shadow source/sink behavior still requires separate target-pod assessment.
+  Synthetic output cannot supply held-out accuracy.
 - Install only resource policies supported by the measured hardware evidence.
   Reviewed promotion/shadow registries need their own matching fixture and
   held-out evidence; absence must remain visible and deny qualified promotion.
