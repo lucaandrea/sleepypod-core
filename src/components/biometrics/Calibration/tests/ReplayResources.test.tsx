@@ -22,3 +22,20 @@ it('keeps older reports inspectable without inventing resource measurements', ()
   render(<I18nProvider i18n={i18n}><ReplayResources /></I18nProvider>)
   expect(screen.getByText('This report predates replay process measurements.')).toBeTruthy()
 })
+
+it('shows sampled ingestion evidence and sampling gaps without claiming continuous health', () => {
+  render(
+    <I18nProvider i18n={i18n}>
+      <ReplayResources operations={{ version: 'backtest-job-operations-v1', wallMs: 10000,
+        scope: 'admission_through_prepublication', ingestion: { source: 'supervisor_live_piezo_receipt_age', checks: 3, samples: 2,
+          allChecksMeasured: false, qualificationId: null, maximumObservedAgeMs: 1200, maximumObservationGapMs: 7000,
+          nominalIntervalMs: 5000, continuousMeasurement: false } }}
+      />
+    </I18nProvider>
+  )
+  expect(screen.getByText('Ingestion samples: 2 of 3 admission checks')).toBeTruthy()
+  expect(screen.getByText('Largest observed ingestion age: 1.2 seconds')).toBeTruthy()
+  expect(screen.getByText('Largest observation gap: 7 seconds')).toBeTruthy()
+  expect(screen.getByText(/Some health evidence is unavailable/)).toBeTruthy()
+  expect(screen.getByText(/Unobserved intervals are not continuous health measurements/)).toBeTruthy()
+})

@@ -40,3 +40,16 @@ it('fails closed when collecting health throws', async () => {
   vi.mocked(collectAdmissionSample).mockRejectedValueOnce(new Error('unavailable'))
   expect(await replayAdmission(db)).toEqual({ configured: true, qualificationId: 'test-evidence', admitted: false, reasons: ['health_unavailable'] })
 })
+
+it('returns the admitted sample only through the internal health callback', async () => {
+  const { replayHealthAdmission } = await import('../admission-service')
+  vi.stubEnv('SLEEPYPOD_BIOMETRICS_ADMISSION_POLICY', JSON.stringify(policy))
+  vi.mocked(collectAdmissionSample).mockImplementation(async () => ({ measuredAtMs: Date.now(), piezoReceivedAtMs: Date.now() - 250,
+    availableMemoryBytes: 200, freeDiskBytes: 200, loadPerCpu: 0.2, eventLoopDelayMs: 2, temperatureC: 30 }))
+  const measured = await replayHealthAdmission(db)()
+  expect(measured).toMatchObject({ allowed: true, sample: { qualificationId: 'test-evidence', ingestionAgeMs: expect.any(Number) } })
+  expect(measured.sample?.ingestionAgeMs).toBeGreaterThanOrEqual(250)
+  expect(await replayAdmission(db)).not.toHaveProperty('receipt')
+  vi.mocked(collectAdmissionSample).mockResolvedValueOnce(null)
+  expect(await replayHealthAdmission(db)()).toEqual({ allowed: false, sample: null })
+})

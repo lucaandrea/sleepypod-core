@@ -50,8 +50,20 @@ describe('durable replay execution', () => {
     const before = sqlite.prepare('SELECT * FROM vitals').all()
     expect(await executeNextBacktest(db, options)).toEqual({ state: 'succeeded', jobId })
     expect(jobs.result(jobId)?.report).toMatchObject({ version: 'processed-backtest-report-v1', nights: [{ uniqueObservationCount: 10 }] })
+    expect(jobs.result(jobId)?.report).toMatchObject({ jobOperations: { ingestion: { allChecksMeasured: false, samples: 0, maximumObservedAgeMs: null } } })
     expect(sqlite.prepare('SELECT * FROM vitals').all()).toEqual(before)
     expect(await executeNextBacktest(db, options)).toEqual({ state: 'idle' })
+  })
+  it('retains supervisor observations in the committed report and marks legacy boolean admission unmeasured', async () => {
+    let checks = 0
+    expect(await executeNextBacktest(db, { ...options, admit: async () => {
+      checks++
+      return true
+    },
+    admissionReceipt: () => ({ allowed: true, sample: { qualificationId: 'test-policy', checkedAtMs: Date.now(), ingestionAgeMs: checks * 100 } }),
+    })).toEqual({ state: 'succeeded', jobId })
+    expect(jobs.result(jobId)?.report).toMatchObject({ jobOperations: { version: 'backtest-job-operations-v1',
+      ingestion: { allChecksMeasured: true, checks: 2, samples: 2, maximumObservedAgeMs: 200, qualificationId: 'test-policy' } } })
   })
   it('refuses to execute a different worker bundle after enqueue', async () => {
     sqlite.prepare('UPDATE biometric_backtest_jobs SET input = json_set(input, \'$.evaluatorBuildHash\', ?)').run('0'.repeat(64))

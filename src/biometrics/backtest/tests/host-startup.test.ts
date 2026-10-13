@@ -18,7 +18,7 @@ it.each([undefined, '', '{}', '{', JSON.stringify({ ...policy, maximumLoadPerCpu
 it('starts with a fresh admission closure and denies after policy removal', async () => {
   vi.stubEnv('SLEEPYPOD_BIOMETRICS_ADMISSION_POLICY', JSON.stringify(policy))
   expect(startConfiguredBacktestHost(db)).toEqual({ started: true })
-  expect(startBacktestHost).toHaveBeenCalledWith(db, expect.any(Function))
+  expect(startBacktestHost).toHaveBeenCalledWith(db, expect.any(Function), expect.any(Function))
   const admit = vi.mocked(startBacktestHost).mock.calls[0][1]
   vi.stubEnv('SLEEPYPOD_BIOMETRICS_ADMISSION_POLICY', undefined)
   expect(await admit()).toBe(false)

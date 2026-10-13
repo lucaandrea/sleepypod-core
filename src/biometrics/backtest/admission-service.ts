@@ -1,3 +1,4 @@
+import type { HealthAdmission } from './job-operations'
 import { dirname } from 'node:path'
 import { sql } from 'drizzle-orm'
 import { z } from 'zod'
@@ -15,7 +16,7 @@ export const replayAdmissionSchema = z.object({
  * background I/O. The qualification ID is operator-supplied evidence attribution,
  * not an assertion that supplying JSON has qualified the hardware.
  */
-export async function replayAdmission(db: BetterSQLite3Database<typeof schema>): Promise<z.infer<typeof replayAdmissionSchema>> {
+async function measuredReplayAdmission(db: BetterSQLite3Database<typeof schema>): Promise<z.infer<typeof replayAdmissionSchema> & { receipt?: Awaited<ReturnType<HealthAdmission>> }> {
   const policy = configuredReplayPolicy()
   if (!policy) return { configured: false, qualificationId: null, admitted: false, reasons: ['unqualified'] }
   try {
@@ -23,9 +24,26 @@ export async function replayAdmission(db: BetterSQLite3Database<typeof schema>):
     if (!path) throw new Error('Missing persistent database')
     const { getSensorFrameTimes } = await import('@/src/streaming/piezoStream')
     const sample = await collectAdmissionSample(dirname(path), () => getSensorFrameTimes()['piezo-dual'])
-    return { configured: true, qualificationId: policy.qualificationId, ...evaluateAdmission(sample, policy) }
+    const checkedAtMs = Date.now()
+    const decision = evaluateAdmission(sample, policy, checkedAtMs)
+    return { configured: true, qualificationId: policy.qualificationId, ...decision,
+      receipt: { allowed: decision.admitted, sample: decision.admitted && sample
+        ? { qualificationId: policy.qualificationId, checkedAtMs, ingestionAgeMs: checkedAtMs - sample.piezoReceivedAtMs }
+        : null } }
   }
   catch { return { configured: true, qualificationId: policy.qualificationId, admitted: false, reasons: ['health_unavailable'] } }
+}
+
+export async function replayAdmission(db: BetterSQLite3Database<typeof schema>) {
+  const { configured, qualificationId, admitted, reasons } = await measuredReplayAdmission(db)
+  return replayAdmissionSchema.parse({ configured, qualificationId, admitted, reasons })
+}
+
+export function replayHealthAdmission(db: BetterSQLite3Database<typeof schema>): HealthAdmission {
+  return async () => {
+    const measured = await measuredReplayAdmission(db)
+    return measured.receipt ?? { allowed: false, sample: null }
+  }
 }
 
 export function replayAdmitter(db: BetterSQLite3Database<typeof schema>) {

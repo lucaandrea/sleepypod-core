@@ -1,3 +1,4 @@
+import { createJobOperations, type AdmissionReceipt } from './job-operations'
 import type { ReplayBudget } from './execution-budget'
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3'
 import { z } from 'zod'
@@ -18,8 +19,15 @@ export async function executeNextBacktest(db: BetterSQLite3Database<typeof schem
   signal?: AbortSignal
   timeoutMs?: number
   admit: () => Promise<boolean>
+  admissionReceipt?: () => AdmissionReceipt | null
 }) {
-  if (options.signal?.aborted || !await options.admit() || options.signal?.aborted) return { state: 'deferred' as const }
+  const operations = createJobOperations()
+  const admit = async () => {
+    const allowed = await options.admit()
+    operations.record(options.admissionReceipt?.() ?? null)
+    return allowed
+  }
+  if (options.signal?.aborted || !await admit() || options.signal?.aborted) return { state: 'deferred' as const }
   const jobs = new BacktestJobStore(db)
   const claimed = jobs.claim(options.owner)
   if (!claimed) return { state: 'idle' as const }
@@ -44,7 +52,7 @@ export async function executeNextBacktest(db: BetterSQLite3Database<typeof schem
   }
   const checkResources = async () => {
     try {
-      if (await options.admit()) return
+      if (await admit()) return
     }
     catch { /* Missing health evidence must stop background work. */ }
     resourceFailure = true
@@ -84,7 +92,7 @@ export async function executeNextBacktest(db: BetterSQLite3Database<typeof schem
     if (identity.evaluatorBuildHash !== work.job.evaluatorBuildHash || identity.datasetHash !== work.job.datasetHash || identity.protocolHash !== work.job.protocolHash || identity.split !== work.job.split
       || identity.nights.length !== progress.totalNights || progress.completedNights !== progress.totalNights) throw new Error('Worker report identity/progress mismatch')
     if (controller.signal.aborted) throw new Error('Replay cancelled')
-    jobs.complete(lease, report)
+    jobs.complete(lease, { ...z.record(z.string(), z.unknown()).parse(report), jobOperations: operations.finish() })
     return { state: 'succeeded' as const, jobId: claimed.id }
   }
   catch {

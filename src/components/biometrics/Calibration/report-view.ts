@@ -1,3 +1,4 @@
+import { jobOperationsSchema } from '@/src/biometrics/backtest/job-operations'
 import { waveformResourceSummarySchema } from '@/src/biometrics/backtest/waveform-resources'
 import { z } from 'zod'
 import { objectivePolicySchema } from '@/src/biometrics/backtest/objective-policy'
@@ -7,6 +8,7 @@ const pooled = z.object({ agreement: score, macroF1: score, pairedDurationMs: z.
 /** A bounded UI projection of the retained versioned report; unknown versions fail closed. */
 export const reportViewSchema = z.object({
   version: z.enum(['processed-backtest-report-v1', 'waveform-backtest-report-v1']), status: z.literal('insufficient_evidence'),
+  jobOperations: jobOperationsSchema.optional(),
   waveform: z.object({ resources: waveformResourceSummarySchema.optional() }).optional(),
   datasetHash: z.string(), protocolHash: z.string(), manifestHash: z.string(), evaluatorBuildHash: z.string(),
   split: z.enum(['tuning', 'validation', 'holdout']), evidence: z.string(), holdoutUse: z.number(),

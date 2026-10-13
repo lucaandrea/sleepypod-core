@@ -1,3 +1,4 @@
+import type { HealthAdmission } from './job-operations'
 import { randomUUID } from 'node:crypto'
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3'
 import type * as schema from '@/src/db/biometrics-schema'
@@ -80,12 +81,12 @@ export class BacktestHost {
 const shared = globalThis as typeof globalThis & { __biometricBacktestHost?: BacktestHost }
 /** Admission is mandatory and supplied by the deployment's resource policy.
  * There is deliberately no permissive fallback for missing health evidence. */
-export function startBacktestHost(db: BetterSQLite3Database<typeof schema>, admit: () => Promise<boolean>) {
+export function startBacktestHost(db: BetterSQLite3Database<typeof schema>, admit: () => Promise<boolean>, healthAdmission?: HealthAdmission) {
   if (shared.__biometricBacktestHost) return shared.__biometricBacktestHost
   const owner = `core:${process.pid}:${randomUUID()}`
   const host = new BacktestHost({
-    execute: signal => coordinatorRequest(db, { type: 'execute', owner }, { signal, admit }),
-    collect: signal => coordinatorRequest(db, { type: 'collectArtifacts' }, { signal, admit }).then(() => {}),
+    execute: signal => coordinatorRequest(db, { type: 'execute', owner }, { signal, admit, healthAdmission }),
+    collect: signal => coordinatorRequest(db, { type: 'collectArtifacts' }, { signal, admit, healthAdmission }).then(() => {}),
     onError: phase => console.warn(`[biometrics] Backtest ${phase} failed; host will retry`),
   })
   shared.__biometricBacktestHost = host

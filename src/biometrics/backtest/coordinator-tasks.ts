@@ -1,3 +1,4 @@
+import type { AdmissionReceipt } from './job-operations'
 import { referenceTraceRequestSchema } from './reference-trace-page'
 import { sql } from 'drizzle-orm'
 import { dirname, join } from 'node:path'
@@ -63,6 +64,7 @@ export async function performCoordinatorTask(db: BetterSQLite3Database<typeof sc
   replayBudget?: ReplayBudget
   signal: AbortSignal
   admit: () => Promise<boolean>
+  admissionReceipt?: () => AdmissionReceipt | null
 }) {
   const task = coordinatorTaskSchema.parse(raw)
   switch (task.type) {

@@ -125,10 +125,11 @@ it('runs a leased evaluation and preserves report identity across the process bo
   const experiment = jobs.createExperiment(dataset.id, fixture.protocol)
   const job = jobs.enqueue({ experimentId: experiment.id, evaluatorBuildHash: await workerBuildHash(workerPath), configs: fixture.configs, split: 'tuning', idempotencyKey: 'execute-job' })
   try {
-    expect(await runCoordinatorTask(options(), { type: 'execute', owner: 'integration' }, { admit: async () => true })).toEqual({ state: 'succeeded', jobId: job.id })
+    expect(await runCoordinatorTask(options(), { type: 'execute', owner: 'integration' }, { healthAdmission: async () => ({ allowed: true, sample: { qualificationId: 'integration-policy', checkedAtMs: Date.now(), ingestionAgeMs: 123 } }) })).toEqual({ state: 'succeeded', jobId: job.id })
     const result = await runCoordinatorTask(options(), { type: 'readResult', input: { id: job.id } })
     expect(result?.contentHash).toBe(jobs.result(job.id)?.contentHash)
     expect(result?.available).toBe(true)
+    expect(result?.report).toMatchObject({ jobOperations: { ingestion: { allChecksMeasured: true, samples: 2, maximumObservedAgeMs: 123, qualificationId: 'integration-policy' } } })
     const summary = await runCoordinatorTask(options(), { type: 'readSummary', input: { id: job.id } })
     expect(summary).toMatchObject({ contentHash: result?.contentHash, contentHashScope: 'complete_retained_report' })
     expect(JSON.stringify(summary?.report)).not.toContain('"blocks"')
@@ -214,4 +215,12 @@ it('collects aged RAW orphans through the admitted coordinator without touching 
   await runCoordinatorTask({ ...options(), rawLocation }, { type: 'collectArtifacts' }, { admit: async () => true })
   await expect(readFile(old)).rejects.toMatchObject({ code: 'ENOENT' })
   expect(await readFile(fresh, 'utf8')).toBe('fresh unpublished copy')
+})
+
+it('does not fall back to permissive boolean admission when the health callback denies or fails', async () => {
+  for (const healthAdmission of [async () => ({ allowed: false, sample: null }), async () => {
+    throw new Error('missing health')
+  }]) {
+    expect(await runCoordinatorTask(options(), { type: 'execute', owner: 'deny-health' }, { admit: async () => true, healthAdmission })).toEqual({ state: 'deferred' })
+  }
 })

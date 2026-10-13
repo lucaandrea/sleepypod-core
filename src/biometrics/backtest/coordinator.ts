@@ -1,3 +1,4 @@
+import { admissionReceiptSchema, type HealthAdmission } from './job-operations'
 import { fork } from 'node:child_process'
 import { setPriority } from 'node:os'
 import { dirname, resolve } from 'node:path'
@@ -21,6 +22,7 @@ export interface CoordinatorOptions {
 export function runCoordinatorTask<T extends CoordinatorTask>(options: CoordinatorOptions, task: T, control: {
   signal?: AbortSignal
   admit?: () => Promise<boolean>
+  healthAdmission?: HealthAdmission
 } = {}): Promise<CoordinatorResults[T['type']]> {
   const parsed = coordinatorTaskSchema.parse(task)
   if (Buffer.byteLength(JSON.stringify(parsed)) > 65536) return Promise.reject(new ReferenceInputError('RESOURCE_LIMIT', 'Coordinator input exceeds 64 KiB'))
@@ -71,8 +73,10 @@ export function runCoordinatorTask<T extends CoordinatorTask>(options: Coordinat
       const data = message as { type?: string, sequence?: number, result?: CoordinatorResults[T['type']], code?: string, message?: string }
       if (data?.type === 'admission' && (parsed.type === 'execute' || parsed.type === 'inspectRawSource' || parsed.type === 'createWaveformDataset' || parsed.type === 'collectArtifacts') && !received && !admissionActive && Number.isSafeInteger(data.sequence)) {
         admissionActive = true
-        Promise.resolve().then(() => control.admit?.() ?? false).catch(() => false).then((allowed) => {
-          if (child.connected && !failure) child.send({ type: 'admission', sequence: data.sequence, allowed }, () => {})
+        Promise.resolve().then(async () => control.healthAdmission
+          ? admissionReceiptSchema.parse(await control.healthAdmission())
+          : { allowed: await control.admit?.() ?? false, sample: null }).catch(() => ({ allowed: false, sample: null })).then((receipt) => {
+          if (child.connected && !failure) child.send({ type: 'admission', sequence: data.sequence, ...receipt }, () => {})
         }).finally(() => { admissionActive = false })
       }
       else if (data?.type === 'result' && !received) {

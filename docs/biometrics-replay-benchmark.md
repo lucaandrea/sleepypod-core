@@ -405,3 +405,22 @@ coordination/scoring and do not measure live ingestion health, so they cannot
 alone satisfy a whole-job operational promotion policy. Execution measurements
 are part of the retained report hash; replay determinism is assessed on derived
 readings rather than equality of timing counters between executions.
+
+Successful jobs also retain `jobOperations` (`backtest-job-operations-v1`),
+written by the coordinator after its final admission check rather than supplied
+by the scoring child or experiment. Its monotonic duration runs from initial
+admission through publication preparation. The supervisor sends ingestion age
+from the same fresh health sample used to admit work over the internal process
+channel. Only count, maximum observed age, largest monotonic observation gap,
+and qualification identity are retained; raw sensor frames are not included.
+
+`allChecksMeasured` means every admission check supplied evidence under one
+qualification identity, with at least initial and final checks. It does not mean
+continuous monitoring: the nominal check interval is five seconds, delays are
+reported, and intervening health is unobserved. Boolean-only admission callbacks
+used by older tools/tests remain supported but produce unavailable health
+evidence. A failed or invalid health callback cannot fall back to a permissive
+boolean callback. Admission withdrawal still interrupts work without publishing
+a result. The waveform report UI shows these observations separately from Python
+process costs. Whole-job memory evidence and designated promotion policy remain
+separate requirements.

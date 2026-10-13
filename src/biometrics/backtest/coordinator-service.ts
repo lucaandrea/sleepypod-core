@@ -1,3 +1,4 @@
+import type { HealthAdmission } from './job-operations'
 import { replayBudgetSchema } from './execution-budget'
 import { sql } from 'drizzle-orm'
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3'
@@ -11,6 +12,7 @@ const shared = globalThis as typeof globalThis & { __biometricCoordinator?: { pa
 export function coordinatorRequest<T extends CoordinatorTask>(db: BetterSQLite3Database<typeof schema>, task: T, control: {
   signal?: AbortSignal
   admit?: () => Promise<boolean>
+  healthAdmission?: HealthAdmission
 } = {}) {
   const path = db.all<{ name: string, file: string }>(sql`PRAGMA database_list`).find(row => row.name === 'main')?.file
   if (!path) throw new ReferenceInputError('WORKER_UNAVAILABLE', 'Coordinator requires a persistent biometrics database')

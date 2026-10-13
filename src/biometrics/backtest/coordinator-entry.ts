@@ -1,3 +1,4 @@
+import { admissionReceiptSchema, type AdmissionReceipt } from './job-operations'
 import { replayBudgetSchema } from './execution-budget'
 import Database from 'better-sqlite3'
 import { drizzle } from 'drizzle-orm/better-sqlite3'
@@ -10,7 +11,8 @@ import { performCoordinatorTask } from './coordinator-tasks'
 const [databasePath, workerPath, rawLocationJson, replayBudgetJson] = process.argv.slice(2)
 let started = false, completed = false, sequence = 0
 const controller = new AbortController()
-const pending = new Map<number, (allowed: boolean) => void>()
+let lastAdmission: AdmissionReceipt | null = null
+const pending = new Map<number, (receipt: AdmissionReceipt) => void>()
 process.on('disconnect', () => {
   if (completed) return
   controller.abort()
@@ -24,13 +26,14 @@ process.on('disconnect', () => {
   process.exit(1)
 })
 process.on('message', async (message: unknown) => {
-  const data = message as { type?: string, sequence?: number, allowed?: boolean, task?: unknown }
+  const data = message as { type?: string, sequence?: number, allowed?: boolean, sample?: unknown, task?: unknown }
   if (data?.type === 'cancel') {
     controller.abort()
     return
   }
   if (data?.type === 'admission' && typeof data.sequence === 'number') {
-    pending.get(data.sequence)?.(data.allowed === true)
+    const receipt = admissionReceiptSchema.safeParse({ allowed: data.allowed, sample: data.sample ?? null })
+    pending.get(data.sequence)?.(receipt.success ? receipt.data : { allowed: false, sample: null })
     return
   }
   if (data?.type !== 'run' || started) return
@@ -41,14 +44,15 @@ process.on('message', async (message: unknown) => {
     sqlite = new Database(databasePath, { fileMustExist: true, timeout: 1000 })
     sqlite.pragma('foreign_keys = ON')
     const db = drizzle(sqlite, { schema })
-    const result = await performCoordinatorTask(db, data.task, { workerPath, replayBudget, rawLocation: rawLocationJson ? JSON.parse(rawLocationJson) ?? undefined : undefined, signal: controller.signal, admit: () => new Promise<boolean>((resolve) => {
+    const result = await performCoordinatorTask(db, data.task, { workerPath, replayBudget, rawLocation: rawLocationJson ? JSON.parse(rawLocationJson) ?? undefined : undefined, signal: controller.signal, admissionReceipt: () => lastAdmission, admit: () => new Promise<boolean>((resolve) => {
       const id = ++sequence
-      const finish = (allowed: boolean) => {
+      const finish = (receipt: AdmissionReceipt) => {
         clearTimeout(timer)
         pending.delete(id)
-        resolve(allowed)
+        lastAdmission = receipt
+        resolve(receipt.allowed)
       }
-      const timer = setTimeout(() => finish(false), 2000)
+      const timer = setTimeout(() => finish({ allowed: false, sample: null }), 2000)
       pending.set(id, finish)
       process.send?.({ type: 'admission', sequence: id })
     }) })

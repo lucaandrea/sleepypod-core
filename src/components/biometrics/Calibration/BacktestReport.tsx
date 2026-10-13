@@ -128,7 +128,7 @@ export function BacktestReport({ id }: { id: string }) {
         </div>
       ))}
       {hasStages ? (stages.success ? <StageReport key={`stages:${descriptor.contentHash}`} report={stages.data} /> : <InlineError><Trans>Stage details are unavailable or incompatible.</Trans></InlineError>) : null}
-      {waveform ? <ReplayResources resources={report.waveform?.resources} /> : null}
+      {waveform ? <ReplayResources resources={report.waveform?.resources} operations={report.jobOperations} /> : null}
       {numeric.success ? <NumericReport key={`numeric:${descriptor.contentHash}`} report={numeric.data} waveform={waveform} /> : <InlineError><Trans>Numerical details are unavailable or incompatible.</Trans></InlineError>}
       {waveform && numeric.success
         ? (

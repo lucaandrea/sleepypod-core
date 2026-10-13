@@ -1,10 +1,11 @@
 'use client'
 
+import type { jobOperationsSchema } from '@/src/biometrics/backtest/job-operations'
 import type { z } from 'zod'
 import { Trans, useLingui } from '@lingui/react/macro'
 import type { waveformResourceSummarySchema } from '@/src/biometrics/backtest/waveform-resources'
 
-export function ReplayResources({ resources }: { resources?: z.infer<typeof waveformResourceSummarySchema> }) {
+export function ReplayResources({ resources, operations }: { resources?: z.infer<typeof waveformResourceSummarySchema>, operations?: z.infer<typeof jobOperationsSchema> }) {
   const { t, i18n } = useLingui()
   const number = new Intl.NumberFormat(i18n.locale || 'en', { maximumFractionDigits: 2 })
   const display = (value: number | null, scale: number) => value === null ? t`Unavailable` : number.format(value / scale)
@@ -27,6 +28,19 @@ export function ReplayResources({ resources }: { resources?: z.infer<typeof wave
               <p><Trans>Durations cover sequential Python work through result generation. Memory is the largest process lifetime peak. These measurements exclude coordinator and scoring costs and do not establish live ingestion health.</Trans></p>
             </>
           )}
+      {operations
+        ? (
+            <div className="space-y-2">
+              <h5><Trans>Job health observations</Trans></h5>
+              <p>{t`Job time through publication preparation: ${display(operations.wallMs, 1000)} seconds`}</p>
+              <p>{t`Ingestion samples: ${operations.ingestion.samples} of ${operations.ingestion.checks} admission checks`}</p>
+              <p>{t`Largest observed ingestion age: ${display(operations.ingestion.maximumObservedAgeMs, 1000)} seconds`}</p>
+              <p>{t`Largest observation gap: ${display(operations.ingestion.maximumObservationGapMs, 1000)} seconds`}</p>
+              {!operations.ingestion.allChecksMeasured ? <p><Trans>Some health evidence is unavailable or changed qualification during execution.</Trans></p> : null}
+              <p><Trans>Health was sampled at admission checks, normally five seconds apart. Unobserved intervals are not continuous health measurements.</Trans></p>
+            </div>
+          )
+        : null}
     </section>
   )
 }
