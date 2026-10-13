@@ -67,6 +67,8 @@ def test_failed_limits_never_import_processor_or_read_input(monkeypatch):
     def fail(*args):
         raise OSError('private-path-or-frame')
     monkeypatch.setattr(shadow_process, 'configure_parent_death', lambda pid: None)
+    monkeypatch.setattr(shadow_process, 'acquire_shadow_lock', lambda: 123)
+    monkeypatch.setattr(shadow_process.os, 'close', lambda fd: None)
     monkeypatch.setattr(shadow_process, 'configure_shadow_limits', fail)
     stderr = io.StringIO()
     monkeypatch.setattr(sys, 'stderr', stderr)
@@ -78,11 +80,13 @@ def test_failed_limits_never_import_processor_or_read_input(monkeypatch):
 def test_successful_limits_precede_processor_import_and_run(monkeypatch):
     calls = []
     monkeypatch.setattr(shadow_process, 'configure_parent_death', lambda pid: calls.append('parent'))
+    monkeypatch.setattr(shadow_process, 'acquire_shadow_lock', lambda: (calls.append('lock'), 123)[1])
+    monkeypatch.setattr(shadow_process.os, 'close', lambda fd: calls.append(('close', fd)))
     monkeypatch.setattr(shadow_process, 'configure_shadow_limits', lambda *args: calls.append('limits'))
     original = builtins.__import__
     def guarded(name, *args, **kwargs):
         if name == 'shadow_worker':
-            assert calls == ['parent', 'limits']
+            assert calls == ['parent', 'lock', 'limits']
             calls.append('import')
             return SimpleNamespace(run=lambda source, destination: calls.append((source, destination)))
         return original(name, *args, **kwargs)
@@ -90,7 +94,7 @@ def test_successful_limits_precede_processor_import_and_run(monkeypatch):
     monkeypatch.setattr(sys, 'stdin', SimpleNamespace(buffer='source'))
     monkeypatch.setattr(sys, 'stdout', SimpleNamespace(buffer='destination'))
     assert shadow_process.main(['--parent-pid', '123', '--cpu-seconds', '1', '--address-space-bytes', '123']) == 0
-    assert calls == ['parent', 'limits', 'import', ('source', 'destination')]
+    assert calls == ['parent', 'lock', 'limits', 'import', ('source', 'destination'), ('close', 123)]
 
 
 @pytest.mark.skipif(sys.platform != 'linux', reason='Kernel enforcement is Linux-only')
@@ -187,6 +191,94 @@ def test_parent_protection_failure_prevents_limits_and_processing(monkeypatch):
         raise OSError('private parent protection detail')
     monkeypatch.setattr(shadow_process, 'configure_parent_death', fail)
     monkeypatch.setattr(shadow_process, 'configure_shadow_limits', lambda *args: pytest.fail('limits reached after parent protection failed'))
+    monkeypatch.setattr(sys, 'stdin', None)
+    stderr = io.StringIO()
+    monkeypatch.setattr(sys, 'stderr', stderr)
+    assert shadow_process.main(['--parent-pid', '123', '--cpu-seconds', '1', '--address-space-bytes', '123']) == 1
+    assert stderr.getvalue() == 'Shadow process failed\n'
+
+
+@pytest.mark.parametrize('kind', ['symlink', 'hardlink', 'public', 'content'])
+def test_unsafe_lock_files_refused(tmp_path, monkeypatch, kind):
+    import os
+    monkeypatch.setattr(sys, 'platform', 'linux')
+    path = tmp_path / 'worker.lock'
+    if kind == 'symlink':
+        target = tmp_path / 'target'
+        target.touch(mode=0o600)
+        path.symlink_to(target)
+    else:
+        path.touch(mode=0o600)
+        if kind == 'hardlink':
+            os.link(path, tmp_path / 'alias')
+        if kind == 'public':
+            path.chmod(0o644)
+        if kind == 'content':
+            path.write_text('not a lock')
+    with pytest.raises((OSError, RuntimeError)):
+        shadow_process.acquire_shadow_lock(path)
+
+
+def test_lock_contention_and_release_do_not_delete_runtime_file(tmp_path, monkeypatch):
+    import os
+    monkeypatch.setattr(sys, 'platform', 'linux')
+    path = tmp_path / 'worker.lock'
+    first = shadow_process.acquire_shadow_lock(path)
+    try:
+        with pytest.raises(BlockingIOError):
+            shadow_process.acquire_shadow_lock(path)
+    finally:
+        os.close(first)
+    before = path.stat().st_ino
+    second = shadow_process.acquire_shadow_lock(path)
+    os.close(second)
+    assert path.stat().st_ino == before
+    assert path.read_bytes() == b''
+
+
+@pytest.mark.skipif(sys.platform != 'linux', reason='Kernel execution lock is Linux-only')
+def test_real_linux_lock_survives_pause_and_releases_after_worker_death():
+    import os
+    import select
+    import signal
+    import tempfile
+    from pathlib import Path
+    from common.biometrics.shadow_process import acquire_shadow_lock
+    environment = {**os.environ, 'PYTHONPATH': str(Path(__file__).resolve().parent.parent)}
+    with tempfile.TemporaryDirectory() as directory:
+        path = str(Path(directory) / 'worker.lock')
+        code = "from common.biometrics.shadow_process import acquire_shadow_lock; import sys,time; fd=acquire_shadow_lock(sys.argv[1]); print('locked',flush=True); time.sleep(60)"
+        worker = subprocess.Popen([sys.executable, '-B', '-c', code, path], env=environment,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        try:
+            ready, _, _ = select.select([worker.stdout], [], [], 10)
+            assert ready and worker.stdout.readline() == 'locked\n'
+            os.kill(worker.pid, signal.SIGSTOP)
+            try:
+                fd = acquire_shadow_lock(path)
+            except BlockingIOError:
+                pass
+            else:
+                os.close(fd)
+                raise AssertionError('Paused worker lost exclusive execution lock')
+            worker.kill()
+            worker.wait(timeout=5)
+            fd = acquire_shadow_lock(path)
+            os.close(fd)
+        finally:
+            if worker.poll() is None:
+                worker.kill()
+                worker.wait(timeout=5)
+            worker.stdout.close()
+            worker.stderr.close()
+
+
+def test_lock_contention_prevents_numerical_startup(monkeypatch):
+    monkeypatch.setattr(shadow_process, 'configure_parent_death', lambda pid: None)
+    def busy():
+        raise BlockingIOError('another worker owns the slot')
+    monkeypatch.setattr(shadow_process, 'acquire_shadow_lock', busy)
+    monkeypatch.setattr(shadow_process, 'configure_shadow_limits', lambda *args: pytest.fail('limits reached without execution slot'))
     monkeypatch.setattr(sys, 'stdin', None)
     stderr = io.StringIO()
     monkeypatch.setattr(sys, 'stderr', stderr)

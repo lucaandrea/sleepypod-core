@@ -8,6 +8,7 @@ its lease. Address space is not RSS and must be budgeted separately.
 import argparse
 import os
 import signal
+import stat
 import subprocess
 import sys
 
@@ -35,6 +36,35 @@ def configure_parent_death(expected_parent_pid):
     # No signal is delivered if the parent died before prctl was armed.
     if os.getppid() != expected_parent_pid:
         raise RuntimeError('Shadow host changed while arming parent-death protection')
+
+
+SHADOW_LOCK_PATH = '/run/sleepypod-shadow.lock'
+
+
+def acquire_shadow_lock(path=SHADOW_LOCK_PATH):
+    """One shipped shadow worker per host, independent of database leases.
+
+    The fixed runtime file is never unlinked/truncated. flock ownership ends on
+    descriptor close or process death; no stale lock-file deletion is needed.
+    The optional path exists for trusted tests, not as a CLI/request argument.
+    """
+    if sys.platform != 'linux':
+        raise RuntimeError('Shadow execution lock requires Linux')
+    import fcntl
+    fd = os.open(path, os.O_CREAT | os.O_RDWR | os.O_CLOEXEC | os.O_NOFOLLOW | os.O_NONBLOCK, 0o600)
+    try:
+        info = os.fstat(fd)
+        if (not stat.S_ISREG(info.st_mode) or info.st_nlink != 1
+                or info.st_uid != os.geteuid() or info.st_mode & 0o077 or info.st_size != 0):
+            raise RuntimeError('Invalid shadow execution lock')
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        current = os.stat(path, follow_symlinks=False)
+        if (current.st_dev, current.st_ino) != (info.st_dev, info.st_ino):
+            raise RuntimeError('Shadow execution lock replaced')
+        return fd
+    except BaseException:
+        os.close(fd)
+        raise
 
 
 def configure_shadow_limits(cpu_seconds, address_space_bytes):
@@ -65,8 +95,10 @@ def main(argv=None):
     parser.add_argument('--cpu-seconds', type=int, required=True)
     parser.add_argument('--address-space-bytes', type=int, required=True)
     args = parser.parse_args(argv)
+    lock_fd = None
     try:
         configure_parent_death(args.parent_pid)
+        lock_fd = acquire_shadow_lock()
         configure_shadow_limits(args.cpu_seconds, args.address_space_bytes)
         from .shadow_worker import run
         run(sys.stdin.buffer, sys.stdout.buffer)
@@ -75,6 +107,9 @@ def main(argv=None):
         # No frame values, paths, reference data or tracebacks in host logs.
         sys.stderr.write('Shadow process failed\n')
         return 1
+    finally:
+        if lock_fd is not None:
+            os.close(lock_fd)
 
 
 if __name__ == '__main__':

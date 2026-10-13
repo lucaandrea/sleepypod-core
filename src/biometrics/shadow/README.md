@@ -682,3 +682,19 @@ process-group inheritance guarantee: Linux clears it in forked children. The
 shipped numerical worker does not launch candidate subprocess trees. Parent-side
 group cleanup remains required, along with durable attempt recovery and resource
 admission across concurrent service processes.
+
+## Kernel-held shadow execution slot
+
+The Linux bootstrap takes a nonblocking exclusive flock on the fixed
+`/run/sleepypod-shadow.lock` before numerical imports and holds its descriptor for
+the worker lifetime. A second shipped shadow worker fails startup even if its
+SQLite lease was granted after a paused worker's lease expired. File creation is
+private, no-follow and non-truncating; nonregular, linked, nonempty, wrong-owner or
+publicly accessible files are refused. No request/CLI argument selects the path.
+
+The runtime file is never unlinked during operation. Descriptor close or process
+death releases kernel ownership without stale-file cleanup. A real Linux test
+verifies exclusion while the owner is stopped with SIGSTOP and acquisition after
+SIGKILL/reaping. This serializes shipped shadow workers sharing the runtime path;
+it does not yet serialize replay jobs or reconcile expired database attempts.
+Those host lifecycle and recovery tasks remain before production registration.
