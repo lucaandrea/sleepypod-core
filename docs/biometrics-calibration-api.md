@@ -390,9 +390,25 @@ The current single-numeric-objective protocol therefore cannot validate a change
 to multiple numeric components; multi-objective evaluation remains required for
 that case.
 
-This verifier returns an audit snapshot, not an activation or an adoption
-receipt. The activation service still needs to load authoritative identities,
-recheck binding generation and holdout exposure, and persist the evidence with
-the intent/outbox transaction. Qualified production policy designation and this
-validated activation path are not yet enabled. Explicit manual activation keeps
-its existing unvalidated semantics.
+The internal validated activation service loads the retained job, experiment,
+dataset, report, profile revision and current runtime baseline. It verifies
+the report before acquiring write reservations, then rechecks report/dataset
+availability, fencing identity, holdout exposure, runtime baseline and binding
+generation before committing. A short biometrics write reservation prevents
+concurrent exposure, release or runtime writes until the configuration commit
+finishes. Full report parsing and hashing happen before this reservation; the
+final artifact checks read only metadata. Only the configuration database is
+written: binding, evidence audit and outbox intent commit together.
+
+The audit keeps the evaluation ID, report/configuration/build hashes, policies
+and assessment summary even if biometric artifacts are later released. An exact
+idempotent retry returns the original activation event without requiring those
+artifacts again. Changing the request under the same key is rejected; manual
+and validated requests cannot alias one another. A successful request still
+returns `pending_delivery`, not proof of processor adoption.
+
+Stage replay now captures the entire acknowledged current configuration, including
+numeric parameters, instead of substituting defaults for those parameters. Pending
+or incompatible personalization blocks validated activation. Qualified production
+policy designation and public API/MCP/UI access to validated activation are not
+yet enabled. Explicit manual activation retains its existing unvalidated semantics.

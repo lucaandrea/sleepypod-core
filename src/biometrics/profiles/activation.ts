@@ -3,12 +3,14 @@ import { and, eq } from 'drizzle-orm'
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3'
 import { z } from 'zod'
 import type * as schema from '@/src/db/schema'
+import type * as bioSchema from '@/src/db/biometrics-schema'
 import { biometricActivationEvents as events, biometricConfigOutbox as outbox, biometricProfileBindings as bindings, sideSettings } from '@/src/db/schema'
 import { defaultConfig, manifestHash } from '../algorithms/registry'
 import { configHash } from '../algorithms/canonical'
 import { ReferenceInputError } from '../references/time'
 import { stageClassifierSchema } from '@/src/lib/sleep-stage-rules'
 import { ProfileStore } from './store'
+import { prepareVerifiedEvaluation, type PromotionBuild } from './evaluation-store'
 
 export const activationIntentSchema = z.object({
   side: z.enum(['left', 'right']), action: z.enum(['activate', 'reset', 'rollback']),
@@ -18,16 +20,42 @@ export const activationIntentSchema = z.object({
   allowUnvalidated: z.literal(true),
 }).strict()
 
-/** Manual intent only; validated promotion will supply separately verified evidence. */
+export const validatedActivationIntentSchema = activationIntentSchema.omit({ allowUnvalidated: true }).extend({
+  action: z.literal('activate'), revisionId: z.string().uuid(), evaluationId: z.string().uuid(),
+  expectedReportHash: z.string().regex(/^[a-f0-9]{64}$/),
+}).strict()
+
+function retryActivation(db: BetterSQLite3Database<typeof schema>, idempotencyKey: string, requestHash: string) {
+  const existing = db.select().from(events).where(eq(events.idempotencyKey, idempotencyKey)).get()
+  if (existing && existing.requestHash !== requestHash) throw new ReferenceInputError('REVISION_CONFLICT', 'Activation idempotency key changed')
+  return existing
+}
+
 export function requestManualActivation(db: BetterSQLite3Database<typeof schema>, raw: z.input<typeof activationIntentSchema>, now = Date.now()) {
   const input = activationIntentSchema.parse(raw)
+  return commitActivationIntent(db, input, configHash(input), now)
+}
+
+/** Configuration is the only database written here. The short biometrics write
+ * reservation prevents exposure/release/runtime changes across the config
+ * commit; it is not a transaction committing writes to two databases. */
+export function requestValidatedActivation(db: BetterSQLite3Database<typeof schema>, bioDb: BetterSQLite3Database<typeof bioSchema>,
+  raw: z.input<typeof validatedActivationIntentSchema>, build: PromotionBuild, now = Date.now()) {
+  const input = validatedActivationIntentSchema.parse(raw)
   const requestHash = configHash(input)
+  const existing = retryActivation(db, input.idempotencyKey, requestHash)
+  if (existing) return existing
+  const verified = prepareVerifiedEvaluation(db, bioDb, input, build)
+  const intent = activationIntentSchema.strip().parse({ ...input, allowUnvalidated: true })
+  return bioDb.transaction(() => commitActivationIntent(db, intent, requestHash, now,
+    { ...verified, evaluationId: input.evaluationId }), { behavior: 'immediate' })
+}
+
+function commitActivationIntent(db: BetterSQLite3Database<typeof schema>, input: z.infer<typeof activationIntentSchema>, requestHash: string, now: number,
+  verified?: ReturnType<typeof prepareVerifiedEvaluation> & { evaluationId: string }) {
   return db.transaction((tx) => {
-    const existing = tx.select().from(events).where(eq(events.idempotencyKey, input.idempotencyKey)).get()
-    if (existing) {
-      if (existing.requestHash !== requestHash) throw new ReferenceInputError('REVISION_CONFLICT', 'Activation idempotency key changed')
-      return existing
-    }
+    const existing = retryActivation(db, input.idempotencyKey, requestHash)
+    if (existing) return existing
     const profiles = new ProfileStore(db)
     const storedBinding = tx.select().from(bindings).where(eq(bindings.side, input.side)).get()
     const binding = profiles.binding(input.side)
@@ -53,6 +81,7 @@ export function requestManualActivation(db: BetterSQLite3Database<typeof schema>
       : profiles.validateRevision(input.revisionId, input.side)
     if (selected.hash !== input.expectedResolvedHash) throw new ReferenceInputError('REVISION_CONFLICT', 'Resolved configuration changed; inspect its exact hash before applying')
     const previous = profiles.effective(input.side)
+    verified?.recheck()
     const generation = binding.generation + 1
     if (!storedBinding) {
       tx.insert(bindings).values({ side: input.side, generation, desiredRevisionId: input.revisionId,
@@ -66,7 +95,8 @@ export function requestManualActivation(db: BetterSQLite3Database<typeof schema>
     }
     const event = tx.insert(events).values({ id: randomUUID(), side: input.side, generation, action: input.action,
       previousRevisionId: binding.desiredRevisionId, nextRevisionId: input.revisionId, previousHash: previous.hash, nextHash: selected.hash,
-      evidence: { status: 'manual_unvalidated', manifestHash, resolvedHash: selected.hash,
+      evaluationId: verified?.evaluationId ?? null,
+      evidence: verified?.evidence ?? { status: 'manual_unvalidated', manifestHash, resolvedHash: selected.hash,
         ...(invalidLegacy === undefined ? {} : { recovery: 'invalid_legacy_reset', preservedLegacyClassifier: invalidLegacy }) }, requester: input.requester,
       state: 'pending_delivery', idempotencyKey: input.idempotencyKey, requestHash, createdAtMs: now, updatedAtMs: now }).returning().get()
     tx.insert(outbox).values({ id: randomUUID(), side: input.side, generation,

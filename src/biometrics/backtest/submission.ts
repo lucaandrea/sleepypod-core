@@ -9,7 +9,6 @@ import { workerBuildHash } from './child'
 import { packagedCoordinatorPath, packagedWorkerPath } from './location'
 import { waveformEvaluatorBuildIdentity } from './waveform-build'
 import { podRawInspectionLocation } from './raw-inspection-child'
-import { resolveStageView } from '../profiles/stage-view'
 import { configHash } from '../algorithms/canonical'
 import { defaultConfig, manifestHash } from '../algorithms/registry'
 import { ProfileStore } from '../profiles/store'
@@ -83,17 +82,16 @@ export function submitBacktest(configDb: BetterSQLite3Database<typeof configSche
     const candidate = profiles.validateRevision(input.candidateRevisionId, experiment.side)
     // This is the actual retrospective view used by existing stage endpoints.
     // A desired-but-unacknowledged vitals profile is not a current baseline.
-    const view = resolveStageView(configDb, bioDb, experiment.side)
-    const currentBaseline = signalReplay ? resolveReplayBaseline(configDb, bioDb, experiment.side) : null
+    const currentBaseline = resolveReplayBaseline(configDb, bioDb, experiment.side)
     const otherBaseline = signalReplay ? resolveReplayBaseline(configDb, bioDb, experiment.side === 'left' ? 'right' : 'left') : null
-    const current = currentBaseline?.resolved ?? { ...structuredClone(defaultConfig), sleep_stages: view.classifier }
-    return { waveform: currentBaseline && otherBaseline && pythonBuildHash
+    const current = currentBaseline.resolved
+    return { waveform: otherBaseline && pythonBuildHash
       ? { pythonBuildHash,
           otherSide: { manifestHash, resolvedHash: otherBaseline.hash, resolved: otherBaseline.resolved },
           baselineProvenance: { current: currentBaseline.provenance, otherSide: otherBaseline.provenance } }
       : undefined, configs: [
       { label: 'default' as const, revisionId: null, manifestHash, resolvedHash: configHash(defaultConfig), resolved: defaultConfig },
-      { label: 'current' as const, revisionId: currentBaseline?.revisionId ?? null, manifestHash, resolvedHash: configHash(current), resolved: current },
+      { label: 'current' as const, revisionId: currentBaseline.revisionId, manifestHash, resolvedHash: configHash(current), resolved: current },
       { label: 'candidate' as const, revisionId: candidate.revision.id, manifestHash, resolvedHash: candidate.hash, resolved: candidate.resolved },
     ] }
   }))
