@@ -64,3 +64,72 @@ it('scores stage evidence in retained replay and replaces claimed operational ev
     ...assessStageObjective(policy, evidence(), policy) })) }
   expect(finalizeStageObjectiveReport(claimed, policy, null, policy).stageObjectiveAssessments).toEqual(expect.arrayContaining([expect.objectContaining({ status: 'insufficient_evidence', missingEvidence: ['operational_evidence_unavailable'] })]))
 })
+
+it('retains specific missing evidence for sparse nights and unavailable metrics', () => {
+  const cases: [string, (data: StageObjectiveEvidence) => void][] = [
+    ['independent_holdout_required', (data) => { data.holdoutUse = 2 }],
+    ['uncertainty_unavailable', (data) => { data.intervalLower = null }],
+    ['coverage_unavailable', (data) => { data.nights[0].candidateOutputCoverage = null }],
+    ['macro_f1_unavailable', (data) => { data.nights[0].macroF1Difference = null }],
+    ['stage_support:rem', (data) => { data.nights[0].perStage[3].f1Difference = null }],
+  ]
+  for (const [reason, change] of cases) {
+    const data = evidence()
+    change(data)
+    expect(assessStageObjective(policy, data, policy)).toMatchObject({ status: 'insufficient_evidence', missingEvidence: [reason], failedThresholds: [] })
+  }
+  for (const change of [
+    (data: StageObjectiveEvidence) => { data.nights[0].agreementDifference = null },
+    (data: StageObjectiveEvidence) => {
+      data.nights[0].pairedDurationMs--
+      data.nights[0].perStage[0].referenceMs--
+    },
+  ]) {
+    const data = evidence()
+    change(data)
+    expect(assessStageObjective(policy, data, policy).missingEvidence).toEqual(expect.arrayContaining(['insufficient_supported_nights', 'unsupported_nights']))
+  }
+  const empty = evidence()
+  empty.nights = []
+  expect(assessStageObjective(policy, empty, policy)).toMatchObject({ status: 'insufficient_evidence', equalNightMeanAgreementDifference: null, missingEvidence: ['insufficient_supported_nights'] })
+})
+
+it('requires actual mean improvement and preserves inclusive regression limits', () => {
+  const data = evidence()
+  data.nights[0].agreementDifference = -0.125
+  data.nights[1].agreementDifference = 0
+  data.nights[2].agreementDifference = 0.5
+  data.nights[0].macroF1Difference = -0.125
+  data.nights[0].perStage[3].f1Difference = -0.125
+  const exact = { ...policy, maximumRegressedNightFraction: 1 / 3 }
+  expect(assessStageObjective(exact, data, exact)).toMatchObject({ status: 'improved', failedThresholds: [], equalNightMeanAgreementDifference: 0.125 })
+  data.nights[2].agreementDifference = 0.499
+  expect(assessStageObjective(exact, data, exact).status).toBe('no_material_change')
+})
+
+it('rejects duplicated stages, inconsistent paired durations, and altered designation', () => {
+  const duplicate = evidence()
+  duplicate.nights[0].perStage[3].stage = 'wake'
+  expect(() => assessStageObjective(policy, duplicate, policy)).toThrow('Invalid stage objective evidence')
+  const unpaired = evidence()
+  unpaired.nights[0].commonOutputMs = 799
+  expect(() => assessStageObjective(policy, unpaired, policy)).toThrow('Invalid stage objective evidence')
+  const mismatch = evidence()
+  mismatch.nights[0].perStage[0].referenceMs++
+  expect(() => assessStageObjective(policy, mismatch, policy)).toThrow('Invalid stage objective evidence')
+  expect(() => assessStageObjective({ ...policy, requiredStages: ['wake', 'wake'] }, evidence(), policy)).toThrow('Duplicate required stages')
+  expect(assessStageObjective(policy, evidence(), { ...policy, qualificationId: 'other' }).missingEvidence).toEqual(['policy_not_designated'])
+})
+
+it('reports absent stage support and zero baseline coverage without inventing a score', () => {
+  const data = evidence()
+  data.nights[0].baselineOutputMs = 0
+  data.nights[0].commonOutputMs = 0
+  data.nights[0].pairedDurationMs = 0
+  data.nights[0].agreementDifference = null
+  data.nights[0].macroF1Difference = null
+  data.nights[0].perStage = []
+  expect(assessStageObjective(policy, data, policy)).toMatchObject({ status: 'insufficient_evidence', failedThresholds: [],
+    missingEvidence: ['insufficient_supported_nights', 'unsupported_nights', 'coverage_unavailable', 'macro_f1_unavailable',
+      'stage_support:wake', 'stage_support:light', 'stage_support:deep', 'stage_support:rem'] })
+})
