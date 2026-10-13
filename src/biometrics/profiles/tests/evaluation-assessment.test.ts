@@ -1,3 +1,4 @@
+import { replayContextFixture } from './fixtures/replay-context'
 // @vitest-environment node
 import { expect, it } from 'vitest'
 import { verifyEvaluationAssessments } from '../evaluation-assessment'
@@ -19,7 +20,7 @@ it('reassesses exact retained evidence under a trusted policy and returns a boun
 
 it('cannot promote a client-selected policy or trust claimed successful assessments', () => {
   const work = fixture()
-  expect(() => verifyEvaluationAssessments(work.job, work.result(), work.expected, { protocolHash: null, numeric: null, stages: null })).toThrow()
+  expect(() => verifyEvaluationAssessments(work.job, work.result(), work.expected, { protocolHash: null, waveformContext: null, numeric: null, stages: null })).toThrow()
   work.report.stageObjectiveAssessments[0].status = 'improved'
   work.report.stageObjectiveAssessments[0].evidence.nights[0].candidateOutputCoverage = 0.5
   expect(() => verifyEvaluationAssessments(work.job, work.result(), work.expected, work.designations)).toThrow()
@@ -90,7 +91,8 @@ it('requires numeric improvement while allowing unchanged downstream stages, and
   const evidence: ObjectiveEvidence = { metricCompatible: true, split: 'holdout', holdoutUse: 1, intervalUpper: -2, subgroups: [], operational: null,
     nights: ['a', 'b', 'c'].map(cohortId => ({ cohortId, pairedReferences: 10, maeDifference: -2, baselineObservationCount: 10, lostObservations: 0 })) }
   const report = { ...work.report, protocol, protocolHash: job.protocolHash, version: 'waveform-backtest-report-v1',
-    support: 'identical_retained_waveform_inputs', waveform: { pythonBuildHash, otherSideConfigHash },
+    support: 'identical_retained_waveform_inputs', waveform: { pythonBuildHash, otherSideConfigHash,
+      ...replayContextFixture(['a', 'b', 'c'], job.configs.map(row => row.resolvedHash), pythonBuildHash, otherSideConfigHash) },
     objectiveAssessments: ['default', 'current'].map(baseline => ({ baseline, candidate: 'candidate', baselineHash: configHash(defaultConfig),
       candidateHash: configHash(candidate), ...assessNumericObjective(policy, structuredClone(evidence), null) })) }
   for (const row of report.stageObjectiveAssessments) {
@@ -100,7 +102,7 @@ it('requires numeric improvement while allowing unchanged downstream stages, and
   }
   const result = () => ({ report, contentHash: dataHash(report), available: true, currentHoldoutUseCount: 1 })
   const expected = { ...work.expected, resolvedHash: configHash(candidate), waveform: { pythonBuildHash, otherSideConfigHash } }
-  const designations = { ...work.designations, protocolHash: job.protocolHash, numeric: policy }
+  const designations = { ...work.designations, protocolHash: job.protocolHash, waveformContext: { allowedLimitations: ['event_time_replaces_arrival_time' as const] }, numeric: policy }
   expect(verifyEvaluationAssessments(job, result(), expected, designations)).toMatchObject({ changedDomains: ['heart_rate'],
     numericAssessments: [{ status: 'improved' }, { status: 'improved' }], stageAssessments: [{ status: 'no_material_change' }, { status: 'no_material_change' }] })
   expect(verifyEvaluationAssessments(job, result(), expected, designations)).toMatchObject({ policies: { numeric: policy }, waveform: expected.waveform })
@@ -116,6 +118,7 @@ it('requires numeric improvement while allowing unchanged downstream stages, and
   const multiProtocol = { ...rest, objectivePolicies: [policy, breathingPolicy] }
   const multiJob = { ...job, protocol: multiProtocol, protocolHash: configHash(multiProtocol) }
   const multiReport = { ...report, protocol: multiProtocol, protocolHash: multiJob.protocolHash,
+    waveform: { pythonBuildHash, otherSideConfigHash, ...replayContextFixture(['a', 'b', 'c'], multiJob.configs.map(row => row.resolvedHash), pythonBuildHash, otherSideConfigHash) },
     stageObjectiveAssessments: report.stageObjectiveAssessments.map(row => ({ ...row, candidateHash: configHash(candidate) })),
     objectiveAssessments: multiProtocol.objectivePolicies.flatMap(item => ['default', 'current'].map(baseline => ({
       baseline, candidate: 'candidate', baselineHash: configHash(defaultConfig), candidateHash: configHash(candidate),

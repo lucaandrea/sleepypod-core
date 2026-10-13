@@ -5,7 +5,7 @@ import { assessNumericObjective } from './objective-policy'
 import { createNumericNightSummary } from './numeric-night-summary'
 import { compareNumericConfigurations } from './numeric-comparison'
 import { z } from 'zod'
-import { waveformReadingSchema, waveformRunSchema } from './waveform-output'
+import { waveformEvaluationSchema } from './waveform-output'
 import { compareStageOutputs } from './stage-comparison'
 import { createNightSummary } from './night-summary-core'
 import { createNightUncertainty } from './uncertainty-core'
@@ -16,10 +16,7 @@ import { alignReferences, DEFAULT_ALIGNMENT } from '../references/alignment'
 import { scoreStageDurations } from '../references/stage-scoring'
 import { datasetSnapshotSchema, backtestJobSnapshotSchema, numericObjectivePolicies } from './contracts'
 
-export const waveformEvaluationSchema = z.object({ hash: z.string().regex(/^[a-f0-9]{64}$/), outputs: z.array(z.object({
-  cohortId: z.string().min(1).max(200), configHash: z.string().regex(/^[a-f0-9]{64}$/),
-  readings: z.array(waveformReadingSchema).max(20000), run: waveformRunSchema,
-}).strict()).max(180) }).strict().refine(value => value.outputs.reduce((sum, output) => sum + output.readings.length, 0) <= 20000, 'Waveform reading budget exceeded')
+export { waveformEvaluationSchema } from './waveform-output'
 
 export const backtestWorkSchema = z.object({
   job: backtestJobSnapshotSchema,

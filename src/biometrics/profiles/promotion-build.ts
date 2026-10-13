@@ -11,5 +11,5 @@ export async function resolvePromotionBuild(bioDb: BetterSQLite3Database<typeof 
   const job = new BacktestJobStore(bioDb).get(evaluationId)
   const snapshot = backtestJobSnapshotSchema.parse(job.input)
   const identity = await resolveInstalledReplayBuild(snapshot.protocol.mode)
-  return { ...identity, designations: { protocolHash: null, numeric: null, stages: null } }
+  return { ...identity, designations: { protocolHash: null, waveformContext: null, numeric: null, stages: null } }
 }

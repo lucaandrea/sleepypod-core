@@ -94,7 +94,7 @@ it('atomically stores verified evidence and outbox intent; retries survive relea
 
 it('rejects missing designation, mismatched hashes, and reused holdout before changing bindings', () => {
   const work = fixture()
-  expect(() => requestValidatedActivation(config, bio, work.input, { ...work.build, designations: { protocolHash: null, numeric: null, stages: null } })).toThrow()
+  expect(() => requestValidatedActivation(config, bio, work.input, { ...work.build, designations: { protocolHash: null, waveformContext: null, numeric: null, stages: null } })).toThrow()
   expect(() => requestValidatedActivation(config, bio, { ...work.input, expectedReportHash: '0'.repeat(64) }, work.build)).toThrow('hash')
   work.enqueue('second-holdout')
   expect(() => requestValidatedActivation(config, bio, work.input, work.build)).toThrow('holdout')

@@ -1,3 +1,4 @@
+import { verifyReplayContext, type ReplayContextQualification } from './replay-context'
 import { numericObjectivePolicies } from '../backtest/contracts'
 import { z } from 'zod'
 import { configHash } from '../algorithms/canonical'
@@ -19,6 +20,7 @@ const assessmentSchema = z.object({
 export interface DesignatedEvaluationPolicies {
   /** Full frozen protocol, including alignment/calibration/uncertainty settings. */
   protocolHash: string | null
+  waveformContext: ReplayContextQualification | null
   numeric: ObjectivePolicy | readonly ObjectivePolicy[] | null
   stages: StageObjectivePolicy | null
 }
@@ -69,11 +71,15 @@ export function verifyEvaluationAssessments(
     .map(row => ({ ...row, metric: policy.metric })))
   const stageAssessments = check(finalized.stageObjectiveAssessments, domains.includes('sleep_stages'))
   if (designations.protocolHash !== job.protocolHash) reject('Evaluation protocol is outside the qualified context')
+  const replayContext = expected.waveform
+    ? verifyReplayContext(raw.waveform, { ...expected.waveform, side: expected.side,
+        cohortIds: identity.cohortIds, configHashes: job.configs.map(config => config.resolvedHash) }, designations.waveformContext)
+    : null
   return { version: 'verified-evaluation-v1' as const, interpretation: 'agreement_with_named_reference_not_clinical_validation' as const,
     reportHash: result.contentHash, revisionId: expected.revisionId, resolvedHash: expected.resolvedHash,
     currentResolvedHash: expected.currentResolvedHash, datasetId: job.datasetId, datasetHash: job.datasetHash,
     evaluatorBuildHash: job.evaluatorBuildHash, manifestHash: identity.report.manifestHash, protocolHash: job.protocolHash,
-    changedDomains: domains, numericAssessments, stageAssessments,
+    changedDomains: domains, numericAssessments, stageAssessments, replayContext,
     policies: { numeric: job.protocol.objectivePolicies ?? job.protocol.objectivePolicy ?? null, stages: job.protocol.stageObjectivePolicy },
     ...(expected.waveform ? { waveform: expected.waveform } : {}),
   }

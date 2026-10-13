@@ -26,3 +26,8 @@ export const waveformRunSchema = z.object({
     pump_gated_frames: count, preroll_outputs: count, scored_outputs: count }).strict(),
   limitations, config_hashes: z.object({ left: hash, right: hash }).strict(), artifact_hashes: z.array(hash).min(1).max(64),
 }).strict()
+
+export const waveformEvaluationSchema = z.object({ hash: z.string().regex(/^[a-f0-9]{64}$/), outputs: z.array(z.object({
+  cohortId: z.string().min(1).max(200), configHash: z.string().regex(/^[a-f0-9]{64}$/),
+  readings: z.array(waveformReadingSchema).max(20000), run: waveformRunSchema,
+}).strict()).max(180) }).strict().refine(value => value.outputs.reduce((sum, output) => sum + output.readings.length, 0) <= 20000, 'Waveform reading budget exceeded')

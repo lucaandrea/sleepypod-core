@@ -33,7 +33,7 @@ export function evaluationFixture() {
     currentResolvedHash: configHash(defaultConfig), evaluatorBuildHash: job.evaluatorBuildHash,
     dataset: { id: job.datasetId, contentHash: job.datasetHash, side: 'left', available: true, holdoutCohortIds: ['a', 'b', 'c'] } }
   const result = () => ({ report, contentHash: dataHash(report), available: true, currentHoldoutUseCount: 1 })
-  const designations = { protocolHash: job.protocolHash, numeric: null, stages: policy }
+  const designations = { protocolHash: job.protocolHash, waveformContext: null, numeric: null, stages: policy }
   return { job, report, result, expected, designations }
 }
 

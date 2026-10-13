@@ -446,3 +446,15 @@ value cannot be supplied through activation or review requests. The audit alread
 retains that exact protocol hash. This identity gate does not establish that missing
 historical pump/occupancy context is acceptable; replay-context qualification is
 still a separate release requirement.
+
+
+Waveform promotion also requires a server-designated list of accepted replay
+limitations. The verifier reads both per-run and per-reading diagnostics across
+every held-out cohort and distinct configuration, verifies their retained payload
+hash and build/configuration identities, and rejects missing or duplicate outputs.
+Missing pump/occupancy/sleeper-mode context, short pre-roll, cold starts and event
+clock substitution cannot pass merely because numeric scores improved. Unknown
+limitation codes cannot be designated until the contract is reviewed. Activation
+audit evidence records both the accepted list and the limitations actually observed.
+No production replay-context allowance is installed yet; this gate does not by
+itself qualify any approximation.
