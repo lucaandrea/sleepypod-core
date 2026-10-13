@@ -12,6 +12,8 @@ import re
 import sys
 import time
 
+from .execution_lock import acquire_execution_lock
+
 MAX_INPUT_BYTES = 8 * 1024 * 1024
 MAX_OUTPUT_BYTES = 16 * 1024 * 1024
 
@@ -141,7 +143,10 @@ def main():
     target.add_argument('--retained-directory')
     target.add_argument('--describe-build', action='store_true')
     args = parser.parse_args()
+    lock_fd = None
     try:
+        if not args.describe_build:
+            lock_fd = acquire_execution_lock()
         configure_process_limits(args.cpu_seconds)
         if args.describe_build:
             from .build_identity import replay_build_identity
@@ -153,6 +158,9 @@ def main():
         # Never echo reference exports, frame values, paths or tracebacks.
         sys.stderr.write('Retained waveform worker failed\n')
         return 1
+    finally:
+        if lock_fd is not None:
+            os.close(lock_fd)
 
 
 if __name__ == '__main__':

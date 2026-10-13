@@ -20,6 +20,7 @@ SOURCE_FILES = (
     'common/biometrics/processing.py', 'common/biometrics/routing.py',
     'common/biometrics/signal.py', 'common/biometrics/raw_artifacts.py',
     'common/biometrics/raw_records.py', 'common/biometrics/retained_replay.py',
+    'common/biometrics/execution_lock.py',
     'common/biometrics/replay.py', 'common/biometrics/replay_worker.py',
     'piezo-processor/pyproject.toml', 'piezo-processor/uv.lock',
 )

@@ -683,11 +683,11 @@ shipped numerical worker does not launch candidate subprocess trees. Parent-side
 group cleanup remains required, along with durable attempt recovery and resource
 admission across concurrent service processes.
 
-## Kernel-held shadow execution slot
+## Kernel-held replay/shadow execution slot
 
-The Linux bootstrap takes a nonblocking exclusive flock on the fixed
+The shadow bootstrap and waveform replay CLI take a nonblocking exclusive flock on the fixed
 `/run/sleepypod-shadow.lock` before numerical imports and holds its descriptor for
-the worker lifetime. A second shipped shadow worker fails startup even if its
+the worker lifetime. A second numerical worker fails startup even if its
 SQLite lease was granted after a paused worker's lease expired. File creation is
 private, no-follow and non-truncating; nonregular, linked, nonempty, wrong-owner or
 publicly accessible files are refused. No request/CLI argument selects the path.
@@ -695,9 +695,18 @@ publicly accessible files are refused. No request/CLI argument selects the path.
 The runtime file is never unlinked during operation. Descriptor close or process
 death releases kernel ownership without stale-file cleanup. A real Linux test
 verifies exclusion while the owner is stopped with SIGSTOP and acquisition after
-SIGKILL/reaping. This serializes shipped shadow workers sharing the runtime path;
-it does not yet serialize replay jobs or reconcile expired database attempts.
-Those host lifecycle and recovery tasks remain before production registration.
+SIGKILL/reaping, including the actual replay CLI blocking a shadow contender.
+Both entrypoints use the same shared implementation, included in their build
+identities. The legacy runtime path is retained for shadow upgrade compatibility.
+Build-description probes do not take the slot because they do not run numerical
+processing. Lock contention fails startup rather than waiting with an active lease.
+
+This serializes shipped waveform replay and shadow workers sharing the runtime
+path. It does not serialize Node stage replay or archive collection, replace
+qualified aggregate host admission, or prove expired-attempt process cleanup.
+Before enabling a new installation, stop/reap old replay workers that predate
+this lock; they cannot retroactively acquire it. Never delete the lock file to
+force admission while any worker may still own its inode.
 
 ## Worker-local wall deadline
 

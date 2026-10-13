@@ -8,11 +8,11 @@ its lease. Address space is not RSS and must be budgeted separately.
 import argparse
 import os
 import signal
-import stat
 import subprocess
 import sys
 
 from .replay_worker import configure_process_limits
+from .execution_lock import EXECUTION_LOCK_PATH as SHADOW_LOCK_PATH, acquire_execution_lock
 
 
 def configure_parent_death(expected_parent_pid):
@@ -38,33 +38,10 @@ def configure_parent_death(expected_parent_pid):
         raise RuntimeError('Shadow host changed while arming parent-death protection')
 
 
-SHADOW_LOCK_PATH = '/run/sleepypod-shadow.lock'
-
-
 def acquire_shadow_lock(path=SHADOW_LOCK_PATH):
-    """One shipped shadow worker per host, independent of database leases.
-
-    The fixed runtime file is never unlinked/truncated. flock ownership ends on
-    descriptor close or process death; no stale lock-file deletion is needed.
-    The optional path exists for trusted tests, not as a CLI/request argument.
-    """
     if sys.platform != 'linux':
         raise RuntimeError('Shadow execution lock requires Linux')
-    import fcntl
-    fd = os.open(path, os.O_CREAT | os.O_RDWR | os.O_CLOEXEC | os.O_NOFOLLOW | os.O_NONBLOCK, 0o600)
-    try:
-        info = os.fstat(fd)
-        if (not stat.S_ISREG(info.st_mode) or info.st_nlink != 1
-                or info.st_uid != os.geteuid() or info.st_mode & 0o077 or info.st_size != 0):
-            raise RuntimeError('Invalid shadow execution lock')
-        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        current = os.stat(path, follow_symlinks=False)
-        if (current.st_dev, current.st_ino) != (info.st_dev, info.st_ino):
-            raise RuntimeError('Shadow execution lock replaced')
-        return fd
-    except BaseException:
-        os.close(fd)
-        raise
+    return acquire_execution_lock(path)
 
 
 def configure_wall_deadline(wall_ms):

@@ -20,7 +20,11 @@ def work(snapshot):
 
 
 def child(tmp_path, directory, payload):
-    return subprocess.run([sys.executable, '-m', 'common.biometrics.replay_worker',
+    return subprocess.run([sys.executable, '-c',
+        'from common.biometrics import replay_worker; '
+        'from common.biometrics.execution_lock import acquire_execution_lock; '
+        f'replay_worker.acquire_execution_lock=lambda: acquire_execution_lock({str(tmp_path / "execution.lock")!r}); '
+        'raise SystemExit(replay_worker.main())',
         '--retained-directory', str(directory)], input=payload, capture_output=True,
         cwd=tmp_path, env={'PYTHONPATH': str(Path(__file__).resolve().parent.parent),
             'LANG': 'C.UTF-8', 'TZ': 'UTC'}, timeout=20)
