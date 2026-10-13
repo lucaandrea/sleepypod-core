@@ -390,3 +390,32 @@ fabricated raw execution records. The experiment host and its retained history
 remain trusted. Qualification must recheck current exposure when publishing its
 decision and still requires objective criteria, determinism, representative
 fixtures, compatibility, target-pod resources and reviewed release promotion.
+
+## Frozen accuracy criteria
+
+Managed protocols may include `accuracyPolicy` using schema
+`biometric-package-accuracy-policy-v1`. Choose and review its explicit criteria
+before freezing the study: `minimumMaeImprovement`,
+`maximumNightMaeRegression`, `maximumNightP95Regression`,
+`maximumNightAbsoluteBiasIncrease`, `minimumCommonPairsPerNight`,
+`minimumReferenceCoverage`, `maximumReferenceCoverageLoss`, and
+`maximumLostTimestampFraction`. Error thresholds use the selected metric's
+canonical unit; coverage/loss thresholds are fractions. There are no implicit
+production thresholds. Changing criteria changes the protocol hash and cannot
+retrofit the original study. Legacy protocols without criteria remain readable
+but cannot meet the accuracy gate.
+
+The managed receipt's `accuracy` assessment is recomputed from verified retained
+evidence and current ledger exposure. It requires a unique current holdout
+attempt, sufficient common pairs on every selected night, coverage and support
+within the frozen limits, no excessive per-night MAE/tail/bias regression, and
+an estimated whole-night confidence interval supporting the requested MAE
+improvement against both default and current. Missing or degenerate uncertainty,
+omitted nights, ambiguous support and absent criteria remain insufficient.
+Known violations produce `criteria_not_met` even if other evidence is missing.
+
+`criteria_met` means only that these reference-agreement criteria passed. It is
+not clinical validation or package qualification: determinism, resource/noise
+fixtures, compatibility, pod fitness, prospective monitoring and reviewed release
+promotion still apply. The assessment retains exact failures and missing evidence
+and never installs code or changes live processing.

@@ -136,7 +136,8 @@ describe.skipIf(!image)('managed package trials through real Docker', () => {
       await writeFile(join(root, 'frames.jsonl'), input.frames.map(frame => JSON.stringify(frame)).join('\n'))
       const workspace = join(root, 'workspace')
       const first = await runManagedFiles(workspace, join(root, 'descriptor.json'))
-      expect(first).toMatchObject({ state: 'succeeded', currentEvidence: { uniqueHoldoutAttempt: true } })
+      expect(first).toMatchObject({ state: 'succeeded', currentEvidence: { uniqueHoldoutAttempt: true },
+        accuracy: { status: 'insufficient_evidence', missing: expect.arrayContaining(['no_frozen_accuracy_policy']) } })
       expect((await stat(join(workspace, 'experiments.sqlite'))).mode & 0o777).toBe(0o600)
       expect(dataHash(JSON.parse(await readFile(first.reportFile, 'utf8')))).toBe(first.reportHash)
       await rm(join(root, 'frames.jsonl'))
