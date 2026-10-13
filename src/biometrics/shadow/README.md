@@ -644,3 +644,24 @@ hardware mismatch rejects admission. This adapter lives on the application side
 of the package boundary, so hardware services remain excluded from the passive
 host bundle. Production service execution must still supply this collector and
 register cancellation/recovery and user-facing operations.
+
+## Installed application runner
+
+`runInstalledShadowAttempt` connects the application to the verified package. It
+inspects the installed host, opens an owned writable state connection to the
+existing biometrics database, and constructs the package's own `ShadowStore`.
+The state connection uses an explicit timeout no greater than the saved execution
+policy and the same file-replacement guard as read-only capture connections.
+
+The runner selects the exact installed qualification, builds the observed
+hardware/artifact identity collector, supplies the actual shared piezo receive
+clock, and invokes the loaded package's `runProfiledShadowAttempt`. Every identity
+check also verifies the writable state database still refers to the owned file.
+The state handle closes after completion, cancellation or any startup/execution
+failure. Capture handles remain read-only; only the store owns shadow writes.
+
+Service code supplies trusted installation paths, storage policy and timeout;
+operations identify an existing run and saved candidate revision. This entry point
+does not register background scheduling or public routes, and does not establish
+cross-process orphan recovery or concurrent resource admission. Those lifecycle
+requirements and current-build qualification remain before production enablement.

@@ -12,7 +12,7 @@ import { biometricManifest, defaultConfig, manifestHash } from '../../algorithms
 import { configHash } from '../../algorithms/canonical'
 import { plannedShadowSourceFactory } from '../planned-sources'
 import { shadowPlanSchema } from '../store'
-import { openShadowActiveDatabase } from '../active-database'
+import { openShadowActiveDatabase, openShadowStateDatabase } from '../active-database'
 import { openShadowLiveSources } from '../live-sources'
 import { publishProspectiveFrame } from '../../../streaming/prospectiveFrameTap'
 import { ShadowActiveReader } from '../active-reader'
@@ -332,4 +332,19 @@ it('enforces the saved frame count and releases owned resources on overflow', ()
   expect(close).toHaveBeenCalledTimes(2)
   expect(vi.getTimerCount()).toBe(0)
   close.mockRestore()
+})
+
+it('opens owned shadow state writable while keeping active capture read-only and detecting replacement', () => {
+  const { path, readonly } = setup()
+  const state = openShadowStateDatabase(path, { busyTimeoutMs: 50 })
+  try {
+    expect(state.db.readonly).toBe(false)
+    state.db.exec('CREATE TABLE shadow_connection_test (value INTEGER)')
+    state.db.prepare('INSERT INTO shadow_connection_test VALUES (1)').run()
+    expect(() => readonly.prepare('INSERT INTO shadow_connection_test VALUES (2)').run()).toThrow(/readonly/)
+    state.assertCurrent()
+    renameSync(path, path + '.moved')
+    expect(state.assertCurrent).toThrow()
+  }
+  finally { state.close() }
 })

@@ -4,7 +4,7 @@ import { z } from 'zod'
 
 /** Trusted host path, never an RPC path. Keep ownership separate from source
  * subscriptions so shutdown can unsubscribe before closing the connection. */
-export function openShadowActiveDatabase(path: string, options: { busyTimeoutMs: number }) {
+function openOwnedShadowDatabase(path: string, options: { busyTimeoutMs: number }, readonly: boolean) {
   const timeout = z.number().int().min(1).max(1000).parse(options.busyTimeoutMs)
   const identity = () => {
     const stat = lstatSync(path, { bigint: true })
@@ -12,7 +12,7 @@ export function openShadowActiveDatabase(path: string, options: { busyTimeoutMs:
     return `${stat.dev}:${stat.ino}`
   }
   const expected = identity()
-  const db = new Database(path, { readonly: true, fileMustExist: true, timeout })
+  const db = new Database(path, { readonly, fileMustExist: true, timeout })
   let closed = false
   const close = () => {
     if (closed) return
@@ -30,4 +30,14 @@ export function openShadowActiveDatabase(path: string, options: { busyTimeoutMs:
     throw error
   }
   return { db, assertCurrent, close }
+}
+
+export function openShadowActiveDatabase(path: string, options: { busyTimeoutMs: number }) {
+  return openOwnedShadowDatabase(path, options, true)
+}
+
+/** The installed runner owns this writable handle for separate shadow tables.
+ * The store, not this connection wrapper, enforces the canonical-write boundary. */
+export function openShadowStateDatabase(path: string, options: { busyTimeoutMs: number }) {
+  return openOwnedShadowDatabase(path, options, false)
 }
