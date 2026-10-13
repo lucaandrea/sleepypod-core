@@ -36,8 +36,14 @@ The package entrypoint is a Python executable implementing JSON Lines:
    output budget. Additional stdout is an error.
 
 Only one frame is in flight. Host validation runs before sending a frame and
-before retaining its response. The caller supplies a trusted synchronous frame
-iterator and is responsible for binding it to the declared retained input hash.
+before retaining its response. The caller supplies a trusted synchronous frame iterator. Before starting the
+candidate, the runner writes canonical frames to a private bounded file and
+checks their domain-separated SHA-256 hash against the request's `inputHash`.
+The file is not mounted into the container; only one frame at a time is sent
+from that frozen copy. The hash encoding is UTF-8
+`biometric-package-input-v1\n` followed by each canonical frame plus LF.
+Input hash validation does not establish a clinical reference or holdout split;
+those associations still need the qualification dataset pipeline.
 Package files and outputs are never imported as host code. Cleanup removes the
 owned container and staging directory on normal completion and caught errors;
 hard host termination still needs stale-job recovery before this can become a
@@ -52,3 +58,19 @@ BIOMETRIC_EXPERIMENT_TEST_IMAGE=sha256:<local-image-id> pnpm exec vitest run scr
 The tests cover a valid exchange, filesystem/network/environment/PID probes,
 output floods, memory exhaustion, deadlines, and invalid results. They do not
 qualify any biometric algorithm or prove resistance to kernel vulnerabilities.
+
+## Determinism evidence
+
+`checkPackageDeterminism` runs the same manifest, byte snapshots, request and
+operator policy two to five times, with a fresh container each time. Its trusted
+frame factory must reproduce the retained input: every run independently
+verifies that hash. It hashes every response, including serialized state, in
+order using the `biometric-package-output-v1` domain. Execution timings and
+transport measurements are excluded from the output identity.
+
+The result records run/input/output identities and execution metadata. A
+changing state fails even when numeric readings are identical. A deterministic
+result is only one qualification dimension: it does not approve dependency
+compatibility, resource fitness, artifact/noise behavior, held-out agreement,
+shadow use, installation, or live activation. Those checks and reviewed release
+promotion remain required.

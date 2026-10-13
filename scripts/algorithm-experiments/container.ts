@@ -8,6 +8,7 @@ import { promisify } from 'node:util'
 import { performance } from 'node:perf_hooks'
 import { verifyAlgorithmPackage } from '../../src/biometrics/packages/manifest'
 import { PackageFrameValidator } from '../../src/biometrics/packages/protocol'
+import { freezePackageInput, readFrozenPackageInput } from './input'
 import { dataHash } from '../../src/biometrics/algorithms/canonical'
 
 const exec = promisify(execFile)
@@ -59,9 +60,14 @@ export async function executePackageExperiment(options: {
   const name = `sleepypod-experiment-${randomUUID()}`
   let created = false
   try {
+    const inputPath = join(root, 'input.jsonl')
+    const frozenInput = await freezePackageInput(inputPath, options.frames, policy.maximumInputBytes)
+    if (frozenInput.hash !== validator.request.inputHash) throw new Error('Experiment input identity mismatch')
+    const packagePath = join(root, 'package')
+    await mkdir(packagePath, { mode: 0o755 })
     await chmod(root, 0o755)
     for (const artifact of verified.manifest.artifacts) {
-      const path = join(root, artifact.path)
+      const path = join(packagePath, artifact.path)
       await mkdir(dirname(path), { recursive: true, mode: 0o755 })
       // Copy to privately owned staging so caller mutation cannot alter the mount.
       await writeFile(path, files.get(artifact.path) as Uint8Array, { flag: 'wx', mode: 0o444 })
@@ -76,7 +82,7 @@ export async function executePackageExperiment(options: {
       '--pids-limit', String(resources.processes), '--memory', String(resources.memoryBytes),
       '--memory-swap', String(resources.memoryBytes), '--cpus', '1', '--ulimit', 'core=0',
       '--log-driver', 'none', '--restart', 'no', '--no-healthcheck', '-i',
-      '--mount', `type=bind,source=${root},target=/package,readonly`, '--workdir', '/package',
+      '--mount', `type=bind,source=${packagePath},target=/package,readonly`, '--workdir', '/package',
       '--entrypoint', 'python', policy.image, '-I', '-B', `/package/${verified.manifest.entrypoint}`],
     { timeout: 10000, maxBuffer: 65536 })
     const started = performance.now()
@@ -136,7 +142,7 @@ export async function executePackageExperiment(options: {
     const results = []
     try {
       await send({ type: 'initialize', request: validator.request, runHash: validator.runHash })
-      for (const input of options.frames) {
+      for await (const input of readFrozenPackageInput(inputPath)) {
         const { frame } = validator.validateFrame(input)
         const response = new Promise<string>((resolve, reject) => {
           waiting = { resolve, reject }
@@ -148,7 +154,7 @@ export async function executePackageExperiment(options: {
       }
       child.stdin.end()
       await completion
-      return { packageHash: verified.packageHash, runHash: validator.runHash, results,
+      return { packageHash: verified.packageHash, runHash: validator.runHash, frozenInput, results,
         execution: { image: policy.image, wallMs: performance.now() - started, outputBytes, inputBytes, isolation: 'docker-restricted-v1' as const } }
     }
     catch (error) {
