@@ -4,7 +4,7 @@ import { drizzle } from 'drizzle-orm/better-sqlite3'
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator'
 import { fileURLToPath } from 'node:url'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { defaultConfig } from '../../algorithms/registry'
+import { defaultConfig, resolveConfig } from '../../algorithms/registry'
 import { configHash } from '../../algorithms/canonical'
 import { ShadowStore } from '../store'
 import { runShadowAttempt, type ShadowAttemptHost } from '../attempt'
@@ -45,7 +45,14 @@ function setup(maximumPoints = 10, duration = 2000) {
   databases.push(db)
   migrate(drizzle(db), { migrationsFolder: fileURLToPath(new URL('../../../db/biometrics-migrations/', import.meta.url)) })
   const store = new ShadowStore(db, { maximumRuns: 10, maximumPoints: 100, maximumBytes: 100000 })
-  const run = store.create({ schema: 'biometric-shadow-plan-v1', subjectId: 'test', side: 'left', startMs: start, endMs: start + duration,
+  const execution = { version: 'shadow-execution-policy-v1', configHashes: { left: hash, right: hash },
+    maximumRecords: 10, maximumOutputs: 10, maximumCpuMs: 1000, maximumInputBytes: 100000, maximumOutputBytes: 100000,
+    budgets: { cpuSeconds: 2, addressSpaceBytes: 100000000, maximumRssBytes: 100000000, wallMs: 10000, acknowledgmentMs: 1000, idleMs: 1000, rssIntervalMs: 100, rssTimeoutMs: 100 },
+    leaseMs: 1500, heartbeatMs: 200,
+    sources: { pollMs: 50, maximumActiveRows: 10, databaseBusyTimeoutMs: 50,
+      frames: { maximumFrames: 10, maximumBytes: 100000, maximumEventAgeMs: 1000, maximumFutureSkewMs: 0 },
+      context: { presenceStaleMs: 300000, pumpStaleMs: 5000, maximumPresenceBytes: 4096 } } }
+  const run = store.create({ execution, schema: 'biometric-shadow-plan-v1', subjectId: 'test', side: 'left', startMs: start, endMs: start + duration,
     candidateConfigHash: hash, activeConfigHash: hash, qualificationHash: 'c'.repeat(64), engineBuildHash: 'd'.repeat(64),
     maximumPoints, maximumBytes: 10000, metrics: ['heart_rate'], joining: { maximumPendingPoints: 10, maximumLatenessMs: 100, drainGraceMs: 500 },
     monitoring: { expectedIntervalMs: 1000, maximumGapMs: 2000, heartbeatStaleMs: 1000, minimumCandidateCoverage: 0.8, maximumCoverageLoss: 0.1, minimumQuality: 0.8,
@@ -56,9 +63,7 @@ function setup(maximumPoints = 10, duration = 2000) {
   const close = vi.fn()
   const host: ShadowAttemptHost = {
     location: { pythonPath: '/trusted/python', modulesPath: '/trusted/modules' }, configs: { left: defaultConfig, right: defaultConfig },
-    maximumRecords: 10, maximumOutputs: 10, maximumCpuMs: 1000, maximumInputBytes: 100000, maximumOutputBytes: 100000,
-    budgets: { cpuSeconds: 2, addressSpaceBytes: 100000000, maximumRssBytes: 100000000, wallMs: 10000, acknowledgmentMs: 1000, idleMs: 1000, rssIntervalMs: 100, rssTimeoutMs: 100 },
-    leaseMs: 1500, heartbeatMs: 200, admit: vi.fn(),
+    admit: vi.fn(),
     openSources: (input) => {
       active = input.active
       let sent = false
@@ -275,4 +280,49 @@ it('records lease expiry during final cleanup as failure rather than leaving a r
   await vi.advanceTimersByTimeAsync(2101)
   await rejected
   expect(store.get(run.id)).toMatchObject({ state: 'failed', reason: 'shadow_completion_lease_lost' })
+})
+it('keeps legacy plans inspectable but refuses to execute without a frozen policy', async () => {
+  const { store, run, host } = setup()
+  const legacy = { ...run.plan }
+  delete legacy.execution
+  const old = store.create(legacy, 'legacy')
+  expect(store.get(old.id).plan.execution).toBeUndefined()
+  await expect(runShadowAttempt(store, old.id, host)).rejects.toThrow(/execution policies/)
+  expect(store.get(old.id).state).toBe('pending')
+  expect(worker.calls).toBe(0)
+})
+it('binds the other physical channel configuration before launching a worker', async () => {
+  const { store, run, host } = setup()
+  host.configs.right = resolveConfig([{ path: 'heart_rate.trackingToleranceBpm', value: 20 }]).resolved
+  await expect(runShadowAttempt(store, run.id, host)).rejects.toThrow(/frozen plan/)
+  expect(worker.calls).toBe(0)
+  expect(store.get(run.id).state).toBe('pending')
+})
+it('source factories receive a policy copy and cannot change worker lease budgets', async () => {
+  const { store, run, host } = setup()
+  const open = host.openSources
+  host.openSources = (input) => {
+    expect(input.execution).toEqual(run.plan.execution)
+    input.execution.leaseMs = 3600000
+    input.execution.budgets.wallMs = 1
+    return open(input)
+  }
+  const abort = new AbortController()
+  const task = runShadowAttempt(store, run.id, host, abort.signal)
+  const rejected = expect(task).rejects.toThrow('shadow_cancelled')
+  await vi.advanceTimersByTimeAsync(0)
+  expect(store.get(run.id).lease_until_ms).toBe(start + 1500)
+  expect(store.get(run.id).plan.execution).toEqual(run.plan.execution)
+  abort.abort()
+  await rejected
+})
+it('rejects incompatible poll cadence and freezes policy changes into plan idempotency', () => {
+  const { store, run } = setup()
+  const execution = structuredClone(run.plan.execution)
+  if (!execution) throw new Error('Missing fixture policy')
+  execution.sources.pollMs = 100
+  expect(() => store.create({ ...run.plan, execution }, 'invalid')).toThrow(/Invalid shadow window/)
+  execution.sources.pollMs = 50
+  execution.maximumRecords++
+  expect(() => store.create({ ...run.plan, execution }, 'test')).toThrow(/idempotency/)
 })

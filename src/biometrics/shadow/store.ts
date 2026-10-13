@@ -1,3 +1,4 @@
+import { shadowExecutionPolicySchema } from './execution-policy'
 import type Database from 'better-sqlite3'
 import { randomUUID } from 'node:crypto'
 import { z } from 'zod'
@@ -14,6 +15,7 @@ export const shadowMonitoringSchema = z.object({
     clockOffsetMs: z.number().int().min(-3600000).max(3600000), offsetSource: z.enum(['fixed', 'training']) }).strict(),
 }).strict()
 export const shadowPlanSchema = z.object({ schema: z.literal('biometric-shadow-plan-v1'), side: z.enum(['left', 'right']),
+  execution: shadowExecutionPolicySchema.optional(),
   subjectId: z.string().min(1).max(200), monitoring: shadowMonitoringSchema,
   windowIbiWindowMs: positive.max(86400000).optional(),
   joining: z.object({ maximumPendingPoints: positive.max(10000), maximumLatenessMs: positive.max(120000),
@@ -23,6 +25,9 @@ export const shadowPlanSchema = z.object({ schema: z.literal('biometric-shadow-p
   metrics: z.array(metric).min(1).max(3),
 }).strict().refine(plan => plan.endMs > plan.startMs && plan.endMs - plan.startMs <= 7 * 86400000
   && Number.isSafeInteger(plan.endMs + (plan.joining?.drainGraceMs ?? 0))
+  && (!plan.execution || (plan.joining !== undefined && plan.execution.sources.pollMs < plan.joining.maximumLatenessMs
+    && plan.execution.heartbeatMs <= plan.monitoring.heartbeatStaleMs
+    && plan.execution.configHashes[plan.side] === plan.candidateConfigHash))
   && new Set(plan.metrics).size === plan.metrics.length
   && (!plan.metrics.includes('window_ibi_variability_v1') || plan.windowIbiWindowMs !== undefined), 'Invalid shadow window or metrics')
 const reading = z.object({ value: z.number().finite().nullable(), quality: z.number().min(0).max(1) }).strict()

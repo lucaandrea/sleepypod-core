@@ -1,12 +1,10 @@
+import { shadowFrameBudgetsSchema as budgetsSchema } from './execution-policy'
 import { z } from 'zod'
 import { subscribeProspectiveFrames } from '../../streaming/prospectiveFrameTap'
 
 const contextSchema = z.object({ activeSides: z.array(z.enum(['left', 'right'])).max(2).nullable(),
   leftOccupied: z.boolean().nullable(), rightOccupied: z.boolean().nullable(), pumpContextKnown: z.boolean(),
 }).strict().refine(value => value.activeSides === null || new Set(value.activeSides).size === value.activeSides.length, 'Duplicate active side')
-const budgetsSchema = z.object({ maximumFrames: z.number().int().min(1).max(1000),
-  maximumBytes: z.number().int().min(1).max(32 * 1024 * 1024),
-  maximumEventAgeMs: z.number().int().min(1).max(120000), maximumFutureSkewMs: z.number().int().min(0).max(5000) }).strict()
 const pumpKeys = ['pumpRpm', 'pump_rpm', 'pumpRPM', 'rpm', 'pumpDuty', 'pump_duty', 'duty'] as const
 function pumpValue(value: unknown) {
   if (value === null) return null

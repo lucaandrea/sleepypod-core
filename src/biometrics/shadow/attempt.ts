@@ -1,11 +1,12 @@
+import type { ShadowExecutionPolicy } from './execution-policy'
 import { z } from 'zod'
-import { configHash } from '../algorithms/canonical'
+import { configHash, dataHash } from '../algorithms/canonical'
 import { validateConfig } from '../algorithms/registry'
 import type { ShadowStore } from './store'
 import { type ShadowLease } from './store'
 import { ShadowStreamJoin } from './stream-join'
 import { shadowActiveReadingSchema } from './worker-sink'
-import { runShadowChild, type ShadowChildBudgets } from './worker-child'
+import { runShadowChild } from './worker-child'
 
 type Plan = ReturnType<ShadowStore['get']>['plan']
 export interface ShadowSources {
@@ -18,20 +19,12 @@ export interface ShadowSources {
 export interface ShadowAttemptHost {
   location: { pythonPath: string, modulesPath: string }
   configs: { left: unknown, right: unknown }
-  maximumRecords: number
-  maximumOutputs: number
-  maximumCpuMs: number
-  maximumInputBytes: number
-  maximumOutputBytes: number
-  budgets: ShadowChildBudgets
-  leaseMs: number
-  heartbeatMs: number
   /** Trusted synchronous check of installed qualification/build, active binding,
    * resource admission and source health. Rechecked throughout the attempt. */
   admit(plan: Plan): void
   /** Must register bounded source adapters; the frame iterator is stopped at
    * collection end while active readings may arrive during the drain window. */
-  openSources(input: { signal: AbortSignal, collectionEndsAtMs: number, fail: () => void, active: (reading: unknown) => void }): ShadowSources
+  openSources(input: { execution: ShadowExecutionPolicy, signal: AbortSignal, collectionEndsAtMs: number, fail: () => void, active: (reading: unknown) => void }): ShadowSources
 }
 
 /** Execute one fenced attempt. A restart is a new claim and fresh processor;
@@ -39,13 +32,14 @@ export interface ShadowAttemptHost {
  * and must terminate any orphan process before admitting a replacement. */
 export async function runShadowAttempt(store: ShadowStore, runId: string, host: ShadowAttemptHost, signal?: AbortSignal) {
   const plan = store.get(runId).plan
-  if (!plan.joining) throw new Error('Shadow attempt requires a frozen join policy')
+  if (!plan.joining || !plan.execution) throw new Error('Shadow attempt requires frozen join and execution policies')
+  const execution = structuredClone(plan.execution)
   const joining = plan.joining
-  z.number().int().min(1000).max(3600000).parse(host.leaseMs)
-  z.number().int().positive().max(Math.min(1000, Math.floor(host.leaseMs / 3), plan.monitoring.heartbeatStaleMs)).parse(host.heartbeatMs)
+  z.number().int().min(1000).max(3600000).parse(execution.leaseMs)
+  z.number().int().positive().max(Math.min(1000, Math.floor(execution.leaseMs / 3), plan.monitoring.heartbeatStaleMs)).parse(execution.heartbeatMs)
   const configs = structuredClone(host.configs)
   const configHashes = { left: configHash(validateConfig(configs.left)), right: configHash(validateConfig(configs.right)) }
-  if (configHashes[plan.side] !== plan.candidateConfigHash) throw new Error('Shadow candidate differs from frozen plan')
+  if (configHashes[plan.side] !== plan.candidateConfigHash || dataHash(configHashes) !== dataHash(execution.configHashes)) throw new Error('Shadow candidate differs from frozen plan')
   if (signal?.aborted) throw new Error('Shadow attempt cancelled before claim')
   const admit = (frozen: Plan) => {
     const result: unknown = host.admit(structuredClone(frozen))
@@ -54,7 +48,7 @@ export async function runShadowAttempt(store: ShadowStore, runId: string, host: 
       throw new Error('Shadow admission must complete synchronously')
     }
   }
-  const lease: ShadowLease = store.claim(runId, host.leaseMs, admit)
+  const lease: ShadowLease = store.claim(runId, execution.leaseMs, admit)
   const controller = new AbortController()
   let sources: ShadowSources | undefined, worker: ReturnType<typeof runShadowChild> | undefined
   let failure: Error | undefined, terminalState: 'failed' | 'stopped' = 'failed', accepting = true
@@ -92,7 +86,7 @@ export async function runShadowAttempt(store: ShadowStore, runId: string, host: 
     const check = () => {
       if (failure) throw failure
       admit(plan)
-      store.renew(lease, host.leaseMs)
+      store.renew(lease, execution.leaseMs)
     }
     const advance = () => {
       const flushed: unknown = sources?.flush?.()
@@ -109,8 +103,8 @@ export async function runShadowAttempt(store: ShadowStore, runId: string, host: 
         advance()
       }
       catch { stop('shadow_admission_or_lease_lost') }
-    }, host.heartbeatMs)
-    sources = host.openSources({ signal: controller.signal, collectionEndsAtMs: plan.endMs,
+    }, execution.heartbeatMs)
+    sources = host.openSources({ execution: structuredClone(execution), signal: controller.signal, collectionEndsAtMs: plan.endMs,
       fail: () => {
         if (accepting) stop('shadow_source_failed')
       },
@@ -147,11 +141,11 @@ export async function runShadowAttempt(store: ShadowStore, runId: string, host: 
     }
     worker = runShadowChild(host.location, { schema: 'biometric-shadow-worker-v1', ...lease, runId,
       configs, configHashes, side: plan.side, startMs: plan.startMs, endMs: plan.endMs,
-      maximumRecords: host.maximumRecords, maximumOutputs: host.maximumOutputs, maximumCpuMs: host.maximumCpuMs,
-      maximumInputBytes: host.maximumInputBytes, maximumOutputBytes: host.maximumOutputBytes }, frames(), (output) => {
+      maximumRecords: execution.maximumRecords, maximumOutputs: execution.maximumOutputs, maximumCpuMs: execution.maximumCpuMs,
+      maximumInputBytes: execution.maximumInputBytes, maximumOutputBytes: execution.maximumOutputBytes }, frames(), (output) => {
       check()
       join.candidate(output)
-    }, { budgets: structuredClone(host.budgets), signal: controller.signal })
+    }, { budgets: structuredClone(execution.budgets), signal: controller.signal })
     receipt = await Promise.race([worker, failed])
     await Promise.race([drained, failed])
     check()

@@ -1,3 +1,4 @@
+import { shadowContextPolicySchema as policySchema } from './execution-policy'
 import type Database from 'better-sqlite3'
 import { constants, openSync, closeSync, fstatSync, readSync } from 'node:fs'
 import { z } from 'zod'
@@ -5,8 +6,6 @@ import { activeSleeperSides } from '../../lib/singleSleeper'
 
 const sideSchema = z.object({ side: z.enum(['left', 'right']), away_mode: z.union([z.literal(0), z.literal(1)]) })
 const bedSchema = z.object({ bed_mode: z.enum(['two', 'solo-left', 'solo-right']) })
-const policySchema = z.object({ presenceStaleMs: z.number().int().min(1).max(300000),
-  pumpStaleMs: z.number().int().min(1).max(300000), maximumPresenceBytes: z.number().int().min(1).max(256 * 1024) }).strict()
 const object = (value: unknown): Record<string, unknown> | null => value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null
 function presence(path: string, at: number, policy: z.infer<typeof policySchema>) {
   let fd: number | undefined

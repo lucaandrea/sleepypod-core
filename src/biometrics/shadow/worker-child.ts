@@ -1,3 +1,4 @@
+import { shadowChildBudgetsSchema as budgetsSchema } from './execution-policy'
 import { spawn } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { z } from 'zod'
@@ -13,11 +14,6 @@ const initSchema = z.object({ schema: z.literal('biometric-shadow-worker-v1'),
   startMs: integer, endMs: integer, configs: z.object({ left: z.unknown(), right: z.unknown() }).strict(),
   configHashes: z.object({ left: hash, right: hash }).strict(), maximumRecords: integer,
   maximumOutputs: integer, maximumCpuMs: integer, maximumInputBytes: integer, maximumOutputBytes: integer,
-}).strict()
-const budgetsSchema = z.object({ cpuSeconds: integer.max(3600), addressSpaceBytes: integer,
-  maximumRssBytes: integer, wallMs: integer.max(7 * 86400000 + 300000),
-  acknowledgmentMs: integer.max(300000), idleMs: integer.max(300000),
-  rssIntervalMs: integer.min(50).max(1000), rssTimeoutMs: integer.max(10000),
 }).strict()
 export type ShadowChildBudgets = z.infer<typeof budgetsSchema>
 type Output = z.infer<typeof shadowWorkerOutputSchema>

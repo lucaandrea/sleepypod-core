@@ -244,8 +244,8 @@ binding changes, recover after host crashes, and expose the requested API/UI.
 ## Fenced attempt lifecycle
 
 `runShadowAttempt` connects the store, stream join and subprocess supervisor for
-one attempt. Its trusted host supplies shipped configurations, explicit execution
-budgets, synchronous admission and bounded source adapters. Admission must resolve
+one attempt. Its trusted host supplies shipped configurations, synchronous
+admission and bounded source adapters; execution budgets come from the saved plan. Admission must resolve
 the installed qualification/build, active profile and host resource/source health;
 it is checked at claim, on every incoming reading/frame and on each heartbeat.
 The heartbeat interval is at most one third of the lease, one second, and the
@@ -383,3 +383,27 @@ cached view: Python independently reloads sleeper settings and committed presenc
 Reports explicitly identify that context evidence limitation. Production admission
 and qualification must account for those timing differences. The provider does
 not itself qualify a run, persist execution policy, or register a live service.
+
+## Frozen execution policy
+
+Executable plans now require `execution` (`shadow-execution-policy-v1`). It binds
+both physical-channel configuration hashes, record/output/transport/CPU quotas,
+process CPU/address-space/RSS/deadline limits, lease and heartbeat cadence, active
+polling/row/busy-timeout limits, waveform queue/freshness limits and committed
+context freshness/file limits. Schemas are shared with the worker, waveform and
+context components; there are no implicit production defaults.
+
+The complete policy participates in the plan hash and create-idempotency contract.
+The store validates heartbeat/lease and polling/lateness compatibility. Reports
+expose `executionPolicyHash`. Old plans lacking execution policy remain inspectable
+and reportable, but `runShadowAttempt` refuses to execute them. No migration or
+backfilled claim of past resource enforcement is needed.
+
+The attempt reads execution limits only from a private copy of the stored plan;
+the host no longer supplies alternative worker limits. Both channel configs must
+match before claim, since the opposite channel influences routing and rejection.
+Source factories receive their own policy copy for configuring capture, and
+cannot change the worker's copy. The production factory must apply those source
+limits and the installed qualification must match the complete policy. Selecting
+this policy does not establish qualification or record observed worker resources;
+those admission/receipt and service integration paths remain outstanding.
