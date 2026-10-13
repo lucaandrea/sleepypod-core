@@ -1,0 +1,81 @@
+{
+  "version": "live-shadow-operational-measurement-v1",
+  "date": "2026-10-13",
+  "runtimeFix": "shadow RSS disappearance during clean exit",
+  "scope": "loopback live input and read-only active observations with isolated sink; not production registry admission or accuracy qualification",
+  "windowSeconds": 180,
+  "state": "completed",
+  "reason": "observation_window_complete",
+  "isolatedSink": {
+    "pointCount": 6,
+    "byteCount": 5396,
+    "canonicalRows": 0
+  },
+  "build": {
+    "runnerHash": "6a2966046edffea389604b28b89a7d9b4417dd3dcda41e64f7adab2103b11d03",
+    "pythonBuildHash": "b16390a3796398903b80db34a1e758d6e8ee3fb30dcfc4034e4b30bbdb13d0e9",
+    "manifestHash": "96c2f01a329b4346b4a3f2801ba973650d7235a5c4bd00bd0ded96f1a5768b9b"
+  },
+  "worker": {
+    "inputBytes": 1013420,
+    "outputBytes": 118657,
+    "peakObservedRssBytes": 113881088,
+    "rssSamples": 1192,
+    "maximumObservationGapMs": 497.2393699999993,
+    "budgets": {
+      "cpuSeconds": 120,
+      "addressSpaceBytes": 805306368,
+      "maximumRssBytes": 402653184,
+      "wallMs": 270000,
+      "acknowledgmentMs": 30000,
+      "idleMs": 10000,
+      "rssIntervalMs": 100,
+      "rssTimeoutMs": 1000
+    },
+    "memoryScope": "sum_rss_of_shadow_process_group",
+    "exactKernelPeak": false,
+    "cpuMs": 4953.220225
+  },
+  "limitations": [
+    "cold_start_without_serialized_state",
+    "less_than_five_minutes_preroll",
+    "missing_occupancy_context",
+    "missing_pump_context"
+  ],
+  "probe": {
+    "samples": 529,
+    "httpRequests": 1587,
+    "httpFailures": 0,
+    "httpP95Ms": 40.213834996393416,
+    "httpMaxMs": 123.67384999379283,
+    "peakProcessTreeRssBytes": 295608320,
+    "minimumAvailableMemoryBytes": 1135259648,
+    "maximumTemperatureC": 44.828,
+    "meanHostCpuPercent": 56.69213951033886,
+    "maximumHostCpuPercent": 96.59574468085107
+  },
+  "cleanup": {
+    "launchExitCode": 0,
+    "ownedProcessesAbsentAfterExit": true,
+    "remoteStageRemoved": true
+  },
+  "qualificationInstalled": false,
+  "profileBindingsChanged": false,
+  "priorAttempts": [
+    {
+      "state": "failed",
+      "reason": "Measurement health admission refused",
+      "cleanupConfirmed": true
+    },
+    {
+      "state": "failed",
+      "reason": "Shadow RSS observation unavailable",
+      "cleanupConfirmed": true
+    }
+  ],
+  "runtimeFixCommit": "4c3a6a6e",
+  "rawArtifactSha256": {
+    "biometrics-live-shadow-third-summary.json": "7e5dca3d1c4a6b3e0360d256a203054ac694b42481eee3ea3b7a333dedc858a9",
+    "biometrics-live-shadow-third-probe.json": "1b86d9a5c1f2fa1f045b19cd310f7dafb09673f1017c7b43e376884888f01d10"
+  }
+}

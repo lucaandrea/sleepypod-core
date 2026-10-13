@@ -636,3 +636,31 @@ Deployment stores the two environment values in
 is required after changing them. Remove that drop-in and restart to return to
 unconfigured admission. No user profile or hardware temperature setting changes
 when installing this policy.
+
+### Live source and isolated sink measurement (2026-10-13)
+
+The [live operational receipt](performance/biometrics-replay-2026-10-13/live-shadow-operational.json)
+records a successful 180-second observation through the loopback sensor stream,
+read-only active observations, shared numerical worker and fenced isolated sink.
+It retained six comparison points (5,396 bytes), with zero canonical rows in the
+isolated database. The worker used 4.95 CPU seconds, sampled peak group RSS of
+108.61 MiB and a maximum RSS observation gap of 497.24 ms. The independent probe
+made 1,587 read-only HTTP requests with no failures (p95 40.21 ms, maximum
+123.67 ms); minimum available memory was 1,082.67 MiB and maximum temperature
+44.828 °C. No raw frames or numerical readings were exported in this receipt.
+
+Two earlier attempts failed: one refused health admission; another reported
+unavailable RSS after its worker completed. The latter exposed a process-exit
+race fixed in `4c3a6a6e`: disappearance after a validated terminal response now
+requires bounded, successful pipe closure. Missing RSS during processing, bad
+exit status and a worker that never exits still fail. Regression tests reproduce
+all three outcomes. The successful repeat used the fixed supervisor without
+relaxing resource limits. Its SSH process exited zero, owned processes were
+absent, and all three owned staging directories were removed after saving
+metadata receipts locally.
+
+This trusted measurement harness uses read-only production handles and a fresh
+isolated database. It does not install a qualification registry, alter profile
+bindings or exercise production registry admission. Cold start, insufficient
+preroll, missing occupancy context and missing pump context remain recorded;
+this operational check cannot establish accuracy or authorize promotion.

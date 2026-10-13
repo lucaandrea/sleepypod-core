@@ -41,13 +41,14 @@ acceptance is separate from fixture and browser results.
 | Original observations distinct from recomputation | [Historical API semantics](biometrics-calibration-api.md), [provenance browser checks](../tests/browser/provenance.e2e.ts) |
 | Coherent updates, resets, cleanup, failures and restarts | [Runtime host tests](../src/biometrics/profiles/tests/runtime-host.test.ts), [backtest lifecycle](biometrics-backtest-jobs.md), [deployment tests](../tests/updateDeploy.test.ts) |
 | Isolated generated code and reviewed promotion | [External experiment contracts and real-Docker checks](../scripts/algorithm-experiments/README.md), [shadow admission tests](../src/biometrics/shadow/tests/admission.test.ts), [promotion registry tests](../src/biometrics/profiles/tests/qualification-registry.test.ts) |
-| Target-pod operational behavior | [Measurements and limitations](biometrics-replay-benchmark.md); final deployment evidence remains outstanding below |
+| Target-pod operational behavior | [Measurements and limitations](biometrics-replay-benchmark.md); deployment and live measurement status below |
 
 ## Rollout status and outstanding evidence
 
 - The current eight-hour replay and 30-minute synthetic shadow supervisor runs
   completed successfully; their receipts are linked in the measurement document.
-  Live shadow source/sink behavior still requires separate target-pod assessment.
+  The separate 180-second live source/isolated sink assessment also completed;
+  its exit-race regression, build identities and limitations are recorded there.
   Synthetic output cannot supply held-out accuracy.
 - The measured replay policy is installed and the pod reports admitted.
   Reviewed promotion/shadow registries still need their own matching fixture and
@@ -57,7 +58,12 @@ acceptance is separate from fixture and browser results.
   provenance. [Deployment receipt](performance/biometrics-replay-2026-10-13/deployment-verification.json).
   Unpersonalized defaults have no requested activation generation, so this check
   does not claim a new profile acknowledgment or change the user's profile.
-- Push the branch, open the PR and request CodeRabbit review.
+- [PR #824](https://github.com/sleepypod/core/pull/824) is pushed against `dev`.
+  CodeRabbit full review was requested, but the provider skipped it because
+  the PR exceeds its 100-file review limit. No completed CodeRabbit review is claimed.
+- Build, lint, typecheck, unit, browser and all Python jobs passed at `b4b6fd1d`.
+  Patch coverage remained below the required gate; new direct coordinator and host
+  lifecycle tests address missing coverage without lowering the threshold.
 
 Legacy reference availability alone does not establish independent nights, metric
 compatibility, reference reliability or sufficient held-out support. No accuracy
