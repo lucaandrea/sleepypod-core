@@ -240,3 +240,36 @@ This implements process supervision, not service admission or restart recovery.
 The live controller must still bind the installed build/qualification and active
 profile, manage leases, capture bounded sensor/active streams, renew or cancel on
 binding changes, recover after host crashes, and expose the requested API/UI.
+
+## Fenced attempt lifecycle
+
+`runShadowAttempt` connects the store, stream join and subprocess supervisor for
+one attempt. Its trusted host supplies shipped configurations, explicit execution
+budgets, synchronous admission and bounded source adapters. Admission must resolve
+the installed qualification/build, active profile and host resource/source health;
+it is checked at claim, on every incoming reading/frame and on each heartbeat.
+The heartbeat interval is at most one third of the lease, one second, and the
+plan's heartbeat-staleness threshold. An asynchronous admission result is refused.
+
+The source factory registers both streams and exposes a synchronous unsubscribe.
+It must unwind partially registered subscriptions if opening throws, and call
+`fail()` when either stream disconnects or overflows. Frames must carry their real
+observed arrival times. The controller assigns fresh per-attempt sequence numbers,
+refuses future arrivals, and ends the iterator at the frozen window boundary even
+if its next read is stalled. A source ending early is a failure. Active readings
+may continue arriving during the bounded final drain; timestamps remain in the
+original observation window. The controller requires a worker completion receipt,
+waits through the allowed lateness interval, flushes the join, closes both sources
+and only then records completion. Source cleanup failure prevents completion.
+
+Admission changes, lease loss, source/worker/sink failures and operator cancellation
+abort the worker and stop accepting callbacks. Worker cleanup finishes before the
+terminal store transition. Existing operator/quota/join termination is preserved.
+If its lease expired during cleanup, `failExpired` can mark that same attempt
+failed; it cannot affect a replacement, unexpired lease or already terminal run.
+
+The host adapter is still to be implemented and wired to service/API lifecycle.
+The controller does not invent qualification, choose production budgets, subscribe
+to hardware on its own, recover orphan workers after host crashes, or persist the
+returned worker resource receipt. Those integration obligations remain before
+prospective runs can be enabled or treated as production-qualified evidence.

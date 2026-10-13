@@ -205,6 +205,20 @@ export class ShadowStore {
     }).immediate()
   }
 
+  /** After the host has reaped its worker, record an expired attempt's failure.
+   * A newer attempt or an already terminal run is never changed. */
+  failExpired(lease: ShadowLease, reason: string) {
+    z.string().min(1).max(500).parse(reason)
+    return this.db.transaction(() => {
+      const run = this.get(lease.runId), now = this.now()
+      if (run.state !== 'running' || run.attempt_id !== lease.attemptId
+        || ((run.lease_until_ms ?? 0) > now && now < run.plan.endMs + (run.plan.joining?.drainGraceMs ?? 0))) return false
+      this.db.prepare('UPDATE biometric_shadow_runs SET state = \'failed\', reason = ?, ended_at_ms = ?, lease_until_ms = NULL WHERE id = ?')
+        .run(reason, now, run.id)
+      return true
+    }).immediate()
+  }
+
   finish(lease: ShadowLease, state: 'completed' | 'stopped' | 'failed', reason: string) {
     z.enum(['completed', 'stopped', 'failed']).parse(state)
     z.string().min(1).max(500).parse(reason)
