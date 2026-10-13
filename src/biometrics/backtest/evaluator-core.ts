@@ -1,3 +1,4 @@
+import { summarizeWaveformResources } from './waveform-resources'
 import { assessNumericObjective } from './objective-policy'
 import { createNumericNightSummary } from './numeric-night-summary'
 import { compareNumericConfigurations } from './numeric-comparison'
@@ -196,7 +197,7 @@ export function createBacktestEvaluator(dependencies: { configHash: (value: unkn
           }))
       : []
     return { side: dataset.snapshot.side, version: signalReplay ? 'waveform-backtest-report-v1' as const : 'processed-backtest-report-v1' as const,
-      ...(signalReplay ? { waveform: { ...(job.waveform?.baselineProvenance ? { baselineProvenance: job.waveform.baselineProvenance } : {}), pythonBuildHash: job.waveform?.pythonBuildHash, otherSideConfigHash: job.waveform?.otherSide.resolvedHash, ...waveform } } : {}), datasetId: job.datasetId, datasetHash: job.datasetHash,
+      ...(signalReplay ? { waveform: { ...(job.waveform?.baselineProvenance ? { baselineProvenance: job.waveform.baselineProvenance } : {}), pythonBuildHash: job.waveform?.pythonBuildHash, otherSideConfigHash: job.waveform?.otherSide.resolvedHash, ...waveform, resources: summarizeWaveformResources(waveform?.outputs ?? []) } } : {}), datasetId: job.datasetId, datasetHash: job.datasetHash,
       evaluatorBuildHash: job.evaluatorBuildHash, protocol: job.protocol, protocolHash: job.protocolHash, manifestHash, support: signalReplay ? 'identical_retained_waveform_inputs' as const : 'identical_retained_epoch_intervals' as const, split: job.split, holdoutUse: job.holdoutUse,
       ...(signalReplay ? { numericNightSummary } : {}),
       objectiveAssessments,

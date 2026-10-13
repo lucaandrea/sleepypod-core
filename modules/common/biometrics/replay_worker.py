@@ -10,6 +10,7 @@ import os
 import subprocess
 import re
 import sys
+import time
 
 MAX_INPUT_BYTES = 8 * 1024 * 1024
 MAX_OUTPUT_BYTES = 16 * 1024 * 1024
@@ -28,7 +29,33 @@ def _invalid_constant(_):
     raise ValueError('Nonfinite JSON input')
 
 
+def peak_rss_bytes():
+    """Kernel process-lifetime high water mark; never substitute current RSS.
+
+    Linux procfs also works on Yocto without the optional resource extension.
+    Missing or unrecognized telemetry remains unknown, never zero.
+    """
+    try:
+        if sys.platform == 'linux':
+            with open('/proc/self/status', 'r', encoding='ascii') as source:
+                status = source.read(16385)
+            if len(status) > 16384:
+                return None
+            matches = re.findall(r'^VmHWM:\s+(\d+) kB$', status, re.MULTILINE)
+            value = int(matches[0]) * 1024 if len(matches) == 1 else None
+        elif sys.platform == 'darwin':
+            import resource
+            value = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+        else:
+            return None
+        return value if type(value) is int and 0 < value <= 2 ** 53 - 1 else None
+    except (OSError, UnicodeError, ImportError, ValueError):
+        return None
+
+
 def run(input_stream, output_stream, retained_directory):
+    started_wall = time.perf_counter_ns()
+    started_cpu = time.process_time_ns()
     payload = input_stream.read(MAX_INPUT_BYTES + 1)
     if len(payload) > MAX_INPUT_BYTES:
         raise ValueError('Waveform work input exceeds byte budget')
@@ -72,7 +99,13 @@ def run(input_stream, output_stream, retained_directory):
     # Detect source/dependency metadata changes during this process as well.
     if replay_build_identity()['hash'] != build['hash']:
         raise ValueError('Replay build identity changed during execution')
-    emit({'type': 'result', 'result': {**result, 'build_hash': build['hash']}})
+    emit({'type': 'result', 'result': {**result, 'build_hash': build['hash'],
+        'resources': {'version': 'waveform-process-resources-v1',
+            'wallMs': (time.perf_counter_ns() - started_wall) / 1_000_000,
+            'cpuMs': (time.process_time_ns() - started_cpu) / 1_000_000,
+            'peakRssBytes': peak_rss_bytes(),
+            'scope': 'python_process_until_result',
+            'memoryScope': 'process_lifetime_high_water_mark'}}})
 
 
 def configure_process_limits(cpu_seconds=120):

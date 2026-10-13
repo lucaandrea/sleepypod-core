@@ -8,6 +8,7 @@ import { reportViewSchema, numericReportViewSchema, stageReportViewSchema } from
 import { NumericReport } from './NumericReport'
 import { StageReport } from './StageReport'
 import { NumericTrace } from './NumericTrace'
+import { ReplayResources } from './ReplayResources'
 import { StageTrace } from './StageTrace'
 
 export function BacktestReport({ id }: { id: string }) {
@@ -127,6 +128,7 @@ export function BacktestReport({ id }: { id: string }) {
         </div>
       ))}
       {hasStages ? (stages.success ? <StageReport key={`stages:${descriptor.contentHash}`} report={stages.data} /> : <InlineError><Trans>Stage details are unavailable or incompatible.</Trans></InlineError>) : null}
+      {waveform ? <ReplayResources resources={report.waveform?.resources} /> : null}
       {numeric.success ? <NumericReport key={`numeric:${descriptor.contentHash}`} report={numeric.data} waveform={waveform} /> : <InlineError><Trans>Numerical details are unavailable or incompatible.</Trans></InlineError>}
       {waveform && numeric.success
         ? (

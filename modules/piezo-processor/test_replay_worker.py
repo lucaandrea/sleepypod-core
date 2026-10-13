@@ -37,6 +37,13 @@ def test_real_worker_streams_provisional_readings_then_one_success_result(tmp_pa
     events = [json.loads(line) for line in completed.stdout.splitlines()]
     assert len(events) == len(expected_rows) + 1
     from common.biometrics.build_identity import replay_build_identity
+    resources = events[-1]['result'].pop('resources')
+    assert resources['version'] == 'waveform-process-resources-v1'
+    assert resources['wallMs'] > 0
+    assert resources['cpuMs'] > 0
+    assert resources['peakRssBytes'] > 0
+    assert resources['scope'] == 'python_process_until_result'
+    assert resources['memoryScope'] == 'process_lifetime_high_water_mark'
     assert events[-1] == {'type': 'result', 'result': {**expected, 'build_hash': replay_build_identity()['hash']}}
     for event, row in zip(events[:-1], expected_rows):
         assert event['type'] == 'reading'

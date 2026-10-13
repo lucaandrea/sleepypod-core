@@ -84,3 +84,17 @@ it('retains objective thresholds but cannot promote without qualified measured e
     missingEvidence: expect.arrayContaining(['policy_not_designated', 'operational_evidence_unavailable']) })
   expect(report.protocol.objectivePolicy).toEqual(protocol.objectivePolicy)
 })
+
+it('retains measured waveform costs through compact report projection without claiming whole-job health', () => {
+  const work = fixture()
+  const outputs = work.waveform.outputs.map(output => ({ ...output, run: { ...output.run, resources: {
+    version: 'waveform-process-resources-v1' as const, wallMs: 120, cpuMs: 80, peakRssBytes: 102400,
+    scope: 'python_process_until_result' as const, memoryScope: 'process_lifetime_high_water_mark' as const,
+  } } }))
+  const report = evaluateBacktest({ ...work, waveform: { hash: dataHash(outputs), outputs } })
+  const summary = summarizeBacktestResult({ available: true, report })
+  expect(summary?.report).toMatchObject({ waveform: { resources: {
+    expectedProcesses: outputs.length, measuredProcesses: outputs.length, totalWallMs: outputs.length * 120,
+    totalCpuMs: outputs.length * 80, largestProcessPeakRssBytes: 102400, ingestionHealthMeasured: false,
+  } } })
+})

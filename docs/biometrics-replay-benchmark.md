@@ -384,3 +384,24 @@ seconds; host shutdown cancels the child. Released artifacts and unpublished
 orphans retain their one-hour grace periods and cross-process publication locks.
 An absent retained directory is a no-op. Enabling the production host still
 requires deployment qualification; adding cleanup does not enable replay.
+
+### Per-run process measurements
+
+New retained waveform runs include `resources` with version
+`waveform-process-resources-v1`. Monotonic wall time and process CPU time cover
+input reading, build verification, replay, and the final build check through
+result generation. They exclude interpreter startup before `run`, final result
+serialization, and teardown. Peak RSS is the kernel process-lifetime high water
+mark: Linux `/proc/self/status` `VmHWM` converted from KiB to bytes (including
+Yocto without Python's `resource` extension), or Darwin `ru_maxrss` in bytes.
+Unavailable telemetry is null; current RSS is never substituted for a peak.
+
+Waveform reports summarize the sequential processes as total measured wall/CPU
+time and the largest individual process memory peak. Shared configuration hashes
+are executed once and are counted once. Missing legacy measurements make the
+corresponding aggregate unavailable. Compact report projections retain these
+measurements, and the review UI labels their units and scope. They exclude Node
+coordination/scoring and do not measure live ingestion health, so they cannot
+alone satisfy a whole-job operational promotion policy. Execution measurements
+are part of the retained report hash; replay determinism is assessed on derived
+readings rather than equality of timing counters between executions.

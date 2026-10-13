@@ -148,3 +148,14 @@ it('pins the requested Python build in the envelope and rejects mismatched compl
   await expect(runWaveformChild(location(), {}, { expectedBuildHash: 'b'.repeat(64) })).rejects.toThrow('incomplete result')
   expect(() => runWaveformChild(location(), {}, { expectedBuildHash: 'invalid' })).toThrow()
 })
+
+it('retains valid measured process resources and rejects fabricated scopes or negative counts', async () => {
+  const resources = { version: 'waveform-process-resources-v1', wallMs: 120, cpuMs: 80, peakRssBytes: 102400,
+    scope: 'python_process_until_result', memoryScope: 'process_lifetime_high_water_mark' }
+  await worker([events[0], { type: 'result', result: { ...result, resources } }].map(emit).join(''))
+  expect((await runWaveformChild(location(), {})).run.resources).toEqual(resources)
+  for (const patch of [{ wallMs: -1 }, { cpuMs: -1 }, { peakRssBytes: 0 }, { scope: 'whole_job' }]) {
+    await worker([events[0], { type: 'result', result: { ...result, resources: { ...resources, ...patch } } }].map(emit).join(''))
+    await expect(runWaveformChild(location(), {})).rejects.toThrow('invalid event')
+  }
+})

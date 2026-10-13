@@ -11,7 +11,16 @@ export const waveformReadingSchema = z.object({
   qualityScore: z.number().finite(), flags: z.array(z.string().max(200)).max(40).nullable(), hrRaw: value,
   sourceSide: side, configHash: hash, limitations,
 }).strict()
+/** Optional only for retained reports produced before resource collection.
+ * These are one Python process's costs, not whole-job or live-ingestion costs. */
+export const waveformProcessResourcesSchema = z.object({
+  version: z.literal('waveform-process-resources-v1'),
+  wallMs: z.number().finite().nonnegative(), cpuMs: z.number().finite().nonnegative(),
+  peakRssBytes: z.number().int().positive().max(Number.MAX_SAFE_INTEGER).nullable(),
+  scope: z.literal('python_process_until_result'), memoryScope: z.literal('process_lifetime_high_water_mark'),
+}).strict()
 export const waveformRunSchema = z.object({
+  resources: waveformProcessResourcesSchema.optional(),
   version: z.literal('retained-waveform-run-v1'), build_hash: hash, decoded_records: count, raw_records: count,
   counts: z.object({ records: count, accepted_frames: count, empty_channel_frames: count,
     pump_gated_frames: count, preroll_outputs: count, scored_outputs: count }).strict(),
