@@ -16,6 +16,7 @@ const env = {
 try {
   for (const args of [
     ['exec', 'tsx', 'src/db/migrate.ts'],
+    ['exec', 'tsx', 'tests/browser/fixture.ts', 'seed'],
     ['exec', 'playwright', 'test', '--config=tests/browser/playwright.config.ts', ...process.argv.slice(2)],
   ]) {
     const result = spawnSync('pnpm', args, { env, stdio: 'inherit' })
