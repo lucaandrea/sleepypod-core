@@ -1,5 +1,6 @@
 'use client'
 
+import { ReferenceOverlay } from './ReferenceOverlay'
 import { useId, useState } from 'react'
 import { Trans, useLingui } from '@lingui/react/macro'
 import { Button, InlineError, Skeleton } from '@/src/components/ds'
@@ -19,6 +20,7 @@ function NumericTracePage({ id, hash, cohortId, configuration, configHash }: {
   const { t, i18n } = useLingui()
   const titleId = useId()
   const [offsets, setOffsets] = useState([0])
+  const [showReferences, setShowReferences] = useState(false)
   const [metric, setMetric] = useState<Metric>('heartRate')
   const offset = offsets[offsets.length - 1]
   const timeFormat = useTimeFormat()
@@ -113,6 +115,20 @@ function NumericTracePage({ id, hash, cohortId, configuration, configHash }: {
           </tbody>
         </table>
       </div>
+      <Button onClick={() => setShowReferences(!showReferences)} aria-expanded={showReferences}><Trans>Compare frozen references</Trans></Button>
+      {showReferences
+        ? (
+            <ReferenceOverlay
+              key={`${metric}:${offset}`}
+              id={id}
+              hash={hash}
+              cohortId={cohortId}
+              metric={metric === 'heartRate' ? 'heart_rate' : metric === 'breathingRate' ? 'breathing_rate' : 'window_ibi_variability_v1'}
+              clockOffsetMs={data.clockOffsetMs}
+              points={points}
+            />
+          )
+        : null}
       <p className="break-all text-xs">{configHash}</p>
       <div className="flex gap-2">
         <Button disabled={offsets.length === 1} onClick={() => setOffsets(offsets.slice(0, -1))}><Trans>Previous numeric page</Trans></Button>

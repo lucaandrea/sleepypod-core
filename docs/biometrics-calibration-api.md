@@ -314,3 +314,11 @@ Point/interval and aggregation semantics remain explicit. HRV-family records
 with an incompatible definition remain inspectable with their compatibility
 reason. Scoring-window boundaries are preserved. A released report or dataset
 makes this detail unavailable; it does not silently fall back to live data.
+
+In a waveform report, open **Inspect numeric traces**, then **Compare frozen
+references**. The overlay pages references independently from recomputed readings
+(200 records per page), preserves point and interval shapes, and applies the
+experiment's fixed clock offset only to recomputed timestamps. The source table
+keeps reference timestamps in UTC. Incompatible definitions remain visible in the
+table but are not plotted. Display overlap does not establish a new scored pair;
+use the report's frozen alignment and common-support scores for comparisons.

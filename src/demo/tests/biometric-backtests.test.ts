@@ -43,6 +43,13 @@ it('pins three configurations and produces real paged reports without activating
   expect(result.report).toMatchObject({ status: 'insufficient_evidence', datasetHash: prepared.dataset.contentHash })
   const trace = await required(handlers.getBacktestTrace)({ id: queued.id, expectedContentHash: result.contentHash, configuration: 'candidate', limit: 1 })
   expect(() => required(handlers.getBacktestNumericTrace)({ id: queued.id, expectedContentHash: result.contentHash, configuration: 'candidate' })).toThrow('Numeric trace format or side provenance is unavailable')
+  const tuning = prepared.dataset.manifest.splitProtocol.assignments.find(row => row.split === 'tuning')
+  if (!tuning) throw new Error('Missing tuning cohort')
+  const referenceRequest = { id: queued.id, expectedContentHash: result.contentHash, cohortId: tuning.cohortId, metric: 'heart_rate' as const }
+  expect(await required(handlers.getBacktestReferenceTrace)(referenceRequest)).toMatchObject({ datasetHash: prepared.dataset.contentHash, items: [], totalItems: 0 })
+  expect(() => required(handlers.getBacktestReferenceTrace)({ ...referenceRequest, expectedContentHash: '0'.repeat(64) })).toThrow('REVISION_CONFLICT')
+  await required(handlers.releaseDataset)({ id: prepared.dataset.id })
+  expect(() => required(handlers.getBacktestReferenceTrace)(referenceRequest)).toThrow('DATASET_RELEASED')
   expect(trace.items).toHaveLength(1)
   expect(trace.nextCursor?.offset).toBe(1)
   expect((await required(handlers.getProfileOverview)({ side: 'left' })).desired.binding.generation).toBe(0)
