@@ -50,7 +50,7 @@ it('creates a separate immutable snapshot with stable request/content hashes and
   expect(base).toEqual(before)
   expect(first.snapshot.sessions).toEqual(base.snapshot.sessions)
   expect(first.manifest.parentDataset).toEqual({ id: base.id, contentHash: base.contentHash })
-  expect(first.manifest.capabilities.signalReplay).toBe(false)
+  expect(first.manifest.capabilities.signalReplay).toBe(true)
   expect(first.contentHash).toBe(dataHash({ manifest: first.manifest, snapshot: first.snapshot }))
   expect(datasets.list('left')).toHaveLength(1) // Preparation performs no publication.
 })

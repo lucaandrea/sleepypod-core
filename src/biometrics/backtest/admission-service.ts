@@ -16,11 +16,8 @@ export const replayAdmissionSchema = z.object({
  * not an assertion that supplying JSON has qualified the hardware.
  */
 export async function replayAdmission(db: BetterSQLite3Database<typeof schema>): Promise<z.infer<typeof replayAdmissionSchema>> {
-  let policy: z.infer<typeof admissionPolicySchema>
-  try {
-    policy = admissionPolicySchema.parse(JSON.parse(process.env.SLEEPYPOD_BIOMETRICS_ADMISSION_POLICY ?? 'null'))
-  }
-  catch { return { configured: false, qualificationId: null, admitted: false, reasons: ['unqualified'] } }
+  const policy = configuredReplayPolicy()
+  if (!policy) return { configured: false, qualificationId: null, admitted: false, reasons: ['unqualified'] }
   try {
     const path = db.all<{ name: string, file: string }>(sql`PRAGMA database_list`).find(row => row.name === 'main')?.file
     if (!path) throw new Error('Missing persistent database')
@@ -33,4 +30,12 @@ export async function replayAdmission(db: BetterSQLite3Database<typeof schema>):
 
 export function replayAdmitter(db: BetterSQLite3Database<typeof schema>) {
   return async () => (await replayAdmission(db)).admitted
+}
+
+/** Reading configuration has no database, streaming or health side effects. */
+export function configuredReplayPolicy() {
+  try {
+    return admissionPolicySchema.parse(JSON.parse(process.env.SLEEPYPOD_BIOMETRICS_ADMISSION_POLICY ?? 'null'))
+  }
+  catch { return null }
 }

@@ -498,6 +498,9 @@ export async function register(): Promise<void> {
     await initializeHardware()
     if (isShuttingDown) return
     startDatabaseIntegrityChecks()
+    const { startConfiguredBacktestHost } = await import('@/src/biometrics/backtest/host-startup')
+    if (isShuttingDown) return
+    startConfiguredBacktestHost(biometricsDb)
     // The clock gate and scheduler loading still finish before scheduled writers
     // start, but no longer prevent clients from loading settings or diagnostics.
     void initializeScheduler()

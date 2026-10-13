@@ -27,8 +27,8 @@ export function prepareWaveformDataset(source: z.input<typeof sourceSchema>, raw
   const snapshot = datasetSnapshotSchema.parse({ ...base.snapshot, version: 'waveform-dataset-v1', waveformInputs: inputs })
   const manifest = datasetManifestSchema.parse({ ...base.manifest, version: 'waveform-dataset-manifest-v1',
     parentDataset: { id: base.id, contentHash: base.contentHash },
-    capabilities: { ...base.manifest.capabilities, signalReplay: false },
-    limitations: ['Waveform files and supplied context intervals are frozen; durable waveform jobs are not yet enabled.',
+    capabilities: { ...base.manifest.capabilities, signalReplay: true },
+    limitations: ['Waveform files and supplied context intervals are frozen; execution requires configured deployment admission and current resource health.',
       'Event bounds do not establish continuous waveform coverage; gaps in historical context remain unknown.',
       'Replay uses event time and a cold start with retained pre-roll, not serialized historical processor state.',
       'Measured calibration is not reconstructed from current calibration settings.',

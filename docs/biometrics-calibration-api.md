@@ -256,3 +256,22 @@ The pure assessor checks an independent first-use holdout, supported whole night
 uncertainty, coverage, subgroup regressions, and measured operational limits before
 it can award improvement under a designated policy. Test-only thresholds exercise
 boundaries; they are not release defaults or evidence of clinical validation.
+
+### Replay host startup
+
+After migrations and hardware initialization, production startup reads
+`SLEEPYPOD_BIOMETRICS_ADMISSION_POLICY`. A missing or invalid policy leaves the
+background host stopped. A valid policy starts the existing singleton host;
+startup does not assert that hardware has been qualified. Its execution and
+cleanup operations still obtain fresh admission, including live piezo receipt
+age. CI skips this startup with the other hardware-dependent services. Shutdown
+aborts and awaits the host before closing the coordinator.
+
+Deploy only a policy backed by recorded pod measurements. Configure the matching
+`SLEEPYPOD_BIOMETRICS_REPLAY_BUDGET` before process startup; the coordinator captures
+that budget when its singleton is created. Changing process environment requires
+a service restart to start a previously disabled host or replace that budget.
+
+New waveform dataset manifests advertise retained-input replay capability.
+Execution availability remains a separate, current admission query. Older
+immutable manifests and their hashes are not rewritten by this change.
