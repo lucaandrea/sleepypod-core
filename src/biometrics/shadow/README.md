@@ -587,3 +587,21 @@ load and execute this same bundle and guard installation changes during a run;
 fingerprinting an unused file would not establish execution identity. Hardware
 capture, recovery, service/API/UI registration and current-build qualification
 remain required before production runs.
+
+## Loading the verified package
+
+`loadInstalledShadowHost` reads a trusted regular-file artifact with no-follow
+semantics and a 16 MiB bound, hashes its bytes, and checks its device/inode, size,
+mtime and ctime before and after loading. It rejects an unsupported API version,
+unverified existing Node cache entry, changed installation or different bundle
+path after the first load. The verified package is held on `globalThis`, avoiding
+multiple independent loader instances under the application bundler. Parent paths
+are canonicalized for Node's cache key while leaf symlinks remain forbidden.
+
+The returned `assertCurrent` checks both canonical and requested paths; replacement
+with identical bytes still requires restart. `inspectInstalledShadowHost` probes
+through that loaded API, rechecks the artifact after the asynchronous Python probe,
+and verifies the reported host hash matches the loaded bytes. These guards cover
+the Node artifact. Python source/dependency change monitoring and hardware capture
+remain separate requirements, and the application must actually use this loader
+and its guard when registering production execution.

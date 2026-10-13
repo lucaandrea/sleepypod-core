@@ -4,3 +4,4 @@ export { runProfiledShadowAttempt } from './host'
 export { ShadowStore, shadowPlanSchema, shadowStoragePolicySchema } from './store'
 export { shadowEngineBuildIdentity } from './build'
 export { readInstalledShadowQualifications } from './admission'
+export const shadowHostApiVersion = 'shadow-host-api-v1' as const
