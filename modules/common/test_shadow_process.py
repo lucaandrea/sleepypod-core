@@ -167,7 +167,8 @@ def test_real_parent_death_kills_detached_shadow_worker():
         while time.monotonic() < deadline:
             try:
                 state = Path(f'/proc/{worker_pid}/stat').read_text().rsplit(')', 1)[1].split()[0]
-            except FileNotFoundError:
+            except (FileNotFoundError, ProcessLookupError):
+                # The task can vanish after procfs open but before read (ESRCH).
                 break
             if state == 'Z':
                 break  # dead; reaping belongs to the container init/subreaper
