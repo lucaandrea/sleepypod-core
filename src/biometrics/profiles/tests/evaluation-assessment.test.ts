@@ -19,7 +19,7 @@ it('reassesses exact retained evidence under a trusted policy and returns a boun
 
 it('cannot promote a client-selected policy or trust claimed successful assessments', () => {
   const work = fixture()
-  expect(() => verifyEvaluationAssessments(work.job, work.result(), work.expected, { numeric: null, stages: null })).toThrow()
+  expect(() => verifyEvaluationAssessments(work.job, work.result(), work.expected, { protocolHash: null, numeric: null, stages: null })).toThrow()
   work.report.stageObjectiveAssessments[0].status = 'improved'
   work.report.stageObjectiveAssessments[0].evidence.nights[0].candidateOutputCoverage = 0.5
   expect(() => verifyEvaluationAssessments(work.job, work.result(), work.expected, work.designations)).toThrow()
@@ -100,7 +100,7 @@ it('requires numeric improvement while allowing unchanged downstream stages, and
   }
   const result = () => ({ report, contentHash: dataHash(report), available: true, currentHoldoutUseCount: 1 })
   const expected = { ...work.expected, resolvedHash: configHash(candidate), waveform: { pythonBuildHash, otherSideConfigHash } }
-  const designations = { ...work.designations, numeric: policy }
+  const designations = { ...work.designations, protocolHash: job.protocolHash, numeric: policy }
   expect(verifyEvaluationAssessments(job, result(), expected, designations)).toMatchObject({ changedDomains: ['heart_rate'],
     numericAssessments: [{ status: 'improved' }, { status: 'improved' }], stageAssessments: [{ status: 'no_material_change' }, { status: 'no_material_change' }] })
   expect(verifyEvaluationAssessments(job, result(), expected, designations)).toMatchObject({ policies: { numeric: policy }, waveform: expected.waveform })
@@ -122,7 +122,7 @@ it('requires numeric improvement while allowing unchanged downstream stages, and
       ...assessNumericObjective(item, structuredClone(evidence), null),
     }))) }
   const multiResult = () => ({ ...result(), report: multiReport, contentHash: dataHash(multiReport) })
-  const qualified = { ...designations, numeric: multiProtocol.objectivePolicies }
+  const qualified = { ...designations, protocolHash: multiJob.protocolHash, numeric: multiProtocol.objectivePolicies }
   expect(verifyEvaluationAssessments(multiJob, multiResult(), expected, qualified)).toMatchObject({
     changedDomains: ['heart_rate', 'breathing_rate'], numericAssessments: [
       { metric: 'heart_rate', status: 'improved' }, { metric: 'heart_rate', status: 'improved' },
@@ -132,4 +132,25 @@ it('requires numeric improvement while allowing unchanged downstream stages, and
   expect(() => verifyEvaluationAssessments(multiJob, multiResult(), expected, designations)).toThrow()
   multiReport.objectiveAssessments[3].evidence.nights.pop()
   expect(() => verifyEvaluationAssessments(multiJob, multiResult(), expected, qualified)).toThrow()
+})
+
+it('does not transfer threshold qualification to changed alignment, calibration or uncertainty settings', () => {
+  for (const patch of [
+    { clockOffsetMs: 1000 },
+    { pointToleranceMs: 1000 },
+    { assumedStageCalibrationQuality: 0.75 },
+    { nightUncertainty: { version: 'paired-night-percentile-v1' as const, seed: 'changed-seed', resamples: 200, minimumNights: 3 } },
+  ]) {
+    const work = fixture()
+    const protocol = { ...work.job.protocol, ...patch }
+    const job = { ...work.job, protocol, protocolHash: configHash(protocol) }
+    const report = { ...work.report, protocol, protocolHash: job.protocolHash }
+    const result = { ...work.result(), report, contentHash: dataHash(report) }
+    expect(() => verifyEvaluationAssessments(job, result, work.expected, work.designations)).toThrow('qualified context')
+    expect(verifyEvaluationAssessments(job, result, work.expected, { ...work.designations, protocolHash: job.protocolHash }))
+      .toMatchObject({ protocolHash: job.protocolHash })
+  }
+  const work = fixture()
+  expect(() => verifyEvaluationAssessments(work.job, work.result(), work.expected, { ...work.designations, protocolHash: null }))
+    .toThrow('qualified context')
 })

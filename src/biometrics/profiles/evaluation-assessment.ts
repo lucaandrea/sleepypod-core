@@ -17,6 +17,8 @@ const assessmentSchema = z.object({
 
 /** Internal qualified-build dependency, never populated from experiment JSON. */
 export interface DesignatedEvaluationPolicies {
+  /** Full frozen protocol, including alignment/calibration/uncertainty settings. */
+  protocolHash: string | null
   numeric: ObjectivePolicy | readonly ObjectivePolicy[] | null
   stages: StageObjectivePolicy | null
 }
@@ -66,6 +68,7 @@ export function verifyEvaluationAssessments(
   const numericAssessments = policies.flatMap(policy => check(numericRows.filter(row => row.policy.metric === policy.metric), true)
     .map(row => ({ ...row, metric: policy.metric })))
   const stageAssessments = check(finalized.stageObjectiveAssessments, domains.includes('sleep_stages'))
+  if (designations.protocolHash !== job.protocolHash) reject('Evaluation protocol is outside the qualified context')
   return { version: 'verified-evaluation-v1' as const, interpretation: 'agreement_with_named_reference_not_clinical_validation' as const,
     reportHash: result.contentHash, revisionId: expected.revisionId, resolvedHash: expected.resolvedHash,
     currentResolvedHash: expected.currentResolvedHash, datasetId: job.datasetId, datasetHash: job.datasetHash,

@@ -436,3 +436,13 @@ The apply control remains disabled when review fails or is refreshing. Once sent
 an uncertain request retains its exact identity and boundary for retry, including
 when detailed report data is subsequently released. Processor adoption is polled
 separately. The demo explicitly rejects validated activation of synthetic evidence.
+
+
+Promotion designation also pins the complete experiment protocol hash. Matching
+objective thresholds alone is insufficient: changes to clock offset, alignment
+tolerance, assumed stage calibration quality, uncertainty settings, replay mode,
+or objective lists require qualification of the resulting protocol. This server
+value cannot be supplied through activation or review requests. The audit already
+retains that exact protocol hash. This identity gate does not establish that missing
+historical pump/occupancy context is acceptable; replay-context qualification is
+still a separate release requirement.
