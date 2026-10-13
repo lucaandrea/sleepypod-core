@@ -1,3 +1,4 @@
+import { monitorProcessGroupMemory } from './process-group-memory'
 import { admissionReceiptSchema, type HealthAdmission } from './job-operations'
 import { fork } from 'node:child_process'
 import { setPriority } from 'node:os'
@@ -37,6 +38,7 @@ export function runCoordinatorTask<T extends CoordinatorTask>(options: Coordinat
       execArgv: ['--max-old-space-size=384'], silent: true,
       env: { NODE_ENV: 'production', LANG: 'C.UTF-8', TZ: 'UTC', NODE_PATH: options.modulePath ?? resolve('node_modules') },
     })
+    const memory = parsed.type === 'execute' && child.pid ? monitorProcessGroupMemory(child.pid) : null
     let settled = false, received = false, result: CoordinatorResults[T['type']], failure: Error | undefined
     let grace: ReturnType<typeof setTimeout> | undefined
     let cancellationGrace: ReturnType<typeof setTimeout> | undefined
@@ -75,8 +77,9 @@ export function runCoordinatorTask<T extends CoordinatorTask>(options: Coordinat
         admissionActive = true
         Promise.resolve().then(async () => control.healthAdmission
           ? admissionReceiptSchema.parse(await control.healthAdmission())
-          : { allowed: await control.admit?.() ?? false, sample: null }).catch(() => ({ allowed: false, sample: null })).then((receipt) => {
-          if (child.connected && !failure) child.send({ type: 'admission', sequence: data.sequence, ...receipt }, () => {})
+          : { allowed: await control.admit?.() ?? false, sample: null }).catch(() => ({ allowed: false, sample: null })).then(async (receipt) => {
+          await memory?.sample()
+          if (child.connected && !failure) child.send({ type: 'admission', sequence: data.sequence, ...receipt, ...(memory ? { memory: memory.snapshot() } : {}) }, () => {})
         }).finally(() => { admissionActive = false })
       }
       else if (data?.type === 'result' && !received) {
@@ -91,6 +94,7 @@ export function runCoordinatorTask<T extends CoordinatorTask>(options: Coordinat
     child.on('close', (code) => {
       if (settled) return
       settled = true
+      void memory?.stop()
       clearTimeout(timer)
       if (grace) clearTimeout(grace)
       if (cancellationGrace) clearTimeout(cancellationGrace)

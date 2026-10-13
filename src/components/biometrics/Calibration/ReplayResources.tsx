@@ -32,6 +32,15 @@ export function ReplayResources({ resources, operations }: { resources?: z.infer
         ? (
             <div className="space-y-2">
               <h5><Trans>Job health observations</Trans></h5>
+              {operations.memory
+                ? (
+                    <div>
+                      <p>{t`Observed process-group peak RSS: ${display(operations.memory.peakObservedRssBytes, 1024 * 1024)} MiB`}</p>
+                      <p>{t`Memory samples: ${operations.memory.samples} of ${operations.memory.attempts}; largest gap: ${display(operations.memory.maximumObservationGapMs, 1000)} seconds`}</p>
+                      <p><Trans>This is sampled summed RSS for the replay coordinator and its workers. Shared pages may be counted more than once; short peaks between observations may be missed.</Trans></p>
+                    </div>
+                  )
+                : null}
               <p>{t`Job time through publication preparation: ${display(operations.wallMs, 1000)} seconds`}</p>
               <p>{t`Ingestion samples: ${operations.ingestion.samples} of ${operations.ingestion.checks} admission checks`}</p>
               <p>{t`Largest observed ingestion age: ${display(operations.ingestion.maximumObservedAgeMs, 1000)} seconds`}</p>

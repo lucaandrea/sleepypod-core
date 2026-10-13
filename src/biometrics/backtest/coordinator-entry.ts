@@ -26,13 +26,13 @@ process.on('disconnect', () => {
   process.exit(1)
 })
 process.on('message', async (message: unknown) => {
-  const data = message as { type?: string, sequence?: number, allowed?: boolean, sample?: unknown, task?: unknown }
+  const data = message as { type?: string, sequence?: number, allowed?: boolean, sample?: unknown, memory?: unknown, task?: unknown }
   if (data?.type === 'cancel') {
     controller.abort()
     return
   }
   if (data?.type === 'admission' && typeof data.sequence === 'number') {
-    const receipt = admissionReceiptSchema.safeParse({ allowed: data.allowed, sample: data.sample ?? null })
+    const receipt = admissionReceiptSchema.safeParse({ allowed: data.allowed, sample: data.sample ?? null, ...(data.memory === undefined ? {} : { memory: data.memory }) })
     pending.get(data.sequence)?.(receipt.success ? receipt.data : { allowed: false, sample: null })
     return
   }

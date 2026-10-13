@@ -424,3 +424,20 @@ boolean callback. Admission withdrawal still interrupts work without publishing
 a result. The waveform report UI shows these observations separately from Python
 process costs. Whole-job memory evidence and designated promotion policy remain
 separate requirements.
+
+The supervisor now also samples summed RSS for the owned replay process group
+at a nominal one-second interval, plus admission boundaries. Linux procfs scans
+are bounded to 4,096 process IDs and 64 group members with at most 16 concurrent
+reads. Only group IDs and RSS are read; arguments, environments and sensor data
+are excluded. Missing procfs, unsupported platforms, malformed data, or exceeded
+bounds yield unavailable samples. Exited processes may disappear during a scan.
+
+The final admission receipt carries this accumulator into `jobOperations.memory`
+(`process-group-rss-observations-v1`): attempts, valid sample count, largest
+observed summed RSS and largest observation gap. The coordinator and its worker
+children share the owned group; the main application process is outside it.
+The sampler stops when the coordinator closes, with no detached polling loop.
+This is not an exact kernel peak: short-lived processes or peaks between scans
+may be missed, scans are not atomic, and shared pages may be counted more than
+once. Reports retain these scope limitations rather than substituting this value
+for the per-process lifetime high-water marks.

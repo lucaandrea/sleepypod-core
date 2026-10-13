@@ -27,12 +27,15 @@ it('shows sampled ingestion evidence and sampling gaps without claiming continuo
   render(
     <I18nProvider i18n={i18n}>
       <ReplayResources operations={{ version: 'backtest-job-operations-v1', wallMs: 10000,
-        scope: 'admission_through_prepublication', ingestion: { source: 'supervisor_live_piezo_receipt_age', checks: 3, samples: 2,
+        scope: 'admission_through_prepublication', memory: { version: 'process-group-rss-observations-v1', scope: 'sum_rss_of_replay_process_group',
+          attempts: 10, samples: 9, allSamplesAvailable: false, peakObservedRssBytes: 104857600, maximumObservationGapMs: 2000, intervalMs: 1000, exactKernelPeak: false }, ingestion: { source: 'supervisor_live_piezo_receipt_age', checks: 3, samples: 2,
           allChecksMeasured: false, qualificationId: null, maximumObservedAgeMs: 1200, maximumObservationGapMs: 7000,
           nominalIntervalMs: 5000, continuousMeasurement: false } }}
       />
     </I18nProvider>
   )
+  expect(screen.getByText('Observed process-group peak RSS: 100 MiB')).toBeTruthy()
+  expect(screen.getByText(/short peaks between observations may be missed/)).toBeTruthy()
   expect(screen.getByText('Ingestion samples: 2 of 3 admission checks')).toBeTruthy()
   expect(screen.getByText('Largest observed ingestion age: 1.2 seconds')).toBeTruthy()
   expect(screen.getByText('Largest observation gap: 7 seconds')).toBeTruthy()
