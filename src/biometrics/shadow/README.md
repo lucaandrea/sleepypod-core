@@ -426,3 +426,27 @@ policy substitution, saved queue overflow, cancellation and failed second-databa
 startup. Installed qualification/build/current-binding admission, worker resource
 receipt storage, orphan recovery and public service registration remain separate
 requirements; constructing sources does not authorize a candidate to run.
+
+## Installed shadow admission
+
+`installedShadowAdmitter` checks a separate, release-installed
+`shadow-qualifications.json` beside the trusted worker. Replay promotion evidence
+does not authorize prospective execution. The bounded, regular, no-follow file is
+read on every check, so removing an entry revokes subsequent admission. Exactly
+one entry must match the saved qualification hash, current manifest, installed
+engine/Python/hardware identity, sample rate, active configuration and complete
+execution policy. Evidence includes reviewed fixture, pod and held-out artifacts
+and explicitly acknowledges the host-context timing limitation.
+
+Admission also requires an applied, fresh selected-side runtime receipt matching
+the generation captured before the attempt, plus fresh memory, disk, CPU load,
+event-loop, ingestion and temperature observations under the entry's health
+policy. A same-hash reset still changes generation and stops admission. Missing,
+ambiguous, stale or asynchronous observations refuse execution.
+
+The callbacks are trusted host collectors, not request fields. Concrete collectors
+must verify installed artifacts and aggregate all relevant daemon receipts; the
+current aggregate receipt contract is not itself proof that those components ran.
+Production integration must also guard relevant opposite-side binding changes.
+No production entry or collector is installed here, and the admission module
+does not authorize activation or provide an API for writing qualification files.
