@@ -1,0 +1,498 @@
+import { shutdownBaseController } from '@/src/hardware/base/instance'
+/**
+ * Server startup and process lifecycle management.
+ *
+ * Handles:
+ * - Job scheduler initialization with exponential-backoff retry
+ * - DAC hardware monitor initialization (non-blocking)
+ * - Hardware daemon pre-flight validation
+ * - Centralized SIGTERM/SIGINT signal handling
+ * - Global unhandled rejection/exception handlers
+ * - Graceful shutdown sequencing with 10 s force-exit watchdog
+ *
+ * Entry points:
+ * - `register()` — Next.js instrumentation hook, called automatically on server start.
+ *    Runs only in the Node.js runtime; skipped on the Edge runtime.
+ * - `initializeScheduler()` — idempotent, safe to call from app code as a fallback.
+ */
+
+import { getJobManager, shutdownJobManager } from '@/src/scheduler'
+import { getAutomationEngine, shutdownAutomationEngine } from '@/src/automation'
+import { startTemperatureController, stopTemperatureController } from '@/src/temperature/instance'
+import { closeDatabase, closeBiometricsDatabase } from '@/src/db'
+import { startBiometricsRetention, stopBiometricsRetention } from '@/src/db/retention'
+import { startAutomationRunsRetention, stopAutomationRunsRetention } from '@/src/db/automationRunsRetention'
+import { startHealthSampler, stopHealthSampler } from '@/src/lib/healthSampler'
+import { stopBacktestHost } from '@/src/biometrics/backtest/host'
+import { stopBiometricCoordinator } from '@/src/biometrics/backtest/coordinator-service'
+import { stopBiometricRuntime } from '@/src/biometrics/profiles/runtime-host'
+import { getDacMonitor, shutdownDacMonitor } from '@/src/hardware/dacMonitor.instance'
+import { startPiezoStreamServer, shutdownPiezoStreamServer } from '@/src/streaming/piezoStream'
+import { startBonjourAnnouncement, stopBonjourAnnouncement } from '@/src/streaming/bonjourAnnounce'
+import { startMqttBridge, shutdownMqttBridge } from '@/src/streaming/mqttBridge'
+import { initializeKeepalives, shutdownKeepalives } from '@/src/services/temperatureKeepalive'
+import { startAutoOffWatcher, stopAutoOffWatcher } from '@/src/services/autoOffWatcher'
+import { startDatabaseIntegrityChecks, stopDatabaseIntegrityChecks } from '@/src/db/integrity'
+import { startPerformanceMonitoring, stopPerformanceMonitoring, recordStartupPhase } from '@/src/lib/serverPerformance'
+import { shutdownHomeKit, startHomeKitIfEnabled } from '@/src/homekit'
+
+let isInitialized = false
+let isShuttingDown = false
+let handlersRegistered = false
+let initializationPromise: Promise<void> | null = null
+let hardwareReady = false
+let hardwarePromise: Promise<void> | null = null
+
+/**
+ * Centralized graceful shutdown coordinator.
+ * Sequences: wait for in-flight jobs → shutdown scheduler → close database → exit
+ */
+async function gracefulShutdown(signal: string): Promise<void> {
+  if (isShuttingDown) return
+  isShuttingDown = true
+
+  console.log(`Received ${signal}, starting graceful shutdown...`)
+
+  // Force exit after 10s if graceful shutdown hangs
+  const forceExitTimer = setTimeout(() => {
+    console.error('Graceful shutdown timed out after 10s, forcing exit')
+    process.exit(1)
+  }, 10_000)
+  forceExitTimer.unref()
+
+  stopPerformanceMonitoring()
+  await stopDatabaseIntegrityChecks()
+
+  // Step 0: Stop keepalive timers
+  try {
+    await stopTemperatureController()
+    shutdownBaseController()
+    shutdownKeepalives()
+  }
+  catch (error) {
+    console.error('Error shutting down keepalives:', error)
+  }
+
+  // Step 1: Shutdown scheduler (waits for in-flight jobs internally)
+  try {
+    await shutdownJobManager()
+  }
+  catch (error) {
+    console.error('Error shutting down scheduler:', error)
+  }
+
+  // Step 1a: Stop the Autopilot rules engine tick
+  try {
+    await shutdownAutomationEngine()
+  }
+  catch (error) {
+    console.error('Error shutting down automation engine:', error)
+  }
+
+  // Step 2: Shutdown piezo stream server
+  try {
+    await shutdownPiezoStreamServer()
+  }
+  catch (error) {
+    console.error('Error shutting down piezo stream server:', error)
+  }
+
+  // Step 2b: Shutdown MQTT bridge (publish offline + close client cleanly)
+  try {
+    await shutdownMqttBridge()
+  }
+  catch (error) {
+    console.error('Error shutting down MQTT bridge:', error)
+  }
+
+  // Step 3: Stop Bonjour announcement
+  try {
+    stopBonjourAnnouncement()
+  }
+  catch (error) {
+    console.error('Error stopping Bonjour:', error)
+  }
+
+  // Step 3a: Stop HomeKit bridge (unpublish HAP mDNS, close TCP listener)
+  try {
+    await shutdownHomeKit()
+  }
+  catch (error) {
+    console.error('Error shutting down HomeKit:', error)
+  }
+
+  // Step 4: Stop auto-off watcher (await in-flight power-off calls)
+  try {
+    await stopAutoOffWatcher()
+  }
+  catch (error) {
+    console.error('Error stopping auto-off watcher:', error)
+  }
+
+  // Step 5: Shutdown DAC monitor
+  try {
+    await shutdownDacMonitor()
+  }
+  catch (error) {
+    console.error('Error shutting down DacMonitor:', error)
+  }
+
+  // Step 6: Stop biometrics retention and health sampling before closing DB
+  try {
+    stopBiometricsRetention()
+    stopAutomationRunsRetention()
+    stopHealthSampler()
+    stopBiometricRuntime()
+  }
+  catch (error) {
+    console.error('Error stopping biometrics retention:', error)
+  }
+
+  // Drain shadow workers before closing database connections.
+  try {
+    const { stopShadowService } = await import('@/src/biometrics/shadow/service-host')
+    await stopShadowService()
+  }
+  catch (error) {
+    console.error('Error stopping biometric shadow service:', error)
+  }
+
+  // Drain replay work before closing its database connections.
+  try {
+    await stopBacktestHost()
+  }
+  catch (error) {
+    console.error('Error stopping biometric backtest host:', error)
+  }
+  try {
+    await stopBiometricCoordinator()
+  }
+  catch (error) {
+    console.error('Error stopping biometric coordinator:', error)
+  }
+
+  // Step 7: Close database connections
+  try {
+    closeDatabase()
+    closeBiometricsDatabase()
+  }
+  catch (error) {
+    console.error('Error closing database:', error)
+  }
+
+  process.exit(0)
+}
+
+/**
+ * Register global process handlers (signal handlers, error handlers).
+ * Safe to call multiple times - only registers once.
+ */
+function registerGlobalHandlers(): void {
+  if (handlersRegistered) return
+  handlersRegistered = true
+
+  // Centralized signal handlers
+  process.on('SIGTERM', () => gracefulShutdown('SIGTERM'))
+  process.on('SIGINT', () => gracefulShutdown('SIGINT'))
+
+  // Global unhandled rejection handler - log but don't crash
+  process.on('unhandledRejection', (reason: unknown) => {
+    console.error('Unhandled promise rejection:', reason)
+    // Don't exit - let the process continue serving other requests
+  })
+
+  // Global uncaught exception handler - log and attempt graceful shutdown
+  process.on('uncaughtException', (error: Error & { code?: string, address?: string, port?: number }) => {
+    // mDNS EPERM is non-fatal — iptables blocks multicast, just log and continue
+    if (error.code === 'EPERM' && error.address === '224.0.0.251' && error.port === 5353) {
+      console.warn('[bonjour] mDNS send blocked by iptables (non-fatal):', error.message)
+      return
+    }
+    console.error('Uncaught exception:', error)
+    // Process state may be corrupted, attempt graceful shutdown
+    gracefulShutdown('uncaughtException')
+  })
+}
+
+/**
+ * Retry a function with exponential backoff.
+ */
+async function withRetry<T>(
+  fn: () => Promise<T>,
+  label: string,
+  maxAttempts: number = 3,
+  baseDelayMs: number = 500
+): Promise<T> {
+  let lastError: unknown
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    if (isShuttingDown) throw new Error('Startup cancelled during shutdown')
+    try {
+      return await fn()
+    }
+    catch (error) {
+      lastError = error
+      if (attempt < maxAttempts) {
+        const delay = baseDelayMs * Math.pow(2, attempt - 1)
+        console.warn(
+          `${label} failed (attempt ${attempt}/${maxAttempts}), retrying in ${delay}ms:`,
+          error instanceof Error ? error.message : error
+        )
+        await new Promise(resolve => setTimeout(resolve, delay))
+      }
+    }
+  }
+  throw lastError
+}
+
+/**
+ * Validate hardware daemon connectivity on startup.
+ * Logs a warning if unavailable but does not crash.
+ */
+// Hardware validation removed — the DacMonitor handles connection lifecycle.
+// The DAC socket server starts first, then the monitor waits for frankenfirmware.
+
+/**
+ * Initialize the DAC hardware monitor.
+ * Non-blocking — logs a warning on failure but does not crash.
+ */
+const initializeDacMonitor = async (): Promise<void> => {
+  try {
+    await getDacMonitor()
+    if (isShuttingDown) {
+      await shutdownDacMonitor()
+      return
+    }
+    // A restart mid-alarm or mid-snooze (deploy, crash) resumes it.
+    const { restoreActiveAlarms } = await import('@/src/hardware/alarmState')
+    const { restoreSnoozes } = await import('@/src/hardware/snoozeManager')
+    await restoreActiveAlarms()
+    restoreSnoozes()
+  }
+  catch (error) {
+    console.warn(
+      'WARNING: DacMonitor failed to start:',
+      error instanceof Error ? error.message : error
+    )
+  }
+}
+
+async function initializeHardware(): Promise<void> {
+  if (hardwareReady || isShuttingDown) return
+  if (hardwarePromise) return hardwarePromise
+  hardwarePromise = prepareHardware().finally(() => {
+    hardwarePromise = null
+  })
+  return hardwarePromise
+}
+
+async function prepareHardware(): Promise<void> {
+  // Rehydrate the pump stall guard from persisted un-acknowledged alerts
+  // before anything that consults shouldBlock (keepalives, scheduler jobs)
+  // can re-energize a side whose fault predates this boot.
+  try {
+    const { rehydrate } = await import('@/src/hardware/pumpStallGuard')
+    rehydrate()
+  }
+  catch (error) {
+    console.warn(
+      '[pumpStallGuard] rehydration failed:',
+      error instanceof Error ? error.message : error
+    )
+  }
+
+  if (isShuttingDown) return
+
+  // Start DAC socket server FIRST — this is the single listener on dac.sock.
+  // frankenfirmware will connect to it. Everything else (DacMonitor, device
+  // router, health checks) uses this server's connection.
+  try {
+    const { startDacServer } = await import('@/src/hardware/dacMonitor.instance')
+    await startDacServer()
+  }
+  catch (error) {
+    console.warn('[DAC] Socket server failed to start:', error instanceof Error ? error.message : error)
+  }
+
+  if (isShuttingDown) return
+
+  // Start DAC monitor (non-blocking — waits for frankenfirmware to connect)
+  initializeDacMonitor()
+
+  if (isShuttingDown) return
+  hardwareReady = true
+  try {
+    startPiezoStreamServer()
+  }
+  catch (error) {
+    console.warn('WARNING: Piezo stream server failed to start:', error instanceof Error ? error.message : error)
+  }
+  recordStartupPhase('hardware-services-started')
+}
+
+/**
+ * Initialize the job scheduler
+ * Safe to call multiple times - will only initialize once
+ */
+export async function initializeScheduler(): Promise<void> {
+  if (isInitialized || isShuttingDown) return
+  if (initializationPromise) return initializationPromise
+  initializationPromise = initializeBackgroundServices().finally(() => {
+    initializationPromise = null
+  })
+  return initializationPromise
+}
+
+async function initializeBackgroundServices(): Promise<void> {
+  try {
+    await initializeHardware()
+    if (isShuttingDown) return
+
+    // Record System → Health's data-path history once a minute (non-blocking).
+    // Started before the scheduler so a scheduler that fails to load still
+    // leaves a history of the failure.
+    startHealthSampler()
+
+    const schedulerStartedAt = performance.now()
+    console.log('Initializing job scheduler...')
+    const jobManager = await withRetry(
+      () => getJobManager(),
+      'Job manager initialization'
+    )
+    if (isShuttingDown) return
+    recordStartupPhase('scheduler-ready', schedulerStartedAt)
+    const scheduler = jobManager.getScheduler()
+    const jobs = scheduler.getJobs()
+
+    console.log(`Job scheduler initialized with ${jobs.length} scheduled jobs`)
+
+    // Log next scheduled jobs for visibility
+    const upcomingJobs = jobs
+      .map((job) => {
+        const nextRun = scheduler.getNextInvocation(job.id)
+        return {
+          id: job.id,
+          type: job.type,
+          nextRun: nextRun ? nextRun.toISOString() : 'N/A',
+        }
+      })
+      .filter(job => job.nextRun !== 'N/A')
+      .sort((a, b) => {
+        if (a.nextRun === 'N/A' || b.nextRun === 'N/A') return 0
+        return new Date(a.nextRun).getTime() - new Date(b.nextRun).getTime()
+      })
+      .slice(0, 5)
+
+    if (upcomingJobs.length > 0) {
+      console.log('Next scheduled jobs:')
+      for (const job of upcomingJobs) {
+        console.log(`  - ${job.id}: ${job.nextRun}`)
+      }
+    }
+
+    isInitialized = true
+
+    // Optional integrations do not hold up HTTP or the remaining services.
+    void startMqttBridge().then(() => {
+      if (isShuttingDown) return shutdownMqttBridge()
+      recordStartupPhase('mqtt-started')
+    }).catch((error) => {
+      console.warn('WARNING: MQTT bridge failed to start:', error instanceof Error ? error.message : error)
+    })
+
+    // Start auto-off watcher (polls biometrics DB for bed-exit events)
+    startAutoOffWatcher()
+
+    // Start Bonjour/mDNS announcement (non-blocking)
+    startBonjourAnnouncement()
+
+    // Start HomeKit bridge if user has opted in (non-blocking)
+    startHomeKitIfEnabled().then(() => {
+      if (isShuttingDown) return shutdownHomeKit()
+    }).catch((error) => {
+      console.warn(
+        '[homekit] startup failed:',
+        error instanceof Error ? error.message : error,
+      )
+    })
+
+    // Start biometrics time-series retention loop (non-blocking)
+    startBiometricsRetention()
+    startAutomationRunsRetention()
+
+    // Boot the Autopilot rules engine beside the scheduler (non-blocking).
+    // Shares the same hardware path; no-op until automations are created.
+    getAutomationEngine().catch((error) => {
+      console.warn('[automation] engine failed to start:', error instanceof Error ? error.message : error)
+    }).then(async () => {
+      if (isShuttingDown) return shutdownAutomationEngine()
+      await startTemperatureController()
+      if (isShuttingDown) {
+        await stopTemperatureController()
+        return
+      }
+      initializeKeepalives()
+    }).catch((error) => {
+      console.warn(
+        '[temperature] controller failed to start:',
+        error instanceof Error ? error.message : error,
+      )
+    })
+  }
+  catch (error) {
+    console.error('Failed to initialize job scheduler:', error)
+    // Don't crash the app if scheduler fails to initialize
+  }
+}
+
+export async function registerNodeInstrumentation(): Promise<void> {
+  // Register global handlers first (before any initialization that could fail)
+  registerGlobalHandlers()
+  startPerformanceMonitoring()
+  const migrationsStartedAt = performance.now()
+
+  // Run pending database migrations before starting the app
+  const { runMigrations, seedDefaultData } = await import('@/src/db/migrate')
+  await runMigrations()
+  await seedDefaultData()
+  recordStartupPhase('migrations-ready', migrationsStartedAt)
+  const [{ db, biometricsDb }, { startBiometricRuntime }] = await Promise.all([
+    import('@/src/db'), import('@/src/biometrics/profiles/runtime-host'),
+  ])
+  startBiometricRuntime(db, biometricsDb)
+
+  // Skip hardware initialization in CI — no dac.sock, no sensors, no scheduler needed.
+  // The server still starts and serves API routes (including /api/openapi.json).
+  if (process.env.CI) {
+    console.log('CI environment detected — skipping hardware initialization')
+    return
+  }
+
+  // Validate and auto-repair iptables rules (mDNS, LAN access, NTP)
+  try {
+    const { checkAndRepairIptables } = await import('@/src/hardware/iptablesCheck')
+    const result = checkAndRepairIptables()
+    if (result.repaired.length > 0) {
+      console.warn(`[startup] Repaired ${result.repaired.length} missing iptables rules:`, result.repaired.join(', '))
+    }
+    else if (result.ok) {
+      console.log('[startup] iptables rules verified')
+    }
+  }
+  catch (e) {
+    console.warn('[startup] iptables check skipped:', e instanceof Error ? e.message : e)
+  }
+
+  await initializeHardware()
+  if (isShuttingDown) return
+  startDatabaseIntegrityChecks()
+  const { startConfiguredBacktestHost } = await import('@/src/biometrics/backtest/host-startup')
+  if (isShuttingDown) return
+  startConfiguredBacktestHost(biometricsDb)
+  const { startConfiguredShadowService } = await import('@/src/biometrics/shadow/startup')
+  if (isShuttingDown) return
+  startConfiguredShadowService(db, biometricsDb)
+  // The clock gate and scheduler loading still finish before scheduled writers
+  // start, but no longer prevent clients from loading settings or diagnostics.
+  void initializeScheduler()
+  recordStartupPhase('http-initialization-ready')
+}
