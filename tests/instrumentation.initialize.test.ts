@@ -12,6 +12,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
+  startConfiguredShadowService: vi.fn(),
   startBiometricRuntime: vi.fn(),
   stopBiometricRuntime: vi.fn(),
   getJobManager: vi.fn(),
@@ -48,6 +49,10 @@ const mocks = vi.hoisted(() => ({
   stopTemperatureController: vi.fn(),
   getAutomationEngine: vi.fn(async () => ({})),
   shutdownAutomationEngine: vi.fn(async () => undefined),
+}))
+
+vi.mock('@/src/biometrics/shadow/startup', () => ({
+  startConfiguredShadowService: mocks.startConfiguredShadowService,
 }))
 
 vi.mock('@/src/db/integrity', () => ({
@@ -440,6 +445,7 @@ describe('register()', () => {
     const { register } = await fresh()
     await register()
     expect(mocks.runMigrations).not.toHaveBeenCalled()
+    expect(mocks.startConfiguredShadowService).not.toHaveBeenCalled()
   })
 
   it('runs migrations + seed, then short-circuits before hardware on CI', async () => {
@@ -450,6 +456,7 @@ describe('register()', () => {
     expect(mocks.seedDefaultData).toHaveBeenCalled()
     expect(mocks.checkAndRepairIptables).not.toHaveBeenCalled()
     expect(mocks.getJobManager).not.toHaveBeenCalled()
+    expect(mocks.startConfiguredShadowService).not.toHaveBeenCalled()
   })
 
   it('runs migrations and full init when not in CI', async () => {
@@ -458,6 +465,9 @@ describe('register()', () => {
     expect(mocks.runMigrations).toHaveBeenCalled()
     expect(mocks.checkAndRepairIptables).toHaveBeenCalled()
     expect(mocks.getJobManager).toHaveBeenCalled()
+    const { db, biometricsDb } = await import('@/src/db')
+    expect(mocks.startConfiguredShadowService).toHaveBeenCalledWith(db, biometricsDb)
+    expect(mocks.startConfiguredShadowService.mock.invocationCallOrder[0]).toBeGreaterThan(mocks.runMigrations.mock.invocationCallOrder[0])
   })
 
   it('warns when iptables auto-repaired rules', async () => {

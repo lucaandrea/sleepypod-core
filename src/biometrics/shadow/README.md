@@ -752,9 +752,36 @@ shutdown calls `stopShadowService` before database closure. The database lease a
 Linux worker lock still enforce authority across processes; this local owner does
 not replace them or serialize replay workers.
 
-This provides an explicit service entry point; qualified deployment startup
-configuration and API/UI wiring are still required. No production resource
-thresholds or qualification evidence are inferred by this service.
+Application instrumentation starts this service after migrations and hardware
+initialization when explicit deployment configuration is present. CI skips it
+along with hardware initialization. No production resource thresholds or
+qualification evidence are inferred by this service; API/UI wiring remains work.
+
+### Deployment configuration
+
+Set `SLEEPYPOD_BIOMETRICS_SHADOW_SERVICE` to a JSON object conforming to
+`shadowServiceConfigurationSchema` in `startup.ts`. All fields are mandatory;
+unknown fields and input larger than 16 KiB are rejected.
+
+| Field | Meaning |
+| --- | --- |
+| `version` | Exactly `shadow-service-configuration-v1` |
+| `pythonPath` | Absolute path to the installed locked Python interpreter |
+| `modulesPath` | Absolute path to the installed shared Python modules |
+| `presenceFile` | Absolute path to the producer's committed presence file |
+| `storagePolicy` | Positive integer `maximumRuns`, `maximumPoints`, `maximumBytes` quotas |
+| `busyTimeoutMs` | SQLite wait limit, 1–1000 ms, also bounded by each saved execution policy |
+| `recoveryIntervalMs` | Recovery and scheduling cadence, 10–300000 ms |
+| `recoveryMaximumRuns` | Maximum rows per recovery/scheduling page, 1–100 |
+
+These are schema bounds, not recommended pod budgets. Choose values from measured
+qualification evidence. The two database paths come from the application's open
+SQLite databases, and the Node host comes from the fixed packaged build location;
+neither can be overridden in this configuration. Missing configuration does not
+start the service. Invalid configuration, nonpersistent databases or a missing
+package leave it unavailable with a generic diagnostic, without exposing paths or
+environment values. Setting valid JSON never creates qualification evidence:
+every attempt must still match the installed registry and pass fresh admission.
 
 ### Durable prospective scheduling
 

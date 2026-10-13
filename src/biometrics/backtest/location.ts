@@ -18,3 +18,11 @@ export function packagedCoordinatorPath() {
   }
   throw new ReferenceInputError('WORKER_UNAVAILABLE', 'Build the packaged biometrics coordinator before accessing retained evaluation data')
 }
+
+export function packagedShadowHostPath() {
+  for (const relative of ['biometrics-worker/shadow-host.cjs', '.next/standalone/biometrics-worker/shadow-host.cjs']) {
+    const path = resolve(relative)
+    if (existsSync(path)) return path
+  }
+  throw new ReferenceInputError('WORKER_UNAVAILABLE', 'Build the packaged shadow host before scheduling prospective runs')
+}
