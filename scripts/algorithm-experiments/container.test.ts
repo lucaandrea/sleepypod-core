@@ -2,6 +2,7 @@
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
+import { runPackageFixtures } from './fixtures'
 import { runExperimentCli } from './cli'
 import { createHash } from 'node:crypto'
 import { beforeAll, describe, expect, it } from 'vitest'
@@ -98,6 +99,30 @@ s.close()
     }
     finally { await rm(root, { recursive: true, force: true }) }
   }, 20000)
+  it('checks numeric coverage and catches false vitals during an empty-bed fixture', async () => {
+    const reading = '[{\'timestampMs\': frame[\'timestampMs\'], \'side\': \'left\', \'metric\': \'heart_rate\', \'value\': 60, \'quality\': 1, \'flags\': []}]'
+    const makeSuite = (input: ReturnType<typeof options>) => ({ schema: 'biometric-package-fixtures-v1', fixtures: [true, false].map((occupied) => {
+      const frames = input.frames.map(frame => ({ ...frame, context: { ...frame.context, occupied } }))
+      return { id: occupied ? 'clean' : 'empty', category: occupied ? 'clean_signal' : 'empty_bed',
+        request: { ...input.request, inputHash: packageInputHash(frames) }, frames,
+        expectations: [{ metric: 'heart_rate', startMs: 1000, endMs: 1012, ...(occupied
+          ? { kind: 'numeric', minimum: 59, maximum: 61, minimumReadings: 2, minimumQuality: 0.8 }
+          : { kind: 'abstain' }) }] }
+    }) })
+    const candidate = options(program.replace('\'readings\': []', `'readings': ${reading} if frame['context']['occupied'] else []`))
+    const suite = makeSuite(candidate)
+    const running = runPackageFixtures(candidate, suite)
+    suite.fixtures[0].frames[0].samples.left[0] = 999
+    const report = await running
+    expect(report.suite.fixtures[0].frames[0].samples.left?.[0]).toBe(1)
+    expect(report.status).toBe('incomplete')
+    expect(report.results.every(result => result.assessment.passed)).toBe(true)
+    expect(report.missingCategories).toContain('pump')
+    const bad = options(program.replace('\'readings\': []', `'readings': ${reading}`))
+    const regression = await runPackageFixtures(bad, makeSuite(bad))
+    expect(regression.status).toBe('failed')
+    expect(regression.results[1].assessment.failures).toContain('failed_abstention:heart_rate:1000')
+  }, 30000)
   it('repeats in fresh containers and detects changing state even with identical readings', async () => {
     const input = options(program)
     const stable = await checkPackageDeterminism({ ...input, frames: () => input.frames })

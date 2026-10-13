@@ -152,3 +152,40 @@ Currently measurement supports local Unix Docker endpoints and API 1.41 or
 newer. Unsupported transports or failed observations leave nullable counters
 and incomplete evidence; they do not fabricate zero usage or waive the existing
 container resource limits. See the [Docker stats API](https://docs.docker.com/reference/api/engine/version/v1.51/).
+
+## Artifact/noise fixture suites
+
+```sh
+pnpm biometrics:experiment fixtures proposal.json suite.json operator-policy.json fixture-report.json
+```
+
+A reviewed suite uses `biometric-package-fixtures-v1` and a `fixtures` array.
+Each fixture has a unique `id`, `category`, full run `request`, inline signal
+`frames`, and `expectations`. Its request must bind the proposal and actual
+frame hashes. The suite file is bounded to 32 MiB; inline fixtures are intended
+for focused signal tests, not whole-night held-out comparisons.
+
+Expectation windows use inclusive `startMs`, exclusive `endMs`, and a declared
+`metric`. A `numeric` expectation specifies `minimum`, `maximum`,
+`minimumReadings`, and `minimumQuality`. Missing/null readings cannot satisfy
+numeric coverage. An `abstain` expectation permits absent or null output and
+rejects numeric values. Duplicate readings, unexpected metrics/times,
+out-of-range values, low quality, insufficient coverage and overlapping
+expectations fail. Windows must fall inside the supplied input interval.
+Clean-signal fixtures must require numeric output; empty-bed fixtures must
+require abstention.
+
+Each fixture executes in a fresh isolated container. Reports retain the suite,
+fixture, input and output identities, the complete frozen suite with frames and
+expectations, execution output, independent resource observations and failures.
+A crashed or invalid-output case remains a failed case in the report.
+
+Required category coverage is `clean_signal`, `pump`, `empty_bed`, `motion`,
+`cross_side`, `harmonics`, `gaps`, `warmup`, and `boundary_reset`. Omitted categories
+make an otherwise passing report `incomplete`. All covered checks passing yields
+`fixture_checks_passed`, never automatic qualification or installation. Category
+labels do not prove that a signal realistically represents that condition:
+review the exact hashed suite and its expected behavior. The test suite includes
+synthetic clean/empty-bed examples to verify this workflow; representative
+shipped-algorithm fixtures, held-out agreement, compatibility and pod resource
+qualification remain separate requirements.

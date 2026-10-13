@@ -1,5 +1,6 @@
 import { pathToFileURL } from 'node:url'
 import { z } from 'zod'
+import { runPackageFixtures } from './fixtures'
 import { packageInputHash } from './input'
 import { inspectPythonEnvironment } from './environment'
 import { executePackageExperiment } from './container'
@@ -10,10 +11,18 @@ const positive = z.number().int().positive().max(Number.MAX_SAFE_INTEGER)
 const policySchema = z.object({ image: z.string().regex(/^sha256:[a-f0-9]{64}$/), maximumWallMs: positive.max(3600000),
   maximumMemoryBytes: positive, maximumProcesses: positive, maximumOutputBytes: positive, maximumInputBytes: positive,
 }).strict()
-const usage = 'Usage: lock IMAGE OUTPUT | input-hash FRAMES MAX_BYTES OUTPUT | inspect PROPOSAL OUTPUT | run PROPOSAL REQUEST FRAMES POLICY OUTPUT | determinism PROPOSAL REQUEST FRAMES POLICY REPETITIONS OUTPUT'
+const usage = 'Usage: fixtures PROPOSAL SUITE POLICY OUTPUT | lock IMAGE OUTPUT | input-hash FRAMES MAX_BYTES OUTPUT | inspect PROPOSAL OUTPUT | run PROPOSAL REQUEST FRAMES POLICY OUTPUT | determinism PROPOSAL REQUEST FRAMES POLICY REPETITIONS OUTPUT'
 
 export async function runExperimentCli(args: string[]) {
   const [command, ...paths] = args
+  if (command === 'fixtures' && paths.length === 4) {
+    const proposal = readPackageProposal(paths[0])
+    const suite = readJsonFile(paths[1], 32 * 1024 * 1024)
+    const policy = policySchema.parse(readJsonFile(paths[2], 16384))
+    const report = await runPackageFixtures({ manifest: proposal.manifest, files: proposal.files, policy }, suite)
+    await publishJson(paths[3], report)
+    return
+  }
   if (command === 'lock' && paths.length === 2) {
     await publishJson(paths[1], await inspectPythonEnvironment(paths[0]))
     return
