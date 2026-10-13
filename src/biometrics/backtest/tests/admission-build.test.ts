@@ -15,7 +15,7 @@ it('retains Linux health collection when a bundler substitutes a macOS build pla
   runInNewContext(compiled.outputFiles[0].text, { module: exported, exports: exported.exports,
     process, setTimeout, clearTimeout, Buffer,
     require: (name: string) => {
-      if (name === 'node:os') return { platform: () => 'linux', availableParallelism: () => 4, loadavg: () => [1, 1, 1] }
+      if (name === 'node:os') return { platform: () => 'darwin', availableParallelism: () => 4, loadavg: () => [1, 1, 1] }
       if (name === 'node:fs/promises') return {
         readFile: async (path: string) => {
           accesses.push(path)

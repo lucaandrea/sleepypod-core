@@ -1,5 +1,5 @@
 import { readFile, statfs } from 'node:fs/promises'
-import { availableParallelism, loadavg, platform } from 'node:os'
+import { availableParallelism, loadavg } from 'node:os'
 import { performance } from 'node:perf_hooks'
 import { z } from 'zod'
 
@@ -60,8 +60,8 @@ export function parseAvailableMemory(text: string) {
 export async function collectAdmissionSample(databaseDirectory: string, piezoReceivedAt: () => number | undefined): Promise<AdmissionSample | null> {
   const measuredAtMs = Date.now()
   try {
-    // Query the runtime OS: Turbopack can fold process.platform to the build host.
-    if (platform() !== 'linux') return null
+    // Probe Linux health files directly. Turbopack folds both process.platform
+    // and os.platform() to the build host; missing runtime files fail closed.
     const probeStarted = performance.now()
     const [memory, disk, thermal, delay] = await Promise.all([
       readFile('/proc/meminfo', 'utf8'),
