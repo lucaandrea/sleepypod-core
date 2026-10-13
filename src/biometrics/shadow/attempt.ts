@@ -1,5 +1,6 @@
+import type { ShadowPartialReceipt } from './receipt'
 import type { ShadowExecutionPolicy } from './execution-policy'
-import { isShadowCleanupError } from './cleanup-error'
+import { isShadowCleanupError, ShadowCleanupError } from './cleanup-error'
 import { z } from 'zod'
 import { configHash, dataHash } from '../algorithms/canonical'
 import { validateConfig } from '../algorithms/registry'
@@ -81,6 +82,17 @@ export async function runShadowAttempt(store: ShadowStore, runId: string, host: 
   // Stop before the store's exclusive lease deadline so failure can be fenced.
   const deadline = setTimeout(() => stop('shadow_drain_deadline'), Math.max(0, plan.endMs + joining.drainGraceMs - Date.now() - 1))
   let heartbeat: ReturnType<typeof setInterval> | undefined
+  let resources: ShadowPartialReceipt | undefined
+  const recordResources = (cause: unknown) => {
+    try {
+      if (resources) store.recordPartialReceipt(lease, resources)
+    }
+    catch (error) {
+      const combined = new AggregateError([cause, error], 'Shadow partial resource evidence could not be stored')
+      if (isShadowCleanupError(cause)) throw new ShadowCleanupError(combined)
+      throw combined
+    }
+  }
   let receipt: Awaited<ReturnType<typeof runShadowChild>> | undefined
   try {
     const join = new ShadowStreamJoin(store, lease)
@@ -146,7 +158,7 @@ export async function runShadowAttempt(store: ShadowStore, runId: string, host: 
       maximumInputBytes: execution.maximumInputBytes, maximumOutputBytes: execution.maximumOutputBytes }, frames(), (output) => {
       check()
       join.candidate(output)
-    }, { budgets: structuredClone(execution.budgets), signal: controller.signal })
+    }, { budgets: structuredClone(execution.budgets), signal: controller.signal, onResources: (value) => { resources = value } })
     receipt = await Promise.race([worker, failed])
     await Promise.race([drained, failed])
     check()
@@ -199,6 +211,7 @@ export async function runShadowAttempt(store: ShadowStore, runId: string, host: 
       }
       catch { /* Storage failure remains observable through the rejected run. */ }
     }
+    recordResources(failure)
     throw failure
   }
   try {
@@ -215,6 +228,7 @@ export async function runShadowAttempt(store: ShadowStore, runId: string, host: 
       catch { store.failExpired(lease, 'shadow_completion_lease_lost') }
     }
     catch { /* Preserve the original completion error. */ }
+    recordResources(error)
     throw error
   }
   return { lease, receipt, run: store.get(runId) }

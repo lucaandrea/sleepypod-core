@@ -7,6 +7,7 @@ import { setTimeout as delay } from 'node:timers/promises'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { defaultConfig } from '../../algorithms/registry'
 import { configHash } from '../../algorithms/canonical'
+import { shadowPartialReceiptSchema } from '../receipt'
 import { runShadowChild } from '../worker-child'
 
 const state = vi.hoisted(() => ({ mode: 'normal', pid: 0, descendantPid: 0, rss: 1000 as number | null, hangRss: false, launches: [] as unknown[][] }))
@@ -98,7 +99,10 @@ describe('shadow child supervision', () => {
   })
   it.each(['bad', 'duplicate', 'flood', 'stderr', 'truncated', 'badexit'])('rejects %s worker output and reaps it', async (mode) => {
     state.mode = mode
-    await expect(run()).rejects.toThrow(/Shadow/)
+    const observed = vi.fn()
+    await expect(run(source(), { onResources: observed })).rejects.toThrow(/Shadow/)
+    expect(observed).toHaveBeenCalledOnce()
+    expect(shadowPartialReceiptSchema.parse(observed.mock.calls[0][0]).cleanupConfirmed).toBe(true)
     reaped()
   })
   it.each(['ignore', 'noexit'])('enforces acknowledgment/exit deadlines for %s', async (mode) => {
@@ -124,7 +128,13 @@ describe('shadow child supervision', () => {
   })
   it.each([null, 3000])('fails closed for unavailable/over-budget RSS %s', async (rss) => {
     state.rss = rss
-    await expect(run()).rejects.toThrow(/RSS/)
+    const observed = vi.fn()
+    await expect(run(source(), { onResources: observed })).rejects.toThrow(/RSS/)
+    expect(observed).toHaveBeenCalledOnce()
+    const receipt = shadowPartialReceiptSchema.parse(observed.mock.calls[0][0])
+    expect(receipt.peakObservedRssBytes).toBe(rss)
+    expect(receipt.cleanupConfirmed).toBe(true)
+    if (rss === null) expect(receipt.rssSamples).toBe(0)
     reaped()
   })
   it('bounds a stalled RSS observation', async () => {
@@ -143,7 +153,10 @@ describe('shadow child supervision', () => {
       yield { type: 'frame', sequence: 0 }
       throw new Error('source disconnected')
     }
-    await expect(run(broken())).rejects.toThrow('source disconnected')
+    const observed = vi.fn()
+    await expect(run(broken(), { onResources: observed })).rejects.toThrow('source disconnected')
+    expect(observed).toHaveBeenCalledOnce()
+    expect(observed.mock.calls[0][0]).toMatchObject({ health: { state: 'running', records: 1 }, cleanupConfirmed: true })
     reaped()
   })
   it('rejects input quota and out-of-order frames before sending them', async () => {
@@ -208,7 +221,9 @@ it('kills descendants that retain output pipes after the worker exits', async ()
 })
 it('handles failed process creation without an unhandled event or cleanup hang', async () => {
   state.mode = 'missing'
-  await expect(run()).rejects.toThrow(/could not start/)
+  const observed = vi.fn()
+  await expect(run(source(), { onResources: observed })).rejects.toThrow(/could not start/)
+  expect(observed.mock.calls[0][0]).toMatchObject({ health: null, rssSamples: 0, peakObservedRssBytes: null, cleanupConfirmed: true })
   expect(state.pid).toBe(0)
 })
 it.skipIf(!existsSync(resolve('modules/piezo-processor/.venv/bin/python')))('supervises the actual locked Python transport through clean completion', async () => {
@@ -252,8 +267,10 @@ it('does not hide failed process-group cleanup behind the original protocol erro
     return kill(pid, signal)
   })
   try {
-    await expect(run()).rejects.toMatchObject({ code: 'SHADOW_CLEANUP_UNCONFIRMED',
+    const observed = vi.fn()
+    await expect(run(source(), { onResources: observed })).rejects.toMatchObject({ code: 'SHADOW_CLEANUP_UNCONFIRMED',
       message: 'shadow_worker_cleanup_unconfirmed', cause: expect.objectContaining({ message: 'Shadow worker emitted an invalid response' }) })
+    expect(observed.mock.calls[0][0]).toMatchObject({ cleanupConfirmed: false })
   }
   finally {
     spy.mockRestore()

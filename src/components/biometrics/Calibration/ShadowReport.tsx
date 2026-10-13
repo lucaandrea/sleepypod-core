@@ -58,9 +58,10 @@ export function ShadowReport({ id, side, subjectId }: { id: string, side?: 'left
         </table>
       </div>
       <p><Trans>Missing observations remain missing. The IBI variability index is not clinical RMSSD.</Trans></p>
-      {data.workerReceipt
+      {data.workerReceipt?.schema === 'biometric-shadow-partial-receipt-v1' ? <p><Trans>Resource observations are partial. Worker health reflects the last valid reply, not the complete attempt.</Trans></p> : null}
+      {data.workerReceipt && data.workerReceipt.receipt.peakObservedRssBytes !== null
         ? <p>{t`Sampled worker memory peak: ${number.format(data.workerReceipt.receipt.peakObservedRssBytes / (1024 * 1024))} MiB. Short peaks between samples may be missed.`}</p>
-        : <p><Trans>No completed worker resource receipt is available.</Trans></p>}
+        : data.workerReceipt ? <p><Trans>No worker memory observation is available.</Trans></p> : <p><Trans>No completed worker resource receipt is available.</Trans></p>}
       <p><Trans>Presence and pump context reflect host observations, not proof of the live processor’s cached state.</Trans></p>
       <Button disabled={report.isFetching} onClick={() => void report.refetch()}><Trans>Refresh report</Trans></Button>
       {side && subjectId !== undefined ? <ShadowComparison key={id} id={id} side={side} subjectId={subjectId} /> : null}

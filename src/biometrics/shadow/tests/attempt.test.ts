@@ -6,12 +6,14 @@ import { fileURLToPath } from 'node:url'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { defaultConfig, resolveConfig } from '../../algorithms/registry'
 import { configHash } from '../../algorithms/canonical'
-import { validateShadowWorkerReceipt } from '../receipt'
+import { reportShadowRun } from '../report'
+import { shadowReportSchema } from '../report-contracts'
+import { type ShadowPartialReceipt, validateShadowPartialReceipt, validateShadowWorkerReceipt } from '../receipt'
 import { ShadowStore } from '../store'
 import { runShadowAttempt, type ShadowAttemptHost } from '../attempt'
 
 const worker = vi.hoisted(() => ({ calls: 0, cleaned: false, fail: false, corruptReceipt: false, cleanupUnconfirmed: false }))
-vi.mock('../worker-child', () => ({ runShadowChild: async (_location: unknown, init: { side: string, configHashes: Record<string, string> }, frames: AsyncIterable<{ observedAtMs: number }>, output: (row: unknown) => void, options: { budgets: unknown }) => {
+vi.mock('../worker-child', () => ({ runShadowChild: async (_location: unknown, init: { side: string, configHashes: Record<string, string> }, frames: AsyncIterable<{ observedAtMs: number }>, output: (row: unknown) => void, options: { budgets: ShadowPartialReceipt['budgets'], onResources?: (value: ShadowPartialReceipt) => void }) => {
   worker.calls++
   let result
   try {
@@ -34,7 +36,12 @@ vi.mock('../worker-child', () => ({ runShadowChild: async (_location: unknown, i
   catch (error) {
     if (!worker.cleanupUnconfirmed) throw error
   }
-  finally { worker.cleaned = true }
+  finally {
+    worker.cleaned = true
+    options.onResources?.({ kind: 'partial_supervisor_observation', health: null, inputBytes: 100, outputBytes: 100, diagnosticBytes: 0,
+      peakObservedRssBytes: 1000, rssSamples: 2, maximumObservationGapMs: 100, budgets: options.budgets,
+      cleanupConfirmed: !worker.cleanupUnconfirmed, memoryScope: 'sum_rss_of_shadow_process_group', exactKernelPeak: false })
+  }
   if (worker.cleanupUnconfirmed) throw Object.assign(new Error('shadow_worker_cleanup_unconfirmed'), { code: 'SHADOW_CLEANUP_UNCONFIRMED' })
   return result
 } }))
@@ -375,7 +382,7 @@ it('fails completion after cleanup when the worker receipt violates the saved bu
   await vi.advanceTimersByTimeAsync(2101)
   await rejected
   expect(worker.cleaned).toBe(true)
-  expect(store.get(run.id)).toMatchObject({ state: 'failed', workerReceipt: null, reason: 'shadow_completion_failed' })
+  expect(store.get(run.id)).toMatchObject({ state: 'failed', workerReceipt: { receipt: { kind: 'partial_supervisor_observation' } }, reason: 'shadow_completion_failed' })
 })
 
 it('preserves cleanup uncertainty through cancellation and durable failure evidence', async () => {
@@ -387,5 +394,60 @@ it('preserves cleanup uncertainty through cancellation and durable failure evide
   await vi.advanceTimersByTimeAsync(0)
   abort.abort()
   await rejected
-  expect(store.get(run.id)).toMatchObject({ state: 'failed', reason: 'shadow_worker_cleanup_unconfirmed', workerReceipt: null })
+  expect(store.get(run.id)).toMatchObject({ state: 'failed', reason: 'shadow_worker_cleanup_unconfirmed', workerReceipt: { receipt: { cleanupConfirmed: false } } })
+})
+
+it('attaches partial evidence after an operator stop without changing terminal authority', async () => {
+  const { db, store, run, host } = setup()
+  const abort = new AbortController()
+  const task = runShadowAttempt(store, run.id, host, abort.signal)
+  const rejected = expect(task).rejects.toThrow('shadow_cancelled')
+  await vi.advanceTimersByTimeAsync(0)
+  const stopped = store.stop(run.id, 'operator')
+  await vi.advanceTimersByTimeAsync(50)
+  abort.abort()
+  await rejected
+  const reopened = new ShadowStore(db).get(run.id)
+  expect(reopened).toMatchObject({ state: 'stopped', reason: 'operator', ended_at_ms: stopped.ended_at_ms,
+    workerReceipt: { schema: 'biometric-shadow-partial-receipt-v1', recordedAtMs: start + 50, receipt: { cleanupConfirmed: true } } })
+  expect(shadowReportSchema.parse(reportShadowRun(store, run.id, { maximumPoints: 100, maximumBytes: 100000 })).workerReceipt).toEqual(reopened.workerReceipt)
+  const receipt = reopened.workerReceipt
+  if (!receipt) throw new Error('Receipt missing')
+  const lease = { runId: run.id, attemptId: receipt.attemptId }
+  expect(store.recordPartialReceipt(lease, receipt.receipt)).toBe(true)
+  expect(() => store.recordPartialReceipt(lease, { ...receipt.receipt, inputBytes: 200 })).toThrow('already recorded')
+  expect(store.recordPartialReceipt({ ...lease, attemptId: 'replacement' }, receipt.receipt)).toBe(false)
+  db.prepare('UPDATE biometric_shadow_runs SET worker_receipt_hash = ? WHERE id = ?').run('corrupted', run.id)
+  expect(() => store.get(run.id)).toThrow('receipt integrity')
+})
+it('retains cleanup quarantine if storing partial evidence also fails', async () => {
+  const { store, run, host } = setup()
+  worker.cleanupUnconfirmed = true
+  worker.fail = true
+  vi.spyOn(store, 'recordPartialReceipt').mockImplementation(() => {
+    throw new Error('disk unavailable')
+  })
+  const task = runShadowAttempt(store, run.id, host)
+  const rejected = expect(task).rejects.toMatchObject({ code: 'SHADOW_CLEANUP_UNCONFIRMED', cause: { message: 'Shadow partial resource evidence could not be stored' } })
+  await vi.advanceTimersByTimeAsync(0)
+  await rejected
+})
+
+it('preserves overruns as partial evidence but rejects inconsistent availability and policy', () => {
+  const { store, run } = setup()
+  const execution = run.plan.execution
+  if (!execution) throw new Error('Missing execution')
+  const receipt: ShadowPartialReceipt = { kind: 'partial_supervisor_observation', health: null, inputBytes: 100001, outputBytes: 200001,
+    diagnosticBytes: 20000, peakObservedRssBytes: 200000000, rssSamples: 1, maximumObservationGapMs: 100,
+    budgets: execution.budgets, cleanupConfirmed: false, memoryScope: 'sum_rss_of_shadow_process_group', exactKernelPeak: false }
+  expect(validateShadowPartialReceipt(receipt, execution)).toEqual(receipt)
+  for (const bad of [{ ...receipt, rssSamples: 0 }, { ...receipt, peakObservedRssBytes: null },
+    { ...receipt, budgets: { ...receipt.budgets, cpuSeconds: 3 } }, { ...receipt, outputBytes: -1 }]) {
+    expect(() => validateShadowPartialReceipt(bad, execution)).toThrow()
+  }
+  const lease = store.claim(run.id, 1500, () => {})
+  expect(store.recordPartialReceipt(lease, receipt)).toBe(false)
+  store.stop(run.id, 'operator')
+  expect(store.recordPartialReceipt(lease, receipt)).toBe(true)
+  expect(reportShadowRun(store, run.id, { maximumPoints: 100, maximumBytes: 100000 }).issues).toContain('worker_cleanup_unconfirmed')
 })

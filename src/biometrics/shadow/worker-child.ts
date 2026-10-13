@@ -1,3 +1,4 @@
+import type { ShadowPartialReceipt } from './receipt'
 import { shadowChildBudgetsSchema as budgetsSchema } from './execution-policy'
 import { confirmShadowProcessCleanup } from './process-cleanup'
 import { ShadowCleanupError } from './cleanup-error'
@@ -27,7 +28,7 @@ const LINE_BYTES = 128 * 1024
  * This supervisor never opens a database, source, network or hardware handle. */
 export async function runShadowChild(location: { pythonPath: string, modulesPath: string }, rawInit: unknown,
   frames: AsyncIterable<unknown>, onOutput: (output: Output) => void | Promise<void>,
-  options: { budgets: ShadowChildBudgets, signal?: AbortSignal }) {
+  options: { budgets: ShadowChildBudgets, signal?: AbortSignal, onResources?: (receipt: ShadowPartialReceipt) => void }) {
   const init = initSchema.parse(structuredClone(rawInit))
   const budgets = budgetsSchema.parse(options.budgets)
   for (const side of ['left', 'right'] as const) {
@@ -45,6 +46,7 @@ export async function runShadowChild(location: { pythonPath: string, modulesPath
     env: { NODE_ENV: 'production', PYTHONPATH: location.modulesPath, LANG: 'C.UTF-8', TZ: 'UTC',
       OPENBLAS_NUM_THREADS: '1', OMP_NUM_THREADS: '1', MKL_NUM_THREADS: '1', NUMEXPR_NUM_THREADS: '1' },
   })
+  let lastHealth: Health | null = null
   let cleanupUnconfirmed = false
   let failure: Error | undefined, closed = false, terminal = false, stopping = false
   let inputBytes = 0, outputBytes = 0, diagnosticBytes = 0, peakRssBytes = 0, rssSamples = 0
@@ -96,6 +98,7 @@ export async function runShadowChild(location: { pythonPath: string, modulesPath
     try {
       const line = new TextDecoder('utf-8', { fatal: true }).decode(pending.subarray(0, end))
       const response = protocol.accept(JSON.parse(line), reply.type)
+      if ('health' in response) lastHealth = structuredClone(response.health)
       const acknowledge = reply.resolve
       reply = undefined
       pending = Buffer.alloc(0)
@@ -117,7 +120,7 @@ export async function runShadowChild(location: { pythonPath: string, modulesPath
     monitoring = true
     try {
       const rss = await bounded(Promise.race([sampleProcessGroupRss(child.pid ?? 0), exited.then(() => null)]), budgets.rssTimeoutMs, 'Shadow RSS observation timed out')
-      if (closed || failure) return
+      if (closed || stopping || failure) return
       if (rss === null || !Number.isSafeInteger(rss) || rss <= 0) return fail('Shadow RSS observation unavailable')
       const observedAt = performance.now()
       maximumObservationGapMs = Math.max(maximumObservationGapMs, observedAt - lastRssAt)
@@ -199,6 +202,13 @@ export async function runShadowChild(location: { pythonPath: string, modulesPath
     if (iterator.return) void Promise.resolve().then(() => iterator.return?.()).catch(() => {})
     if (!await confirmShadowProcessCleanup(child.pid, () => closed)) cleanupUnconfirmed = true
   }
+  try {
+    options.onResources?.({ kind: 'partial_supervisor_observation', health: lastHealth,
+      inputBytes, outputBytes, diagnosticBytes, peakObservedRssBytes: rssSamples ? peakRssBytes : null, rssSamples,
+      maximumObservationGapMs: Math.max(maximumObservationGapMs, performance.now() - lastRssAt), budgets,
+      cleanupConfirmed: !cleanupUnconfirmed, memoryScope: 'sum_rss_of_shadow_process_group', exactKernelPeak: false })
+  }
+  catch (error) { fail(error instanceof Error ? error.message : 'Shadow resource observation failed') }
   if (cleanupUnconfirmed) throw new ShadowCleanupError(failure)
   if (failure) throw failure
   if (!result) throw new Error('Shadow completion missing')

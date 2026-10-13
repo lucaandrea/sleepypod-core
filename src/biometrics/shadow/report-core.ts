@@ -58,11 +58,12 @@ export function summarizeShadowSnapshot(snapshot: ShadowReportSnapshot, referenc
       referenceExclusions: exclusions, comparison: compareNumericConfigurations(metric, windowMs, outputs, measurements, policy.alignment)[0] }
   })
   const issues: string[] = []
+  if (run.workerReceipt?.schema === 'biometric-shadow-partial-receipt-v1' && !run.workerReceipt.receipt.cleanupConfirmed) issues.push('worker_cleanup_unconfirmed')
   if (clockSkew) issues.push('clock_skew')
   if (run.reason?.startsWith('join_')) issues.push('join_failed')
   if (run.reason === 'shadow_observation_window_missed') issues.push('observation_window_missed')
   else if (run.state === 'failed') issues.push('processor_failed')
-  if ((run.reason === 'shadow_lease_expired_cleanup_unconfirmed' || run.reason === 'shadow_worker_cleanup_unconfirmed')) issues.push('worker_cleanup_unconfirmed')
+  if (!issues.includes('worker_cleanup_unconfirmed') && (run.reason === 'shadow_lease_expired_cleanup_unconfirmed' || run.reason === 'shadow_worker_cleanup_unconfirmed')) issues.push('worker_cleanup_unconfirmed')
   if (run.reason === 'storage_quota') issues.push('storage_quota')
   if (run.state === 'running' && ((run.lease_until_ms ?? 0) <= capturedAtMs || run.heartbeat_at_ms === null
     || capturedAtMs - run.heartbeat_at_ms > policy.heartbeatStaleMs)) issues.push('worker_stale')

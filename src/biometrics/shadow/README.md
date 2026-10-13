@@ -997,3 +997,31 @@ A stop freezes saved synthetic samples. Repeated stop preserves terminal state;
 no local process settlement is claimed because the demo has no process. Reloading
 resets demo state. A scheduling retry from a previous browser session receives an
 explicit bad-request result instead of silently creating a replacement run.
+
+
+### Partial resource evidence
+
+After supervising cleanup, the child host reports a bounded snapshot even when
+processing, input, cancellation or cleanup fails. The last protocol-validated
+health reply is retained; it may be absent or stale and is not final CPU usage.
+Input bytes count attempted serialized commands; output and diagnostic bytes
+count observed transport chunks. RSS is sampled process-group RSS, not an exact
+kernel peak; no successful sample is represented by null, never zero. Over-budget
+observations remain evidence rather than failing completed-receipt validation.
+The observation gap includes the unsampled cleanup tail.
+
+Completed attempts retain the original `biometric-shadow-receipt-v1` format.
+Failed/stopped attempts use `biometric-shadow-partial-receipt-v1` in the same
+hash-protected receipt columns, tied to run, plan and attempt. Attachment requires
+the exact terminal attempt, cannot change its state/reason/end time, and cannot
+replace evidence. An identical retry is idempotent. A later receipt timestamp is
+allowed because an operator can stop before process cleanup settles. Old attempts
+cannot annotate replacement attempts or completed runs. Missing/rejected writes
+remain failures; a cleanup-unconfirmed error still quarantines the host even if
+storing its receipt also fails. A host crash can leave no receipt; recovery does
+not fabricate measurements or proof of cleanup.
+
+Reports expose partial receipts through the existing bounded report route and
+show a partial-evidence notice; missing RSS is unavailable. Unconfirmed cleanup
+is an issue even when an operator's stop reason remains authoritative. This does
+not qualify a candidate, prove exact resource peaks, or authorize activation.

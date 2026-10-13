@@ -1296,7 +1296,7 @@ msgstr ""
 msgid "No compatible values on these pages."
 msgstr ""
 
-#: src/components/biometrics/Calibration/ShadowReport.tsx:63
+#: src/components/biometrics/Calibration/ShadowReport.tsx:64
 msgid "No completed worker resource receipt is available."
 msgstr ""
 
@@ -1410,6 +1410,10 @@ msgstr ""
 
 #: src/components/biometrics/Calibration/NumericTrace.tsx:81
 msgid "No values for this metric on the current page."
+msgstr ""
+
+#: src/components/biometrics/Calibration/ShadowReport.tsx:64
+msgid "No worker memory observation is available."
 msgstr ""
 
 #: src/components/biometrics/Calibration/NumericTrace.tsx:111
@@ -1717,7 +1721,7 @@ msgstr ""
 msgid "Prepared, not admitted. The pod checks current qualification and health again when scheduling and when execution starts."
 msgstr ""
 
-#: src/components/biometrics/Calibration/ShadowReport.tsx:64
+#: src/components/biometrics/Calibration/ShadowReport.tsx:65
 msgid "Presence and pump context reflect host observations, not proof of the live processor’s cached state."
 msgstr ""
 
@@ -1960,7 +1964,7 @@ msgstr ""
 msgid "References"
 msgstr ""
 
-#: src/components/biometrics/Calibration/ShadowReport.tsx:65
+#: src/components/biometrics/Calibration/ShadowReport.tsx:66
 msgid "Refresh report"
 msgstr ""
 
@@ -2027,12 +2031,12 @@ msgstr ""
 msgid "Replay stage traces"
 msgstr ""
 
-#: src/components/biometrics/Calibration/ShadowReport.tsx:68
+#: src/components/biometrics/Calibration/ShadowReport.tsx:69
 msgid "Report evidence"
 msgstr ""
 
 #: src/components/biometrics/Calibration/BacktestReport.tsx:144
-#: src/components/biometrics/Calibration/ShadowReport.tsx:70
+#: src/components/biometrics/Calibration/ShadowReport.tsx:71
 msgid "Report hash"
 msgstr ""
 
@@ -2071,6 +2075,10 @@ msgstr ""
 
 #: src/components/biometrics/Calibration/ProfileComparison.tsx:48
 msgid "Resolved parameter changes"
+msgstr ""
+
+#: src/components/biometrics/Calibration/ShadowReport.tsx:61
+msgid "Resource observations are partial. Worker health reflects the last valid reply, not the complete attempt."
 msgstr ""
 
 #: src/components/biometrics/Calibration/WaveformDatasetBuilder.tsx:80
@@ -2191,7 +2199,7 @@ msgid "Running"
 msgstr ""
 
 #. placeholder {0}: number.format(data.workerReceipt.receipt.peakObservedRssBytes / (1024 * 1024))
-#: src/components/biometrics/Calibration/ShadowReport.tsx:62
+#: src/components/biometrics/Calibration/ShadowReport.tsx:63
 msgid "Sampled worker memory peak: {0} MiB. Short peaks between samples may be missed."
 msgstr ""
 
@@ -2380,7 +2388,7 @@ msgstr ""
 msgid "Smooth isolated epochs"
 msgstr ""
 
-#: src/components/biometrics/Calibration/ShadowReport.tsx:72
+#: src/components/biometrics/Calibration/ShadowReport.tsx:73
 msgid "Snapshot hash"
 msgstr ""
 

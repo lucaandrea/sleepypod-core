@@ -1296,7 +1296,7 @@ msgstr "No committed report is available yet."
 msgid "No compatible values on these pages."
 msgstr "No compatible values on these pages."
 
-#: src/components/biometrics/Calibration/ShadowReport.tsx:63
+#: src/components/biometrics/Calibration/ShadowReport.tsx:64
 msgid "No completed worker resource receipt is available."
 msgstr "No completed worker resource receipt is available."
 
@@ -1411,6 +1411,10 @@ msgstr "No stored vitals for comparison"
 #: src/components/biometrics/Calibration/NumericTrace.tsx:81
 msgid "No values for this metric on the current page."
 msgstr "No values for this metric on the current page."
+
+#: src/components/biometrics/Calibration/ShadowReport.tsx:64
+msgid "No worker memory observation is available."
+msgstr "No worker memory observation is available."
 
 #: src/components/biometrics/Calibration/NumericTrace.tsx:111
 #: src/components/biometrics/Calibration/NumericTrace.tsx:112
@@ -1717,7 +1721,7 @@ msgstr "Prepared window (UTC)"
 msgid "Prepared, not admitted. The pod checks current qualification and health again when scheduling and when execution starts."
 msgstr "Prepared, not admitted. The pod checks current qualification and health again when scheduling and when execution starts."
 
-#: src/components/biometrics/Calibration/ShadowReport.tsx:64
+#: src/components/biometrics/Calibration/ShadowReport.tsx:65
 msgid "Presence and pump context reflect host observations, not proof of the live processor’s cached state."
 msgstr "Presence and pump context reflect host observations, not proof of the live processor’s cached state."
 
@@ -1960,7 +1964,7 @@ msgstr "Reference-defined subgroup comparisons"
 msgid "References"
 msgstr "References"
 
-#: src/components/biometrics/Calibration/ShadowReport.tsx:65
+#: src/components/biometrics/Calibration/ShadowReport.tsx:66
 msgid "Refresh report"
 msgstr "Refresh report"
 
@@ -2027,12 +2031,12 @@ msgstr "Replay sleep stages"
 msgid "Replay stage traces"
 msgstr "Replay stage traces"
 
-#: src/components/biometrics/Calibration/ShadowReport.tsx:68
+#: src/components/biometrics/Calibration/ShadowReport.tsx:69
 msgid "Report evidence"
 msgstr "Report evidence"
 
 #: src/components/biometrics/Calibration/BacktestReport.tsx:144
-#: src/components/biometrics/Calibration/ShadowReport.tsx:70
+#: src/components/biometrics/Calibration/ShadowReport.tsx:71
 msgid "Report hash"
 msgstr "Report hash"
 
@@ -2072,6 +2076,10 @@ msgstr "Resolved configuration hash"
 #: src/components/biometrics/Calibration/ProfileComparison.tsx:48
 msgid "Resolved parameter changes"
 msgstr "Resolved parameter changes"
+
+#: src/components/biometrics/Calibration/ShadowReport.tsx:61
+msgid "Resource observations are partial. Worker health reflects the last valid reply, not the complete attempt."
+msgstr "Resource observations are partial. Worker health reflects the last valid reply, not the complete attempt."
 
 #: src/components/biometrics/Calibration/WaveformDatasetBuilder.tsx:80
 msgid "Restart archive scan"
@@ -2191,7 +2199,7 @@ msgid "Running"
 msgstr "Running"
 
 #. placeholder {0}: number.format(data.workerReceipt.receipt.peakObservedRssBytes / (1024 * 1024))
-#: src/components/biometrics/Calibration/ShadowReport.tsx:62
+#: src/components/biometrics/Calibration/ShadowReport.tsx:63
 msgid "Sampled worker memory peak: {0} MiB. Short peaks between samples may be missed."
 msgstr "Sampled worker memory peak: {0} MiB. Short peaks between samples may be missed."
 
@@ -2380,7 +2388,7 @@ msgstr "Sleeper: {0}"
 msgid "Smooth isolated epochs"
 msgstr "Smooth isolated epochs"
 
-#: src/components/biometrics/Calibration/ShadowReport.tsx:72
+#: src/components/biometrics/Calibration/ShadowReport.tsx:73
 msgid "Snapshot hash"
 msgstr "Snapshot hash"
 

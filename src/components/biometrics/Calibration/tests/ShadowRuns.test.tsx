@@ -79,3 +79,13 @@ it('lets a failed report be retried explicitly', () => {
   fireEvent.click(screen.getByRole('button', { name: 'Retry report' }))
   expect(mock.refresh).toHaveBeenCalledOnce()
 })
+
+it('labels partial resources and does not turn missing RSS into a zero measurement', () => {
+  const result = mock.report()
+  result.data.workerReceipt = { schema: 'biometric-shadow-partial-receipt-v1', receipt: { peakObservedRssBytes: null } }
+  mock.report.mockReturnValue(result)
+  render(wrap(<ShadowReport id="run" />))
+  expect(screen.getByText(/Resource observations are partial/)).toBeTruthy()
+  expect(screen.queryByText(/Sampled worker memory peak:/)).toBeNull()
+  expect(screen.getByText(/No worker memory observation is available/)).toBeTruthy()
+})

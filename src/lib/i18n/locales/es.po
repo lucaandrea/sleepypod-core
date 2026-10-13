@@ -1296,7 +1296,7 @@ msgstr "Todavía no hay ningún informe guardado disponible."
 msgid "No compatible values on these pages."
 msgstr "No hay valores compatibles en estas páginas."
 
-#: src/components/biometrics/Calibration/ShadowReport.tsx:63
+#: src/components/biometrics/Calibration/ShadowReport.tsx:64
 msgid "No completed worker resource receipt is available."
 msgstr "No hay ningún comprobante de recursos de un proceso de trabajo completado."
 
@@ -1411,6 +1411,10 @@ msgstr "No hay signos vitales almacenados para comparar"
 #: src/components/biometrics/Calibration/NumericTrace.tsx:81
 msgid "No values for this metric on the current page."
 msgstr "No hay valores de esta métrica en la página actual."
+
+#: src/components/biometrics/Calibration/ShadowReport.tsx:64
+msgid "No worker memory observation is available."
+msgstr "No hay ninguna observación de memoria del proceso disponible."
 
 #: src/components/biometrics/Calibration/NumericTrace.tsx:111
 #: src/components/biometrics/Calibration/NumericTrace.tsx:112
@@ -1717,7 +1721,7 @@ msgstr "Período preparado (UTC)"
 msgid "Prepared, not admitted. The pod checks current qualification and health again when scheduling and when execution starts."
 msgstr "Preparado, aún no admitido. El pod comprueba de nuevo la cualificación y el estado actuales al programar y al iniciar la ejecución."
 
-#: src/components/biometrics/Calibration/ShadowReport.tsx:64
+#: src/components/biometrics/Calibration/ShadowReport.tsx:65
 msgid "Presence and pump context reflect host observations, not proof of the live processor’s cached state."
 msgstr "El contexto de presencia y de la bomba refleja observaciones del host, no demuestra el estado almacenado en la caché del procesador en vivo."
 
@@ -1960,7 +1964,7 @@ msgstr "Comparaciones de subgrupos definidos por la referencia"
 msgid "References"
 msgstr "Referencias"
 
-#: src/components/biometrics/Calibration/ShadowReport.tsx:65
+#: src/components/biometrics/Calibration/ShadowReport.tsx:66
 msgid "Refresh report"
 msgstr "Actualizar informe"
 
@@ -2027,12 +2031,12 @@ msgstr "Reprocesar fases del sueño"
 msgid "Replay stage traces"
 msgstr "Trazas de fases reprocesadas"
 
-#: src/components/biometrics/Calibration/ShadowReport.tsx:68
+#: src/components/biometrics/Calibration/ShadowReport.tsx:69
 msgid "Report evidence"
 msgstr "Evidencia del informe"
 
 #: src/components/biometrics/Calibration/BacktestReport.tsx:144
-#: src/components/biometrics/Calibration/ShadowReport.tsx:70
+#: src/components/biometrics/Calibration/ShadowReport.tsx:71
 msgid "Report hash"
 msgstr "Hash del informe"
 
@@ -2072,6 +2076,10 @@ msgstr "Hash de la configuración resuelta"
 #: src/components/biometrics/Calibration/ProfileComparison.tsx:48
 msgid "Resolved parameter changes"
 msgstr "Cambios en los parámetros resueltos"
+
+#: src/components/biometrics/Calibration/ShadowReport.tsx:61
+msgid "Resource observations are partial. Worker health reflects the last valid reply, not the complete attempt."
+msgstr "Las observaciones de recursos son parciales. El estado del proceso refleja la última respuesta válida, no el intento completo."
 
 #: src/components/biometrics/Calibration/WaveformDatasetBuilder.tsx:80
 msgid "Restart archive scan"
@@ -2191,7 +2199,7 @@ msgid "Running"
 msgstr "En ejecución"
 
 #. placeholder {0}: number.format(data.workerReceipt.receipt.peakObservedRssBytes / (1024 * 1024))
-#: src/components/biometrics/Calibration/ShadowReport.tsx:62
+#: src/components/biometrics/Calibration/ShadowReport.tsx:63
 msgid "Sampled worker memory peak: {0} MiB. Short peaks between samples may be missed."
 msgstr "Pico de memoria muestreado del proceso de trabajo: {0} MiB. Los picos breves entre muestras pueden pasar inadvertidos."
 
@@ -2380,7 +2388,7 @@ msgstr "Persona que duerme: {0}"
 msgid "Smooth isolated epochs"
 msgstr "Suavizar épocas aisladas"
 
-#: src/components/biometrics/Calibration/ShadowReport.tsx:72
+#: src/components/biometrics/Calibration/ShadowReport.tsx:73
 msgid "Snapshot hash"
 msgstr "Hash de la instantánea"
 

@@ -1,4 +1,4 @@
-import { shadowReceiptEnvelopeSchema, validateShadowWorkerReceipt } from './receipt'
+import { shadowReceiptEnvelopeSchema, shadowPartialEnvelopeSchema, validateShadowPartialReceipt, validateShadowWorkerReceipt } from './receipt'
 import { shadowPlanSchema } from './plan-contracts'
 export { shadowPlanSchema, shadowMonitoringSchema, shadowExpectedBindingsSchema } from './plan-contracts'
 import type Database from 'better-sqlite3'
@@ -77,8 +77,15 @@ export class ShadowStore {
       if (Buffer.byteLength(row.worker_receipt) > 16384) throw new Error('Shadow receipt exceeds storage limit')
       workerReceipt = shadowReceiptEnvelopeSchema.parse(JSON.parse(row.worker_receipt))
       if (!plan.execution || dataHash(workerReceipt) !== row.worker_receipt_hash || workerReceipt.runId !== row.id
-        || workerReceipt.recordedAtMs !== row.ended_at_ms || workerReceipt.attemptId !== row.attempt_id || workerReceipt.planHash !== row.plan_hash || row.state !== 'completed') throw new Error('Shadow receipt integrity mismatch')
-      validateShadowWorkerReceipt(workerReceipt.receipt, plan.execution)
+        || workerReceipt.attemptId !== row.attempt_id || workerReceipt.planHash !== row.plan_hash) throw new Error('Shadow receipt integrity mismatch')
+      if (workerReceipt.schema === 'biometric-shadow-receipt-v1') {
+        if (row.state !== 'completed' || workerReceipt.recordedAtMs !== row.ended_at_ms) throw new Error('Shadow receipt integrity mismatch')
+        validateShadowWorkerReceipt(workerReceipt.receipt, plan.execution)
+      }
+      else {
+        if (!['failed', 'stopped'].includes(row.state) || row.ended_at_ms === null || workerReceipt.recordedAtMs < row.ended_at_ms) throw new Error('Shadow receipt integrity mismatch')
+        validateShadowPartialReceipt(workerReceipt.receipt, plan.execution)
+      }
     }
     else if (row.worker_receipt_hash !== null) throw new Error('Shadow receipt integrity mismatch')
     return { ...row, plan, workerReceipt }
@@ -303,6 +310,28 @@ export class ShadowStore {
         || ((run.lease_until_ms ?? 0) > now && now < run.plan.endMs + (run.plan.joining?.drainGraceMs ?? 0))) return false
       this.db.prepare('UPDATE biometric_shadow_runs SET state = \'failed\', reason = ?, ended_at_ms = ?, lease_until_ms = NULL WHERE id = ?')
         .run(reason, now, run.id)
+      return true
+    }).immediate()
+  }
+
+  /** Attach cleanup evidence without changing terminal authority, even when an
+   * operator or recovery already ended this exact attempt. Never replace evidence. */
+  recordPartialReceipt(lease: ShadowLease, raw: unknown) {
+    return this.db.transaction(() => {
+      const run = this.get(lease.runId), now = this.now()
+      if (run.attempt_id !== lease.attemptId || !['failed', 'stopped'].includes(run.state)) return false
+      if (!run.plan.execution || run.ended_at_ms === null || now < run.ended_at_ms) throw new Error('Shadow partial receipt requires a terminal executable attempt')
+      const receipt = validateShadowPartialReceipt(raw, run.plan.execution)
+      if (run.workerReceipt) {
+        if (run.workerReceipt.schema === 'biometric-shadow-partial-receipt-v1' && dataHash(run.workerReceipt.receipt) === dataHash(receipt)) return true
+        throw new Error('Shadow receipt already recorded')
+      }
+      const envelope = shadowPartialEnvelopeSchema.parse({ schema: 'biometric-shadow-partial-receipt-v1', runId: run.id,
+        attemptId: lease.attemptId, planHash: run.plan_hash, recordedAtMs: now, receipt })
+      const encoded = canonicalJson(envelope)
+      if (Buffer.byteLength(encoded) > 16384) throw new Error('Shadow receipt exceeds storage limit')
+      this.db.prepare('UPDATE biometric_shadow_runs SET worker_receipt = ?, worker_receipt_hash = ? WHERE id = ?')
+        .run(encoded, dataHash(envelope), run.id)
       return true
     }).immediate()
   }
