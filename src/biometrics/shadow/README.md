@@ -184,3 +184,22 @@ readings with unavailable signal provenance retain a null input hash rather than
 a fabricated one. Reports expose active-only/candidate-only counts and unknown
 input identity. Live source capture, OS supervision, admission and API/UI wiring
 remain required to turn this component into an enabled prospective service.
+
+## Linux kernel-limit entrypoint
+
+The production supervisor must launch `common.biometrics.shadow_process` with
+explicit `--cpu-seconds` (1–3600) and `--address-space-bytes` budgets. This installs
+CPU, core-dump, open-file, low-priority and numerical-thread limits using the
+existing replay bootstrap, then a hard address-space limit, before importing the
+numerical shadow worker or reading its initialization. Yocto without Python's
+`resource` extension uses the fixed `/usr/bin/prlimit` utility; missing or refused
+limits fail startup. Unsupported hosts fail rather than claim enforcement.
+There are no production budget defaults. The direct `shadow_worker` module
+remains a transport test entrypoint and does not install kernel limits.
+
+The CPU cap includes import/startup and has a one-second hard-limit grace; it is
+separate from the adapter's finer cooperative processing budget. Address space
+bounds virtual allocations, not resident memory. The parent must still enforce
+RSS, wall/idle deadlines, cancellation, lease loss and process cleanup. These
+host controls and live admission remain unfinished. This entrypoint runs only
+trusted shipped algorithms and is not a sandbox for external package proposals.
