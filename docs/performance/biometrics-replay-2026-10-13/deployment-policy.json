@@ -1,0 +1,17 @@
+{
+  "admission": {
+    "qualificationId": "pod-192-168-1-88-replay-20261013-bda8d03d",
+    "minimumAvailableMemoryBytes": 805306368,
+    "minimumFreeDiskBytes": 2147483648,
+    "maximumLoadPerCpu": 1.1,
+    "maximumEventLoopDelayMs": 100,
+    "maximumPiezoAgeMs": 5000,
+    "maximumTemperatureC": 55,
+    "maximumSampleAgeMs": 2000
+  },
+  "budget": {
+    "jobWallMs": 7200000,
+    "waveformWallMs": 1800000,
+    "waveformCpuSeconds": 1200
+  }
+}

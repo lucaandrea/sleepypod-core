@@ -612,3 +612,27 @@ hashes. The original SSH handle exited zero, no owned descendants remained, and
 both live services were active before the owned staging directory was removed.
 This run does not exercise the live source/database sink, establish held-out
 accuracy or authorize a shadow qualification registry.
+
+### Target-specific replay deployment policy
+
+The measured pod uses the [recorded policy](performance/biometrics-replay-2026-10-13/deployment-policy.json).
+Its admission floor is 768 MiB available memory and 2 GiB free disk; it refuses
+load per CPU above 1.1, temperature above 55 °C, piezo age above five seconds,
+stale health samples above two seconds, or a scheduling probe above 100 ms.
+These are conservative operating cutoffs around the observed workload, not
+universal hardware defaults or guarantees that every transient stays below them.
+A temporary refusal is expected when current health exceeds a cutoff.
+
+The whole-job deadline is two hours; each numerical waveform child has a
+30-minute wall deadline and 1,200 CPU-second limit, matching the successful
+full-night measurement. Larger jobs can still exceed these ceilings and fail
+explicitly. Existing worker serialization, process limits, quotas and health
+checks remain enforced. This policy authorizes bounded replay on this measured
+pod only; it provides no accuracy designation or shadow qualification.
+
+Deployment stores the two environment values in
+`/etc/sleepypod/biometrics-replay.env`, loaded by
+`/etc/systemd/system/sleepypod.service.d/biometrics-replay.conf`. A service restart
+is required after changing them. Remove that drop-in and restart to return to
+unconfigured admission. No user profile or hardware temperature setting changes
+when installing this policy.
