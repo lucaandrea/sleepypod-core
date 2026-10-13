@@ -1,3 +1,4 @@
+import { resolveShadowProfiles } from './profiles'
 import { dirname } from 'node:path'
 import { dataHash } from '../algorithms/canonical'
 import { shadowPlanSchema, type ShadowStore } from './store'
@@ -94,4 +95,33 @@ export async function runPlannedShadowAttempt(store: ShadowStore, runId: string,
     return await runShadowAttempt(store, runId, owned.host, owned.signal)
   }
   finally { owned.close() }
+}
+
+/** Public service integration supplies a saved revision ID, never resolved
+ * numerical configs or asserted active generations. Admission rechecks the
+ * captured generations after these snapshot handles have been closed. */
+export async function runProfiledShadowAttempt(store: ShadowStore, runId: string,
+  installation: Omit<ShadowHostInstallation, 'configs' | 'expectedBindings'>, revisionId: string | null, signal?: AbortSignal) {
+  const plan = store.get(runId).plan
+  if (!plan.execution) throw new Error('Shadow profile resolution requires execution policy')
+  if (signal?.aborted) throw new Error('Shadow attempt cancelled before profile resolution')
+  const options = { busyTimeoutMs: plan.execution.sources.databaseBusyTimeoutMs }
+  const configuration = openShadowActiveDatabase(installation.configurationDatabase, options)
+  let biometrics: ReturnType<typeof openShadowActiveDatabase> | undefined
+  let resolved: ReturnType<typeof resolveShadowProfiles>
+  try {
+    biometrics = openShadowActiveDatabase(installation.biometricsDatabase, options)
+    const bio = biometrics
+    resolved = resolveShadowProfiles(configuration.db, bio.db, plan, revisionId, () => {
+      configuration.assertCurrent()
+      bio.assertCurrent()
+    })
+  }
+  finally {
+    try {
+      configuration.close()
+    }
+    finally { biometrics?.close() }
+  }
+  return runPlannedShadowAttempt(store, runId, { ...installation, configs: resolved.configs, expectedBindings: resolved.expectedBindings }, signal)
 }

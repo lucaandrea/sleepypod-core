@@ -544,3 +544,25 @@ This composition still requires production code to resolve candidate/baseline
 configs, capture hardware and shipped Node/Python identity, and supply a synchronous
 identity collector that detects changes. It does not recover orphan workers,
 register APIs/UI, install qualification entries or create production budgets.
+
+## Resolving candidate profiles and active baselines
+
+`resolveShadowProfiles` reads the saved candidate revision through the existing
+immutable profile validator, including side, pinned manifest, override rebuild and
+dependency checks. A null revision explicitly requests the shipped default. The
+resolved candidate must match the saved candidate hash.
+
+Both active baselines come from desired activation generations and their bounded
+runtime projections in nested read snapshots. The full runtime binding collector
+then verifies all numerical receipts and projection identities; no unacknowledged
+fallback is allowed. The selected active hash and both candidate execution hashes
+must match the plan. The opposite channel retains its acknowledged configuration.
+This operation requires read-only handles and pre/post file-identity guards and
+writes no activation, receipt, repair or canonical measurement.
+
+`runProfiledShadowAttempt` owns temporary profile-resolution handles and closes
+them before constructing the admission host. Admission checks the captured
+identities again, so changes between resolution and execution are rejected. This
+entry point accepts a saved revision ID rather than caller-asserted configs or
+active generations. Trusted installed build/hardware identity, service ownership,
+crash recovery, qualification and public API/UI integration remain required.

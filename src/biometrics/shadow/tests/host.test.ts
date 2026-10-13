@@ -1,7 +1,8 @@
 // @vitest-environment node
 import { beforeEach, expect, it, vi } from 'vitest'
+import { resolveShadowProfiles } from '../profiles'
 import { dataHash } from '../../algorithms/canonical'
-import { openPlannedShadowHost, runPlannedShadowAttempt } from '../host'
+import { openPlannedShadowHost, runPlannedShadowAttempt, runProfiledShadowAttempt } from '../host'
 import { openShadowActiveDatabase } from '../active-database'
 import { openShadowHealthMonitor } from '../health-monitor'
 import { installedShadowAdmitter, readInstalledShadowQualifications } from '../admission'
@@ -9,6 +10,7 @@ import { plannedShadowSourceFactory } from '../planned-sources'
 import { shadowRuntimeBindingReader } from '../runtime-binding'
 import { runShadowAttempt } from '../attempt'
 import type { ShadowStore } from '../store'
+vi.mock('../profiles', () => ({ resolveShadowProfiles: vi.fn() }))
 vi.mock('../active-database', () => ({ openShadowActiveDatabase: vi.fn() }))
 vi.mock('../health-monitor', () => ({ openShadowHealthMonitor: vi.fn() }))
 vi.mock('../admission', () => ({ installedShadowAdmitter: vi.fn(), readInstalledShadowQualifications: vi.fn() }))
@@ -121,4 +123,22 @@ it('closes admission connections when health collection rejects', async () => {
   databases.forEach(db => expect(db.close).toHaveBeenCalledOnce())
   expect(health.close).not.toHaveBeenCalled()
   expect(plannedShadowSourceFactory).not.toHaveBeenCalled()
+})
+
+it('resolves profiles using temporary handles then reopens admission with captured generations', async () => {
+  const { plan, installation, databases } = setup()
+  const capture = [0, 1].map(() => ({ db: {}, close: vi.fn(), assertCurrent: vi.fn() }))
+  vi.mocked(openShadowActiveDatabase).mockReset()
+  for (const db of [...capture, ...databases]) vi.mocked(openShadowActiveDatabase).mockReturnValueOnce(db as unknown as ReturnType<typeof openShadowActiveDatabase>)
+  vi.mocked(resolveShadowProfiles).mockReturnValue({ revisionId: null, configs: installation.configs,
+    expectedBindings: installation.expectedBindings, heartbeatAtMs: now } as ReturnType<typeof resolveShadowProfiles>)
+  vi.mocked(runShadowAttempt).mockImplementation(async () => {
+    capture.forEach(db => expect(db.close).toHaveBeenCalledOnce())
+    databases.forEach(db => expect(db.close).not.toHaveBeenCalled())
+    throw new Error('test attempt finished')
+  })
+  const store = { get: () => ({ plan }) } as unknown as ShadowStore
+  await expect(runProfiledShadowAttempt(store, 'test', installation, null)).rejects.toThrow(/test attempt finished/)
+  expect(resolveShadowProfiles).toHaveBeenCalledWith(capture[0].db, capture[1].db, plan, null, expect.any(Function))
+  databases.forEach(db => expect(db.close).toHaveBeenCalledOnce())
 })
