@@ -951,7 +951,7 @@ recovery forward. The record contains plan metadata, not reference rows or wavef
 
 ### Unconfirmed local cleanup
 
-A process-group kill refusal or direct-child cleanup deadline now raises
+A process-group kill refusal or process cleanup confirmation deadline raises
 `SHADOW_CLEANUP_UNCONFIRMED`, preserving the original worker failure as its cause.
 This result takes precedence over an earlier cancellation or processing error;
 the attempt writes `shadow_worker_cleanup_unconfirmed` when its fenced state
@@ -963,6 +963,13 @@ continuing bounded database recovery. Local cancellation returns false instead
 of claiming settlement; ordinary task failures with settled cleanup still release
 the slot. The marker is recognized across the separately packaged host boundary.
 This is local service state, not durable proof of OS cleanup: restarting a host
-must not be treated as verification that old processes are gone. Successful
-SIGKILL delivery and direct-child closure also do not prove that every descendant
-has been reaped. The shared kernel lock remains required across hosts.
+must not be treated as verification that old processes are gone.
+
+The supervisor now requires both the direct-child close event and `ESRCH` from
+a signal-0 probe of the detached process group within a five-second deadline.
+Surviving members, zombies, or persistent permission/observation failures leave
+cleanup unconfirmed. Transient unknown observations are retried, never counted
+as absence. No probe signals PID/group zero. These checks cover the original
+detached group; they cannot prove cleanup of descendants that deliberately escape
+into another group. Shipped numerical code must not create such descendants.
+The shared kernel lock remains required across hosts.

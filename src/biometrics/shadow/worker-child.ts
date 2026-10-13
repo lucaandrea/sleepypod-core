@@ -1,4 +1,5 @@
 import { shadowChildBudgetsSchema as budgetsSchema } from './execution-policy'
+import { confirmShadowProcessCleanup } from './process-cleanup'
 import { ShadowCleanupError } from './cleanup-error'
 import { spawn } from 'node:child_process'
 import { tmpdir } from 'node:os'
@@ -196,16 +197,7 @@ export async function runShadowChild(location: { pythonPath: string, modulesPath
     child.stderr.destroy()
     // Iterator cleanup may itself be stalled; never let it keep a worker alive.
     if (iterator.return) void Promise.resolve().then(() => iterator.return?.()).catch(() => {})
-    if (!closed) {
-      let timer: ReturnType<typeof setTimeout> | undefined
-      try {
-        await Promise.race([exited, new Promise<void>((resolve) => {
-          timer = setTimeout(resolve, 5000)
-        })])
-        if (!closed) cleanupUnconfirmed = true
-      }
-      finally { clearTimeout(timer) }
-    }
+    if (!await confirmShadowProcessCleanup(child.pid, () => closed)) cleanupUnconfirmed = true
   }
   if (cleanupUnconfirmed) throw new ShadowCleanupError(failure)
   if (failure) throw failure
