@@ -228,6 +228,10 @@ function deploy(fail: 'build' | 'transfer' | 'apply' | '' = '', branch = false, 
   put(join(project, '.env'), 'local-secret')
   if (!branch) put(join(project, '.git/config'), 'credential')
   put(join(project, 'node_modules/native.node'), 'wrong-arch')
+  put(join(project, 'modules/piezo-processor/.venv/lib/native.so'), 'wrong-python-arch')
+  put(join(project, 'modules/piezo-processor/__pycache__/main.pyc'), 'local-bytecode')
+  put(join(project, 'modules/piezo-processor/.pytest_cache/state'), 'local-test-cache')
+  put(join(project, 'modules/piezo-processor/uv.lock'), 'locked-dependencies')
   put(join(project, 'source.ts'), 'source')
   if (branch) {
     const git = (args: string[]) => {
@@ -340,7 +344,8 @@ describe('local deploy', () => {
     expect(archive).toContain('./.next/standalone/server.js')
     expect(archive).toContain('./.next/standalone/.git-info')
     expect(archive).toContain('./source.ts')
-    for (const excluded of ['.env', '.git/', 'node_modules', '.next/cache']) expect(archive).not.toContain(excluded)
+    expect(archive).toContain('./modules/piezo-processor/uv.lock')
+    for (const excluded of ['.env', '.git/', 'node_modules', '.next/cache', '.venv', '__pycache__', '.pytest_cache']) expect(archive).not.toContain(excluded)
     expect(log).toContain('export PATH=/usr/local/bin:$PATH; test -d /home/dac/sleepypod-core')
     expect(log).toContain('--archive')
     for (const marker of ['cat >', 'ssh bash']) expect(log).toContain(marker)
