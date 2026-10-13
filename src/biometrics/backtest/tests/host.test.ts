@@ -64,3 +64,19 @@ it('does not begin a job when shutdown arrives during cleanup', async () => {
   expect(execute).not.toHaveBeenCalled()
   expect(vi.getTimerCount()).toBe(0)
 })
+it('aborts the active cleanup on shutdown and waits for its acknowledgement', async () => {
+  vi.useFakeTimers()
+  const execute = vi.fn()
+  let aborted = false
+  const host = new BacktestHost({ execute, collect: signal => new Promise<void>((resolve) => {
+    signal.addEventListener('abort', () => {
+      aborted = true
+      resolve()
+    }, { once: true })
+  }) })
+  host.start()
+  await host.stop()
+  expect(aborted).toBe(true)
+  expect(execute).not.toHaveBeenCalled()
+  expect(vi.getTimerCount()).toBe(0)
+})

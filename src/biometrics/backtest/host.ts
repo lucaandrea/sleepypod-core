@@ -5,7 +5,7 @@ import { coordinatorRequest } from './coordinator-service'
 
 interface HostOptions {
   execute: (signal: AbortSignal) => Promise<unknown>
-  collect: () => void | Promise<void>
+  collect: (signal: AbortSignal) => void | Promise<void>
   onError?: (phase: 'execution' | 'cleanup') => void
   intervalMs?: number
   clock?: () => number
@@ -52,7 +52,7 @@ export class BacktestHost {
     if (this.clock() - this.lastCollection >= 1800000) {
       this.lastCollection = this.clock()
       try {
-        await this.options.collect()
+        await this.options.collect(this.controller.signal)
       }
       catch {
         this.report('cleanup')
@@ -85,7 +85,7 @@ export function startBacktestHost(db: BetterSQLite3Database<typeof schema>, admi
   const owner = `core:${process.pid}:${randomUUID()}`
   const host = new BacktestHost({
     execute: signal => coordinatorRequest(db, { type: 'execute', owner }, { signal, admit }),
-    collect: () => coordinatorRequest(db, { type: 'collectArtifacts' }).then(() => {}),
+    collect: signal => coordinatorRequest(db, { type: 'collectArtifacts' }, { signal, admit }).then(() => {}),
     onError: phase => console.warn(`[biometrics] Backtest ${phase} failed; host will retry`),
   })
   shared.__biometricBacktestHost = host

@@ -375,3 +375,12 @@ Synthetic measurements and probe metadata were copied locally for analysis.
 After confirming all benchmark descendants had exited, its exact staging directory
 was removed; both installed services were active. Repeat full qualification in an
 uninterrupted window before enabling the production replay host.
+
+Retained RAW cleanup runs through the coordinator's serialized work lane when
+its host performs startup/periodic collection. It uses a fixed Python module,
+server-derived database/storage paths, a two-minute deadline, bounded diagnostics,
+and a count-only response. Admission is checked before execution and every five
+seconds; host shutdown cancels the child. Released artifacts and unpublished
+orphans retain their one-hour grace periods and cross-process publication locks.
+An absent retained directory is a no-op. Enabling the production host still
+requires deployment qualification; adding cleanup does not enable replay.

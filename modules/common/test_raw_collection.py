@@ -243,3 +243,27 @@ def test_orphan_collection_waits_for_publication_metadata_commit(tmp_path):
         assert (store.directory / descriptor.name).exists()
     finally:
         db.close()
+
+
+def test_collection_worker_runs_both_collectors_without_exposing_filenames(tmp_path):
+    from io import BytesIO
+    import json
+    import os
+    from common.biometrics.collection_worker import run
+    _, store, descriptor, database, db = fixture(tmp_path)
+    try:
+        orphan = store.directory / ('a' * 64 + '.RAW.gz')
+        orphan.write_bytes(b'private fixture')
+        os.utime(orphan, ns=(0, 0))
+        output = BytesIO()
+        run(BytesIO(b'{"version":"raw-collection-work-v1"}'), output, database, store.directory)
+        assert json.loads(output.getvalue()) == {'version': 'raw-collection-result-v1', 'released': 1, 'orphans': 1}
+        assert not orphan.exists() and not (store.directory / descriptor.name).exists()
+        assert db.execute('SELECT count(*) FROM biometric_raw_artifacts').fetchone()[0] == 1
+        with pytest.raises(ValueError, match='envelope'):
+            run(BytesIO(b'{"version":"raw-collection-work-v1","path":"/tmp"}'), BytesIO(), database, store.directory)
+        missing = tmp_path / 'missing'
+        run(BytesIO(b'{"version":"raw-collection-work-v1"}'), BytesIO(), database, missing)
+        assert not missing.exists()
+    finally:
+        db.close()

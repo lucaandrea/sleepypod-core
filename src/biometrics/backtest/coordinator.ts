@@ -69,7 +69,7 @@ export function runCoordinatorTask<T extends CoordinatorTask>(options: Coordinat
     child.on('error', stop)
     child.on('message', (message: unknown) => {
       const data = message as { type?: string, sequence?: number, result?: CoordinatorResults[T['type']], code?: string, message?: string }
-      if (data?.type === 'admission' && (parsed.type === 'execute' || parsed.type === 'inspectRawSource' || parsed.type === 'createWaveformDataset') && !received && !admissionActive && Number.isSafeInteger(data.sequence)) {
+      if (data?.type === 'admission' && (parsed.type === 'execute' || parsed.type === 'inspectRawSource' || parsed.type === 'createWaveformDataset' || parsed.type === 'collectArtifacts') && !received && !admissionActive && Number.isSafeInteger(data.sequence)) {
         admissionActive = true
         Promise.resolve().then(() => control.admit?.() ?? false).catch(() => false).then((allowed) => {
           if (child.connected && !failure) child.send({ type: 'admission', sequence: data.sequence, allowed }, () => {})

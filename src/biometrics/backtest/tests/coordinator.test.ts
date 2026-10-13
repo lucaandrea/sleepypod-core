@@ -3,7 +3,7 @@ import Database from 'better-sqlite3'
 import { drizzle } from 'drizzle-orm/better-sqlite3'
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator'
 import { execFile } from 'node:child_process'
-import { mkdtemp, mkdir, rm, writeFile, readFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, rm, writeFile, readFile, utimes } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
 import { promisify } from 'node:util'
@@ -200,3 +200,18 @@ it('cancels archive inspection when ongoing resource admission is withdrawn', as
     { type: 'inspectRawSource', input: { afterName: null } }, { admit: async () => ++checks === 1 })).toEqual({ status: 'deferred', nextCursor: null })
   expect(checks).toBe(2)
 }, 10000)
+
+it('collects aged RAW orphans through the admitted coordinator without touching fresh files', async () => {
+  const retained = join(directory, 'biometric-raw')
+  await mkdir(retained, { recursive: true })
+  const old = join(retained, `${'a'.repeat(64)}.RAW.gz`), fresh = join(retained, `${'b'.repeat(64)}.RAW.gz`)
+  await writeFile(old, 'old unpublished copy')
+  await writeFile(fresh, 'fresh unpublished copy')
+  await utimes(old, 0, 0)
+  const rawLocation = { pythonPath: resolve('modules/piezo-processor/.venv/bin/python'), modulesPath: resolve('modules'), archiveDirectory: directory }
+  await runCoordinatorTask({ ...options(), rawLocation }, { type: 'collectArtifacts' }, { admit: async () => false })
+  expect(await readFile(old, 'utf8')).toBe('old unpublished copy')
+  await runCoordinatorTask({ ...options(), rawLocation }, { type: 'collectArtifacts' }, { admit: async () => true })
+  await expect(readFile(old)).rejects.toMatchObject({ code: 'ENOENT' })
+  expect(await readFile(fresh, 'utf8')).toBe('fresh unpublished copy')
+})

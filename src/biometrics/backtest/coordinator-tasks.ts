@@ -1,3 +1,6 @@
+import { sql } from 'drizzle-orm'
+import { dirname, join } from 'node:path'
+import { runRawCollectionChild } from './raw-collection-child'
 import type { ReplayBudget } from './execution-budget'
 import { z } from 'zod'
 import { summarizeBacktestResult } from './report-summary'
@@ -71,6 +74,7 @@ export async function performCoordinatorTask(db: BetterSQLite3Database<typeof sc
     case 'createExperiment': return new BacktestJobStore(db).createExperiment(task.input.datasetId, task.input.protocol, task.input.idempotencyKey)
     case 'collectArtifacts':
       new BacktestJobStore(db).collectOrphanedArtifacts()
+      await collectRawArtifacts(db, options)
       return null
     case 'execute': return executeNextBacktest(db, { owner: task.owner, ...options })
   }
@@ -111,6 +115,37 @@ async function inspectRawSource(db: BetterSQLite3Database<typeof schema>, input:
   catch (error) {
     if (denied) return deferred
     throw error
+  }
+  finally {
+    clearInterval(timer)
+    await checking
+    options.signal.removeEventListener('abort', abort)
+  }
+}
+
+/** Same work lane as publication; Python additionally locks across processes. */
+async function collectRawArtifacts(db: BetterSQLite3Database<typeof schema>, options: {
+  signal: AbortSignal
+  admit: () => Promise<boolean>
+  rawLocation?: RawInspectionLocation
+}) {
+  if (options.signal.aborted || !await options.admit()) return
+  const databasePath = db.all<{ name: string, file: string }>(sql`PRAGMA database_list`).find(row => row.name === 'main')?.file
+  if (!databasePath) return
+  const controller = new AbortController()
+  const abort = () => controller.abort()
+  options.signal.addEventListener('abort', abort, { once: true })
+  if (options.signal.aborted) abort()
+  let checking: Promise<void> | undefined
+  const timer = setInterval(() => {
+    if (checking) return
+    checking = Promise.resolve().then(options.admit).catch(() => false).then((allowed) => {
+      if (!allowed) controller.abort()
+    }).finally(() => { checking = undefined })
+  }, 5000)
+  try {
+    await runRawCollectionChild({ ...(options.rawLocation ?? podRawInspectionLocation), databasePath,
+      retainedDirectory: join(dirname(databasePath), 'biometric-raw') }, { signal: controller.signal })
   }
   finally {
     clearInterval(timer)
