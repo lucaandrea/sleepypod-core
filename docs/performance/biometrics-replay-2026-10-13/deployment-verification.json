@@ -1,0 +1,99 @@
+{
+  "verifiedAt": "2026-10-13T13:39:34.720436+00:00",
+  "build": {
+    "branch": "feat/biometrics-calibration",
+    "commitHash": "fc61e0e8",
+    "commitTitle": "docs(biometrics): keep private reference inventory out of release evidence",
+    "buildDate": "2026-10-13T13:36:49.208Z"
+  },
+  "admission": {
+    "httpStatus": 200,
+    "result": {
+      "configured": true,
+      "qualificationId": "pod-192-168-1-88-replay-20261013-bda8d03d",
+      "admitted": true,
+      "reasons": []
+    }
+  },
+  "manifest": {
+    "httpStatus": 200,
+    "result": {
+      "manifestHash": "96c2f01a329b4346b4a3f2801ba973650d7235a5c4bd00bd0ded96f1a5768b9b",
+      "activationAvailable": true
+    }
+  },
+  "dataPath": {
+    "httpStatus": 200,
+    "result": {
+      "nodes": [
+        {
+          "id": "sensor-piezo",
+          "status": "ok"
+        },
+        {
+          "id": "sensor-cap",
+          "status": "ok"
+        },
+        {
+          "id": "sensor-temp",
+          "status": "ok"
+        },
+        {
+          "id": "frames",
+          "status": "ok"
+        },
+        {
+          "id": "dac",
+          "status": "ok"
+        },
+        {
+          "id": "piezo-processor",
+          "status": "ok"
+        },
+        {
+          "id": "sleep-detector",
+          "status": "ok"
+        },
+        {
+          "id": "environment-monitor",
+          "status": "ok"
+        },
+        {
+          "id": "dac-monitor",
+          "status": "ok"
+        },
+        {
+          "id": "database",
+          "status": "ok"
+        },
+        {
+          "id": "scheduler",
+          "status": "ok"
+        },
+        {
+          "id": "out-vitals",
+          "status": "ok"
+        },
+        {
+          "id": "out-sleep",
+          "status": "ok"
+        },
+        {
+          "id": "out-temp",
+          "status": "ok"
+        },
+        {
+          "id": "out-live",
+          "status": "idle"
+        }
+      ],
+      "verdict": "ok"
+    }
+  },
+  "services": {
+    "sleepypod.service": "active",
+    "sleepypod-piezo-processor.service": "active",
+    "sleepypod-sleep-detector.service": "active",
+    "sleepypod-environment-monitor.service": "active"
+  }
+}

@@ -43,17 +43,20 @@ acceptance is separate from fixture and browser results.
 | Isolated generated code and reviewed promotion | [External experiment contracts and real-Docker checks](../scripts/algorithm-experiments/README.md), [shadow admission tests](../src/biometrics/shadow/tests/admission.test.ts), [promotion registry tests](../src/biometrics/profiles/tests/qualification-registry.test.ts) |
 | Target-pod operational behavior | [Measurements and limitations](biometrics-replay-benchmark.md); final deployment evidence remains outstanding below |
 
-## Outstanding release evidence
+## Rollout status and outstanding evidence
 
 - The current eight-hour replay and 30-minute synthetic shadow supervisor runs
   completed successfully; their receipts are linked in the measurement document.
   Live shadow source/sink behavior still requires separate target-pod assessment.
   Synthetic output cannot supply held-out accuracy.
-- Install only resource policies supported by the measured hardware evidence.
-  Reviewed promotion/shadow registries need their own matching fixture and
+- The measured replay policy is installed and the pod reports admitted.
+  Reviewed promotion/shadow registries still need their own matching fixture and
   held-out evidence; absence must remain visible and deny qualified promotion.
-- Deploy the completed build, verify additive migration, live receipts and service
-  health, and record the installed commit and deployment outcome.
+- Build `fc61e0e8` is deployed. Migrations succeeded; the calibration API, live
+  data path and core/numerical services are healthy, and new vitals carry processing
+  provenance. [Deployment receipt](performance/biometrics-replay-2026-10-13/deployment-verification.json).
+  Unpersonalized defaults have no requested activation generation, so this check
+  does not claim a new profile acknowledgment or change the user's profile.
 - Push the branch, open the PR and request CodeRabbit review.
 
 Legacy reference availability alone does not establish independent nights, metric
