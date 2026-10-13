@@ -249,3 +249,81 @@ isolation. No production resource policy or automatic background execution was
 enabled by this benchmark. Temporary benchmark databases and binaries were
 removed after measurements were copied locally; the production service was
 left running without a deployment or restart.
+
+## Retained waveform pipeline on the pod
+
+The October 12 follow-up used the coordinator and Node evaluator built from
+`fe25e71a`, plus the Python process-limit compatibility fix accompanying this
+measurement. The pod's Python 3.10.4 installation omits the optional `resource`
+extension. Workers now use `/usr/bin/prlimit` on Linux when that extension is
+missing, failing startup if the utility fails. A separate child on the pod
+confirmed CPU soft/hard limits of 120/121 seconds, core limits of zero, and
+open-file limits of 64/64 in `/proc/self/limits`.
+
+The new `scripts/benchmarks/biometrics-waveform-fixture.py` creates deterministic
+500 Hz dual-channel sine-plus-noise CBOR archives in an exclusively created
+directory. The runner `biometrics-waveform-runner.ts` creates a separate database,
+retains those archives through the production publisher, enqueues three unique
+configuration hashes, executes the leased waveform pipeline, and reads its
+summary. The first five minutes are retained pre-roll. Configuration labels
+are synthetic roles; this fixture does not measure biological accuracy.
+
+The 30-minute fixture contained 5,976,451 compressed bytes. Dataset creation
+took 1.309 seconds and retention took 15.809 seconds. Execution reached its
+180-second coordinator limit before publishing a result. Canonical synthetic
+observations were unchanged. **This workload is not qualified for automatic
+execution.** Full-night execution needs a different scheduling/budget design;
+simply enabling the existing host would not make these jobs complete.
+
+The independent probe sampled the benchmark process and its descendants through
+`/proc`, in addition to the existing loopback HTTP measurements. RSS is a sampled
+sum, not an exact peak or unique physical-memory accounting. The failed
+30-minute run produced 12 baseline, 448 benchmark, and nine post-run samples.
+All sampled HTTP responses returned 200.
+
+| Measurement | During the complete 30-minute-fixture benchmark |
+| --- | --- |
+| Maximum sampled process-tree RSS | 313,332 KiB |
+| Minimum available system memory | 1,181,144 KiB |
+| Maximum zone-zero temperature | 40.041 °C |
+| Maximum performance GET latency | 49.01 ms |
+| Maximum sensor-source GET latency | 79.46 ms |
+| Maximum device-status GET latency | 115.39 ms |
+| Maximum age of piezo WebSocket receipt | 1,446 ms |
+
+The receipt age is measured at the benchmark client; it is not the age of the
+original sensor timestamp. The calling process's largest sampled scheduling
+delay was 179.88 ms, so favorable HTTP timings alone do not establish its event
+loop budget. Measurements use synthetic databases and do not qualify live
+SQLite write contention or hardware-command latency. No production admission
+policy is selected by these results.
+
+A 10-minute follow-up (five minutes pre-roll and five minutes scored) completed
+the entire pipeline with the same three configurations. Its 1,992,541 compressed
+bytes took 15.599 seconds to retain. Leased replay and publication took 83.402
+seconds, and integrity-checked summary retrieval took 1.289 seconds. The summary
+was 28,798 bytes; synthetic canonical observations again remained unchanged.
+The replay caller's event-loop p95/max were 22.00/63.90 ms, including a timer
+turn after the coordinator reply. This is a successful short fixture, not a
+qualified whole-night workload.
+
+The independent probe recorded 12 baseline, 247 benchmark, and nine post-run
+samples, all with HTTP 200 responses. During the benchmark, process-tree RSS
+reached 314,852 KiB, available memory stayed at or above 1,184,736 KiB, and
+zone-zero temperature reached 39.924 °C. Maximum performance/sensor-source/device
+GET times were 155.93/96.78/75.31 ms. Maximum piezo receipt age was 1,626 ms.
+
+The successful run pinned compound build
+`b91e8552bc6d973922bd38808d04490683e3e05d8c67c9af5ad37d40a64bfe45`
+and Python build
+`fad13cfff0b361fbec950e0b6ddd892fe3d97f42f3ef9c5031af2e700c579aca`.
+Its complete report hash was
+`8446b1a8fd4c0f1530c25ed186ac5231c8020c60e4dffc42b1ec248aa2b46291`.
+Python used the pod's installed NumPy 2.2.6 and SciPy 1.15.3. The staged
+benchmark used fixed production worker bundles, not the temporary diagnostic
+coordinator used to investigate the missing Python extension.
+
+After both runs, no benchmark descendants remained. Synthetic telemetry and
+logs were copied locally, and the staging directory was removed. Both installed
+services remained active on the original `homekit-0b53800` release. No deployment,
+restart, live-database modification, or hardware command was part of this test.

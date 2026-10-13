@@ -7,7 +7,7 @@ result publication; reading events alone never constitute a successful job.
 import argparse
 import json
 import os
-import resource
+import subprocess
 import re
 import sys
 
@@ -78,9 +78,22 @@ def run(input_stream, output_stream, retained_directory):
 def configure_process_limits():
     # Provisional execution caps; qualified scheduling/admission belongs to
     # the parent. It must also enforce wall time and kill on cancellation.
-    resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
-    resource.setrlimit(resource.RLIMIT_CPU, (120, 121))
-    resource.setrlimit(resource.RLIMIT_NOFILE, (64, 64))
+    try:
+        import resource
+    except ModuleNotFoundError as error:
+        if error.name != 'resource' or sys.platform != 'linux':
+            raise
+        # Yocto may omit Python's optional resource extension. Use the fixed
+        # system utility to limit this process before importing numerical code.
+        # Missing utility, refusal, or timeout remains a startup failure.
+        subprocess.run(['/usr/bin/prlimit', '--pid', str(os.getpid()),
+            '--core=0:0', '--cpu=120:121', '--nofile=64:64'],
+            check=True, timeout=5, stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    else:
+        resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
+        resource.setrlimit(resource.RLIMIT_CPU, (120, 121))
+        resource.setrlimit(resource.RLIMIT_NOFILE, (64, 64))
     os.nice(19)
     for key in ('OPENBLAS_NUM_THREADS', 'OMP_NUM_THREADS', 'MKL_NUM_THREADS', 'NUMEXPR_NUM_THREADS'):
         os.environ[key] = '1'
