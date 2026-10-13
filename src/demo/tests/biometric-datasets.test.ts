@@ -48,3 +48,11 @@ it('retains reference copies after deletion and honors every active job before r
   expect(() => demoDatasetSnapshot(dataset.id)).toThrow('DATASET_RELEASED')
   expect(await required(handlers.releaseDataset)({ id: dataset.id })).toEqual(released)
 })
+
+it('does not invent raw archives or resource qualification for demo waveform controls', async () => {
+  expect(await required(handlers.getReplayAdmission)({})).toEqual({ configured: false, qualificationId: null, admitted: false, reasons: ['unqualified'] })
+  expect(await required(handlers.listRawSources)({ startMs: 0, endMs: 1000 })).toEqual({ items: [], nextCursor: null })
+  expect(await required(handlers.inspectRawSource)({ afterName: 'a.RAW.gz' })).toEqual({ status: 'deferred', nextCursor: 'a.RAW.gz' })
+  expect(await required(handlers.createWaveformDataset)({ parentDatasetId: '00000000-0000-4000-8000-000000000001', expectedContentHash: 'a'.repeat(64),
+    cohorts: [{ cohortId: 'night', sourceIds: ['b'.repeat(64)] }], idempotencyKey: 'demo-raw' })).toEqual({ status: 'deferred' })
+})

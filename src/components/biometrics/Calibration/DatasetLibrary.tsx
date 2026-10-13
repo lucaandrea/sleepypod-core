@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { Trans, useLingui } from '@lingui/react/macro'
+import { WaveformDatasetBuilder } from './WaveformDatasetBuilder'
 import { ExperimentBuilder } from './ExperimentBuilder'
 import { trpc } from '@/src/utils/trpc'
 import { Button, Card, CardHeader, InlineError, Skeleton } from '@/src/components/ds'
@@ -47,6 +48,7 @@ export function DatasetLibrary({ side }: { side: 'left' | 'right' }) {
 }
 function DatasetDetails({ id }: { id: string }) {
   const { t } = useLingui()
+  const [waveforms, setWaveforms] = useState(false)
   const [confirmRelease, setConfirmRelease] = useState(false)
   const dataset = trpc.biometricTuning.getDataset.useQuery({ id })
   const release = trpc.biometricTuning.releaseDataset.useMutation()
@@ -83,7 +85,9 @@ function DatasetDetails({ id }: { id: string }) {
         <summary><Trans>Frozen coverage and capabilities</Trans></summary>
         <pre className="max-h-64 overflow-auto whitespace-pre-wrap text-xs">{JSON.stringify({ coverage: data.manifest.coverage, capabilities: data.manifest.capabilities }, null, 2)}</pre>
       </details>
-      {data.available ? <ExperimentBuilder datasetId={id} stageReplay={data.manifest.capabilities.stageReplay} /> : null}
+      {data.available ? <ExperimentBuilder datasetId={id} stageReplay={data.manifest.capabilities.stageReplay} waveformReplay={data.manifest.version === 'waveform-dataset-manifest-v1'} /> : null}
+      {data.available && data.manifest.version === 'processed-dataset-manifest-v1' ? <Button aria-expanded={waveforms} onClick={() => setWaveforms(!waveforms)}><Trans>Select recorded waveforms</Trans></Button> : null}
+      {data.available && waveforms ? <WaveformDatasetBuilder key={data.contentHash} parentId={data.id} parentHash={data.contentHash} cohorts={data.manifest.splitProtocol.assignments} /> : null}
       {data.available
         ? (
             confirmRelease

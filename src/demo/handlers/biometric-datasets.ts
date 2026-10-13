@@ -33,6 +33,12 @@ export function demoDatasetBusy(id: string, jobId: string, active: boolean) {
   else busy.delete(token)
 }
 export const datasetHandlers: DemoHandlers<'biometricTuning'> = {
+  // Demo data includes processed observations, never retained RAW archives or
+  // qualified pod resource telemetry. Do not fabricate waveform publication.
+  getReplayAdmission: () => ({ configured: false, qualificationId: null, admitted: false, reasons: ['unqualified'] }),
+  listRawSources: () => ({ items: [], nextCursor: null }),
+  inspectRawSource: input => ({ status: 'deferred', nextCursor: input.afterName }),
+  createWaveformDataset: () => ({ status: 'deferred' }),
   listSessions: (input) => {
     const rows = demoNights(input.side).filter(row => row.leftBedAt !== null).map(session)
       .filter(row => input.beforeStartMs === undefined || row.startMs < input.beforeStartMs || (row.startMs === input.beforeStartMs && row.id < (input.beforeId ?? 0)))

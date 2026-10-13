@@ -6,9 +6,11 @@ import { experimentProtocolSchema } from '@/src/biometrics/backtest/contracts'
 import { trpc } from '@/src/utils/trpc'
 import { Button, InlineError } from '@/src/components/ds'
 
-export function ExperimentBuilder({ datasetId, stageReplay }: { datasetId: string, stageReplay: boolean }) {
+export function ExperimentBuilder({ datasetId, stageReplay, waveformReplay = false }: { datasetId: string, stageReplay: boolean, waveformReplay?: boolean }) {
   const { t } = useLingui()
-  const [mode, setMode] = useState<'comparison' | 'stage_replay'>('comparison')
+  const [mode, setMode] = useState<'comparison' | 'stage_replay' | 'signal_replay'>(waveformReplay ? 'signal_replay' : 'comparison')
+  const [waveformStages, setWaveformStages] = useState(false)
+  const stages = mode === 'stage_replay' || (mode === 'signal_replay' && waveformStages)
   const [quality, setQuality] = useState('')
   const [tolerance, setTolerance] = useState('30000')
   const [offset, setOffset] = useState('0')
@@ -22,13 +24,15 @@ export function ExperimentBuilder({ datasetId, stageReplay }: { datasetId: strin
   const utils = trpc.useUtils()
   const numeric = (value: string) => value.trim() === '' ? Number.NaN : Number(value)
   const protocol = experimentProtocolSchema.safeParse({ version: 'descriptive-evaluation-v1', mode,
-    assumedStageCalibrationQuality: mode === 'stage_replay' ? numeric(quality) : 0,
+    assumedStageCalibrationQuality: stages ? numeric(quality) : 0,
     pointToleranceMs: numeric(tolerance), clockOffsetMs: numeric(offset),
-    ...(uncertainty && mode === 'stage_replay' ? { nightUncertainty: { version: 'paired-night-percentile-v1', seed, resamples: numeric(resamples), minimumNights: numeric(minimumNights) } } : {}),
+    ...(mode === 'signal_replay' ? { waveformStages } : {}),
+    ...(uncertainty && stages ? { nightUncertainty: { version: 'paired-night-percentile-v1', seed, resamples: numeric(resamples), minimumNights: numeric(minimumNights) } } : {}),
   })
+  const compatible = waveformReplay === (mode === 'signal_replay') && (mode !== 'stage_replay' || stageReplay)
   const fingerprint = protocol.success ? JSON.stringify({ datasetId, protocol: protocol.data }) : undefined
   async function save() {
-    if (!protocol.success || !fingerprint) return
+    if (!protocol.success || !fingerprint || !compatible) return
     if (request.current?.fingerprint !== fingerprint) request.current = { fingerprint, key: Array.from(crypto.getRandomValues(new Uint8Array(24)), byte => byte.toString(16).padStart(2, '0')).join('') }
     await create.mutateAsync({ datasetId, protocol: protocol.data, idempotencyKey: request.current.key })
     setSaved(fingerprint)
@@ -41,11 +45,21 @@ export function ExperimentBuilder({ datasetId, stageReplay }: { datasetId: strin
         <label className="block">
           <Trans>Evaluation mode</Trans>
           <select className="ml-2 rounded border p-2" value={mode} onChange={event => setMode(event.target.value as typeof mode)}>
-            <option value="comparison">{t`Compare stored readings`}</option>
-            <option value="stage_replay" disabled={!stageReplay}>{t`Replay sleep stages`}</option>
+            <option value="comparison" disabled={waveformReplay}>{t`Compare stored readings`}</option>
+            <option value="stage_replay" disabled={!stageReplay || waveformReplay}>{t`Replay sleep stages`}</option>
+            {waveformReplay ? <option value="signal_replay">{t`Replay retained waveforms`}</option> : null}
           </select>
         </label>
-        {mode === 'stage_replay'
+        {mode === 'signal_replay'
+          ? (
+              <label className="block">
+                <input type="checkbox" checked={waveformStages} onChange={event => setWaveformStages(event.target.checked)} />
+                {' '}
+                <Trans>Also replay sleep stages</Trans>
+              </label>
+            )
+          : null}
+        {stages
           ? (
               <label className="block">
                 <Trans>Assumed calibration quality (0–1)</Trans>
@@ -63,11 +77,11 @@ export function ExperimentBuilder({ datasetId, stageReplay }: { datasetId: strin
           <input type="number" min={-3600000} max={3600000} step={1} value={offset} onChange={event => setOffset(event.target.value)} />
         </label>
         <label className="block">
-          <input type="checkbox" disabled={mode !== 'stage_replay'} checked={uncertainty && mode === 'stage_replay'} onChange={event => setUncertainty(event.target.checked)} />
+          <input type="checkbox" disabled={!stages} checked={uncertainty && stages} onChange={event => setUncertainty(event.target.checked)} />
           {' '}
           <Trans>Estimate exploratory whole-night uncertainty</Trans>
         </label>
-        {uncertainty && mode === 'stage_replay'
+        {uncertainty && stages
           ? (
               <div className="space-y-2">
                 <label className="block">
@@ -87,7 +101,7 @@ export function ExperimentBuilder({ datasetId, stageReplay }: { datasetId: strin
             )
           : null}
         {!protocol.success ? <p role="status"><Trans>Complete the required fields within their stated bounds.</Trans></p> : null}
-        <Button disabled={!protocol.success || saved === fingerprint || (mode === 'stage_replay' && !stageReplay)} onClick={() => void save().catch(() => {})}><Trans>Save evaluation protocol</Trans></Button>
+        <Button disabled={!protocol.success || saved === fingerprint || !compatible} onClick={() => void save().catch(() => {})}><Trans>Save evaluation protocol</Trans></Button>
       </fieldset>
       {create.error ? <InlineError>{create.error.message}</InlineError> : null}
       {create.data

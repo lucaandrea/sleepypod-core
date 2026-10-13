@@ -40,7 +40,7 @@ export function BacktestSubmission({ side, experimentId, datasetId }: { side: 'l
   }
   return (
     <section className="space-y-3" aria-label={t`Backtest submission`}>
-      <p><Trans>The server captures default, current stage-view, and candidate configurations at submission. Stored readings cannot validate numerical parameter changes.</Trans></p>
+      {dataset.data.manifest.version === 'waveform-dataset-manifest-v1' ? <p><Trans>The server pins default, current baseline, and candidate configurations, plus the other side’s configuration. Replay uses retained signals and never replaces original observations.</Trans></p> : <p><Trans>The server captures default, current stage-view, and candidate configurations at submission. Stored readings cannot validate numerical parameter changes.</Trans></p>}
       <p className="break-all font-mono text-xs">{dataset.data.contentHash}</p>
       <fieldset disabled={enqueue.isPending} className="space-y-3">
         {profiles.data.items.length === 0 ? <p><Trans>No saved candidate revisions.</Trans></p> : null}

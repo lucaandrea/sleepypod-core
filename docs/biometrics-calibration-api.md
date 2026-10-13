@@ -224,3 +224,18 @@ Released descriptors remain released; retries never recreate their bytes.
 Create a `signal_replay` experiment using the published dataset, then submit and
 poll a durable backtest. Publication does not start a worker host or activate a
 profile. Host qualification and scheduling remain separate operational gates.
+
+
+The retained-dataset UI exposes **Select recorded waveforms** on available
+processed datasets. It inspects one archive per explicit request, keeps scan
+cursors on deferral, and preserves source selections across pages and nights.
+Every parent cohort requires a selection, with at most 64 source IDs per cohort.
+Publication pins the parent content hash and reuses its request key after a lost
+reply or deferral. Released publication retries are shown as unavailable.
+
+Published waveform datasets offer **Replay retained waveforms** in the protocol
+editor. Sleep-stage replay is optional and requires an explicit calibration
+quality assumption; numerical-only replay does not. Protocol creation and queued
+submission still depend on the separate worker host for execution. The browser
+demo contains no RAW archive fixture or qualified pod telemetry, so its waveform
+operations remain explicitly deferred.
