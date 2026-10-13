@@ -121,3 +121,28 @@ print(json.dumps([canonical_json(v) for v in json.load(sys.stdin)], ensure_ascii
     for (const value of values) expect(JSON.parse(canonicalJson(value))).toEqual(value === 0 ? 0 : value)
   })
 })
+
+it.each([
+  ['wrong object type', { ...defaultConfig, heart_rate: [] }],
+  ['missing required property', { ...defaultConfig, heart_rate: { trackingToleranceBpm: 15 } }],
+  ['null component', { ...defaultConfig, heart_rate: null }],
+  ['wrong contract version', { ...defaultConfig, sleep_stages: { ...defaultConfig.sleep_stages, version: 99 } }],
+])('rejects %s instead of silently filling an immutable snapshot', (_reason, config) => {
+  expect(() => validateConfig(config)).toThrow()
+})
+it.each([
+  { path: 'heart_rate.trackingToleranceBpm', value: 4 },
+  { path: 'heart_rate.trackingToleranceBpm', value: 31 },
+  { path: 'sleep_stages.ruleset.smoothIsolatedEpochs', value: 1 },
+  { path: 'sleep_stages.ruleset.rules', value: {} },
+  { path: 'sleep_stages.ruleset.rules', value: [null] },
+  { path: 'sleep_stages.ruleset.rules', value: [{ stage: 'wake' }] },
+  { path: '', value: 1 },
+  { path: 'heart_rate.trackingToleranceBpm', value: 15, extra: true },
+])('rejects malformed override $path with value $value', (override) => {
+  expect(() => resolveConfig([override])).toThrow()
+})
+it('bounds override intake before resolving or mutating defaults', () => {
+  expect(() => resolveConfig(Array.from({ length: 65 }, () => ({ path: 'heart_rate.trackingToleranceBpm', value: 15 })))).toThrow('maximum 64')
+  expect(defaultConfig.heart_rate.trackingToleranceBpm).toBe(15)
+})

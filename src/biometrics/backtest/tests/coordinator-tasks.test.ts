@@ -1,5 +1,11 @@
 // @vitest-environment node
 import Database from 'better-sqlite3'
+import { build } from 'esbuild'
+import { BacktestJobStore } from '../jobs'
+import { DatasetStore } from '../datasets'
+import { workerBuildHash } from '../child'
+import { backtestFixture } from './fixtures/backtest'
+import { datasetManifestSchema } from '../contracts'
 import { drizzle } from 'drizzle-orm/better-sqlite3'
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator'
 import { mkdtempSync, realpathSync, rmSync } from 'node:fs'
@@ -148,5 +154,51 @@ it('cancels collection after a failed health recheck and clears supervision', as
   await vi.advanceTimersByTimeAsync(5000)
   expect(await running).toBeNull()
   expect(aborted).toBe(true)
+  expect(vi.getTimerCount()).toBe(0)
+})
+
+it('dispatches a retained evaluation through publication, paged traces and hash-fenced release', async () => {
+  const start = 1791673200000
+  db.insert(schema.sleepRecords).values({ id: 1, side: 'left', enteredBedAt: new Date(start), leftBedAt: new Date(start + 600000), sleepDurationSeconds: 600, timesExitedBed: 0 }).run()
+  db.insert(schema.vitals).values({ side: 'left', timestamp: new Date(start), heartRate: 65 }).run()
+  const dataset = new DatasetStore(db).create({ side: 'left', subjectId: 'fixture', sessionIds: [1], referenceImportIds: [], timezone: 'UTC', idempotencyKey: 'evaluation' })
+  const fixture = backtestFixture().job
+  const experiment = await execute({ type: 'createExperiment', input: { datasetId: dataset.id, protocol: fixture.protocol, idempotencyKey: 'experiment' } }) as { id: string }
+  const workerPath = join(directory, 'worker.cjs')
+  await build({ entryPoints: ['src/biometrics/backtest/worker-entry.ts'], outfile: workerPath, bundle: true, platform: 'node', target: 'node22', format: 'cjs' })
+  const jobs = new BacktestJobStore(db)
+  const job = jobs.enqueue({ experimentId: experiment.id, evaluatorBuildHash: await workerBuildHash(workerPath), configs: fixture.configs, split: 'tuning', idempotencyKey: 'job' })
+  const before = sqlite.prepare('SELECT * FROM vitals').all()
+  expect(await performCoordinatorTask(db, { type: 'execute', owner: 'test' }, { workerPath, signal: controller.signal, admit })).toEqual({ state: 'succeeded', jobId: job.id })
+  const result = await execute({ type: 'readResult', input: { id: job.id } }) as NonNullable<ReturnType<BacktestJobStore['result']>>
+  expect(result.available).toBe(true)
+  expect(await execute({ type: 'readSummary', input: { id: job.id } })).toMatchObject({ contentHash: result.contentHash, contentHashScope: 'complete_retained_report' })
+  const trace = { id: job.id, configuration: 'default' as const, expectedContentHash: result.contentHash }
+  expect(await execute({ type: 'readTrace', input: trace })).toMatchObject({ provenance: 'versioned_stage_replay', downsampled: false })
+  await expect(execute({ type: 'readNumericTrace', input: { ...trace, expectedContentHash: 'f'.repeat(64) } })).rejects.toMatchObject({ code: 'REVISION_CONFLICT' })
+  const cohortId = datasetManifestSchema.parse(dataset.manifest).splitProtocol.assignments[0].cohortId
+  expect(await execute({ type: 'readReferenceTrace', input: { id: job.id, expectedContentHash: result.contentHash, cohortId, metric: 'heart_rate' } })).toMatchObject({ totalItems: 0, items: [], provenance: 'frozen_dataset_reference' })
+  await expect(execute({ type: 'releaseResult', input: { id: job.id, expectedContentHash: 'f'.repeat(64) } })).rejects.toMatchObject({ code: 'REVISION_CONFLICT' })
+  expect(await execute({ type: 'releaseResult', input: { id: job.id, expectedContentHash: result.contentHash } })).toMatchObject({ available: false, report: null })
+  await expect(execute({ type: 'readTrace', input: trace })).rejects.toMatchObject({ code: 'RESULT_RELEASED' })
+  expect(sqlite.prepare('SELECT * FROM vitals').all()).toEqual(before)
+})
+
+it('does not overlap slow health rechecks and waits for a pending denial before committing inspection', async () => {
+  vi.useFakeTimers()
+  let resolveHealth!: (allowed: boolean) => void
+  admit.mockResolvedValueOnce(true).mockImplementation(() => new Promise((resolve) => {
+    resolveHealth = resolve
+  }))
+  let resolveScan!: (result: Awaited<ReturnType<typeof runRawInspectionChild>>) => void
+  vi.mocked(runRawInspectionChild).mockImplementation(() => new Promise((resolve) => {
+    resolveScan = resolve
+  }))
+  const running = scan()
+  await vi.advanceTimersByTimeAsync(15000)
+  expect(admit).toHaveBeenCalledTimes(2)
+  resolveScan({ status: 'complete', nextCursor: null })
+  resolveHealth(false)
+  expect(await running).toEqual(deferred)
   expect(vi.getTimerCount()).toBe(0)
 })

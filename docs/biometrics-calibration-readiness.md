@@ -7,7 +7,7 @@ of improved accuracy or authorization to promote an algorithm.
 
 ## Validation recorded on October 13, 2026
 
-- Full Vitest run at `a85dff77`: 6,819 passed, 18 skipped; 476 files passed,
+- Full CI Vitest run at `cb39444b`: 6,856 passed, 18 skipped; 480 files passed,
   one skipped. Skips are not counted as verified behavior.
 - Locked piezo environment: 203 piezo/shared numerical tests passed; the separate
   common-module suite passed 415 tests with five skipped.
@@ -43,7 +43,7 @@ acceptance is separate from fixture and browser results.
 | Isolated generated code and reviewed promotion | [External experiment contracts and real-Docker checks](../scripts/algorithm-experiments/README.md), [shadow admission tests](../src/biometrics/shadow/tests/admission.test.ts), [promotion registry tests](../src/biometrics/profiles/tests/qualification-registry.test.ts) |
 | Target-pod operational behavior | [Measurements and limitations](biometrics-replay-benchmark.md); deployment and live measurement status below |
 
-## Rollout status and outstanding evidence
+## Delivery and qualification status
 
 - The current eight-hour replay and 30-minute synthetic shadow supervisor runs
   completed successfully; their receipts are linked in the measurement document.
@@ -61,9 +61,11 @@ acceptance is separate from fixture and browser results.
 - [PR #824](https://github.com/sleepypod/core/pull/824) is pushed against `dev`.
   CodeRabbit full review was requested, but the provider skipped it because
   the PR exceeds its 100-file review limit. No completed CodeRabbit review is claimed.
-- Build, lint, typecheck, unit, browser and all Python jobs passed at `b4b6fd1d`.
-  Patch coverage remained below the required gate; new direct coordinator and host
-  lifecycle tests address missing coverage without lowering the threshold.
+- Build, lint, typecheck, unit, browser and all Python jobs passed at `8909f305`.
+  The patch-coverage gate passed at 86.47%, within the repository's existing
+  eight-point margin below its 88.93% target. No coverage threshold was changed.
+  Direct coordinator and host tests cover admission, cancellation, retention,
+  error sanitization and resource ownership.
 
 Legacy reference availability alone does not establish independent nights, metric
 compatibility, reference reliability or sufficient held-out support. No accuracy
