@@ -1,5 +1,7 @@
 import { pathToFileURL } from 'node:url'
 import { z } from 'zod'
+import { runManagedFiles } from './managed-files'
+import { experimentPolicySchema as policySchema } from './policy'
 import { comparePackageOutputs } from './comparison'
 import { runPackageFixtures } from './fixtures'
 import { packageInputHash } from './input'
@@ -9,13 +11,14 @@ import { checkPackageDeterminism } from './determinism'
 import { publishJson, readJsonFile, readJsonLines, readPackageProposal } from './files'
 
 const positive = z.number().int().positive().max(Number.MAX_SAFE_INTEGER)
-const policySchema = z.object({ image: z.string().regex(/^sha256:[a-f0-9]{64}$/), maximumWallMs: positive.max(3600000),
-  maximumMemoryBytes: positive, maximumProcesses: positive, maximumOutputBytes: positive, maximumInputBytes: positive,
-}).strict()
-const usage = 'Usage: compare INPUT OUTPUT | fixtures PROPOSAL SUITE POLICY OUTPUT | lock IMAGE OUTPUT | input-hash FRAMES MAX_BYTES OUTPUT | inspect PROPOSAL OUTPUT | run PROPOSAL REQUEST FRAMES POLICY OUTPUT | determinism PROPOSAL REQUEST FRAMES POLICY REPETITIONS OUTPUT'
+const usage = 'Usage: managed WORKSPACE DESCRIPTOR RECEIPT | compare INPUT OUTPUT | fixtures PROPOSAL SUITE POLICY OUTPUT | lock IMAGE OUTPUT | input-hash FRAMES MAX_BYTES OUTPUT | inspect PROPOSAL OUTPUT | run PROPOSAL REQUEST FRAMES POLICY OUTPUT | determinism PROPOSAL REQUEST FRAMES POLICY REPETITIONS OUTPUT'
 
 export async function runExperimentCli(args: string[]) {
   const [command, ...paths] = args
+  if (command === 'managed' && paths.length === 3) {
+    await publishJson(paths[2], await runManagedFiles(paths[0], paths[1]))
+    return
+  }
   if (command === 'compare' && paths.length === 2) {
     await publishJson(paths[1], comparePackageOutputs(readJsonFile(paths[0], 32 * 1024 * 1024)))
     return

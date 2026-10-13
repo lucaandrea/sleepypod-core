@@ -270,8 +270,8 @@ publishing its decision.
 
 The exploratory `run`, `compare`, `determinism`, and `fixtures` commands do not
 claim studies through this ledger and cannot issue independent-holdout promotion
-evidence. `runManagedTrial` integrates it as described below; file-based managed
-commands and final qualification/installation orchestration remain to be added.
+evidence. `runManagedTrial` and the `managed` command integrate it as described
+below; final qualification/installation orchestration remains to be added.
 
 ## Managed whole-night runner
 
@@ -305,3 +305,44 @@ resource assessments, deterministic/noise/compatibility evidence and reviewed
 release admission. The runner does not install packages or claim pod fitness.
 Hard process termination can still leave orphan containers/artifacts; durable
 cleanup and the final qualification controller remain required.
+
+## Managed descriptor command
+
+```sh
+pnpm biometrics:experiment managed ./experiment-workspace descriptor.json receipt.json
+```
+
+The command creates a private workspace (0700) containing a dedicated
+`experiments.sqlite` (0600) and private `reports/`. Reuse the same workspace
+across studies; deleting or replacing it destroys the exposure history needed
+for future decisions. Existing public directories, symlinked workspace/report
+paths, symlinked database/sidecar files, and foreign databases are rejected.
+No pod database is opened or migrated.
+
+A descriptor uses `biometric-managed-descriptor-v1` with:
+
+- `study`: the frozen `biometric-package-study-v1`, including all chronological
+  night assignments and their input/reference hashes.
+- `protocol`: the exact managed protocol whose canonical hash is the study's
+  `protocolHash`.
+- `split` and an `idempotencyKey` for this exact trial.
+- `variants`: exactly `default`, `current`, and `candidate`, each specifying
+  `proposal` (file path), `config`, `seed`, and the operator execution `policy`.
+- `nights`: exactly the selected split's night IDs, each with `frames` (JSONL
+  path) and `referenceImport` (raw reference-import JSON path).
+
+Relative source paths resolve from the descriptor's directory. The descriptor
+is operator-owned input, not candidate-provided instructions. Source files must
+pass the bounded regular-file reader. Study reference hashes use the shared
+`previewReferenceImport(...).summary.contentHash`; input hashes use
+`packageInputHash`. Keep retained sources and proposals alongside the study for
+reproducibility; metadata alone does not prove a complete night or subject
+identity.
+
+Night files are opened only after the ledger records exposure. The receipt
+contains the winning trial/report identity, report path and current ledger
+evidence. Repeating an unchanged completed descriptor verifies and reuses its
+report without rereading night files. Reusing its idempotency key with changed
+configuration or study fails. Review current exposure again at any later
+promotion decision, since other trials can invalidate first-use evidence.
+A receipt is not an installation or qualification approval.

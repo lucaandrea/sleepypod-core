@@ -1,7 +1,7 @@
 // @vitest-environment node
 import Database from 'better-sqlite3'
 import { createHash } from 'node:crypto'
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, writeFile, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { beforeAll, describe, expect, it } from 'vitest'
@@ -11,6 +11,7 @@ import { packageFixture } from '../../src/biometrics/packages/tests/fixture'
 import { inspectPythonEnvironment } from './environment'
 import { packageInputHash } from './input'
 import { PackageExperimentLedger } from './ledger'
+import { runManagedFiles } from './managed-files'
 import { runManagedTrial } from './managed'
 import { fixtureResourceTestPolicy } from './resource-test-policy'
 const image = process.env.BIOMETRIC_EXPERIMENT_TEST_IMAGE
@@ -77,6 +78,39 @@ describe.skipIf(!image)('managed package trials through real Docker', () => {
       const second = ledger.reserveTrial(input.request, 'second')
       ledger.claim(second, 30000)
       expect(ledger.currentEvidence(input.trialId).uniqueHoldoutAttempt).toBe(false)
+    }
+    finally {
+      db.close()
+      await rm(root, { recursive: true, force: true })
+    }
+  }, 30000)
+  it('runs a managed descriptor through persistent storage and reuses it without reopening night files', async () => {
+    const db = new Database(':memory:'), root = await mkdtemp(join(tmpdir(), 'managed-files-test-'))
+    try {
+      const ledger = new PackageExperimentLedger(db), input = fixture(ledger)
+      const variant = input.variants[0]
+      const proposal = { schema: 'biometric-package-proposal-v1', manifest: variant.manifest,
+        files: [...variant.files].map(([path, bytes]) => ({ path, base64: bytes.toString('base64') })) }
+      const descriptor = { schema: 'biometric-managed-descriptor-v1', study: ledger.study(input.request.studyId), protocol: input.protocol,
+        split: 'holdout', idempotencyKey: 'managed-files',
+        variants: input.variants.map(variant => ({ label: variant.label, proposal: 'proposal.json', config: variant.config, seed: variant.seed, policy: variant.policy })),
+        nights: [{ id: 'night', frames: 'frames.jsonl', referenceImport: 'references.json' }] }
+      await writeFile(join(root, 'proposal.json'), JSON.stringify(proposal))
+      await writeFile(join(root, 'descriptor.json'), JSON.stringify(descriptor))
+      await writeFile(join(root, 'references.json'), JSON.stringify(input.referenceImport))
+      await writeFile(join(root, 'frames.jsonl'), input.frames.map(frame => JSON.stringify(frame)).join('\n'))
+      const workspace = join(root, 'workspace')
+      const first = await runManagedFiles(workspace, join(root, 'descriptor.json'))
+      expect(first).toMatchObject({ state: 'succeeded', currentEvidence: { uniqueHoldoutAttempt: true } })
+      expect((await stat(join(workspace, 'experiments.sqlite'))).mode & 0o777).toBe(0o600)
+      expect(dataHash(JSON.parse(await readFile(first.reportFile, 'utf8')))).toBe(first.reportHash)
+      await rm(join(root, 'frames.jsonl'))
+      await rm(join(root, 'references.json'))
+      const repeated = await runManagedFiles(workspace, join(root, 'descriptor.json'))
+      expect(repeated).toMatchObject({ state: 'already_completed', trialId: first.trialId, reportHash: first.reportHash })
+      descriptor.variants[2].config.offset++
+      await writeFile(join(root, 'descriptor.json'), JSON.stringify(descriptor))
+      await expect(runManagedFiles(workspace, join(root, 'descriptor.json'))).rejects.toThrow('idempotency conflict')
     }
     finally {
       db.close()
