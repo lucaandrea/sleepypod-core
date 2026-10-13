@@ -8,7 +8,7 @@ import { normalizeReferenceImport } from '../../src/biometrics/references/normal
 import { referenceImportSchema, timestampMsSchema } from '../../src/biometrics/references/contracts'
 
 const hash = z.string().regex(/^[a-f0-9]{64}$/)
-const inputSchema = z.object({
+export const packageComparisonInputSchema = z.object({
   schema: z.literal('biometric-package-comparison-v1'), metricId: z.string().min(1).max(100),
   startMs: timestampMsSchema, endMs: timestampMsSchema, minimumQuality: z.number().min(0).max(1),
   referenceImport: referenceImportSchema,
@@ -27,7 +27,7 @@ const inputSchema = z.object({
  * attest execution provenance or independent holdout use; promotion must use
  * the authoritative experiment store and reviewed qualification pipeline. */
 export function comparePackageOutputs(raw: unknown) {
-  const input = inputSchema.parse(raw)
+  const input = packageComparisonInputSchema.parse(raw)
   if (new Set(input.outputs.map(output => output.label)).size !== 3) throw new Error('Default, current and candidate outputs are required')
   const reference = normalizeReferenceImport(input.referenceImport)
   let commonInput: string | undefined

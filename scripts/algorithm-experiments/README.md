@@ -295,9 +295,9 @@ then the ledger's live attempt fence selects the winning report. Heartbeats and
 checks between expensive steps renew leases; lost leases abort active execution
 or reject publication. Failures retain partial-night evidence and exposure.
 An old worker may leave an unreferenced artifact but cannot overwrite the winning
-ledger pointer. Restarted completed trials verify the existing report hash and
-identity before reusing it and never silently reread holdout input. Missing or
-corrupted reports fail rather than trigger a new evaluation.
+ledger pointer. Restarted completed trials verify the complete retained report graph before
+reusing it and never silently reread holdout input. Missing or corrupted
+per-night artifacts fail rather than trigger a new evaluation.
 
 A successful run means the evaluation completed, not that its candidate passed
 all promotion criteria. Check current ledger exposure, coverage, uncertainty,
@@ -369,3 +369,24 @@ access still counted. This sweep does not delete retained reports or staging
 files, and is not a background supervisor: the external host must schedule it.
 Host clock correctness is required for absolute expiry. Storage quotas and
 abandoned private staging-file cleanup remain separate work.
+
+## Retained evidence verification
+
+`readManagedEvidence(ledger, trialId, reportDirectory)` starts from the successful
+ledger-selected report hash. It verifies every linked night artifact, exact
+study/request/protocol/attempt identities, the complete selected-night set,
+reference content and subject/side, all three package/configuration/input/image
+identities, and declared resource limits. It recomputes reference comparisons,
+resource assessments and whole-night uncertainty, requiring both the per-night
+and top-level summaries to match those calculations. Updating hashes around an
+altered score does not make that score valid.
+
+Completed managed runs use this verifier before returning a cached result. It
+reads reports only, without rerunning candidate code or reopening retained raw
+night inputs. The returned evidence includes a fresh ledger exposure snapshot;
+later overlapping access can invalidate a previously unique holdout attempt.
+This does not prove that a local administrator has never replaced the ledger or
+fabricated raw execution records. The experiment host and its retained history
+remain trusted. Qualification must recheck current exposure when publishing its
+decision and still requires objective criteria, determinism, representative
+fixtures, compatibility, target-pod resources and reviewed release promotion.

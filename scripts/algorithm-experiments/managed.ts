@@ -1,10 +1,12 @@
+import { readManagedEvidence } from './managed-evidence'
+import { managedProtocolSchema } from './managed-protocol'
+export { managedProtocolSchema } from './managed-protocol'
 import { createHash } from 'node:crypto'
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { z } from 'zod'
 import { configHash, dataHash } from '../../src/biometrics/algorithms/canonical'
 import { createNightUncertainty } from '../../src/biometrics/backtest/uncertainty-core'
-import { nightBootstrapSchema } from '../../src/biometrics/backtest/uncertainty-policy'
 import { verifyAlgorithmPackage } from '../../src/biometrics/packages/manifest'
 import { signalFrameSchema } from '../../src/biometrics/packages/protocol'
 import { referenceImportSchema } from '../../src/biometrics/references/contracts'
@@ -12,16 +14,9 @@ import { previewReferenceImport } from '../../src/biometrics/references/normaliz
 import { executePackageExperiment, type ExperimentPolicy } from './container'
 import type { PackageExperimentLedger } from './ledger'
 import { comparePackageOutputs } from './comparison'
-import { assessPackageResources, packageResourcePolicySchema } from './resource-assessment'
-import { publishJson, readJsonFile } from './files'
+import { assessPackageResources } from './resource-assessment'
+import { publishJson } from './files'
 
-export const managedProtocolSchema = z.object({ schema: z.literal('biometric-managed-protocol-v1'),
-  hardwareId: z.string().min(1).max(100), sampleRateHz: z.number().int().positive(), metricId: z.string().min(1).max(100),
-  minimumQuality: z.number().min(0).max(1),
-  alignment: z.object({ version: z.literal('reference-alignment-v1'), pointToleranceMs: z.number().int().min(0).max(300000),
-    clockOffsetMs: z.number().int().min(-3600000).max(3600000), offsetSource: z.enum(['fixed', 'training']) }).strict(),
-  uncertainty: nightBootstrapSchema, resourcePolicy: packageResourcePolicySchema,
-}).strict()
 interface Variant {
   label: 'default' | 'current' | 'candidate'
   manifest: unknown
@@ -44,11 +39,8 @@ export async function runManagedTrial(options: {
 }) {
   const trial = options.ledger.trial(options.trialId)
   if (trial.state === 'succeeded') {
-    const reportHash = z.string().regex(/^[a-f0-9]{64}$/).parse(trial.report_hash)
-    const report = readJsonFile(join(options.reportDirectory, `${reportHash}.json`), 32 * 1024 * 1024)
-    const identity = z.object({ schema: z.literal('biometric-managed-trial-v1'), trialId: z.string(), attemptId: z.string() }).parse(report)
-    if (dataHash(report) !== reportHash || identity.trialId !== trial.id || identity.attemptId !== trial.attempt_id) throw new Error('Retained trial report integrity mismatch')
-    return { state: 'already_completed' as const, reportHash }
+    const evidence = readManagedEvidence(options.ledger, trial.id, options.reportDirectory)
+    return { state: 'already_completed' as const, reportHash: evidence.reportHash }
   }
   const study = options.ledger.study(trial.request.studyId)
   const protocol = managedProtocolSchema.parse(structuredClone(options.protocol))

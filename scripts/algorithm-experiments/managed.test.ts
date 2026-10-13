@@ -13,6 +13,7 @@ import { packageInputHash } from './input'
 import { PackageExperimentLedger } from './ledger'
 import { runManagedFiles } from './managed-files'
 import { runManagedTrial } from './managed'
+import { readManagedEvidence } from './managed-evidence'
 import { fixtureResourceTestPolicy } from './resource-test-policy'
 const image = process.env.BIOMETRIC_EXPERIMENT_TEST_IMAGE
 let environmentBytes: Buffer<ArrayBuffer>
@@ -72,12 +73,46 @@ describe.skipIf(!image)('managed package trials through real Docker', () => {
       expect(night.outputs).toHaveLength(3)
       expect(await runManagedTrial(options)).toEqual({ state: 'already_completed', reportHash: result.reportHash })
       expect(loads).toBe(1)
+      expect(readManagedEvidence(ledger, input.trialId, root)).toMatchObject({
+        reportHash: result.reportHash, currentEvidence: { uniqueHoldoutAttempt: true },
+      })
+      // A valid top-level hash does not excuse a missing or corrupted child.
+      const childPath = join(root, `${report.nights[0].reportHash}.json`)
+      await rm(childPath)
+      await expect(runManagedTrial(options)).rejects.toThrow()
+      await writeFile(childPath, JSON.stringify({ ...night, outputs: [] }))
+      await expect(runManagedTrial(options)).rejects.toThrow('integrity mismatch')
+      await writeFile(childPath, JSON.stringify(night))
+      // Even a rehashed report graph cannot substitute a derived score. The
+      // verifier recomputes from the retained outputs and frozen protocol.
+      const forgedChild = structuredClone(night)
+      forgedChild.comparison.comparisons[0].differences.commonMae = -999
+      const forgedChildHash = dataHash(forgedChild)
+      await writeFile(join(root, `${forgedChildHash}.json`), JSON.stringify(forgedChild))
+      const forged = structuredClone(report)
+      forged.nights[0].reportHash = forgedChildHash
+      forged.nights[0].comparison = forgedChild.comparison
+      const forgedHash = dataHash(forged)
+      await writeFile(join(root, `${forgedHash}.json`), JSON.stringify(forged))
+      db.prepare('UPDATE package_trials SET report_hash = ? WHERE id = ?').run(forgedHash, input.trialId)
+      expect(() => readManagedEvidence(ledger, input.trialId, root)).toThrow('night comparison integrity')
+      // Retained request/uncertainty substitutions are rejected independently.
+      for (const replacement of [{ ...report, uncertainty: [] }, { ...report, request: { ...report.request, split: 'tuning' } }]) {
+        const replacementHash = dataHash(replacement)
+        await writeFile(join(root, `${replacementHash}.json`), JSON.stringify(replacement))
+        db.prepare('UPDATE package_trials SET report_hash = ? WHERE id = ?').run(replacementHash, input.trialId)
+        expect(() => readManagedEvidence(ledger, input.trialId, root)).toThrow('integrity mismatch')
+      }
+      db.prepare('UPDATE package_trials SET report_hash = ? WHERE id = ?').run(result.reportHash, input.trialId)
       await writeFile(join(root, `${result.reportHash}.json`), JSON.stringify({ ...report, trialId: 'changed' }))
       await expect(runManagedTrial(options)).rejects.toThrow('integrity mismatch')
       expect(loads).toBe(1)
+      await writeFile(join(root, `${result.reportHash}.json`), JSON.stringify(report))
       const second = ledger.reserveTrial(input.request, 'second')
       ledger.claim(second, 30000)
       expect(ledger.currentEvidence(input.trialId).uniqueHoldoutAttempt).toBe(false)
+      expect(readManagedEvidence(ledger, input.trialId, root).currentEvidence.uniqueHoldoutAttempt).toBe(false)
+      expect(loads).toBe(1)
     }
     finally {
       db.close()
