@@ -328,3 +328,30 @@ additive JSON field, requiring no schema migration or canonical-vitals write.
 Polling cadence, final-drain polling, runtime admission/context, connection
 replacement detection, resource receipts and service/API wiring remain host
 integration work; this reader alone does not enable a prospective run.
+
+## Composed live sources and drain polling
+
+`openShadowLiveSources` establishes the active-reader watermark before subscribing
+to prospective waveform input. It polls the read-only reader on an explicit
+10–1000 ms cadence, strictly shorter than the frozen join lateness, and exposes
+`flush()` for synchronous polling before the controller seals join timestamps.
+`runShadowAttempt` invokes that flush on every heartbeat and at final drain;
+commits arriving between the last timer poll and completion are included. Flush,
+active delivery and database-identity checks must be synchronous. Their failures
+terminate the attempt rather than acknowledge an incomplete read.
+
+Waveform collection ends at the observation boundary while active polling remains
+available during drain. Abort, source disconnect, poll failure and explicit close
+remove both subscriptions/timers. Source teardown does not own the SQLite handle.
+The host closes that handle afterward.
+
+`openShadowActiveDatabase` opens an existing regular file read-only with an
+explicit bounded busy timeout. It checks the path's device/inode identity before
+and after opening and supplies `assertCurrent` to the composed source. Replacement,
+removal, a symlink or a closed connection stops capture instead of reading the old
+file indefinitely. Paths remain trusted host configuration, never caller input.
+
+These pieces still require the production context provider, installed build and
+qualification admission, frozen execution budgets/receipts, orphan recovery and
+service/API registration. No production defaults or qualified registry entries
+are inferred by composing the sources.

@@ -10,6 +10,8 @@ import { runShadowChild, type ShadowChildBudgets } from './worker-child'
 type Plan = ReturnType<ShadowStore['get']>['plan']
 export interface ShadowSources {
   frames: AsyncIterable<unknown>
+  /** Poll committed active observations before sealing join timestamps. */
+  flush?(): void
   /** Unsubscribe both streams synchronously, including on failed startup. */
   close(): void
 }
@@ -93,6 +95,12 @@ export async function runShadowAttempt(store: ShadowStore, runId: string, host: 
       store.renew(lease, host.leaseMs)
     }
     const advance = () => {
+      const flushed: unknown = sources?.flush?.()
+      if (flushed !== undefined) {
+        void Promise.resolve(flushed).catch(() => {})
+        throw new Error('Shadow source flush must complete synchronously')
+      }
+      if (failure) throw failure
       if (join.advance(Date.now()).stopped) stop('storage_quota', 'stopped')
     }
     heartbeat = setInterval(() => {
@@ -194,6 +202,17 @@ export async function runShadowAttempt(store: ShadowStore, runId: string, host: 
     throw failure
   }
   if (!receipt) throw new Error('Shadow worker receipt missing')
-  store.finish(lease, 'completed', 'observation_window_complete')
+  try {
+    store.finish(lease, 'completed', 'observation_window_complete')
+  }
+  catch (error) {
+    // A synchronous final read/cleanup can outlast the remaining lease even
+    // when its admission check succeeds. Cleanup is complete; fence the failure.
+    try {
+      store.failExpired(lease, 'shadow_completion_lease_lost')
+    }
+    catch { /* Preserve the original completion error. */ }
+    throw error
+  }
   return { lease, receipt, run: store.get(runId) }
 }

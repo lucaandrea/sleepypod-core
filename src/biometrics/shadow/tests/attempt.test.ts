@@ -239,3 +239,40 @@ it('rejects future active timestamps before buffering them', async () => {
   await rejected
   expect(store.get(run.id)).toMatchObject({ state: 'failed', point_count: 0 })
 })
+it('flushes active observations before sealing the final drain', async () => {
+  const { store, run, host, active } = setup()
+  const open = host.openSources
+  let emitted = false
+  host.openSources = input => ({ ...open(input), flush: () => {
+    if (!emitted && Date.now() >= start + 2100) {
+      active(start + 1999)
+      emitted = true
+    }
+  } })
+  const task = runShadowAttempt(store, run.id, host)
+  await vi.advanceTimersByTimeAsync(2101)
+  await task
+  expect(store.get(run.id)).toMatchObject({ state: 'completed', point_count: 2 })
+  expect(store.snapshot(run.id, { maximumPoints: 10, maximumBytes: 10000 }).samples[1]).toMatchObject({ timestampMs: start + 1999, pairing: { activePresent: true, candidatePresent: false } })
+})
+it('refuses asynchronous final-drain polling', async () => {
+  const { store, run, host } = setup()
+  const open = host.openSources
+  host.openSources = input => ({ ...open(input), flush: async () => {} })
+  const task = runShadowAttempt(store, run.id, host)
+  const rejected = expect(task).rejects.toThrow(/admission_or_lease_lost/)
+  await vi.advanceTimersByTimeAsync(200)
+  await rejected
+  expect(store.get(run.id).state).toBe('failed')
+})
+it('records lease expiry during final cleanup as failure rather than leaving a running attempt', async () => {
+  const { store, run, host, close } = setup()
+  close.mockImplementation(() => {
+    vi.setSystemTime(start + 3000)
+  })
+  const task = runShadowAttempt(store, run.id, host)
+  const rejected = expect(task).rejects.toThrow(/Stale shadow lease/)
+  await vi.advanceTimersByTimeAsync(2101)
+  await rejected
+  expect(store.get(run.id)).toMatchObject({ state: 'failed', reason: 'shadow_completion_lease_lost' })
+})

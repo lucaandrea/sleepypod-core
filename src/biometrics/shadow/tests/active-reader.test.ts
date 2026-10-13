@@ -3,19 +3,25 @@ import Database from 'better-sqlite3'
 import { drizzle } from 'drizzle-orm/better-sqlite3'
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator'
 import { randomUUID } from 'node:crypto'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, rmSync, renameSync, copyFileSync, symlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { afterEach, expect, it } from 'vitest'
+import { afterEach, expect, it, vi } from 'vitest'
 import { biometricManifest, defaultConfig, manifestHash } from '../../algorithms/registry'
 import { configHash } from '../../algorithms/canonical'
+import { openShadowActiveDatabase } from '../active-database'
+import { openShadowLiveSources } from '../live-sources'
+import { publishProspectiveFrame } from '../../../streaming/prospectiveFrameTap'
 import { ShadowActiveReader } from '../active-reader'
 import { ShadowStore } from '../store'
 import { ShadowStreamJoin } from '../stream-join'
 const start = 1700000000000, hash = configHash(defaultConfig)
 const cleanups: (() => void)[] = []
-afterEach(() => cleanups.splice(0).forEach(cleanup => cleanup()))
+afterEach(() => {
+  cleanups.splice(0).forEach(cleanup => cleanup())
+  vi.useRealTimers()
+})
 function setup(maximumRows = 10) {
   const directory = mkdtempSync(join(tmpdir(), 'shadow-active-')), path = join(directory, 'biometrics.db')
   const writer = new Database(path)
@@ -40,7 +46,7 @@ function setup(maximumRows = 10) {
     writer.prepare('INSERT INTO vitals_quality (vitals_id,side,timestamp,quality_score,created_at) VALUES (?,?,?,0.9,?)').run(id, side, start / 1000 + seconds, start / 1000 + seconds)
     return id
   }
-  return { writer, readonly, runId, bundle, options, reader, insert, advance: (milliseconds: number) => {
+  return { writer, readonly, path, runId, bundle, options, reader, insert, advance: (milliseconds: number) => {
     now += milliseconds
   } }
 }
@@ -134,4 +140,110 @@ it.each(['manifestHash', 'components', 'sourceHashes', 'resolved'])('rejects sub
   writer.prepare('UPDATE biometric_processing_runs SET bundle=?').run(JSON.stringify(bundle))
   // Failed validation did not advance the cursor or hide this observation.
   expect(capture.poll()).toHaveLength(1)
+})
+function liveSetup() {
+  vi.useFakeTimers()
+  vi.setSystemTime(start)
+  const fixture = setup()
+  const controller = new AbortController(), active = vi.fn(), fail = vi.fn(), databaseCurrent = vi.fn()
+  const options = { db: fixture.readonly, side: 'left' as const, startMs: start, endMs: start + 10000, activeConfigHash: hash,
+    maximumActiveRows: 10, maximumLatenessMs: 100, pollMs: 50,
+    frameBudgets: { maximumFrames: 2, maximumBytes: 10000, maximumEventAgeMs: 1000, maximumFutureSkewMs: 0 },
+    context: () => ({ activeSides: ['left'], leftOccupied: true, rightOccupied: false, pumpContextKnown: false }),
+    assertDatabaseCurrent: databaseCurrent, signal: controller.signal, active, fail }
+  const open = () => {
+    const source = openShadowLiveSources(options)
+    // Close subscribers before the owning database connections in afterEach.
+    cleanups.unshift(source.close)
+    return source
+  }
+  return { ...fixture, controller, active, fail, databaseCurrent, options, open }
+}
+it('composes real waveform capture and read-only active polling with an explicit final flush', async () => {
+  const { insert, open, active, fail } = liveSetup()
+  insert()
+  const source = open(), frames = source.frames[Symbol.asyncIterator]()
+  const frame = frames.next()
+  publishProspectiveFrame({ type: 'piezo-dual', ts: start / 1000, freq: 500, left1: [1, 2], right1: [3, 4] }, false, start)
+  expect((await frame).value).toMatchObject({ observedAtMs: start, context: { activeSides: ['left'] } })
+  expect(active).not.toHaveBeenCalled()
+  await vi.advanceTimersByTimeAsync(1000)
+  insert(1)
+  source.flush?.()
+  expect(active).toHaveBeenCalledOnce()
+  expect(active.mock.calls[0][0]).toMatchObject({ timestampMs: start + 1000 })
+  await vi.advanceTimersByTimeAsync(50)
+  expect(active).toHaveBeenCalledOnce()
+  expect(fail).not.toHaveBeenCalled()
+})
+it('keeps active polling available during final drain after waveform collection ends', async () => {
+  const { insert, open, active, fail } = liveSetup()
+  const source = open(), frames = source.frames[Symbol.asyncIterator]()
+  const done = frames.next()
+  await vi.advanceTimersByTimeAsync(10000)
+  expect((await done).done).toBe(true)
+  insert(9)
+  source.flush?.()
+  expect(active.mock.calls[0][0]).toMatchObject({ timestampMs: start + 9000 })
+  expect(fail).not.toHaveBeenCalled()
+})
+it('closes both captures on a database identity failure without delivering old-connection data', async () => {
+  const { insert, open, active, fail, databaseCurrent } = liveSetup()
+  const source = open(), frames = source.frames[Symbol.asyncIterator]()
+  const pending = frames.next()
+  insert()
+  databaseCurrent.mockImplementation(() => {
+    throw new Error('database inode changed')
+  })
+  await vi.advanceTimersByTimeAsync(50)
+  expect((await pending).done).toBe(true)
+  expect(active).not.toHaveBeenCalled()
+  expect(fail).toHaveBeenCalledOnce()
+  expect(vi.getTimerCount()).toBe(0)
+})
+it('clears polling and subscriptions on abort and refuses asynchronous delivery', async () => {
+  const fixture = liveSetup()
+  const source = fixture.open()
+  fixture.controller.abort()
+  expect(vi.getTimerCount()).toBe(0)
+  expect(() => source.flush?.()).toThrow(/closed/)
+  expect(fixture.fail).not.toHaveBeenCalled()
+  const next = liveSetup()
+  next.active.mockImplementation(async () => {})
+  next.open()
+  next.insert()
+  await vi.advanceTimersByTimeAsync(50)
+  expect(next.fail).toHaveBeenCalledOnce()
+  expect(vi.getTimerCount()).toBe(0)
+})
+it('opens a bounded read-only active connection and detects path replacement', () => {
+  const { path } = setup()
+  const connection = openShadowActiveDatabase(path, { busyTimeoutMs: 50 })
+  cleanups.unshift(connection.close)
+  expect(connection.db.readonly).toBe(true)
+  expect(connection.db.pragma('busy_timeout', { simple: true })).toBe(50)
+  connection.assertCurrent()
+  renameSync(path, path + '.old')
+  copyFileSync(path + '.old', path)
+  expect(() => connection.assertCurrent()).toThrow(/replaced/)
+  connection.close()
+  expect(() => connection.assertCurrent()).toThrow(/closed/)
+})
+it('refuses missing files, symlinks and unbounded busy timeouts', () => {
+  const { path } = setup()
+  expect(() => openShadowActiveDatabase(path + '.missing', { busyTimeoutMs: 50 })).toThrow()
+  symlinkSync(path, path + '.link')
+  expect(() => openShadowActiveDatabase(path + '.link', { busyTimeoutMs: 50 })).toThrow(/regular file/)
+  expect(() => openShadowActiveDatabase(path, { busyTimeoutMs: 1001 })).toThrow()
+})
+it('rechecks database identity after the snapshot and before active delivery', async () => {
+  const { insert, open, active, fail, databaseCurrent } = liveSetup()
+  databaseCurrent.mockImplementationOnce(() => {}).mockImplementationOnce(() => {}).mockImplementation(() => {
+    throw new Error('database replaced during snapshot')
+  })
+  open()
+  insert()
+  await vi.advanceTimersByTimeAsync(50)
+  expect(active).not.toHaveBeenCalled()
+  expect(fail).toHaveBeenCalledOnce()
 })
