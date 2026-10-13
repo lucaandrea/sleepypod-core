@@ -441,3 +441,61 @@ This is not an exact kernel peak: short-lived processes or peaks between scans
 may be missed, scans are not atomic, and shared pages may be counted more than
 once. Reports retain these scope limitations rather than substituting this value
 for the per-process lifetime high-water marks.
+
+### Completed eight-hour synthetic qualification (2026-10-13 UTC)
+
+The uninterrupted run on `192.168.1.88` completed all three distinct
+configurations over the 28,800-second dual-channel 500 Hz synthetic fixture
+(95,621,299 compressed bytes). Staged production code was `e1ab3942`, with the
+completion-validating benchmark runner from `2ff9bf58`. Completion required a
+successful job, retained waveform report, matching dataset/Python identities,
+three unique expected configuration hashes, and positive scored outputs for each.
+Canonical synthetic observations remained unchanged.
+
+- Replay: 2,625,664 ms (43.8 minutes); retention: 22,064 ms; summary: 2,849 ms.
+- 366 concurrent dataset reads, zero failures; p95 1,516 ms, maximum 1,867 ms.
+- Internal probe: 7,456 API requests, zero failures; p95 41.5 ms, maximum 311 ms.
+- External probe: 16,905 API requests, zero failures; p95 38.6 ms, maximum 1,429 ms.
+- Peak observed benchmark process-tree RSS: 413,163,520 bytes (394 MiB).
+- Minimum sampled available memory: 1,132,576,768 bytes; maximum temperature 43.777°C.
+- Maximum sampled ingestion age: 1,250 ms. In 68 samples a newer frame arrived
+  after the collector captured its start timestamp, producing a negative age;
+  those are collection-timing artifacts, not measured negative latency.
+- Replay parent event-loop p95 23.1 ms, maximum 96.7 ms.
+
+Retained report hash:
+`bc1ac53d9168a5f2e6fd521212c69f6ae53939911e7ba17e4f1ccb0fb8e7cdcc`.
+Compound build:
+`375b2ae0e0e81545b234f1ee3357a2b0cd4cde222cd413591c71c88766b75607`.
+Python build:
+`23670017f01a37b0281fdea016440261af6f9e6519bff5f294b9056d6f5caf29`.
+
+Synthetic measurements, probe output, and compact summary were retained locally
+under `/tmp/biometrics-waveform-qualification-results/fullnight-success/`.
+The owned pod staging directory was removed only after successful termination
+and a descendant-process check. Core (`sleepypod.service`) and piezo services
+remained active and the health API returned 200 afterward. These results qualify
+the stated staged build and fixture; later telemetry and objective changes need
+additional target verification. Synthetic signal recovery does not establish
+agreement with real reference exports or clinical accuracy.
+
+A subsequent target smoke test exercised the new process-group sampler against
+an isolated Node child holding a touched 32 MiB buffer. Four of four observations
+were available; peak observed RSS was 83,582,976 bytes, maximum observation gap
+999.8 ms. The child exited and the temporary sampler directory was removed;
+both application and piezo services remained active. This verifies Linux
+collection and cleanup, not a repeat full-night qualification of newer code.
+
+### Frozen sampled operational objectives
+
+Numeric objective policies may explicitly opt into
+`operational.observations.version = sampled-process-group-v1`, with maximum
+memory and ingestion observation gaps. Without that opt-in, sampled RSS cannot
+satisfy the existing peak-memory field. After the final admission check, the
+coordinator replaces the scorer's operational evidence with its own measured
+job duration, group RSS, and ingestion observations. Missing/partial samples
+remain unavailable; excessive observation gaps or a qualification identity
+mismatch prevent improvement. Threshold values and sampling semantics remain
+part of the frozen experiment protocol. This supplies operational evidence;
+a designated qualified policy, sufficient independent reference support, and
+subgroup checks are still required for validated promotion.

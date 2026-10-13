@@ -16,25 +16,33 @@ export const objectivePolicySchema = z.object({
   maximumSubgroupMaeRegression: nonnegative,
   requiredSubgroups: z.array(z.string().min(1).max(100)).max(20),
   operational: z.object({ maximumWallMs: z.number().int().positive(), maximumPeakRssBytes: z.number().int().positive(),
-    maximumIngestionAgeMs: z.number().int().positive() }).strict(),
+    maximumIngestionAgeMs: z.number().int().positive(),
+    observations: z.object({ version: z.literal('sampled-process-group-v1'),
+      maximumMemoryGapMs: z.number().int().positive(), maximumIngestionGapMs: z.number().int().positive(),
+    }).strict().optional(),
+  }).strict(),
 }).strict().refine(policy => new Set(policy.requiredSubgroups).size === policy.requiredSubgroups.length, 'Duplicate objective subgroups')
 export type ObjectivePolicy = z.infer<typeof objectivePolicySchema>
 
 const nightSchema = z.object({ cohortId: z.string(), pairedReferences: z.number().int().nonnegative(),
   maeDifference: z.number().finite().nullable(), baselineObservationCount: z.number().int().nonnegative(), lostObservations: z.number().int().nonnegative() }).strict()
-const evidenceSchema = z.object({
+export const objectiveEvidenceSchema = z.object({
   metricCompatible: z.boolean(), split: z.enum(['tuning', 'validation', 'holdout']), holdoutUse: z.number().int().nonnegative(),
   nights: z.array(nightSchema).max(60),
   intervalUpper: z.number().finite().nullable(),
   subgroups: z.array(z.object({ name: z.string(), pairedNights: z.number().int().nonnegative(), maeDifference: z.number().finite().nullable() }).strict()).max(20),
-  operational: z.object({ wallMs: nonnegative, peakRssBytes: nonnegative, maximumIngestionAgeMs: nonnegative }).strict().nullable(),
+  operational: z.object({ wallMs: nonnegative, peakRssBytes: nonnegative, maximumIngestionAgeMs: nonnegative,
+    observations: z.object({ version: z.literal('sampled-process-group-v1'), qualificationId: z.string(),
+      maximumMemoryGapMs: nonnegative, maximumIngestionGapMs: nonnegative,
+    }).strict().optional(),
+  }).strict().nullable(),
 }).strict()
-export type ObjectiveEvidence = z.infer<typeof evidenceSchema>
+export type ObjectiveEvidence = z.infer<typeof objectiveEvidenceSchema>
 
 /** Pure assessment. Designation is supplied by a trusted build dependency, not
  * experiment JSON. No clinical accuracy or activation is inferred. */
 export function assessNumericObjective(rawPolicy: ObjectivePolicy, rawEvidence: ObjectiveEvidence, designatedPolicy: ObjectivePolicy | null) {
-  const policy = objectivePolicySchema.parse(rawPolicy), evidence = evidenceSchema.parse(rawEvidence)
+  const policy = objectivePolicySchema.parse(rawPolicy), evidence = objectiveEvidenceSchema.parse(rawEvidence)
   if (new Set(evidence.nights.map(night => night.cohortId)).size !== evidence.nights.length
     || new Set(evidence.subgroups.map(group => group.name)).size !== evidence.subgroups.length
     || evidence.nights.some(night => night.lostObservations > night.baselineObservationCount)) throw new Error('Invalid objective evidence identity or coverage')
@@ -48,6 +56,14 @@ export function assessNumericObjective(rawPolicy: ObjectivePolicy, rawEvidence: 
   if (evidence.intervalUpper === null) missing.push('uncertainty_unavailable')
   if (!evidence.operational) missing.push('operational_evidence_unavailable')
   else {
+    const required = policy.operational.observations, observed = evidence.operational.observations
+    if (required && !observed) missing.push('operational_sampling_evidence_unavailable')
+    if (!required && observed) missing.push('sampled_memory_not_authorized_by_policy')
+    if (required && observed) {
+      if (observed.qualificationId !== policy.qualificationId) missing.push('operational_qualification_mismatch')
+      if (observed.maximumMemoryGapMs > required.maximumMemoryGapMs) missing.push('memory_sampling_gap')
+      if (observed.maximumIngestionGapMs > required.maximumIngestionGapMs) missing.push('ingestion_sampling_gap')
+    }
     if (evidence.operational.wallMs > policy.operational.maximumWallMs) failures.push('wall_time_limit')
     if (evidence.operational.peakRssBytes > policy.operational.maximumPeakRssBytes) failures.push('memory_limit')
     if (evidence.operational.maximumIngestionAgeMs > policy.operational.maximumIngestionAgeMs) failures.push('ingestion_limit')
@@ -72,7 +88,7 @@ export function assessNumericObjective(rawPolicy: ObjectivePolicy, rawEvidence: 
         : estimate !== null && estimate <= -policy.minimumMaeImprovement && evidence.intervalUpper !== null && evidence.intervalUpper <= -policy.minimumMaeImprovement
           ? 'improved' as const
           : 'no_material_change' as const
-  return { version: 'numeric-objective-assessment-v1' as const, policy, designated, status, missingEvidence: missing, failedThresholds: failures,
+  return { version: 'numeric-objective-assessment-v1' as const, policy, evidence, designated, status, missingEvidence: missing, failedThresholds: failures,
     equalNightMeanMaeDifference: estimate, intervalUpper: evidence.intervalUpper,
     interpretation: 'agreement_with_named_reference_not_clinical_validation' as const }
 }

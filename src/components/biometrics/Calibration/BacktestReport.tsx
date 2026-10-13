@@ -65,10 +65,16 @@ export function BacktestReport({ id }: { id: string }) {
                     <dd>{Array.isArray(value) ? value.join(', ') || t`None` : String(value)}</dd>
                   </div>
                 ))}
-                {Object.entries(report.protocol.objectivePolicy.operational).map(([key, value]) => (
+                {Object.entries(report.protocol.objectivePolicy.operational).filter(([key]) => key !== 'observations').map(([key, value]) => (
                   <div key={key}>
                     <dt>{key}</dt>
-                    <dd>{value}</dd>
+                    <dd>{String(value)}</dd>
+                  </div>
+                ))}
+                {Object.entries(report.protocol.objectivePolicy.operational.observations ?? {}).map(([key, value]) => (
+                  <div key={`observations:${key}`}>
+                    <dt>{key}</dt>
+                    <dd>{String(value)}</dd>
                   </div>
                 ))}
               </dl>

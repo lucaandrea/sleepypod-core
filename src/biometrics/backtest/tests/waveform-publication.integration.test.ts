@@ -120,7 +120,12 @@ print(json.dumps({'start':start,'artifacts':artifacts,'inspections':inspections}
     expect(sqlite.prepare('SELECT heart_rate FROM vitals').all()).toEqual([{ heart_rate: 65 }])
     const jobs = new BacktestJobStore(db)
     const experiment = jobs.createExperiment(published.id, { version: 'descriptive-evaluation-v1', mode: 'signal_replay', waveformStages: true,
-      assumedStageCalibrationQuality: 0, pointToleranceMs: 30000, clockOffsetMs: 0 })
+      assumedStageCalibrationQuality: 0, pointToleranceMs: 30000, clockOffsetMs: 0,
+      objectivePolicy: { version: 'numeric-objective-v1', qualificationId: 'integration-only', metric: 'heart_rate',
+        minimumNights: 3, minimumPairedReferencesPerNight: 10, maximumLostObservationFraction: 0.1, minimumMaeImprovement: 2,
+        maximumNightMaeRegression: 1, maximumRegressedNightFraction: 0.34, maximumSubgroupMaeRegression: 1, requiredSubgroups: [],
+        operational: { maximumWallMs: 30000, maximumPeakRssBytes: 536870912, maximumIngestionAgeMs: 5000,
+          observations: { version: 'sampled-process-group-v1', maximumMemoryGapMs: 2000, maximumIngestionGapMs: 7000 } } } })
     const candidate = structuredClone(defaultConfig)
     candidate.heart_rate.trackingToleranceBpm = 20
     const jobInput = { experimentId: experiment.id, evaluatorBuildHash: build.hash, split: 'tuning' as const,
@@ -138,6 +143,10 @@ print(json.dumps({'start':start,'artifacts':artifacts,'inspections':inspections}
     expect(report).toMatchObject({ version: 'waveform-backtest-report-v1', datasetHash: published.contentHash,
       evaluatorBuildHash: build.hash, protocol: { mode: 'signal_replay' }, waveform: { outputs: [{}, {}] },
       nights: [{ evaluations: [{ label: 'default' }, { label: 'current' }, { label: 'candidate' }] }] })
+    expect(report).toMatchObject({ objectiveAssessments: [
+      { baseline: 'default', evidence: { operational: null }, status: 'insufficient_evidence' },
+      { baseline: 'current', evidence: { operational: null }, status: 'insufficient_evidence' },
+    ] })
     const summary = await runCoordinatorTask(options, { type: 'readSummary', input: { id: job.id } })
     expect(JSON.stringify(summary?.report)).not.toContain('"readings"')
     expect(JSON.stringify(report)).toContain('"readings"')
