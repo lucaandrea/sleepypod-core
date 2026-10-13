@@ -14,9 +14,11 @@ export const experimentProtocolSchema = z.object({
   clockOffsetMs: z.number().int().min(-3600000).max(3600000),
   nightUncertainty: nightBootstrapSchema.optional(),
 }).strict()
+export const replayBaselineProvenanceSchema = z.object({ source: z.enum(['acknowledged_runtime', 'unacknowledged_defaults']),
+  generation: z.number().int().nonnegative().nullable(), effectiveSampleTimeMs: z.number().int().nonnegative().nullable(), warning: z.string().max(1000).nullable() }).strict()
 export const enqueueBacktestSchema = z.object({
   experimentId: z.string().uuid(), idempotencyKey: key, evaluatorBuildHash: hash, submissionHash: hash.optional(),
-  waveform: z.object({ pythonBuildHash: hash, otherSide: z.object({ manifestHash: hash, resolvedHash: hash, resolved: z.unknown() }).strict() }).strict().optional(),
+  waveform: z.object({ pythonBuildHash: hash, baselineProvenance: z.object({ current: replayBaselineProvenanceSchema, otherSide: replayBaselineProvenanceSchema }).strict().optional(), otherSide: z.object({ manifestHash: hash, resolvedHash: hash, resolved: z.unknown() }).strict() }).strict().optional(),
   split: z.enum(['tuning', 'validation', 'holdout']),
   configs: z.array(z.object({ label: z.enum(['default', 'current', 'candidate']), revisionId: z.string().uuid().nullable(),
     manifestHash: hash, resolvedHash: hash, resolved: z.unknown() }).strict()).min(1).max(3),

@@ -6,6 +6,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import * as configSchema from '@/src/db/schema'
 import * as bioSchema from '@/src/db/biometrics-schema'
 import { DEFAULT_STAGE_CLASSIFIER, MOVEMENT_ONLY_STAGE_RULESET } from '@/src/lib/sleep-stage-rules'
+import { defaultConfig } from '../../algorithms/registry'
+import { resolveReplayBaseline } from '../replay-baseline'
 import { ProfileStore } from '../store'
 import { writeLegacyStageClassifier } from '../legacy-stage'
 import { consumeStageView, resolveStageView } from '../stage-view'
@@ -97,4 +99,37 @@ describe('stage view adoption and legacy compatibility', () => {
     expect(config.select().from(configSchema.biometricProfileRevisions).all()).toEqual([])
     expect(config.select().from(configSchema.biometricProfileBindings).all()).toEqual([])
   })
+})
+
+it('captures a complete numerical baseline only after coherent adoption', () => {
+  expect(resolveReplayBaseline(config, bio, 'left')).toMatchObject({ resolved: defaultConfig, provenance: { source: 'unacknowledged_defaults' } })
+  const store = new ProfileStore(config)
+  const revision = store.createRevision({ side: 'left', overrides: [{ path: 'heart_rate.trackingToleranceBpm', value: 20 }], origin: 'manual', requester: 'fixture', idempotencyKey: 'numerical-current' })
+  requestManualActivation(config, { side: 'left', action: 'activate', revisionId: revision.id, expectedGeneration: 0,
+    expectedResolvedHash: revision.resolvedHash, boundary: 'immediate', requester: 'fixture', idempotencyKey: 'numerical-active', allowUnvalidated: true }, now)
+  expect(resolveReplayBaseline(config, bio, 'left').resolved.heart_rate.trackingToleranceBpm).toBe(defaultConfig.heart_rate.trackingToleranceBpm)
+  acknowledge(1, ['heart_rate'])
+  expect(() => resolveReplayBaseline(config, bio, 'left')).toThrow('consistent configuration')
+  acknowledge(1, ['breathing_rate', 'hrv_index'])
+  const captured = resolveReplayBaseline(config, bio, 'left')
+  expect(captured).toMatchObject({ hash: revision.resolvedHash, revisionId: revision.id, resolved: { heart_rate: { trackingToleranceBpm: 20 } },
+    provenance: { source: 'acknowledged_runtime', generation: 1, effectiveSampleTimeMs: now } })
+  expect(resolveReplayBaseline(config, bio, 'right').resolved).toEqual(defaultConfig)
+  expect(bioRaw.prepare('SELECT * FROM biometric_runtime_receipts WHERE component=\'sleep_stages\'').all()).toEqual([])
+  writeLegacyStageClassifier(config, 'left', movementOnly, now)
+  acknowledge(2, ['heart_rate'])
+  expect(() => resolveReplayBaseline(config, bio, 'left')).toThrow('consistent configuration')
+  bioRaw.prepare('UPDATE biometric_runtime_receipts SET state=\'pending_boundary\' WHERE generation=2').run()
+  expect(resolveReplayBaseline(config, bio, 'left')).toEqual(captured)
+  bioRaw.prepare('UPDATE biometric_runtime_receipts SET state=\'failed\' WHERE generation=2').run()
+  bio.insert(bioSchema.biometricRuntimeReceipts).values({ side: 'left', component: 'heart_rate', generation: 3, appliedHash: revision.resolvedHash,
+    state: 'pending_boundary', effectiveSampleTimeMs: null, heartbeatAtMs: now }).run()
+  expect(() => resolveReplayBaseline(config, bio, 'left')).toThrow('adoption failed')
+})
+
+it('refuses corrupt acknowledged projections instead of relabeling defaults as current', () => {
+  writeLegacyStageClassifier(config, 'left', movementOnly, now)
+  acknowledge(1)
+  bioRaw.prepare('UPDATE biometric_runtime_configs SET payload = ?').run('{}')
+  expect(() => resolveReplayBaseline(config, bio, 'left')).toThrow('unavailable or incompatible')
 })

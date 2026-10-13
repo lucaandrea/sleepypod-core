@@ -16,6 +16,12 @@ import { DEFAULT_STAGE_CLASSIFIER } from '@/src/lib/sleep-stage-rules'
 import { evaluateBacktest } from '@/src/biometrics/backtest/evaluator'
 import { backtestFixture } from '@/src/biometrics/backtest/tests/fixtures/backtest'
 import { BacktestJobStore } from '@/src/biometrics/backtest/jobs'
+import { resolveSubmissionBuild } from '@/src/biometrics/backtest/submission'
+import { deliverRuntimeOutbox } from '@/src/biometrics/profiles/runtime'
+import { DatasetStore } from '@/src/biometrics/backtest/datasets'
+import { datasetManifestSchema } from '@/src/biometrics/backtest/contracts'
+import { prepareWaveformDataset } from '@/src/biometrics/backtest/waveform-dataset'
+import { waveformEvaluatorBuildIdentity } from '@/src/biometrics/backtest/waveform-build'
 import { ProfileStore } from '@/src/biometrics/profiles/store'
 
 const holder = vi.hoisted(() => ({ bio: null as unknown, config: null as unknown, coordinator: '' }))
@@ -24,6 +30,7 @@ vi.mock('@/src/db', () => ({
   get biometricsDb() { return holder.bio },
 }))
 vi.mock('@/src/biometrics/backtest/location', () => ({ packagedWorkerPath: () => '/server-owned/worker.cjs', packagedCoordinatorPath: () => holder.coordinator }))
+vi.mock('@/src/biometrics/backtest/waveform-build', () => ({ waveformEvaluatorBuildIdentity: vi.fn(async () => ({ hash: 'e'.repeat(64), python: { hash: 'a'.repeat(64) } })) }))
 vi.mock('@/src/biometrics/backtest/child', () => ({ workerBuildHash: async () => 'f'.repeat(64) }))
 const { biometricTuningRouter } = await import('../biometricTuning')
 const caller = biometricTuningRouter.createCaller({})
@@ -279,4 +286,60 @@ describe('shared biometric reference API', () => {
     expect(document.paths?.['/biometric-tuning/references/{id}/measurements']?.get).toBeDefined()
     expect(document.paths?.['/biometric-tuning/references/{id}']?.delete).toBeDefined()
   })
+})
+
+it('submits waveform pins and both baseline snapshots, then retries without probing a changed runtime', async () => {
+  const bio = holder.bio as ReturnType<typeof drizzle<typeof schema>>
+  const start = 1791673200000
+  bio.insert(schema.sleepRecords).values({ id: 1, side: 'left', enteredBedAt: new Date(start), leftBedAt: new Date(start + 600000), sleepDurationSeconds: 600, timesExitedBed: 0 }).run()
+  const parentDescriptor = await caller.createDataset({ side: 'left', subjectId: 'A', sessionIds: [1], referenceImportIds: [], idempotencyKey: 'raw-parent' })
+  const parent = new DatasetStore(bio).read(parentDescriptor.id)
+  const manifest = datasetManifestSchema.parse(parent.manifest)
+  const prepared = prepareWaveformDataset({ ...parent, manifest }, [{ cohortId: manifest.splitProtocol.assignments[0].cohortId,
+    input: { version: 'retained-waveform-input-v1', retained_start_ms: start, score_start_ms: start, score_end_ms: start + 600000, contexts: [],
+      artifacts: [{ artifact: { name: `${'a'.repeat(64)}.RAW.gz`, sha256: 'a'.repeat(64), compressed_bytes: 1, expanded_bytes: 2 }, first_event_ms: start, last_event_ms: start + 599999 }] } }], 'raw-fixture')
+  bio.insert(schema.biometricDatasets).values({ ...prepared, byteLength: Buffer.byteLength(JSON.stringify(prepared)) }).run()
+  const experiment = await caller.createExperiment({ datasetId: prepared.id, idempotencyKey: 'signal-experiment', protocol: {
+    version: 'descriptive-evaluation-v1', mode: 'signal_replay', waveformStages: true, assumedStageCalibrationQuality: 0, pointToleranceMs: 30000, clockOffsetMs: 0 } })
+  const candidate = await caller.createProfileRevision({ side: 'left', origin: 'manual', requester: 'fixture', idempotencyKey: 'signal-candidate', overrides: [{ path: 'heart_rate.trackingToleranceBpm', value: 20 }] })
+  const request = { experimentId: experiment.id, candidateRevisionId: candidate.id, expectedBindingGeneration: 0, split: 'tuning' as const, idempotencyKey: 'signal-submission' }
+  const job = await caller.enqueueBacktest(request)
+  expect(job).toMatchObject({ state: 'queued', evaluatorBuildHash: 'e'.repeat(64), evaluationScope: 'retained_waveform_replay' })
+  const saved = new BacktestJobStore(bio).get(job.id).input
+  expect(saved).toMatchObject({ waveform: { pythonBuildHash: 'a'.repeat(64), baselineProvenance: {
+    current: { source: 'unacknowledged_defaults' }, otherSide: { source: 'unacknowledged_defaults' } } } })
+  const identity = await waveformEvaluatorBuildIdentity('fixture', 'fixture', { pythonPath: 'fixture', modulesPath: 'fixture' })
+  let finishProbe = () => {}
+  const pendingProbe = new Promise<typeof identity>((resolve) => {
+    finishProbe = () => resolve(identity)
+  })
+  vi.mocked(waveformEvaluatorBuildIdentity).mockReturnValueOnce(pendingProbe)
+  const previousCalls = vi.mocked(waveformEvaluatorBuildIdentity).mock.calls.length
+  const firstProbe = resolveSubmissionBuild(bio, { ...request, idempotencyKey: 'probe-one' })
+  const secondProbe = resolveSubmissionBuild(bio, { ...request, idempotencyKey: 'probe-two' })
+  expect(vi.mocked(waveformEvaluatorBuildIdentity).mock.calls.length - previousCalls).toBe(1)
+  finishProbe()
+  expect(await firstProbe).toEqual(await secondProbe)
+  await resolveSubmissionBuild(bio, { ...request, idempotencyKey: 'probe-three' })
+  expect(vi.mocked(waveformEvaluatorBuildIdentity).mock.calls.length - previousCalls).toBe(2)
+  const config = holder.config as ReturnType<typeof drizzle<typeof configSchema>>
+  for (const [side, value] of [['left', 22], ['right', 12]] as const) {
+    const revision = await caller.createProfileRevision({ side, origin: 'manual', requester: 'fixture', idempotencyKey: `current-${side}`, overrides: [{ path: 'heart_rate.trackingToleranceBpm', value }] })
+    await caller.activateProfile({ side, revisionId: revision.id, expectedGeneration: 0, expectedResolvedHash: revision.resolvedHash,
+      boundary: 'immediate', requester: 'fixture', idempotencyKey: `active-${side}`, allowUnvalidated: true })
+    deliverRuntimeOutbox(config, bio)
+    for (const component of ['heart_rate', 'breathing_rate', 'hrv_index']) bio.insert(schema.biometricRuntimeReceipts).values({ side, component, generation: 1,
+      appliedHash: revision.resolvedHash, effectiveSampleTimeMs: start, state: 'applied', heartbeatAtMs: start }).run()
+  }
+  const acknowledged = await caller.enqueueBacktest({ ...request, idempotencyKey: 'acknowledged-signal', expectedBindingGeneration: 1 })
+  expect(new BacktestJobStore(bio).get(acknowledged.id).input).toMatchObject({
+    configs: [{ label: 'default' }, { label: 'current', resolved: { heart_rate: { trackingToleranceBpm: 22 } } }, { label: 'candidate', resolved: { heart_rate: { trackingToleranceBpm: 20 } } }],
+    waveform: { otherSide: { resolved: { heart_rate: { trackingToleranceBpm: 12 } } }, baselineProvenance: {
+      current: { source: 'acknowledged_runtime', generation: 1 }, otherSide: { source: 'acknowledged_runtime', generation: 1 } } },
+  })
+  expect(new BacktestJobStore(bio).get(job.id).input).toEqual(saved)
+  vi.mocked(waveformEvaluatorBuildIdentity).mockRejectedValueOnce(new Error('Runtime changed'))
+  expect(await caller.enqueueBacktest(request)).toEqual(job)
+  await expect(caller.enqueueBacktest({ ...request, idempotencyKey: 'new-signal-submission' })).rejects.toMatchObject({ code: 'SERVICE_UNAVAILABLE' })
+  await expect(caller.enqueueBacktest({ ...request, expectedBindingGeneration: 1 })).rejects.toMatchObject({ code: 'CONFLICT' })
 })

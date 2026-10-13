@@ -17,9 +17,7 @@ import { activationStatus, activationStatusSchema } from '@/src/biometrics/profi
 import { activationEventSchema, activationHistorySchema, listActivationHistory } from '@/src/biometrics/profiles/history'
 import { DatasetStore, createDatasetSchema } from '@/src/biometrics/backtest/datasets'
 import { listReplaySessions, sessionCapabilities, sessionPageSchema, sessionCapabilitiesSchema } from '@/src/biometrics/backtest/discovery'
-import { workerBuildHash } from '@/src/biometrics/backtest/child'
-import { packagedWorkerPath } from '@/src/biometrics/backtest/location'
-import { submitBacktest, submitBacktestSchema } from '@/src/biometrics/backtest/submission'
+import { submitBacktest, submitBacktestSchema, resolveSubmissionBuild } from '@/src/biometrics/backtest/submission'
 import { traceRequestSchema, tracePageSchema } from '@/src/biometrics/backtest/trace-contracts'
 import { coordinatorRequest } from '@/src/biometrics/backtest/coordinator-service'
 import { BacktestJobStore } from '@/src/biometrics/backtest/jobs'
@@ -141,11 +139,9 @@ export const biometricTuningRouter = router({
     .input(submitBacktestSchema)
     .output(jobDescriptorSchema)
     .mutation(async ({ input }) => {
-      const path = await references(() => packagedWorkerPath())
-      const buildHash = await workerBuildHash(path).catch(() => {
-        throw new TRPCError({ code: 'SERVICE_UNAVAILABLE', message: 'Packaged replay worker cannot be read' })
-      })
-      return references(() => profiles(() => describeJob(submitBacktest(db, biometricsDb, buildHash, input))))
+      const build = await references(() => resolveSubmissionBuild(biometricsDb, input))
+      if (build.existing) return describeJob(build.existing)
+      return references(() => profiles(() => describeJob(submitBacktest(db, biometricsDb, build.evaluatorBuildHash, input, build.pythonBuildHash))))
     }),
 
   listBacktests: publicProcedure
