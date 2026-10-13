@@ -16,6 +16,7 @@ import { runManagedTrial } from './managed'
 import { readManagedEvidence } from './managed-evidence'
 import { runPackagePreflight } from './preflight'
 import { verifyPreflightEvidence } from './preflight-evidence'
+import { assessManagedQualification } from './qualification'
 import { fixtureResourceTestPolicy } from './resource-test-policy'
 const image = process.env.BIOMETRIC_EXPERIMENT_TEST_IMAGE
 let environmentBytes: Buffer<ArrayBuffer>
@@ -134,6 +135,9 @@ describe.skipIf(!image)('managed package trials through real Docker', () => {
       expect(night.outputs).toHaveLength(3)
       expect(await runManagedTrial(options)).toEqual({ state: 'already_completed', reportHash: result.reportHash })
       expect(loads).toBe(1)
+      const qualification = assessManagedQualification(ledger, input.trialId, root)
+      expect(assessManagedQualification(ledger, input.trialId, root).assessmentHash).toBe(qualification.assessmentHash)
+      expect(qualification.qualification.installationAuthorized).toBe(false)
       expect(readManagedEvidence(ledger, input.trialId, root)).toMatchObject({
         reportHash: result.reportHash, currentEvidence: { uniqueHoldoutAttempt: true },
       })
@@ -173,6 +177,9 @@ describe.skipIf(!image)('managed package trials through real Docker', () => {
       ledger.claim(second, 30000)
       expect(ledger.currentEvidence(input.trialId).uniqueHoldoutAttempt).toBe(false)
       expect(readManagedEvidence(ledger, input.trialId, root).currentEvidence.uniqueHoldoutAttempt).toBe(false)
+      const afterExposure = assessManagedQualification(ledger, input.trialId, root)
+      expect(afterExposure.assessmentHash).not.toBe(qualification.assessmentHash)
+      expect(afterExposure.qualification.accuracy.missing).toContain('no_unique_current_holdout')
       expect(loads).toBe(1)
     }
     finally {
@@ -203,11 +210,13 @@ describe.skipIf(!image)('managed package trials through real Docker', () => {
       expect((await stat(join(workspace, 'experiments.sqlite'))).mode & 0o777).toBe(0o600)
       expect(dataHash(JSON.parse(await readFile(first.reportFile, 'utf8')))).toBe(first.reportHash)
       expect(first.preflight?.status).toBe('incomplete')
+      expect(first.qualification).toMatchObject({ status: 'insufficient_evidence', installationAuthorized: false })
+      expect(first.assessmentHash).toMatch(/^[a-f0-9]{64}$/)
       await rm(join(root, 'suite.json'))
       await rm(join(root, 'frames.jsonl'))
       await rm(join(root, 'references.json'))
       const repeated = await runManagedFiles(workspace, join(root, 'descriptor.json'))
-      expect(repeated).toMatchObject({ state: 'already_completed', trialId: first.trialId, reportHash: first.reportHash })
+      expect(repeated).toMatchObject({ state: 'already_completed', trialId: first.trialId, reportHash: first.reportHash, assessmentHash: first.assessmentHash })
       descriptor.variants[2].config.offset++
       await writeFile(join(root, 'descriptor.json'), JSON.stringify(descriptor))
       await expect(runManagedFiles(workspace, join(root, 'descriptor.json'))).rejects.toThrow('idempotency conflict')

@@ -475,3 +475,27 @@ Completed file workflows do not reread the original suite or night input files.
 The managed receipt exposes verified preflight status alongside accuracy; target
 pod compatibility, representative-fixture review and release promotion remain
 required before an algorithm can become live.
+
+## Combined external qualification assessment
+
+`assessManagedQualification(ledger, trialId, reportDirectory)` verifies the full
+retained graph once, reads current holdout exposure, assesses frozen accuracy,
+and combines it with bound preflight and every night/variant's resource evidence.
+The managed command includes this `qualification` object and an `assessmentHash`
+in its receipt. The hash binds trial/report/protocol/request identities, current
+exposure and all assessment dimensions. Re-reviewing unchanged evidence is stable;
+later overlapping holdout use changes the snapshot and invalidates its independent
+holdout claim even though the original execution report remains unchanged.
+
+The combined status is `failed`, `insufficient_evidence`, or
+`external_criteria_met`. Known failures dominate missing evidence, with both
+reason lists retained. Passing accuracy cannot waive absent/failed preflight,
+missing or duplicated resource rows, substituted resource policy, budget excess,
+or inadequate measurements for default/current/candidate on any selected night.
+
+This is an external evidence snapshot, not a durable installation authorization.
+`installationAuthorized` remains false, and the receipt lists outstanding
+representative-fixture review, target-pod compatibility and resource qualification,
+prospective health/reference comparison, and reviewed shipped-registry release.
+A future promotion step must recheck authoritative evidence at publication; an
+old exported assessment must never substitute for that current check.

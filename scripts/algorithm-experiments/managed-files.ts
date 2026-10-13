@@ -1,4 +1,4 @@
-import { assessManagedAccuracy } from './accuracy'
+import { assessManagedQualification } from './qualification'
 import Database from 'better-sqlite3'
 import { constants } from 'node:fs'
 import { lstat, mkdir, open } from 'node:fs/promises'
@@ -81,9 +81,10 @@ export async function runManagedFiles(workspace: string, descriptorPath: string)
         return { referenceImport: readJsonFile(resolve(base, source.referenceImport), 2 * 1024 * 1024),
           frames: () => readJsonLines(resolve(base, source.frames), maximumInputBytes) }
       } })
-    const reviewed = assessManagedAccuracy(ledger, trialId, reports)
+    const reviewed = assessManagedQualification(ledger, trialId, reports)
     return { schema: 'biometric-managed-receipt-v1' as const, studyId: study.id, trialId, ...result,
-      currentEvidence: reviewed.currentEvidence, accuracy: reviewed.assessment, preflight: reviewed.preflight, reportFile: join(reports, `${result.reportHash}.json`) }
+      currentEvidence: reviewed.currentEvidence, accuracy: reviewed.qualification.accuracy, preflight: reviewed.qualification.preflight,
+      qualification: reviewed.qualification, assessmentHash: reviewed.assessmentHash, reportFile: join(reports, `${result.reportHash}.json`) }
   }
   finally { db.close() }
 }
