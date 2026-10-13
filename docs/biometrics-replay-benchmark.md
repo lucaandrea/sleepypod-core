@@ -535,3 +535,25 @@ qualification remain outstanding. The measured event-loop maximum also prevents
 interpreting the admission samples as a guarantee that all delays stayed below
 the benchmark's 100 ms admission threshold. No promotion registry or production
 budget defaults were derived from this smoke alone.
+
+### Synthetic shadow supervisor measurement harness
+
+`scripts/benchmarks/biometrics-shadow-runner.ts` exercises the shipped Node
+supervisor and kernel-limited Python shadow child with generated 500 Hz dual
+channels. It retains bounded resource receipts, partial failure observations,
+output identity, exact Python/runner identities and parent event-loop measurements.
+It uses no live waveform subscription, database, credentials or hardware API.
+
+Bundle with esbuild (`--bundle --platform=node --target=node22 --format=cjs`),
+then run on the target Linux pod with arguments `OUTPUT_JSON PYTHON_PATH
+MODULES_PATH [SECONDS]`. The default is 1,800 synthetic seconds, processed as
+fast as the worker permits; accepted durations are 150–28,800 seconds. Use the
+locked installed Python environment and the source modules matching the build.
+Wrap it in `biometrics-probe.py` for independent live-service telemetry. Run only
+after other replay/shadow measurements finish: the child uses their same kernel
+execution lock. The harness's explicit ceilings are measurement stop conditions,
+not installed qualification or recommended deployment limits.
+
+This measures synthetic processing and supervision only. It does not establish
+live capture/sink performance, representative artifact robustness, held-out
+accuracy or permission to install a shadow qualification registry.
