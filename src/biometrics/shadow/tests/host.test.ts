@@ -42,7 +42,7 @@ function setup() {
   vi.mocked(shadowRuntimeBindingReader).mockReturnValue(vi.fn())
   const installation = { workerPath: '/trusted/worker.cjs', pythonPath: '/trusted/python', modulesPath: '/trusted/modules',
     configurationDatabase: '/trusted/config.db', biometricsDatabase: '/trusted/bio.db', presenceFile: '/trusted/presence.json',
-    configs: { left: {}, right: {} }, expectedBindings: { left: { generation: 1, resolvedHash: a }, right: { generation: 2, resolvedHash: a } }, identity: vi.fn() }
+    configs: { left: {}, right: {} }, expectedBindings: { left: { generation: 1, resolvedHash: a }, right: { generation: 2, resolvedHash: a } }, identity: vi.fn(), piezoReceivedAt: vi.fn(() => now) }
   return { plan, installation, databases, health, admit, sources }
 }
 beforeEach(() => vi.resetAllMocks())
@@ -55,7 +55,7 @@ it('composes frozen policy, both binding guards and sampled health before return
   bindingOptions.assertCurrent()
   databases.forEach(db => expect(db.assertCurrent).toHaveBeenCalledOnce())
   expect(bindingOptions.expected.right.generation).toBe(2)
-  expect(openShadowHealthMonitor).toHaveBeenCalledWith('/trusted', { qualificationId: 'test' }, owned.signal)
+  expect(openShadowHealthMonitor).toHaveBeenCalledWith('/trusted', { qualificationId: 'test' }, installation.piezoReceivedAt, owned.signal)
   expect(owned.host.openSources).toBe(sources)
   installation.configs.left = { changed: true }
   expect(owned.host.configs.left).toEqual({})

@@ -59,7 +59,6 @@ export async function startShadowHealthMonitor(collect: () => Promise<AdmissionS
 
 /** Production collector uses host filesystem health and the actual live piezo
  * receive clock. Paths and qualification policy are supplied by the host only. */
-export async function openShadowHealthMonitor(databaseDirectory: string, policy: unknown, signal?: AbortSignal) {
-  const { getSensorFrameTimes } = await import('@/src/streaming/piezoStream')
-  return startShadowHealthMonitor(() => collectAdmissionSample(databaseDirectory, () => getSensorFrameTimes()['piezo-dual']), policy, signal)
+export async function openShadowHealthMonitor(databaseDirectory: string, policy: unknown, piezoReceivedAt: () => number | undefined, signal?: AbortSignal) {
+  return startShadowHealthMonitor(() => collectAdmissionSample(databaseDirectory, piezoReceivedAt), policy, signal)
 }

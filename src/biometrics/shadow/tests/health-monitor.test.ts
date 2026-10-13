@@ -4,7 +4,6 @@ import { startShadowHealthMonitor, openShadowHealthMonitor } from '../health-mon
 import { collectAdmissionSample } from '../../backtest/admission'
 import type * as Admission from '../../backtest/admission'
 vi.mock('../../backtest/admission', async original => ({ ...await original<typeof Admission>(), collectAdmissionSample: vi.fn() }))
-vi.mock('@/src/streaming/piezoStream', () => ({ getSensorFrameTimes: () => ({ 'piezo-dual': Date.now() - 10 }) }))
 const now = 1700000000000
 const policy = { qualificationId: 'test', minimumAvailableMemoryBytes: 100, minimumFreeDiskBytes: 100,
   maximumLoadPerCpu: 1, maximumEventLoopDelayMs: 100, maximumPiezoAgeMs: 1000, maximumTemperatureC: 70, maximumSampleAgeMs: 1000 }
@@ -25,7 +24,7 @@ it('refreshes real collector arguments and isolates published snapshots', async 
     expect(piezo()).toBe(Date.now() - 10)
     return sample()
   })
-  const monitor = await openShadowHealthMonitor('/trusted/data', policy)
+  const monitor = await openShadowHealthMonitor('/trusted/data', policy, () => Date.now() - 10)
   const first = monitor.read()
   expect(first).not.toBeNull()
   if (first) first.availableMemoryBytes = 0

@@ -1,0 +1,6 @@
+// Shipped, fingerprinted host API. Importing this module opens no database,
+// starts no service, subscribes to no source and performs no hardware command.
+export { runProfiledShadowAttempt } from './host'
+export { ShadowStore, shadowPlanSchema, shadowStoragePolicySchema } from './store'
+export { shadowEngineBuildIdentity } from './build'
+export { readInstalledShadowQualifications } from './admission'

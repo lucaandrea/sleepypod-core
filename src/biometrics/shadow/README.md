@@ -491,8 +491,9 @@ fallback, without overwriting a replacement attempt.
 ## Host health sampling
 
 `openShadowHealthMonitor` connects the existing Linux memory, filesystem space,
-load, event-loop delay and thermal collector to the real piezo receive clock.
-The host supplies the database directory and installed qualification policy.
+load, event-loop delay and thermal collector to a trusted live piezo receive-clock
+callback supplied by the application.
+The host supplies that callback, the database directory and installed qualification policy.
 The monitor waits for an initial collection, then exposes a synchronous `read`
 for admission. Every read re-evaluates health and freshness against that policy;
 missing, stale, future or unhealthy evidence returns null.
@@ -566,3 +567,23 @@ identities again, so changes between resolution and execution are rejected. This
 entry point accepts a saved revision ID rather than caller-asserted configs or
 active generations. Trusted installed build/hardware identity, service ownership,
 crash recovery, qualification and public API/UI integration remain required.
+
+
+## Packaged host identity
+
+The standard biometrics build also produces `shadow-host.cjs` and its dependency
+manifest. This CommonJS module exports the profiled attempt runner, store/plan
+schemas, installed qualification reader and build probe; importing it starts no
+service. The build rejects hardware, automation, scheduler, HomeKit, live database
+singletons and streaming entrypoints. Only the passive `prospectiveFrameTap` is
+allowed from streaming. The application supplies the actual receive-clock callback,
+so the bundle does not initialize another stream or hardware controller.
+
+`shadowEngineBuildIdentity` hashes the exact host bundle bytes, prospective Python
+fingerprint and Node runtime identity. The real-package test loads the exported
+API, inspects its dependency graph, compares packaged/source probe identities and
+proves changing the host artifact changes the engine fingerprint. Production must
+load and execute this same bundle and guard installation changes during a run;
+fingerprinting an unused file would not establish execution identity. Hardware
+capture, recovery, service/API/UI registration and current-build qualification
+remain required before production runs.

@@ -2,6 +2,7 @@ import { execFile } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { promisify } from 'node:util'
 import { z } from 'zod'
+import { workerBuildHash } from '../backtest/child'
 import { configHash } from '../algorithms/canonical'
 import { waveformPythonBuildSchema } from '../backtest/waveform-build'
 
@@ -21,4 +22,13 @@ export async function probeShadowBuild(location: { pythonPath: string, modulesPa
   const result = shadowPythonBuildSchema.parse(JSON.parse(stdout))
   if (configHash(result.identity) !== result.hash) throw new Error('Shadow build identity integrity mismatch')
   return result
+}
+
+/** Bind the complete packaged host graph and prospective Python fingerprint.
+ * The service must execute this bundle, not hash an unrelated unused artifact. */
+export async function shadowEngineBuildIdentity(hostPath: string, location: { pythonPath: string, modulesPath: string }, signal?: AbortSignal) {
+  const [hostHash, python] = await Promise.all([workerBuildHash(hostPath), probeShadowBuild(location, signal)])
+  const identity = { version: 'shadow-engine-build-v1', hostHash, pythonHash: python.hash,
+    node: { version: process.version, platform: process.platform, arch: process.arch, icu: process.versions.icu ?? null } }
+  return { hash: configHash(identity), identity, python }
 }

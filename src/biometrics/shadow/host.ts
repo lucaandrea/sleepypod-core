@@ -20,6 +20,7 @@ export interface ShadowHostInstallation {
   expectedBindings: Record<'left' | 'right', { generation: number, resolvedHash: string }>
   /** Trusted installed-build/hardware collector; must detect changes, never RPC data. */
   identity: () => unknown
+  piezoReceivedAt: () => number | undefined
 }
 
 /** Own admission connections and health sampling for exactly one saved plan.
@@ -28,7 +29,7 @@ export interface ShadowHostInstallation {
 export async function openPlannedShadowHost(rawPlan: unknown, installation: ShadowHostInstallation, signal?: AbortSignal) {
   const plan = shadowPlanSchema.parse(rawPlan), planHash = dataHash(plan)
   if (!plan.execution || !plan.joining) throw new Error('Shadow host requires a saved execution policy')
-  const { identity, ...rawLocations } = installation
+  const { identity, piezoReceivedAt, ...rawLocations } = installation
   const locations = structuredClone(rawLocations)
   const controller = new AbortController()
   let closed = false
@@ -64,7 +65,7 @@ export async function openPlannedShadowHost(rawPlan: unknown, installation: Shad
         configuration.assertCurrent()
         biometrics.assertCurrent()
       } })
-    health = await openShadowHealthMonitor(dirname(locations.biometricsDatabase), entries[0].healthPolicy, controller.signal)
+    health = await openShadowHealthMonitor(dirname(locations.biometricsDatabase), entries[0].healthPolicy, piezoReceivedAt, controller.signal)
     if (closed) {
       health.close()
       throw new Error('Shadow host cancelled while opening')

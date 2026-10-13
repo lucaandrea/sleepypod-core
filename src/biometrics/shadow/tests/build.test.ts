@@ -30,3 +30,30 @@ it('probes the exact locked interpreter and requires shadow sources and intact i
   }
   finally { await rm(directory, { recursive: true, force: true }) }
 })
+it('packages the host without live service imports and binds its exact bytes', async () => {
+  const { execFile } = await import('node:child_process')
+  const { promisify } = await import('node:util')
+  const { createRequire } = await import('node:module')
+  const { readFile } = await import('node:fs/promises')
+  const { shadowEngineBuildIdentity } = await import('../build')
+  const directory = await mkdtemp(resolve('node_modules/shadow-package-test-'))
+  try {
+    await promisify(execFile)(process.execPath, ['scripts/build/biometrics-worker.mjs', directory], { timeout: 30000 })
+    const path = join(directory, 'shadow-host.cjs')
+    const api = createRequire(import.meta.url)(path)
+    expect(Object.keys(api).sort()).toEqual(['ShadowStore', 'readInstalledShadowQualifications', 'runProfiledShadowAttempt',
+      'shadowEngineBuildIdentity', 'shadowPlanSchema', 'shadowStoragePolicySchema'].sort())
+    const dependencies = JSON.parse(await readFile(join(directory, 'shadow-host-dependencies.json'), 'utf8')) as string[]
+    expect(dependencies).toContain('src/biometrics/algorithms/registry.ts')
+    expect(dependencies).toContain('src/streaming/prospectiveFrameTap.ts')
+    expect(dependencies.some(path => /src\/(hardware|automation|scheduler|homekit)\//.test(path) || path.endsWith('/piezoStream.ts'))).toBe(false)
+    const original = await shadowEngineBuildIdentity(path, location)
+    expect(original.python).toEqual(await probeShadowBuild(location))
+    expect(await api.shadowEngineBuildIdentity(path, location)).toEqual(original)
+    await writeFile(path, '// changed build\n' + await readFile(path, 'utf8'))
+    const changed = await shadowEngineBuildIdentity(path, location)
+    expect(changed.hash).not.toBe(original.hash)
+    expect(changed.python.hash).toBe(original.python.hash)
+  }
+  finally { await rm(directory, { recursive: true, force: true }) }
+})
