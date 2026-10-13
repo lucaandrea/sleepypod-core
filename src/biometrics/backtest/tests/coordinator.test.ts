@@ -1,3 +1,5 @@
+import { withBiometricBackgroundSlot } from '../../background-admission'
+import * as cleanup from '../../shadow/process-cleanup'
 // @vitest-environment node
 import Database from 'better-sqlite3'
 import { drizzle } from 'drizzle-orm/better-sqlite3'
@@ -7,7 +9,7 @@ import { mkdtemp, mkdir, rm, writeFile, readFile, utimes } from 'node:fs/promise
 import { join, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
 import { promisify } from 'node:util'
-import { afterAll, beforeAll, expect, it } from 'vitest'
+import { afterAll, beforeAll, expect, it, vi } from 'vitest'
 import { runCoordinatorTask } from '../coordinator'
 import { BacktestJobStore } from '../jobs'
 import { ShadowStore } from '../../shadow/store'
@@ -253,5 +255,34 @@ it('does not fall back to permissive boolean admission when the health callback 
     throw new Error('missing health')
   }]) {
     expect(await runCoordinatorTask(options(), { type: 'execute', owner: 'deny-health' }, { admit: async () => true, healthAdmission })).toEqual({ state: 'deferred' })
+  }
+})
+
+it('shares background capacity with shadow attempts while retaining report access', async () => {
+  let finish!: () => void
+  const busy = withBiometricBackgroundSlot('work', () => new Promise<void>((resolve) => {
+    finish = resolve
+  }))
+  try {
+    for (const task of [{ type: 'execute', owner: 'test' }, { type: 'collectArtifacts' }] as const) {
+      await expect(runCoordinatorTask(options(), task)).rejects.toMatchObject({ code: 'RESOURCE_LIMIT' })
+    }
+    await expect(runCoordinatorTask(options(), { type: 'readResult', input: { id: '00000000-0000-4000-8000-000000000001' } })).rejects.toMatchObject({ code: 'NOT_FOUND' })
+  }
+  finally {
+    finish()
+    await busy
+  }
+  expect(await runCoordinatorTask(options(), { type: 'execute', owner: 'test' })).toEqual({ state: 'deferred' })
+})
+it('does not release background capacity when coordinator cleanup cannot be confirmed', async () => {
+  const observation = vi.spyOn(cleanup, 'confirmShadowProcessCleanup').mockResolvedValueOnce(false)
+  try {
+    await expect(runCoordinatorTask(options(), { type: 'execute', owner: 'test' })).rejects.toMatchObject({ code: 'BIOMETRIC_COORDINATOR_CLEANUP_UNCONFIRMED' })
+    await expect(withBiometricBackgroundSlot('work', async () => null)).rejects.toThrow('cleanup is unconfirmed')
+  }
+  finally {
+    observation.mockRestore()
+    delete (globalThis as typeof globalThis & { __biometricBackgroundSlotsV1?: unknown }).__biometricBackgroundSlotsV1
   }
 })

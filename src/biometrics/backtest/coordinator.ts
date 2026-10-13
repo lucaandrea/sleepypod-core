@@ -1,3 +1,6 @@
+import { withBiometricBackgroundSlot } from '../background-admission'
+import { coordinatorTaskLanes } from './coordinator-lanes'
+import { confirmShadowProcessCleanup } from '../shadow/process-cleanup'
 import { monitorProcessGroupMemory } from './process-group-memory'
 import { admissionReceiptSchema, type HealthAdmission } from './job-operations'
 import { fork } from 'node:child_process'
@@ -32,7 +35,7 @@ export function runCoordinatorTask<T extends CoordinatorTask>(options: Coordinat
   const maximumTimeout = parsed.type === 'execute' && replayBudget ? replayBudget.jobWallMs : 180000
   if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 10 || timeoutMs > maximumTimeout) throw new Error('Invalid coordinator timeout')
   if (control.signal?.aborted) return Promise.reject(new Error('Coordinator cancelled'))
-  return new Promise((resolveResult, reject) => {
+  return withBiometricBackgroundSlot(coordinatorTaskLanes[parsed.type], () => new Promise((resolveResult, reject) => {
     const child = fork(resolve(options.coordinatorPath), [resolve(options.databasePath), resolve(options.workerPath), JSON.stringify(options.rawLocation ?? null), JSON.stringify(parsed.type === 'execute' ? replayBudget ?? null : null)], {
       cwd: dirname(resolve(options.databasePath)), detached: process.platform !== 'win32', serialization: 'advanced',
       execArgv: ['--max-old-space-size=384'], silent: true,
@@ -91,7 +94,7 @@ export function runCoordinatorTask<T extends CoordinatorTask>(options: Coordinat
       }
       else stop(new Error('Invalid coordinator response'))
     })
-    child.on('close', (code) => {
+    child.on('close', async (code) => {
       if (settled) return
       settled = true
       void memory?.stop()
@@ -101,6 +104,10 @@ export function runCoordinatorTask<T extends CoordinatorTask>(options: Coordinat
       control.signal?.removeEventListener('abort', cancel)
       // Also kill descendants if the coordinator crashed before reporting them.
       killGroup('SIGKILL')
+      if (process.platform !== 'win32' && !await confirmShadowProcessCleanup(child.pid, () => true)) {
+        reject(Object.assign(new Error('Biometrics coordinator process-group cleanup unconfirmed', { cause: failure }), { code: 'BIOMETRIC_COORDINATOR_CLEANUP_UNCONFIRMED' }))
+        return
+      }
       if (failure) reject(failure)
       else if (!received || code !== 0) reject(new Error('Coordinator exited without a complete result'))
       else resolveResult(result)
@@ -112,5 +119,5 @@ export function runCoordinatorTask<T extends CoordinatorTask>(options: Coordinat
       })
     }
     catch { stop(new Error('Could not start coordinator')) }
-  })
+  }))
 }

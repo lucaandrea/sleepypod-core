@@ -1,3 +1,4 @@
+import { withBiometricBackgroundSlot } from '../../background-admission'
 // @vitest-environment node
 import { beforeEach, expect, it, vi } from 'vitest'
 import { dataHash } from '../../algorithms/canonical'
@@ -95,5 +96,25 @@ it('reads pending identity from the installed store without worker inspection', 
   expect(pendingInstalledShadowRun(paths, {}, 50, { maximumRuns: 10 })).toEqual({ run: { runId, revisionId: null }, nextCursor: runId })
   expect(pending).toHaveBeenCalledWith({ maximumRuns: 10 })
   expect(inspectInstalledShadowHost).not.toHaveBeenCalled()
+  expect(database.close).toHaveBeenCalledOnce()
+})
+
+it('defers before inspection or claim while coordinator work owns application capacity', async () => {
+  const { execute, database } = setup()
+  let finish!: () => void
+  const busy = withBiometricBackgroundSlot('work', () => new Promise<void>((resolve) => {
+    finish = resolve
+  }))
+  try {
+    await expect(runInstalledShadowAttempt(runId, null, paths, {}, 50)).rejects.toMatchObject({ code: 'RESOURCE_LIMIT' })
+    expect(inspectInstalledShadowHost).not.toHaveBeenCalled()
+    expect(openShadowStateDatabase).not.toHaveBeenCalled()
+    expect(execute).not.toHaveBeenCalled()
+  }
+  finally {
+    finish()
+    await busy
+  }
+  expect(await runInstalledShadowAttempt(runId, null, paths, {}, 50)).toBe('completed')
   expect(database.close).toHaveBeenCalledOnce()
 })

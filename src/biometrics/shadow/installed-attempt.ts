@@ -1,3 +1,4 @@
+import { withBiometricBackgroundSlot } from '../background-admission'
 import { z } from 'zod'
 import { dataHash } from '../algorithms/canonical'
 import { getSensorFrameTimes } from '@/src/streaming/piezoStream'
@@ -12,7 +13,7 @@ type Installation = Pick<ShadowHostInstallation, 'workerPath' | 'pythonPath' | '
 /** Application-side execution boundary. Paths/storage policy are trusted service
  * configuration. User operations identify only an existing run and revision.
  * Executes the inspected package, never the source-copy attempt controller. */
-export async function runInstalledShadowAttempt(runId: string, revisionId: string | null, installation: Installation,
+async function runAdmittedShadowAttempt(runId: string, revisionId: string | null, installation: Installation,
   storagePolicy: unknown, busyTimeoutMs: number, signal?: AbortSignal) {
   z.string().uuid().parse(runId)
   z.string().uuid().nullable().parse(revisionId)
@@ -41,6 +42,12 @@ export async function runInstalledShadowAttempt(runId: string, revisionId: strin
       piezoReceivedAt: () => getSensorFrameTimes()['piezo-dual'] }, revisionId, signal)
   }
   finally { database.close() }
+}
+
+/** Reserve before build probes, database ownership, source subscription or claim.
+ * Busy pending runs remain pending for the service's next scheduling pass. */
+export function runInstalledShadowAttempt(...args: Parameters<typeof runAdmittedShadowAttempt>) {
+  return withBiometricBackgroundSlot('work', () => runAdmittedShadowAttempt(...args))
 }
 
 /** Queue inspection runs the verified package with an owned state connection. */

@@ -1,15 +1,9 @@
+import { coordinatorTaskLanes as taskLanes, type CoordinatorLane as Lane } from './coordinator-lanes'
 import { ReferenceInputError } from '../references/time'
 import { runCoordinatorTask, type CoordinatorOptions } from './coordinator'
 import type { CoordinatorTask, CoordinatorResults } from './coordinator-tasks'
 
 interface Control { signal?: AbortSignal, admit?: () => Promise<boolean> }
-type Lane = 'read' | 'work'
-const taskLanes: Record<CoordinatorTask['type'], Lane> = {
-  readShadowReport: 'read',
-  pageRawSources: 'read', datasetDescriptor: 'read', readResult: 'read', readSummary: 'read', readTrace: 'read', readNumericTrace: 'read', readReferenceTrace: 'read',
-  createWaveformDataset: 'work', inspectRawSource: 'work', createDataset: 'work', releaseDataset: 'work',
-  releaseResult: 'work', createExperiment: 'work', collectArtifacts: 'work', execute: 'work',
-}
 interface Entry { lane: Lane, start: () => Promise<void>, reject: (error: Error) => void }
 
 /** One serialized work slot plus one read slot, so replay cannot starve report

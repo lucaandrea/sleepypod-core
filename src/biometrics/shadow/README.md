@@ -1025,3 +1025,33 @@ Reports expose partial receipts through the existing bounded report route and
 show a partial-evidence notice; missing RSS is unavailable. Unconfirmed cleanup
 is an issue even when an operator's stop reason remains authoritative. This does
 not qualify a candidate, prove exact resource peaks, or authorize activation.
+
+
+### Shared application background capacity
+
+`runInstalledShadowAttempt` and the coordinator supervisor reserve the same
+`globalThis` work slot before starting probes, processes, scans or a shadow claim.
+The coordinator's exhaustive task/lane map is shared with its queue: stage and
+waveform execution, dataset construction/release, experiment creation, RAW
+inspection and artifact cleanup are work. One separately reserved read slot keeps
+reports available. The existing queue still bounds requests and wait times;
+capacity conflicts return `RESOURCE_LIMIT` before starting work. A busy shadow run
+remains pending and the service retries it on a later scan; no historical samples
+are invented if its window is ultimately missed.
+
+Ownership lasts until the supervisor settles cleanup. Coordinator completion now
+confirms disappearance of the original detached process group after child close,
+using the same bounded signal-zero check as shadow cleanup. Unconfirmed cleanup
+quarantines that lane instead of admitting replacement work. Ordinary errors
+release ownership; cancellation alone does not. Read diagnostics remain available
+when the work lane is quarantined. There is no API to clear quarantine: verify OS
+cleanup before restarting the application.
+
+This gate bounds the application process across duplicate module bundles; it is
+not an OS-wide lock. The existing private kernel flock still excludes numerical
+replay and shadow workers across processes. Deployment must retain a single
+application owner and retire old worker processes before startup. Independently
+launched Node coordinators in another application process do not share this gate.
+Production qualification must measure live processing plus one read process and
+one admitted work task, including peak RSS, ingestion delay and storage reserves;
+this concurrency bound does not replace per-worker or live-health limits.
