@@ -698,3 +698,17 @@ verifies exclusion while the owner is stopped with SIGSTOP and acquisition after
 SIGKILL/reaping. This serializes shipped shadow workers sharing the runtime path;
 it does not yet serialize replay jobs or reconcile expired database attempts.
 Those host lifecycle and recovery tasks remain before production registration.
+
+## Worker-local wall deadline
+
+The supervisor passes the saved `wallMs` budget to the Python bootstrap, which
+arms `ITIMER_REAL` before numerical imports. It installs the default terminating
+SIGALRM action and explicitly unblocks that signal. This supplements the parent's
+wall timer, so an idle worker does not depend on Node's event loop to enforce its
+elapsed-time budget. No alternate production timeout is selected by the worker.
+
+The real Linux test starts with SIGALRM blocked, arms a 100 ms deadline, sleeps,
+verifies signal termination and then reacquires the execution lock. Parent-side
+process-group cleanup remains necessary; a process explicitly stopped by SIGSTOP
+cannot handle ordinary pending signals until resumed, and the lock continues to
+exclude competing shadow workers in that condition.

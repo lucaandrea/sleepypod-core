@@ -68,12 +68,13 @@ def test_failed_limits_never_import_processor_or_read_input(monkeypatch):
         raise OSError('private-path-or-frame')
     monkeypatch.setattr(shadow_process, 'configure_parent_death', lambda pid: None)
     monkeypatch.setattr(shadow_process, 'acquire_shadow_lock', lambda: 123)
+    monkeypatch.setattr(shadow_process, 'configure_wall_deadline', lambda ms: None)
     monkeypatch.setattr(shadow_process.os, 'close', lambda fd: None)
     monkeypatch.setattr(shadow_process, 'configure_shadow_limits', fail)
     stderr = io.StringIO()
     monkeypatch.setattr(sys, 'stderr', stderr)
     monkeypatch.setattr(sys, 'stdin', None)
-    assert shadow_process.main(['--parent-pid', '123', '--cpu-seconds', '1', '--address-space-bytes', '123']) == 1
+    assert shadow_process.main(['--parent-pid', '123', '--wall-ms', '10000', '--cpu-seconds', '1', '--address-space-bytes', '123']) == 1
     assert stderr.getvalue() == 'Shadow process failed\n'
 
 
@@ -81,20 +82,21 @@ def test_successful_limits_precede_processor_import_and_run(monkeypatch):
     calls = []
     monkeypatch.setattr(shadow_process, 'configure_parent_death', lambda pid: calls.append('parent'))
     monkeypatch.setattr(shadow_process, 'acquire_shadow_lock', lambda: (calls.append('lock'), 123)[1])
+    monkeypatch.setattr(shadow_process, 'configure_wall_deadline', lambda ms: calls.append(('wall', ms)))
     monkeypatch.setattr(shadow_process.os, 'close', lambda fd: calls.append(('close', fd)))
     monkeypatch.setattr(shadow_process, 'configure_shadow_limits', lambda *args: calls.append('limits'))
     original = builtins.__import__
     def guarded(name, *args, **kwargs):
         if name == 'shadow_worker':
-            assert calls == ['parent', 'lock', 'limits']
+            assert calls == ['parent', 'lock', ('wall', 10000), 'limits']
             calls.append('import')
             return SimpleNamespace(run=lambda source, destination: calls.append((source, destination)))
         return original(name, *args, **kwargs)
     monkeypatch.setattr(builtins, '__import__', guarded)
     monkeypatch.setattr(sys, 'stdin', SimpleNamespace(buffer='source'))
     monkeypatch.setattr(sys, 'stdout', SimpleNamespace(buffer='destination'))
-    assert shadow_process.main(['--parent-pid', '123', '--cpu-seconds', '1', '--address-space-bytes', '123']) == 0
-    assert calls == ['parent', 'lock', 'limits', 'import', ('source', 'destination'), ('close', 123)]
+    assert shadow_process.main(['--parent-pid', '123', '--wall-ms', '10000', '--cpu-seconds', '1', '--address-space-bytes', '123']) == 0
+    assert calls == ['parent', 'lock', ('wall', 10000), 'limits', 'import', ('source', 'destination'), ('close', 123)]
 
 
 @pytest.mark.skipif(sys.platform != 'linux', reason='Kernel enforcement is Linux-only')
@@ -194,7 +196,7 @@ def test_parent_protection_failure_prevents_limits_and_processing(monkeypatch):
     monkeypatch.setattr(sys, 'stdin', None)
     stderr = io.StringIO()
     monkeypatch.setattr(sys, 'stderr', stderr)
-    assert shadow_process.main(['--parent-pid', '123', '--cpu-seconds', '1', '--address-space-bytes', '123']) == 1
+    assert shadow_process.main(['--parent-pid', '123', '--wall-ms', '10000', '--cpu-seconds', '1', '--address-space-bytes', '123']) == 1
     assert stderr.getvalue() == 'Shadow process failed\n'
 
 
@@ -282,5 +284,45 @@ def test_lock_contention_prevents_numerical_startup(monkeypatch):
     monkeypatch.setattr(sys, 'stdin', None)
     stderr = io.StringIO()
     monkeypatch.setattr(sys, 'stderr', stderr)
-    assert shadow_process.main(['--parent-pid', '123', '--cpu-seconds', '1', '--address-space-bytes', '123']) == 1
+    assert shadow_process.main(['--parent-pid', '123', '--wall-ms', '10000', '--cpu-seconds', '1', '--address-space-bytes', '123']) == 1
     assert stderr.getvalue() == 'Shadow process failed\n'
+
+
+@pytest.mark.parametrize('budget', [0, -1, True, 1.5, '1000', 7 * 86_400_000 + 300_001])
+def test_invalid_worker_wall_budget_refused(monkeypatch, budget):
+    monkeypatch.setattr(sys, 'platform', 'linux')
+    with pytest.raises(ValueError):
+        shadow_process.configure_wall_deadline(budget)
+
+
+def test_worker_wall_timer_uses_default_termination_signal(monkeypatch):
+    monkeypatch.setattr(sys, 'platform', 'linux')
+    calls = []
+    monkeypatch.setattr(shadow_process.signal, 'signal', lambda *args: calls.append(args))
+    monkeypatch.setattr(shadow_process.signal, 'pthread_sigmask', lambda *args: calls.append(args))
+    monkeypatch.setattr(shadow_process.signal, 'setitimer', lambda *args: calls.append(args))
+    shadow_process.configure_wall_deadline(1234)
+    assert calls == [(shadow_process.signal.SIGALRM, shadow_process.signal.SIG_DFL),
+        (shadow_process.signal.SIG_UNBLOCK, {shadow_process.signal.SIGALRM}),
+        (shadow_process.signal.ITIMER_REAL, 1.234)]
+
+
+@pytest.mark.skipif(sys.platform != 'linux', reason='Worker wall timer is Linux-only')
+def test_real_worker_wall_timer_terminates_idle_process_and_releases_slot():
+    import os
+    import signal
+    import tempfile
+    import time
+    from pathlib import Path
+    from common.biometrics.shadow_process import acquire_shadow_lock
+    environment = {**os.environ, 'PYTHONPATH': str(Path(__file__).resolve().parent.parent)}
+    with tempfile.TemporaryDirectory() as directory:
+        path = str(Path(directory) / 'worker.lock')
+        code = "from common.biometrics.shadow_process import acquire_shadow_lock,configure_wall_deadline; import sys,time,signal; fd=acquire_shadow_lock(sys.argv[1]); signal.pthread_sigmask(signal.SIG_BLOCK,{signal.SIGALRM}); configure_wall_deadline(100); time.sleep(60)"
+        started = time.monotonic()
+        result = subprocess.run([sys.executable, '-B', '-c', code, path], env=environment,
+            capture_output=True, timeout=5)
+        assert result.returncode == -signal.SIGALRM
+        assert time.monotonic() - started < 5
+        fd = acquire_shadow_lock(path)
+        os.close(fd)

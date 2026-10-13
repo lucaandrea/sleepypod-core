@@ -38,7 +38,7 @@ export async function runShadowChild(location: { pythonPath: string, modulesPath
   if (options.signal?.aborted) throw new Error('Shadow worker cancelled')
   const iterator = frames[Symbol.asyncIterator]()
   const child = spawn(location.pythonPath, ['-B', '-m', 'common.biometrics.shadow_process',
-    '--parent-pid', String(process.pid), '--cpu-seconds', String(budgets.cpuSeconds), '--address-space-bytes', String(budgets.addressSpaceBytes)], {
+    '--parent-pid', String(process.pid), '--wall-ms', String(budgets.wallMs), '--cpu-seconds', String(budgets.cpuSeconds), '--address-space-bytes', String(budgets.addressSpaceBytes)], {
     detached: true, cwd: tmpdir(), stdio: ['pipe', 'pipe', 'pipe'],
     env: { NODE_ENV: 'production', PYTHONPATH: location.modulesPath, LANG: 'C.UTF-8', TZ: 'UTC',
       OPENBLAS_NUM_THREADS: '1', OMP_NUM_THREADS: '1', MKL_NUM_THREADS: '1', NUMEXPR_NUM_THREADS: '1' },

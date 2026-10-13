@@ -67,6 +67,17 @@ def acquire_shadow_lock(path=SHADOW_LOCK_PATH):
         raise
 
 
+def configure_wall_deadline(wall_ms):
+    """Worker-local elapsed-time limit, independent of the Node event loop."""
+    if sys.platform != 'linux':
+        raise RuntimeError('Shadow wall deadline requires Linux')
+    if type(wall_ms) is not int or not 0 < wall_ms <= 7 * 86_400_000 + 300_000:
+        raise ValueError('Invalid shadow wall budget')
+    signal.signal(signal.SIGALRM, signal.SIG_DFL)
+    signal.pthread_sigmask(signal.SIG_UNBLOCK, {signal.SIGALRM})
+    signal.setitimer(signal.ITIMER_REAL, wall_ms / 1000)
+
+
 def configure_shadow_limits(cpu_seconds, address_space_bytes):
     if sys.platform != 'linux':
         raise RuntimeError('Shadow process limits require Linux')
@@ -92,6 +103,7 @@ def configure_shadow_limits(cpu_seconds, address_space_bytes):
 def main(argv=None):
     parser = argparse.ArgumentParser(description='Run a resource-limited shipped shadow processor')
     parser.add_argument('--parent-pid', type=int, required=True)
+    parser.add_argument('--wall-ms', type=int, required=True)
     parser.add_argument('--cpu-seconds', type=int, required=True)
     parser.add_argument('--address-space-bytes', type=int, required=True)
     args = parser.parse_args(argv)
@@ -99,6 +111,7 @@ def main(argv=None):
     try:
         configure_parent_death(args.parent_pid)
         lock_fd = acquire_shadow_lock()
+        configure_wall_deadline(args.wall_ms)
         configure_shadow_limits(args.cpu_seconds, args.address_space_bytes)
         from .shadow_worker import run
         run(sys.stdin.buffer, sys.stdout.buffer)
