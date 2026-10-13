@@ -1,0 +1,119 @@
+"""Prospective adapter parity and failure boundaries using locked signal deps."""
+from copy import deepcopy
+from pathlib import Path
+import sys
+
+import numpy as np
+import pytest
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from common.biometrics.config import manifest
+from common.biometrics.replay import RecordedContext, WaveformReplay
+from common.biometrics.shadow import ProspectiveShadow
+
+START = 1_700_000_000_000
+CONTEXT = RecordedContext(('left',), True, False, True)
+
+
+def configs():
+    return {side: deepcopy(manifest()['defaults']) for side in ('left', 'right')}
+
+
+def frames():
+    for second in range(150):
+        values = (np.sin((np.arange(500) + second * 500) / 500 * 2 * np.pi * 1.2) * 1_000_000).astype('<i4').tobytes()
+        yield START + second * 1000, {'type': 'piezo-dual', 'left1': values, 'right1': bytes(2000)}
+
+
+def shadow(sink, **changes):
+    options = dict(side='left', start_ms=START, end_ms=START + 150000,
+                   maximum_records=200, maximum_outputs=10, maximum_cpu_ms=30000, sink=sink)
+    options.update(changes)
+    return ProspectiveShadow(configs(), **options)
+
+
+def test_prospective_adapter_matches_shared_arrival_time_core_and_stays_separate():
+    expected, actual = [], []
+    core = WaveformReplay(configs(), retained_start_ms=START, score_start_ms=START,
+                          score_end_ms=START + 150000, sink=expected.append,
+                          clock_mode='observed_arrival_time')
+    candidate = shadow(actual.append)
+    for timestamp, record in frames():
+        core.feed(timestamp, record, CONTEXT)
+        candidate.feed(timestamp, record, CONTEXT)
+    core.close()
+    candidate.finish()
+    assert actual and [row.reading for row in actual] == expected
+    assert [row.sequence for row in actual] == list(range(len(actual)))
+    assert all(row.reading.side == 'left' and len(row.input_hash) == 64 for row in actual)
+    assert candidate.health()['state'] == 'completed'
+    assert 'cold_start_without_serialized_state' in candidate.health()['limitations']
+    assert 'event_time_replaces_arrival_time' not in candidate.health()['limitations']
+    with pytest.raises(ValueError, match='stopped'):
+        candidate.feed(START, {}, CONTEXT)
+
+
+def test_independent_instances_are_deterministic_and_context_changes_identity():
+    first, second = shadow(lambda _: None), shadow(lambda _: None)
+    record = {'type': 'frzHealth', 'left': {'pumpRpm': 0}, 'right': {'pumpRpm': 0}}
+    first.feed(START, record, CONTEXT)
+    second.feed(START, record, CONTEXT)
+    assert first.health()['input_hash'] == second.health()['input_hash']
+    third = shadow(lambda _: None)
+    third.feed(START, record, RecordedContext())
+    assert third.health()['input_hash'] != first.health()['input_hash']
+    assert 'missing_occupancy_context' in third.health()['limitations']
+
+
+def test_cooperative_cpu_budget_discards_provisional_outputs_and_stops():
+    emitted = []
+    ticks = iter([0, 2_000_000])
+    candidate = shadow(emitted.append, maximum_cpu_ms=1, cpu_clock=lambda: next(ticks))
+    timestamp, record = next(frames())
+    with pytest.raises(ValueError, match='CPU budget'):
+        candidate.feed(timestamp, record, CONTEXT)
+    assert emitted == [] and candidate.health()['state'] == 'failed'
+    with pytest.raises(ValueError, match='stopped'):
+        candidate.feed(timestamp, record, CONTEXT)
+
+
+def test_record_budget_cancellation_and_invalid_frames_stop_processing():
+    candidate = shadow(lambda _: None, maximum_records=1)
+    candidate.feed(START, {'type': 'frzHealth'}, CONTEXT)
+    with pytest.raises(ValueError, match='record budget'):
+        candidate.feed(START + 1, {'type': 'frzHealth'}, CONTEXT)
+    other = shadow(lambda _: pytest.fail('Cancelled processor emitted output'))
+    other.stop()
+    other.stop('retry')
+    assert other.health()['reason'] == 'cancelled'
+    with pytest.raises(ValueError, match='stopped'):
+        other.finish()
+    bad = shadow(lambda _: None)
+    with pytest.raises(ValueError, match='bounded shadow channel'):
+        bad.feed(START, {'type': 'piezo-dual', 'left1': bytes(20001)}, CONTEXT)
+    assert bad.health()['state'] == 'failed'
+
+
+def test_real_outputs_stop_at_quota_and_sink_failure_never_retries_silently():
+    output = []
+    candidate = shadow(output.append, maximum_outputs=1)
+    with pytest.raises(ValueError, match='output budget'):
+        for timestamp, record in frames():
+            candidate.feed(timestamp, record, CONTEXT)
+        candidate.finish()
+    assert len(output) == 1 and output[0].sequence == 0
+    assert candidate.health()['state'] == 'failed'
+
+    attempted = []
+    def failing_sink(row):
+        attempted.append(row)
+        raise RuntimeError('shadow storage unavailable')
+    failed = shadow(failing_sink)
+    with pytest.raises(RuntimeError, match='storage unavailable'):
+        for timestamp, record in frames():
+            failed.feed(timestamp, record, CONTEXT)
+        failed.finish()
+    assert len(attempted) == 1
+    with pytest.raises(ValueError, match='stopped'):
+        failed.finish()
+    assert len(attempted) == 1

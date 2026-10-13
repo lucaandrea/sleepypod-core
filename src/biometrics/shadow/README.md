@@ -69,3 +69,30 @@ index. Out-of-window/future reference rows and incompatibility reasons remain
 visible. Reports carry plan/snapshot/report hashes and reference provenance;
 they are descriptive prospective evidence, not clinical validation or activation
 authorization. Whole-night uncertainty and promotion review remain separate.
+
+## Shipped-core prospective adapter
+
+`modules/common/biometrics/shadow.py` provides `ProspectiveShadow`, an in-memory
+adapter around the shipped shared processor and routing/pump gates. It accepts
+both channels plus complete observed context, keeps isolated candidate state,
+and emits only the selected logical side through an injected shadow sink.
+It does not open a database or source, load proposed code, activate a profile,
+or import hardware control. The controller must still verify release-installed
+qualification and connect it to the separate storage path.
+
+The controller supplies observed arrival timestamps, matching the live core's
+clock semantics; recorded replay retains its existing event-time mode. Cold
+start, insufficient preroll and missing context remain explicit limitations.
+Each output carries sequence, immutable reading/provenance and a rolling input
+prefix hash over arrival timestamps, actual channel bytes and recorded context.
+Arbitration may delay publication: this hash identifies the prefix observed at
+publication, not a claim that a reading used every sample in that prefix.
+
+Record/output quotas and cumulative CPU checks stop the adapter on excess.
+Frame output remains provisional until the cooperative CPU check succeeds.
+Sink errors stop further processing; the controller must resolve any uncertain
+write through the storage idempotency contract. Cancellation does not flush
+pending arbitration; normal finish flushes once. These checks cannot preempt an
+individual numerical call. An isolated worker with host CPU/RSS/wall limits and
+health supervision is still required before enabling live shadow processing.
+The worker/source/controller/storage bridge is not yet connected.

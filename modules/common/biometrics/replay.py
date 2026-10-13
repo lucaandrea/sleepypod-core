@@ -77,7 +77,7 @@ class WaveformReplay:
     """
     def __init__(self, configs: Mapping[str, dict], *, retained_start_ms: int,
                  score_start_ms: int, score_end_ms: int,
-                 sink: Callable[[ReplayReading], None]):
+                 sink: Callable[[ReplayReading], None], clock_mode='recorded_event_time'):
         for value in (retained_start_ms, score_start_ms, score_end_ms):
             if type(value) is not int or value < 0:
                 raise ValueError('Invalid replay timestamp')
@@ -94,7 +94,11 @@ class WaveformReplay:
         self._closed = False
         self._context = RecordedContext()
         self._sink = sink
-        self.limitations = {'event_time_replaces_arrival_time', 'cold_start_without_serialized_state'}
+        if clock_mode not in ('recorded_event_time', 'observed_arrival_time'):
+            raise ValueError('Invalid processing clock mode')
+        self.limitations = {'cold_start_without_serialized_state'}
+        if clock_mode == 'recorded_event_time':
+            self.limitations.add('event_time_replaces_arrival_time')
         if score_start_ms - retained_start_ms < 300_000:
             self.limitations.add('less_than_five_minutes_preroll')
         self.counts = {'records': 0, 'accepted_frames': 0, 'empty_channel_frames': 0,
