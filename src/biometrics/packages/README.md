@@ -18,9 +18,10 @@ JSON. Artifact array order is part of that identity.
 or archive extraction. It rejects unexpected files, missing files, mismatched
 sizes/hashes, traversal paths, duplicate identities, and oversized proposals.
 The 32 MiB intake ceiling is a storage bound, not a qualified runtime budget.
-A future transport must enforce size limits before buffering. Dependency-lock
-syntax and actual dependency resolution must be checked in the isolated worker;
-intake only verifies its identity.
+A future transport must enforce size limits before buffering. Intake verifies
+only the dependency-lock artifact identity. The external
+executor additionally requires an exact Python environment lock and independently
+probes its reviewed runtime image; see the executor README for that format.
 
 Execution must use an external isolation boundary without pod credentials,
 network access by default, writable input, or access to live sinks. Resource

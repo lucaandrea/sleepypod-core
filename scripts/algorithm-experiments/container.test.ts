@@ -1,13 +1,18 @@
 // @vitest-environment node
 import { createHash } from 'node:crypto'
-import { describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, it } from 'vitest'
 import { configHash } from '../../src/biometrics/algorithms/canonical'
 import { packageFixture } from '../../src/biometrics/packages/tests/fixture'
+import { inspectPythonEnvironment } from './environment'
 import { checkPackageDeterminism } from './determinism'
 import { packageInputHash } from './input'
 import { executePackageExperiment } from './container'
 
 const image = process.env.BIOMETRIC_EXPERIMENT_TEST_IMAGE
+let lockBytes: Buffer<ArrayBuffer>
+beforeAll(async () => {
+  if (image) lockBytes = Buffer.from(JSON.stringify(await inspectPythonEnvironment(image)))
+})
 const program = `import json, sys
 init = json.loads(sys.stdin.readline())
 for line in sys.stdin:
@@ -18,6 +23,7 @@ for line in sys.stdin:
 function options(code: string) {
   const { manifest, files } = packageFixture()
   files.set('engine.py', Buffer.from(code))
+  files.set(manifest.dependencyLock, lockBytes)
   manifest.artifacts = [...files].map(([path, bytes]) => ({ path, bytes: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') }))
   manifest.resources = { cpuMs: 5000, wallMs: 5000, memoryBytes: 64 * 1024 * 1024, processes: 1, outputBytes: 16384 }
   const frames = [{ schema: 'biometric-signal-frame-v1', sequence: 0, timestampMs: 1000, samples: { left: [1, 2, 3], right: null }, context: { occupied: null, pumpActive: null } }]
@@ -58,7 +64,11 @@ else:
     raise AssertionError('Network available')
 s.close()
 `
-    const result = await executePackageExperiment(options(probes + program))
+    const input = options(probes + program)
+    const execution = executePackageExperiment(input)
+    input.policy.image = 'sha256:' + 'b'.repeat(64)
+    const result = await execution
+    expect(result.execution.environment.image).toBe(image)
     expect(result.results).toHaveLength(2)
     expect(result.execution.isolation).toBe('docker-restricted-v1')
   }, 20000)
@@ -69,6 +79,18 @@ s.close()
     expect(stable.runs).toHaveLength(2)
     const unstable = options(program.replace('import json, sys', 'import json, sys, secrets').replace('\'state\': {}', '\'state\': {\'nonce\': secrets.token_hex(16)}'))
     expect((await checkPackageDeterminism({ ...unstable, frames: () => unstable.frames })).deterministic).toBe(false)
+  }, 20000)
+  it('rejects a locked Python version that differs from the actual image before running code', async () => {
+    const input = options('raise AssertionError("candidate must not run")')
+    const wrong = JSON.parse(lockBytes.toString())
+    wrong.pythonVersion = '0.0.0'
+    const bytes = Buffer.from(JSON.stringify(wrong))
+    input.files.set(input.manifest.dependencyLock, bytes)
+    input.manifest.artifacts = input.manifest.artifacts.map(artifact => artifact.path === input.manifest.dependencyLock
+      ? { ...artifact, bytes: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') }
+      : artifact)
+    input.request.packageHash = configHash(input.manifest)
+    await expect(executePackageExperiment(input)).rejects.toThrow('differs from dependency lock')
   }, 20000)
   it('terminates an output flood without buffering it', async () => {
     await expect(executePackageExperiment(options('import sys\nsys.stdout.write(\'x\' * 1000000)\nsys.stdout.flush()\n'))).rejects.toThrow('Output transport limit')

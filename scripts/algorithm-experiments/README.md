@@ -5,10 +5,26 @@ local Docker image selected by an operator policy. It is development tooling,
 not a pod API, installation service, or qualification decision. Known pod DAC
 socket paths are rejected. Never bundle this runner into the pod web server.
 
-The image must contain Python and dependencies built from the package's lock.
-The runner requires an immutable local `sha256:` image ID, but does not yet
-verify that the installed dependencies match the lock. That remains a required
-qualification step. Do not pass a candidate-selected image or policy.
+The image must be operator-reviewed and selected by immutable local `sha256:`
+ID. The package's dependency-lock artifact uses the
+`biometric-python-environment-v1` JSON schema: exact image ID, Python version,
+implementation, OS, architecture and the complete sorted installed distribution
+inventory. A restricted probe container with no package files mounted collects
+that inventory before candidate execution. Any mismatch rejects the experiment.
+The result carries the exact lock-byte hash and observed environment hash.
+Do not pass a candidate-selected image or policy.
+
+Use `inspectPythonEnvironment(imageId)` to capture a lock from a reviewed image,
+then include those JSON bytes as a hashed package artifact. This is an
+**environment lock**, not a pip or uv dependency-resolution file; existing uv
+locks may also be retained as package artifacts for review. Preparing an image
+from the source dependency lock remains an operator's reviewed build step. The
+runner never installs dependencies or executes build hooks. The immutable image
+ID binds the configuration and layers; inventory verification additionally
+makes interpreter/platform/package-version mismatches explicit. See
+[Docker image identities](https://docs.docker.com/reference/cli/docker/image/pull/)
+and [Python distribution metadata](https://docs.python.org/3.12/library/importlib.metadata.html).
+A matching lock does not establish that dependencies or the image are safe.
 
 The process runs as UID 65534 with no network, capabilities, privilege elevation,
 or writable root filesystem. Only a fresh verified copy of the package is

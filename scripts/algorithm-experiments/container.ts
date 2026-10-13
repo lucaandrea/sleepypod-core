@@ -8,6 +8,7 @@ import { promisify } from 'node:util'
 import { performance } from 'node:perf_hooks'
 import { verifyAlgorithmPackage } from '../../src/biometrics/packages/manifest'
 import { PackageFrameValidator } from '../../src/biometrics/packages/protocol'
+import { inspectPythonEnvironment, matchPythonEnvironment, parsePythonEnvironmentLock } from './environment'
 import { freezePackageInput, readFrozenPackageInput } from './input'
 import { dataHash } from '../../src/biometrics/algorithms/canonical'
 
@@ -41,7 +42,7 @@ export async function executePackageExperiment(options: {
   policy: ExperimentPolicy
 }) {
   if (existsSync('/persistent/deviceinfo/dac.sock') || existsSync('/deviceinfo/dac.sock')) throw new Error('Algorithm experiments must run off-pod')
-  const { policy } = options
+  const policy = structuredClone(options.policy)
   if (!/^sha256:[a-f0-9]{64}$/.test(policy.image)) throw new Error('A local immutable image ID is required')
   for (const value of [policy.maximumWallMs, policy.maximumMemoryBytes, policy.maximumProcesses, policy.maximumOutputBytes, policy.maximumInputBytes]) {
     if (!Number.isSafeInteger(value) || value <= 0) throw new Error('Invalid experiment policy')
@@ -56,6 +57,10 @@ export async function executePackageExperiment(options: {
   if (resources.wallMs > 3600000) throw new Error('Experiment deadline exceeds one hour')
   const info = JSON.parse((await exec('docker', ['info', '--format', '{{json .}}'], { timeout: 10000, maxBuffer: 1024 * 1024 })).stdout)
   if (info.OSType !== 'linux' || !info.MemoryLimit || !info.PidsLimit || !info.CpuCfsQuota || !info.SecurityOptions?.some((item: string) => item.startsWith('name=seccomp'))) throw new Error('Docker lacks required isolation controls')
+  const lockBytes = files.get(verified.manifest.dependencyLock)
+  if (!lockBytes) throw new Error('Missing dependency lock')
+  parsePythonEnvironmentLock(lockBytes, policy.image)
+  const environment = matchPythonEnvironment(lockBytes, await inspectPythonEnvironment(policy.image), policy.image)
   const root = await mkdtemp(join(tmpdir(), 'sleepypod-package-'))
   const name = `sleepypod-experiment-${randomUUID()}`
   let created = false
@@ -155,7 +160,7 @@ export async function executePackageExperiment(options: {
       child.stdin.end()
       await completion
       return { packageHash: verified.packageHash, runHash: validator.runHash, frozenInput, results,
-        execution: { image: policy.image, wallMs: performance.now() - started, outputBytes, inputBytes, isolation: 'docker-restricted-v1' as const } }
+        execution: { environment, image: policy.image, wallMs: performance.now() - started, outputBytes, inputBytes, isolation: 'docker-restricted-v1' as const } }
     }
     catch (error) {
       fail(error instanceof Error ? error : new Error(String(error)))
