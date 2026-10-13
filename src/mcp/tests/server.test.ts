@@ -42,7 +42,7 @@ const callerMock = vi.hoisted(() => {
       delete: fn(), create: fn(), update: fn(),
     },
     databases: { checkIntegrity: fn() },
-    biometricShadow: { list: fn(), get: fn(), stop: fn(), report: fn(), compare: fn(), create: fn() },
+    biometricShadow: { list: fn(), get: fn(), stop: fn(), report: fn(), compare: fn(), create: fn(), templates: fn(), prepare: fn() },
     biometricTuning: {
       getReplayAdmission: fn(), listRawSources: fn(), inspectRawSource: fn(), createWaveformDataset: fn(),
       getManifest: fn(), getProfileOverview: fn(), listSessions: fn(), getSessionCapabilities: fn(), listImports: fn(),
@@ -652,6 +652,14 @@ describe('sleepypod MCP server', () => {
     api.list.mockResolvedValue({ items: [{ id }], nextCursor: null })
     const { submissionFixture } = await import('@/src/biometrics/shadow/tests/fixtures/submission')
     const proposed = submissionFixture()
+    api.templates.mockResolvedValue({ items: [{ id: 'test', label: 'Fixture', maximumWindowMs: 10000 }] })
+    api.prepare.mockResolvedValue({ status: 'prepared_not_admitted', plan: proposed.plan, planHash: 'a'.repeat(64) })
+    await client.callTool({ name: 'inspect_biometric_calibration', arguments: { request: { action: 'shadow_templates' } } })
+    expect(api.templates).toHaveBeenCalledWith({})
+    const preparation = { templateId: 'test', side: 'left', subjectId: 'sleeper', candidateRevisionId: null, startMs: 1700000001000, endMs: 1700000010000 }
+    await client.callTool({ name: 'inspect_biometric_calibration', arguments: { request: { action: 'shadow_prepare', input: preparation } } })
+    expect(api.prepare).toHaveBeenCalledWith(preparation)
+    expect(api.create).not.toHaveBeenCalled()
     api.create.mockResolvedValue({ id, state: 'pending' })
     const scheduled = await client.callTool({ name: 'schedule_biometric_shadow', arguments: proposed }) as CallToolResult
     expect(parse(scheduled)).toMatchObject({ id, state: 'pending' })

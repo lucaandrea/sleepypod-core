@@ -9,15 +9,11 @@ import { runtimePayloadSchema } from '../profiles/runtime'
 import { shadowRuntimeBindingReader } from './runtime-binding'
 import { shadowPlanSchema } from './store'
 
-/** Resolve a saved candidate and acknowledged baselines without activating or
- * repairing anything. Null revision explicitly selects the shipped default.
- * Both physical channels must have adopted their current desired generation. */
-export function resolveShadowProfiles(configuration: Database.Database, biometrics: Database.Database, rawPlan: unknown,
-  rawRevisionId: string | null, assertCurrent: () => void, now = Date.now()) {
-  const plan = shadowPlanSchema.parse(rawPlan), revisionId = z.string().uuid().nullable().parse(rawRevisionId)
-  if (!plan.execution) throw new Error('Shadow profile resolution requires execution policy')
-  if (plan.candidateRevisionId !== undefined && plan.candidateRevisionId !== revisionId) throw new Error('Shadow candidate revision differs from saved plan')
-  const execution = plan.execution
+/** Capture saved candidate and acknowledged baselines without activation or
+ * repair. Both physical channels must have adopted their desired generation. */
+export function captureShadowProfiles(configuration: Database.Database, biometrics: Database.Database,
+  rawSide: 'left' | 'right', rawRevisionId: string | null, assertCurrent: () => void, now = Date.now()) {
+  const side = z.enum(['left', 'right']).parse(rawSide), revisionId = z.string().uuid().nullable().parse(rawRevisionId)
   for (const db of [configuration, biometrics]) {
     if (!db.open || (!db.readonly && db.pragma('query_only', { simple: true }) !== 1)) throw new Error('Shadow profile resolution requires read-only databases')
   }
@@ -31,8 +27,7 @@ export function resolveShadowProfiles(configuration: Database.Database, biometri
   check()
   const result = configuration.transaction(() => biometrics.transaction(() => {
     const profiles = new ProfileStore(drizzle(configuration, { schema }))
-    const candidate = revisionId === null ? structuredClone(defaultConfig) : profiles.validateRevision(revisionId, plan.side).resolved
-    if (configHash(candidate) !== plan.candidateConfigHash) throw new Error('Shadow candidate differs from saved plan')
+    const candidate = revisionId === null ? structuredClone(defaultConfig) : profiles.validateRevision(revisionId, side).resolved
     const capture = (side: 'left' | 'right') => {
       const desired = z.object({ generation: z.number().int().positive().max(Number.MAX_SAFE_INTEGER), resolvedHash: z.string().regex(/^[a-f0-9]{64}$/) })
         .parse(configuration.prepare(`SELECT b.generation, e.next_hash AS resolvedHash FROM biometric_profile_bindings b
@@ -45,13 +40,24 @@ export function resolveShadowProfiles(configuration: Database.Database, biometri
     }
     const left = capture('left'), right = capture('right')
     const expectedBindings = { left: left.expected, right: right.expected }
-    if (plan.expectedBindings && dataHash(plan.expectedBindings) !== dataHash(expectedBindings)) throw new Error('Shadow active generations differ from saved plan')
-    const binding = shadowRuntimeBindingReader(configuration, biometrics, { side: plan.side, expected: expectedBindings, assertCurrent: check, now: () => now })()
-    if (binding.resolvedHash !== plan.activeConfigHash) throw new Error('Shadow active baseline differs from saved plan')
-    const configs = { left: left.resolved, right: right.resolved, [plan.side]: candidate }
-    if (dataHash({ left: configHash(configs.left), right: configHash(configs.right) }) !== dataHash(execution.configHashes)) throw new Error('Shadow physical-channel configs differ from saved plan')
-    return { revisionId, configs, expectedBindings, heartbeatAtMs: binding.heartbeatAtMs }
+    const binding = shadowRuntimeBindingReader(configuration, biometrics, { side, expected: expectedBindings, assertCurrent: check, now: () => now })()
+    const configs = { left: left.resolved, right: right.resolved, [side]: candidate }
+    return { revisionId, configs, expectedBindings, heartbeatAtMs: binding.heartbeatAtMs, candidateConfigHash: configHash(candidate), activeConfigHash: binding.resolvedHash }
   })())()
   check()
   return structuredClone(result)
+}
+
+/** Validate a frozen plan against a current capture. */
+export function resolveShadowProfiles(configuration: Database.Database, biometrics: Database.Database, rawPlan: unknown,
+  rawRevisionId: string | null, assertCurrent: () => void, now = Date.now()) {
+  const plan = shadowPlanSchema.parse(rawPlan), revisionId = z.string().uuid().nullable().parse(rawRevisionId)
+  if (!plan.execution) throw new Error('Shadow profile resolution requires execution policy')
+  if (plan.candidateRevisionId !== undefined && plan.candidateRevisionId !== revisionId) throw new Error('Shadow candidate revision differs from saved plan')
+  const result = captureShadowProfiles(configuration, biometrics, plan.side, revisionId, assertCurrent, now)
+  if (result.candidateConfigHash !== plan.candidateConfigHash) throw new Error('Shadow candidate differs from saved plan')
+  if (plan.expectedBindings && dataHash(plan.expectedBindings) !== dataHash(result.expectedBindings)) throw new Error('Shadow active generations differ from saved plan')
+  if (result.activeConfigHash !== plan.activeConfigHash) throw new Error('Shadow active baseline differs from saved plan')
+  if (dataHash({ left: configHash(result.configs.left), right: configHash(result.configs.right) }) !== dataHash(plan.execution.configHashes)) throw new Error('Shadow physical-channel configs differ from saved plan')
+  return { revisionId: result.revisionId, configs: result.configs, expectedBindings: result.expectedBindings, heartbeatAtMs: result.heartbeatAtMs }
 }

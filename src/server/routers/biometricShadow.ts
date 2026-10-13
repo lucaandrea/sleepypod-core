@@ -10,6 +10,8 @@ import { ReferenceInputError } from '@/src/biometrics/references/time'
 import { shadowReportRequestSchema, shadowReportSchema } from '@/src/biometrics/shadow/report-contracts'
 import { submitShadowSchema, submitInstalledShadow } from '@/src/biometrics/shadow/submission'
 import { configuredShadowServiceOptions } from '@/src/biometrics/shadow/startup'
+import { configuredShadowTemplates, prepareInstalledShadow } from '@/src/biometrics/shadow/installed-preparation'
+import { prepareShadowRequestSchema, preparedShadowPlanSchema, shadowTemplatePageSchema } from '@/src/biometrics/shadow/preparation-contracts'
 
 const idSchema = z.object({ id: z.string().uuid() }).strict()
 async function inspect<T>(action: (store: ShadowStore) => T | Promise<T>) {
@@ -31,6 +33,18 @@ async function inspect<T>(action: (store: ShadowStore) => T | Promise<T>) {
 }
 
 export const biometricShadowRouter = router({
+  templates: publicProcedure
+    .meta({ openapi: { method: 'GET', path: '/biometric-tuning/shadow-templates', protect: false, tags: ['Biometric tuning'] } })
+    .input(z.object({}).strict()).output(shadowTemplatePageSchema)
+    .query(() => inspect(() => configuredShadowTemplates())),
+  prepare: publicProcedure
+    .meta({ openapi: { method: 'POST', path: '/biometric-tuning/shadow-plans/prepare', protect: false, tags: ['Biometric tuning'] } })
+    .input(prepareShadowRequestSchema).output(preparedShadowPlanSchema)
+    .mutation(({ input }) => inspect(() => {
+      const options = configuredShadowServiceOptions(db, biometricsDb)
+      if (!options) throw new ReferenceInputError('WORKER_UNAVAILABLE', 'Shadow execution is not configured')
+      return prepareInstalledShadow(input, options.installation, options.busyTimeoutMs)
+    })),
   create: publicProcedure
     .meta({ openapi: { method: 'POST', path: '/biometric-tuning/shadow-runs', protect: false, tags: ['Biometric tuning'] } })
     .input(submitShadowSchema).output(shadowRunDescriptorSchema)

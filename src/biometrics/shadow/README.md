@@ -760,7 +760,7 @@ qualification evidence are inferred by this service; API/UI wiring remains work.
 ### Deployment configuration
 
 Set `SLEEPYPOD_BIOMETRICS_SHADOW_SERVICE` to a JSON object conforming to
-`shadowServiceConfigurationSchema` in `startup.ts`. All fields are mandatory;
+`shadowServiceConfigurationSchema` in `startup.ts`. Only `planTemplates` is optional;
 unknown fields and input larger than 16 KiB are rejected.
 
 | Field | Meaning |
@@ -773,6 +773,7 @@ unknown fields and input larger than 16 KiB are rejected.
 | `busyTimeoutMs` | SQLite wait limit, 1–1000 ms, also bounded by each saved execution policy |
 | `recoveryIntervalMs` | Recovery and scheduling cadence, 10–300000 ms |
 | `recoveryMaximumRuns` | Maximum rows per recovery/scheduling page, 1–100 |
+| `planTemplates` | Optional array of up to 8 uniquely named preparation templates; no templates are inferred |
 
 These are schema bounds, not recommended pod budgets. Choose values from measured
 qualification evidence. The two database paths come from the application's open
@@ -882,3 +883,30 @@ installed execution path. Exact idempotent retries return existing evidence befo
 new Python/health probes; changed requests with the same key conflict. Creation
 still requires explicit server deployment configuration and the installed package.
 There are no caller-supplied executable paths, numerical configs or health flags.
+
+### Server-side plan preparation
+
+Deployment `planTemplates` supply a bounded ID/label, qualification hash, maximum
+window, frozen execution and monitoring policy, joining limits, selected metrics,
+optional IBI window and storage ceilings. Their maximum window plus final drain
+must fit the worker wall budget; their point/byte ceilings must fit deployment
+storage policy. These are explicit operator-installed values, not production
+defaults or proof of qualification. No template ships enabled by default.
+
+`GET /api/biometric-tuning/shadow-templates` returns only template IDs, labels and
+maximum windows. `POST /api/biometric-tuning/shadow-plans/prepare` accepts template
+ID, side, sleeper identity, saved candidate revision (or explicit default) and
+start/end times. The verified package checks the template against the installed
+qualification registry and manifest, then captures acknowledged active generations
+and candidate configuration from owned read-only database handles. Both physical
+channel config hashes and the active baseline must match the template's evidence.
+
+The response contains the full frozen plan and hash with status
+`prepared_not_admitted`. Preparation opens no waveform source, runs no Python
+worker and queues nothing. Fresh installed-build, hardware and health admission
+remain mandatory at creation and execution. Changed profiles or generations make
+the prepared plan stale rather than silently replacing its inputs.
+
+MCP exposes `shadow_templates` and `shadow_prepare` through the read-only
+`inspect_biometric_calibration` tool. Scheduling remains the separate explicit
+`schedule_biometric_shadow` operation with its immutable retry key.

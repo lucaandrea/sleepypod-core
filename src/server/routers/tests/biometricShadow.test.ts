@@ -106,6 +106,8 @@ it('publishes concrete REST contracts for inspection and stop', () => {
   const document = generateOpenApiDocument(biometricShadowRouter, { title: 'Shadow', version: '1.0.0', baseUrl: 'http://localhost/api' })
   expect(document.paths?.['/biometric-tuning/shadow-runs']?.get).toBeDefined()
   expect(document.paths?.['/biometric-tuning/shadow-runs']?.post).toBeDefined()
+  expect(document.paths?.['/biometric-tuning/shadow-templates']?.get).toBeDefined()
+  expect(document.paths?.['/biometric-tuning/shadow-plans/prepare']?.post).toBeDefined()
   expect(document.paths?.['/biometric-tuning/shadow-runs/{id}']?.get).toBeDefined()
   expect(document.paths?.['/biometric-tuning/shadow-runs/{id}/stop']?.post).toBeDefined()
   expect(document.paths?.['/biometric-tuning/shadow-runs/{id}/report']?.get).toBeDefined()

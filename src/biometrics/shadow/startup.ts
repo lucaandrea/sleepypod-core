@@ -7,6 +7,7 @@ import { z } from 'zod'
 import { packagedShadowHostPath } from '../backtest/location'
 import { shadowStoragePolicySchema } from './store'
 import { startShadowService } from './service-host'
+import { shadowPlanTemplateSchema } from './preparation-contracts'
 
 const absolutePath = z.string().min(1).max(4096).refine(value => isAbsolute(value) && !value.includes('\0'), 'Expected absolute installation path')
 export const shadowServiceConfigurationSchema = z.object({
@@ -18,7 +19,9 @@ export const shadowServiceConfigurationSchema = z.object({
   busyTimeoutMs: z.number().int().min(1).max(1000),
   recoveryIntervalMs: z.number().int().min(10).max(300000),
   recoveryMaximumRuns: z.number().int().min(1).max(100),
-}).strict()
+  planTemplates: z.array(shadowPlanTemplateSchema).max(8).refine(items => new Set(items.map(item => item.id)).size === items.length, 'Duplicate shadow template IDs').optional(),
+}).strict().refine(value => (value.planTemplates ?? []).every(template => template.maximumPoints <= value.storagePolicy.maximumPoints
+  && template.maximumBytes <= value.storagePolicy.maximumBytes), 'Shadow templates exceed deployment storage policy')
 
 /** Environment configuration is an operator-owned resource policy, not evidence
  * of qualification. Every execution still verifies the installed qualification

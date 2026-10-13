@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import { afterEach, expect, it } from 'vitest'
 import { loadInstalledShadowHost } from '../installed-host'
 const directories: string[] = []
-const fixture = `module.exports = { shadowHostApiVersion: 'shadow-host-api-v1', runProfiledShadowAttempt() {}, openProfiledShadowHost() {}, ShadowStore() {},
+const fixture = `module.exports = { shadowHostApiVersion: 'shadow-host-api-v1', runProfiledShadowAttempt() {}, openProfiledShadowHost() {}, prepareShadowPlan() {}, ShadowStore() {},
 shadowEngineBuildIdentity() {}, readInstalledShadowQualifications() {}, shadowPlanSchema: {}, shadowStoragePolicySchema: {} };`
 function file(contents = fixture) {
   const directory = mkdtempSync(join(tmpdir(), 'installed-shadow-'))
