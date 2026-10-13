@@ -1,3 +1,4 @@
+import { summaryProvenanceFields, summaryProvenanceSchema, summarizeVitalProvenance } from '@/src/biometrics/profiles/vital-summary-provenance'
 import { vitalProvenance, vitalProvenanceSchema } from '@/src/biometrics/profiles/vital-provenance'
 import { z } from 'zod'
 import { TRPCError } from '@trpc/server'
@@ -679,6 +680,7 @@ export const biometricsRouter = router({
   getVitalsSummary: publicProcedure
     .meta({ openapi: { method: 'GET', path: '/biometrics/vitals/summary', protect: false, tags: ['Biometrics'] } })
     .output(z.object({
+      provenance: summaryProvenanceSchema.optional(),
       avgHeartRate: z.number().nullable(),
       minHeartRate: z.number().nullable(),
       maxHeartRate: z.number().nullable(),
@@ -718,6 +720,7 @@ export const biometricsRouter = router({
 
         const [summary] = await biometricsDb
           .select({
+            ...summaryProvenanceFields,
             avgHeartRate: avg(vitals.heartRate),
             minHeartRate: min(vitals.heartRate),
             maxHeartRate: max(vitals.heartRate),
@@ -726,6 +729,7 @@ export const biometricsRouter = router({
             recordCount: count(),
           })
           .from(vitals)
+          .leftJoin(biometricProcessingRuns, and(eq(vitals.processingRunId, biometricProcessingRuns.id), eq(vitals.side, biometricProcessingRuns.side)))
           .where(
             and(
               eq(vitals.side, input.side),
@@ -738,11 +742,14 @@ export const biometricsRouter = router({
           return null
         }
 
+        const provenance = summarizeVitalProvenance(summary)
+        const incompatibleHrv = provenance?.hrvAggregation === 'incompatible_definitions'
         return {
+          provenance,
           avgHeartRate: summary.avgHeartRate !== null ? Number(summary.avgHeartRate) : null,
           minHeartRate: summary.minHeartRate ?? null,
           maxHeartRate: summary.maxHeartRate ?? null,
-          avgHRV: summary.avgHRV !== null ? Number(summary.avgHRV) : null,
+          avgHRV: !incompatibleHrv && summary.avgHRV !== null ? Number(summary.avgHRV) : null,
           avgBreathingRate: summary.avgBreathingRate !== null ? Number(summary.avgBreathingRate) : null,
           recordCount: summary.recordCount,
         }
@@ -766,6 +773,7 @@ export const biometricsRouter = router({
   getVitalsBaseline: publicProcedure
     .meta({ openapi: { method: 'GET', path: '/biometrics/vitals/baseline', protect: false, tags: ['Biometrics'] } })
     .output(z.object({
+      provenance: summaryProvenanceSchema.optional(),
       hrMean: z.number().nullable(),
       hrSD: z.number().nullable(),
       hrvMean: z.number().nullable(),
@@ -788,6 +796,7 @@ export const biometricsRouter = router({
 
         const [row] = await biometricsDb
           .select({
+            ...summaryProvenanceFields,
             hrMean: avg(vitals.heartRate),
             hrSqMean: sql<number | null>`AVG(${vitals.heartRate} * ${vitals.heartRate})`,
             hrvMean: avg(vitals.hrv),
@@ -797,6 +806,7 @@ export const biometricsRouter = router({
             sampleCount: count(),
           })
           .from(vitals)
+          .leftJoin(biometricProcessingRuns, and(eq(vitals.processingRunId, biometricProcessingRuns.id), eq(vitals.side, biometricProcessingRuns.side)))
           .where(
             and(
               eq(vitals.side, input.side),
@@ -813,13 +823,17 @@ export const biometricsRouter = router({
           return variance > 0 ? Math.sqrt(variance) : 0
         }
 
+        const provenance = summarizeVitalProvenance(row)
+        const mixedConfigurations = provenance !== undefined && (provenance.configurationCount > 1 || (provenance.configurationCount > 0 && provenance.unknownConfigurationRows > 0))
+        const incompatibleHrv = mixedConfigurations || provenance?.hrvAggregation === 'incompatible_definitions'
         return {
-          hrMean: row.hrMean !== null ? Number(row.hrMean) : null,
-          hrSD: sd(row.hrMean as number | null, row.hrSqMean),
-          hrvMean: row.hrvMean !== null ? Number(row.hrvMean) : null,
-          hrvSD: sd(row.hrvMean as number | null, row.hrvSqMean),
-          brMean: row.brMean !== null ? Number(row.brMean) : null,
-          brSD: sd(row.brMean as number | null, row.brSqMean),
+          provenance,
+          hrMean: !mixedConfigurations && row.hrMean !== null ? Number(row.hrMean) : null,
+          hrSD: mixedConfigurations ? null : sd(row.hrMean as number | null, row.hrSqMean),
+          hrvMean: !incompatibleHrv && row.hrvMean !== null ? Number(row.hrvMean) : null,
+          hrvSD: incompatibleHrv ? null : sd(row.hrvMean as number | null, row.hrvSqMean),
+          brMean: !mixedConfigurations && row.brMean !== null ? Number(row.brMean) : null,
+          brSD: mixedConfigurations ? null : sd(row.brMean as number | null, row.brSqMean),
           sampleCount: row.sampleCount,
           windowDays: input.days,
         }

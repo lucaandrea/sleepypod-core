@@ -1,9 +1,14 @@
+import { I18nProvider } from '@lingui/react'
+import { i18n } from '@lingui/core'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { BiometricsPage } from '../BiometricsPage'
 
 const NOW = new Date(2026, 8, 28, 19, 1).getTime()
 const LAST_VITAL = new Date(2026, 8, 28, 15, 5).getTime()
+
+i18n.load('en', {})
+i18n.activate('en')
 
 const state = vi.hoisted(() => ({
   occupied: true,
@@ -95,7 +100,7 @@ afterEach(() => {
 
 describe('BiometricsPage', () => {
   it('warns when the side is occupied but vitals stalled, with the gap as hours and minutes', () => {
-    render(<BiometricsPage />)
+    render(<I18nProvider i18n={i18n}><BiometricsPage /></I18nProvider>)
     const banner = screen.getByTestId('stale-banner')
     expect(banner.textContent).toContain('Jon’s side is occupied, but the last vital arrived 3h 56m ago. The pipeline may be stalled.')
     expect(within(banner).getByRole('link', { name: /Health/ }).getAttribute('href')).toBe('/en/system?tab=health&node=piezo-processor')
@@ -103,7 +108,7 @@ describe('BiometricsPage', () => {
 
   it('asks whether anyone is there instead of blaming the pipeline when the side looks empty', async () => {
     state.dataPath = { occupancy: { left: 'suspect', right: 'empty' } }
-    render(<BiometricsPage />)
+    render(<I18nProvider i18n={i18n}><BiometricsPage /></I18nProvider>)
     expect(screen.queryByTestId('stale-banner')).toBeNull()
     const banner = screen.getByTestId('suspect-banner')
     expect(banner.textContent).toContain('Jon’s side reads occupied, but the last vital arrived 3h 56m ago and nobody has moved since.')
@@ -113,22 +118,22 @@ describe('BiometricsPage', () => {
 
   it('does not call the pipeline stalled while the latest vital is still loading', () => {
     state.latestPending = true
-    render(<BiometricsPage />)
+    render(<I18nProvider i18n={i18n}><BiometricsPage /></I18nProvider>)
     expect(screen.queryByTestId('stale-banner')).toBeNull()
     cleanup()
     state.dataPath = { occupancy: { left: 'suspect', right: 'empty' } }
-    render(<BiometricsPage />)
+    render(<I18nProvider i18n={i18n}><BiometricsPage /></I18nProvider>)
     expect(screen.queryByTestId('suspect-banner')).toBeNull()
   })
 
   it('hides the banner when the side is empty', () => {
     state.occupied = false
-    render(<BiometricsPage />)
+    render(<I18nProvider i18n={i18n}><BiometricsPage /></I18nProvider>)
     expect(screen.queryByTestId('stale-banner')).toBeNull()
   })
 
   it('shows the four summary cells without records or RAW files', () => {
-    render(<BiometricsPage />)
+    render(<I18nProvider i18n={i18n}><BiometricsPage /></I18nProvider>)
     const summary = screen.getByTestId('biometrics-summary')
     expect(summary.textContent).toContain('Avg heart rate')
     expect(summary.textContent).toContain('40–84')
@@ -137,7 +142,7 @@ describe('BiometricsPage', () => {
   })
 
   it('lists sessions newest first, marks the ongoing stalled one, and moves counts to the footer', () => {
-    render(<BiometricsPage />)
+    render(<I18nProvider i18n={i18n}><BiometricsPage /></I18nProvider>)
     const rows = screen.getAllByTestId('session-row')
     expect(rows).toHaveLength(2)
     expect(rows[0].textContent).toContain('Mon Sep 28')
@@ -148,7 +153,7 @@ describe('BiometricsPage', () => {
   })
 
   it('zooms the chart to the complete session when its row is clicked', () => {
-    render(<BiometricsPage />)
+    render(<I18nProvider i18n={i18n}><BiometricsPage /></I18nProvider>)
     fireEvent.click(screen.getAllByTestId('session-row')[1])
     const last = state.vitals.mock.calls.at(-1)?.[0] as { startDate: Date, endDate: Date }
     expect(last.startDate).toEqual(new Date(2026, 8, 27, 4, 5))
@@ -162,7 +167,7 @@ describe('BiometricsPage', () => {
   ] as const)('labels the vitals axis and session times in the %s clock', (format, ticks, since) => {
     state.timeFormat = format
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({ x: 0, y: 0, left: 0, top: 0, width: 900, height: 300, right: 900, bottom: 300, toJSON: () => ({}) })
-    const { container } = render(<BiometricsPage />)
+    const { container } = render(<I18nProvider i18n={i18n}><BiometricsPage /></I18nProvider>)
     const labels = [...container.querySelectorAll('svg text')].map(t => t.textContent)
     for (const tick of ticks) expect(labels).toContain(tick)
     expect(screen.getAllByTestId('session-row')[0].textContent).toContain(since)
@@ -175,7 +180,7 @@ describe('BiometricsPage', () => {
     ]
     try {
       vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({ x: 0, y: 0, left: 0, top: 0, width: 900, height: 300, right: 900, bottom: 300, toJSON: () => ({}) })
-      render(<BiometricsPage />)
+      render(<I18nProvider i18n={i18n}><BiometricsPage /></I18nProvider>)
       expect(screen.getAllByTestId('vitals-reference')).toHaveLength(1)
       expect(screen.getByText('Apple Watch heart rate')).toBeTruthy()
     }
@@ -187,12 +192,12 @@ describe('BiometricsPage', () => {
   it('does not carry the previous side’s Watch samples across a side switch', () => {
     // The pod line may keep its placeholder while the new side loads, but the
     // Watch overlay must not: that would compare one person to the other.
-    render(<BiometricsPage />)
+    render(<I18nProvider i18n={i18n}><BiometricsPage /></I18nProvider>)
     expect(state.referenceOpts).not.toHaveProperty('placeholderData')
   })
 
   it('drops the Occupied field from the sides card', () => {
-    render(<BiometricsPage />)
+    render(<I18nProvider i18n={i18n}><BiometricsPage /></I18nProvider>)
     const sides = screen.getByTestId('sides-card')
     expect(sides.textContent).toContain('In bed')
     expect(sides.textContent).toContain('Empty')
@@ -202,7 +207,7 @@ describe('BiometricsPage', () => {
   it('lists only the sleeper\'s side in the sides card when the other is away', () => {
     state.shown = ['left']
     try {
-      render(<BiometricsPage />)
+      render(<I18nProvider i18n={i18n}><BiometricsPage /></I18nProvider>)
       const sides = screen.getByTestId('sides-card')
       expect(sides.textContent).toContain('left')
       expect(sides.textContent).not.toContain('right')
@@ -215,7 +220,7 @@ describe('BiometricsPage', () => {
 
 describe('biometrics date navigation', () => {
   it('selects an older night, steps through nights, and returns to the latest range', () => {
-    render(<BiometricsPage />)
+    render(<I18nProvider i18n={i18n}><BiometricsPage /></I18nProvider>)
     fireEvent.click(screen.getAllByRole('tab', { name: 'Night' })[0])
     fireEvent.change(screen.getByLabelText('Biometrics date'), { target: { value: '2026-09-10' } })
     expect(state.vitals.mock.calls.at(-1)?.[0].startDate).toEqual(new Date(2026, 8, 10, 12))
@@ -228,7 +233,7 @@ describe('biometrics date navigation', () => {
   })
 
   it('focuses session detail and restores the original week', () => {
-    render(<BiometricsPage />)
+    render(<I18nProvider i18n={i18n}><BiometricsPage /></I18nProvider>)
     fireEvent.click(screen.getAllByTestId('session-row')[1])
     expect(document.activeElement).toBe(screen.getByLabelText('Vitals detail'))
     fireEvent.click(screen.getByRole('button', { name: 'Back to range' }))
@@ -238,7 +243,7 @@ describe('biometrics date navigation', () => {
 
   it('shows Watch summaries only for sessions with matching data', () => {
     state.reference = [{ timestamp: new Date(2026, 8, 27, 5), heartRate: 58 }]
-    render(<BiometricsPage />)
+    render(<I18nProvider i18n={i18n}><BiometricsPage /></I18nProvider>)
     const rows = screen.getAllByTestId('session-row')
     expect(rows[0].textContent).not.toContain('Watch')
     expect(rows[1].textContent).toContain('Watch 58 bpm')
@@ -246,7 +251,7 @@ describe('biometrics date navigation', () => {
   })
 
   it('requests a complete month including dense 30-second readings', () => {
-    render(<BiometricsPage />)
+    render(<I18nProvider i18n={i18n}><BiometricsPage /></I18nProvider>)
     fireEvent.click(screen.getAllByRole('tab', { name: 'Month' })[0])
     const input = state.vitals.mock.calls.at(-1)?.[0]
     expect(input.startDate).toEqual(new Date(2026, 7, 30))
@@ -257,7 +262,7 @@ describe('biometrics date navigation', () => {
 
 it('keeps the whole selected session when it crosses noon', () => {
   state.vitals.mockReturnValue({ data: session(new Date(2026, 8, 27, 11).getTime(), 181), isLoading: false })
-  render(<BiometricsPage />)
+  render(<I18nProvider i18n={i18n}><BiometricsPage /></I18nProvider>)
   fireEvent.click(screen.getByTestId('session-row'))
   const input = state.vitals.mock.calls.at(-1)?.[0]
   expect(input.startDate).toEqual(new Date(2026, 8, 27, 11))
@@ -270,7 +275,7 @@ it.each([
   ['Month', 'Previous month', new Date(2026, 6, 31), new Date(2026, 7, 30)],
   ['Month', 'Next month', new Date(2026, 8, 29), new Date(2026, 9, 29)],
 ])('steps %s using %s across calendar boundaries', (range, button, startDate, endDate) => {
-  render(<BiometricsPage />)
+  render(<I18nProvider i18n={i18n}><BiometricsPage /></I18nProvider>)
   fireEvent.click(screen.getAllByRole('tab', { name: range as string })[0])
   fireEvent.click(screen.getByRole('button', { name: button as string }))
   expect(state.vitals.mock.calls.at(-1)?.[0]).toMatchObject({ startDate, endDate })
@@ -280,7 +285,7 @@ it.each([
   ['Previous night', new Date(2026, 8, 25, 12)],
   ['Next night', new Date(2026, 8, 27, 12)],
 ])('uses the focused session night as the anchor for %s', (button, startDate) => {
-  render(<BiometricsPage />)
+  render(<I18nProvider i18n={i18n}><BiometricsPage /></I18nProvider>)
   fireEvent.click(screen.getAllByTestId('session-row')[1])
   fireEvent.click(screen.getByRole('button', { name: button as string }))
   expect(state.vitals.mock.calls.at(-1)?.[0].startDate).toEqual(startDate)
@@ -288,7 +293,7 @@ it.each([
 })
 
 it('clears session focus when switching people and ignores clearing the date field', () => {
-  render(<BiometricsPage />)
+  render(<I18nProvider i18n={i18n}><BiometricsPage /></I18nProvider>)
   fireEvent.click(screen.getAllByTestId('session-row')[1])
   fireEvent.click(screen.getByRole('tab', { name: 'Heidi' }))
   expect(screen.queryByRole('button', { name: 'Back to range' })).toBeNull()

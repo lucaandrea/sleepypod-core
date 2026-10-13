@@ -900,6 +900,14 @@ msgstr "Reserva"
 msgid "Holdout accesses recorded for this experiment: {0}"
 msgstr "Accesos a la reserva registrados para este experimento: {0}"
 
+#: src/components/biometrics/BiometricsPage.tsx:532
+msgid "HRV definition"
+msgstr "Definición de VFC"
+
+#: src/components/biometrics/BiometricsPage.tsx:251
+msgid "HRV definitions differ or are partly unknown. A combined HRV average is unavailable."
+msgstr "Las definiciones de VFC difieren o se desconocen en parte. No se puede calcular un promedio combinado de VFC."
+
 #: src/components/biometrics/Calibration/CalibrationOverview.tsx:18
 msgid "HRV index"
 msgstr "Índice de VFC"
@@ -1758,6 +1766,10 @@ msgstr "Página anterior de la traza"
 msgid "Processing failed."
 msgstr "El procesamiento falló."
 
+#: src/components/biometrics/BiometricsPage.tsx:531
+msgid "Processing run"
+msgstr "Ejecución de procesamiento"
+
 #: src/components/biometrics/Calibration/CalibrationOverview.tsx:27
 msgid "Processor health"
 msgstr "Estado del procesador"
@@ -1832,6 +1844,12 @@ msgstr "Lecturas recalculadas {first}–{0} de {1}"
 msgid "Recomputed readings and compatible frozen references in the selected metric unit"
 msgstr "Lecturas recalculadas y referencias fijadas compatibles en la unidad de la métrica seleccionada"
 
+#. placeholder {0}: summaryQ.data.provenance.configurationCount
+#. placeholder {1}: summaryQ.data.provenance.unknownConfigurationRows
+#: src/components/biometrics/BiometricsPage.tsx:238
+msgid "Recorded configurations: {0}; readings with unknown configuration: {1}."
+msgstr "Configuraciones registradas: {0}; lecturas con configuración desconocida: {1}."
+
 #: src/components/biometrics/Calibration/ReplaySessionPicker.tsx:24
 msgid "Recorded nights"
 msgstr "Noches registradas"
@@ -1875,10 +1893,6 @@ msgstr "Cobertura de referencia"
 #: src/components/biometrics/Calibration/NumericReport.tsx:38
 msgid "Reference coverage is the fraction of eligible reference records paired. Output coverage is the fraction of observations with a value, not continuous time coverage. Sparse samples cannot establish whole-night accuracy."
 msgstr "La cobertura de referencia es la fracción de registros de referencia aptos que se han emparejado. La cobertura de salida es la fracción de observaciones con un valor, no la cobertura temporal continua. Las muestras escasas no permiten establecer la precisión de una noche completa."
-
-#: src/components/biometrics/Calibration/NumericReport.tsx:34
-#~ msgid "Reference coverage is the fraction of eligible reference records paired. Output coverage is the fraction of stored observations with a value, not continuous time coverage. Sparse samples cannot establish whole-night accuracy."
-#~ msgstr "La cobertura de referencia es la fracción de registros de referencia aptos que se emparejaron. La cobertura de salida es la fracción de observaciones almacenadas con un valor, no una cobertura temporal continua. Las muestras dispersas no permiten determinar la precisión de toda la noche."
 
 #. placeholder {0}: coverage(metric.comparison.ownSupport.baseline.referenceCoverage)
 #. placeholder {1}: coverage(metric.comparison.ownSupport.candidate.referenceCoverage)
@@ -2514,6 +2528,10 @@ msgstr "Valores predeterminados del sistema"
 msgid "The archive directory is unavailable."
 msgstr "El directorio de archivos no está disponible."
 
+#: src/components/biometrics/BiometricsPage.tsx:234
+msgid "The current pod algorithm reports a window IBI variability index, not clinical RMSSD. Older readings may have an unknown definition."
+msgstr "El algoritmo actual del pod informa un índice de variabilidad de los intervalos entre latidos por ventana, no el RMSSD clínico. La definición de las lecturas antiguas puede ser desconocida."
+
 #. placeholder {0}: data.pointToleranceMs
 #: src/components/biometrics/Calibration/ReferenceOverlay.tsx:39
 msgid "The frozen offset of {clockOffsetMs} ms is added to recomputed timestamps in this overlay. Reference times stay unchanged. Point matching tolerance: {0} ms."
@@ -2600,6 +2618,10 @@ msgstr "El índice de variabilidad IBI por ventanas no es el RMSSD clínico entr
 #: src/components/biometrics/Calibration/ShadowComparison.tsx:93
 msgid "These are descriptive agreement results, not clinical accuracy, independent holdout evidence, or authorization to activate a profile."
 msgstr "Estos son resultados descriptivos de concordancia, no precisión clínica, evidencia de evaluación independiente con datos reservados ni autorización para activar un perfil."
+
+#: src/components/biometrics/BiometricsPage.tsx:233
+msgid "These are original recorded readings. Charts separate known processing runs and HRV definitions. Legacy readings with unknown provenance remain unverified."
+msgstr "Estas son las lecturas originales registradas. Los gráficos separan las ejecuciones de procesamiento y las definiciones de VFC conocidas. Las lecturas antiguas de procedencia desconocida siguen sin verificarse."
 
 #: src/components/biometrics/Calibration/CandidateStageFields.tsx:18
 msgid "These edits belong only to the candidate. Rule order matters: the first matching rule wins."
@@ -2749,6 +2771,8 @@ msgstr "No disponible o pertenece a otra persona."
 msgid "Unit: {0}; range: {1}–{2}; default: {3}; original: {4}"
 msgstr "Unidad: {0}; intervalo: {1}–{2}; predeterminado: {3}; original: {4}"
 
+#: src/components/biometrics/BiometricsPage.tsx:531
+#: src/components/biometrics/BiometricsPage.tsx:532
 #: src/components/biometrics/Calibration/NumericTrace.tsx:111
 msgid "Unknown"
 msgstr "Desconocido"

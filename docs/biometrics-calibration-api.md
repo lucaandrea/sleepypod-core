@@ -501,9 +501,25 @@ Only bounded scalar metadata is projected from the processing bundle. The raw
 bundle, input identity, and unrelated fields are not returned. A future recorded
 HRV metric identifier is preserved rather than relabelled as the current window
 IBI variability index. Consumers must keep different/unknown definitions
-separate when computing comparable baselines. The legacy summary/baseline
-endpoints do not yet expose grouped metric/configuration provenance; clients
-needing that distinction must use the per-observation metadata.
+separate when computing comparable baselines.
+
+Summary and baseline responses now include exact SQL aggregate provenance counts
+across the full selected range, independent of chart pagination: distinct recorded
+configurations (manifest plus resolved configuration hash), unknown configuration
+rows, HRV definitions and unknown HRV rows. Mixed known definitions, or known
+and unknown HRV values together, produce null HRV aggregates. Entirely legacy
+ranges retain their descriptive values with `legacy_unverified`; no definition
+is inferred. All baseline means and deviations are null when multiple recorded
+configurations or recorded/unknown configurations coexist. A summary may still
+describe original HR/breathing values across configurations, with explicit counts.
+
+The chart separates recorded processing runs and HRV definitions before smoothing,
+omits bands/statistics across those boundaries, and explains original/unknown
+provenance. Its raw log exposes run IDs and HRV definitions. Unknown legacy rows
+remain unverified: missing history cannot prove that their processing was uniform.
+A run boundary is deliberately conservative even when two restarts used the same
+configuration. This is distinct from the manifest/configuration counts in the
+whole-range API summary.
 
 The vitals CSV keeps its original five columns first and appends interpretation,
 processing-run ID, provenance status, configuration hash, and HRV metric ID.

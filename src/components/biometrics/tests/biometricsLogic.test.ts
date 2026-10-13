@@ -156,3 +156,24 @@ it('maps brush edges across compressed gaps, ignores stalls, and handles an empt
   expect(timeAtX(layoutAxis([], 400, { start: 500, end: 600 }), 100)).toBeNull()
   expect(timeAtX(layoutAxis([{ start: 100, end: 100 }], 0, null), 0)).toBe(100)
 })
+
+it('separates processing runs before smoothing and omits mixed-provenance bands', () => {
+  const points = [
+    { ...pt(0, 60), provenanceKey: 'run-a', hrvMetricId: 'window_ibi_variability_v1' },
+    { ...pt(MIN, 100), provenanceKey: 'run-b', hrvMetricId: 'window_ibi_variability_v1' },
+  ]
+  const segments = splitSessions(points)
+  expect(segments).toHaveLength(2)
+  expect(segments.flatMap(segment => rollingMean(segment.points, 'hr'))).toEqual([60, 100])
+  expect(baselineBand(points, 'hr')).toBeNull()
+  expect(metricStats(points, 'hrv')).toBeNull()
+  expect(baselineBand(segments[0].points, 'hr')).toEqual({ lo: 60, hi: 60 })
+})
+it('does not combine known and unknown HRV definitions even within one run', () => {
+  const known = { ...pt(0), provenanceKey: 'run-a', hrvMetricId: 'window_ibi_variability_v1' }
+  const unknown = { ...pt(MIN), provenanceKey: 'run-a', hrvMetricId: null }
+  expect(splitSessions([known, unknown])).toHaveLength(2)
+  expect(baselineBand([known, unknown], 'hrv')).toBeNull()
+  expect(metricStats([known, unknown], 'hrv')).toBeNull()
+  expect(metricStats([known, { ...unknown, hrv: null }], 'hrv')).toEqual({ avg: 40, min: 40, max: 40 })
+})

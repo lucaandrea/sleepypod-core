@@ -900,6 +900,14 @@ msgstr "Holdout"
 msgid "Holdout accesses recorded for this experiment: {0}"
 msgstr "Holdout accesses recorded for this experiment: {0}"
 
+#: src/components/biometrics/BiometricsPage.tsx:532
+msgid "HRV definition"
+msgstr "HRV definition"
+
+#: src/components/biometrics/BiometricsPage.tsx:251
+msgid "HRV definitions differ or are partly unknown. A combined HRV average is unavailable."
+msgstr "HRV definitions differ or are partly unknown. A combined HRV average is unavailable."
+
 #: src/components/biometrics/Calibration/CalibrationOverview.tsx:18
 msgid "HRV index"
 msgstr "HRV index"
@@ -1758,6 +1766,10 @@ msgstr "Previous trace page"
 msgid "Processing failed."
 msgstr "Processing failed."
 
+#: src/components/biometrics/BiometricsPage.tsx:531
+msgid "Processing run"
+msgstr "Processing run"
+
 #: src/components/biometrics/Calibration/CalibrationOverview.tsx:27
 msgid "Processor health"
 msgstr "Processor health"
@@ -1832,6 +1844,12 @@ msgstr "Recomputed readings {first}–{0} of {1}"
 msgid "Recomputed readings and compatible frozen references in the selected metric unit"
 msgstr "Recomputed readings and compatible frozen references in the selected metric unit"
 
+#. placeholder {0}: summaryQ.data.provenance.configurationCount
+#. placeholder {1}: summaryQ.data.provenance.unknownConfigurationRows
+#: src/components/biometrics/BiometricsPage.tsx:238
+msgid "Recorded configurations: {0}; readings with unknown configuration: {1}."
+msgstr "Recorded configurations: {0}; readings with unknown configuration: {1}."
+
 #: src/components/biometrics/Calibration/ReplaySessionPicker.tsx:24
 msgid "Recorded nights"
 msgstr "Recorded nights"
@@ -1875,10 +1893,6 @@ msgstr "Reference coverage"
 #: src/components/biometrics/Calibration/NumericReport.tsx:38
 msgid "Reference coverage is the fraction of eligible reference records paired. Output coverage is the fraction of observations with a value, not continuous time coverage. Sparse samples cannot establish whole-night accuracy."
 msgstr "Reference coverage is the fraction of eligible reference records paired. Output coverage is the fraction of observations with a value, not continuous time coverage. Sparse samples cannot establish whole-night accuracy."
-
-#: src/components/biometrics/Calibration/NumericReport.tsx:34
-#~ msgid "Reference coverage is the fraction of eligible reference records paired. Output coverage is the fraction of stored observations with a value, not continuous time coverage. Sparse samples cannot establish whole-night accuracy."
-#~ msgstr "Reference coverage is the fraction of eligible reference records paired. Output coverage is the fraction of stored observations with a value, not continuous time coverage. Sparse samples cannot establish whole-night accuracy."
 
 #. placeholder {0}: coverage(metric.comparison.ownSupport.baseline.referenceCoverage)
 #. placeholder {1}: coverage(metric.comparison.ownSupport.candidate.referenceCoverage)
@@ -2514,6 +2528,10 @@ msgstr "System defaults"
 msgid "The archive directory is unavailable."
 msgstr "The archive directory is unavailable."
 
+#: src/components/biometrics/BiometricsPage.tsx:234
+msgid "The current pod algorithm reports a window IBI variability index, not clinical RMSSD. Older readings may have an unknown definition."
+msgstr "The current pod algorithm reports a window IBI variability index, not clinical RMSSD. Older readings may have an unknown definition."
+
 #. placeholder {0}: data.pointToleranceMs
 #: src/components/biometrics/Calibration/ReferenceOverlay.tsx:39
 msgid "The frozen offset of {clockOffsetMs} ms is added to recomputed timestamps in this overlay. Reference times stay unchanged. Point matching tolerance: {0} ms."
@@ -2600,6 +2618,10 @@ msgstr "The window IBI variability index is not clinical beat-to-beat RMSSD. Onl
 #: src/components/biometrics/Calibration/ShadowComparison.tsx:93
 msgid "These are descriptive agreement results, not clinical accuracy, independent holdout evidence, or authorization to activate a profile."
 msgstr "These are descriptive agreement results, not clinical accuracy, independent holdout evidence, or authorization to activate a profile."
+
+#: src/components/biometrics/BiometricsPage.tsx:233
+msgid "These are original recorded readings. Charts separate known processing runs and HRV definitions. Legacy readings with unknown provenance remain unverified."
+msgstr "These are original recorded readings. Charts separate known processing runs and HRV definitions. Legacy readings with unknown provenance remain unverified."
 
 #: src/components/biometrics/Calibration/CandidateStageFields.tsx:18
 msgid "These edits belong only to the candidate. Rule order matters: the first matching rule wins."
@@ -2749,6 +2771,8 @@ msgstr "Unavailable or belongs to a different sleeper."
 msgid "Unit: {0}; range: {1}–{2}; default: {3}; original: {4}"
 msgstr "Unit: {0}; range: {1}–{2}; default: {3}; original: {4}"
 
+#: src/components/biometrics/BiometricsPage.tsx:531
+#: src/components/biometrics/BiometricsPage.tsx:532
 #: src/components/biometrics/Calibration/NumericTrace.tsx:111
 msgid "Unknown"
 msgstr "Unknown"

@@ -31,7 +31,7 @@ export const METRICS: readonly MetricDef[] = [
   { key: 'br', label: 'Breathing', unit: 'br/min', domain: [10, 26], ticks: [12, 18, 24], color: 'var(--chart-vital-br)', digits: 1 },
 ]
 
-export interface VitalPoint { t: number, hr: number | null, hrv: number | null, br: number | null }
+export interface VitalPoint { t: number, hr: number | null, hrv: number | null, br: number | null, provenanceKey?: string, hrvMetricId?: string | null }
 
 export interface Session {
   start: number
@@ -94,7 +94,8 @@ export function splitSessions(points: VitalPoint[], gapMs = SESSION_GAP_MS): Ses
   const out: Session[] = []
   for (const p of sorted) {
     const cur = out[out.length - 1]
-    if (cur && p.t - cur.end <= gapMs) {
+    if (cur && p.t - cur.end <= gapMs && cur.points[cur.points.length - 1].provenanceKey === p.provenanceKey
+      && cur.points[cur.points.length - 1].hrvMetricId === p.hrvMetricId) {
       cur.points.push(p)
       cur.end = p.t
     }
@@ -148,8 +149,15 @@ export function percentile(sorted: number[], p: number): number | null {
   return sorted[lo] + (sorted[hi] - sorted[lo]) * (idx - lo)
 }
 
-/** The middle 50% (p25–p75) of a metric across the readings. */
+function comparablePoints(points: VitalPoint[], key: MetricKey): boolean {
+  const relevant = points.filter(point => point[key] !== null)
+  return new Set(relevant.map(point => point.provenanceKey)).size <= 1
+    && (key !== 'hrv' || new Set(relevant.map(point => point.hrvMetricId ?? null)).size <= 1)
+}
+
+/** The middle 50% within one recorded provenance/metric definition. */
 export function baselineBand(points: VitalPoint[], key: MetricKey): { lo: number, hi: number } | null {
+  if (!comparablePoints(points, key)) return null
   const vals = points.map(p => p[key]).filter((v): v is number => v != null).sort((a, b) => a - b)
   const lo = percentile(vals, 0.25)
   const hi = percentile(vals, 0.75)
@@ -159,6 +167,7 @@ export function baselineBand(points: VitalPoint[], key: MetricKey): { lo: number
 export interface MetricStats { avg: number, min: number, max: number }
 
 export function metricStats(points: VitalPoint[], key: MetricKey): MetricStats | null {
+  if (!comparablePoints(points, key)) return null
   let sum = 0
   let n = 0
   let min = Infinity

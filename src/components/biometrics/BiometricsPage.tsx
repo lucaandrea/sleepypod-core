@@ -7,6 +7,8 @@
  */
 'use client'
 
+import { Trans, useLingui } from '@lingui/react/macro'
+import type { VitalProvenance } from '@/src/biometrics/profiles/vital-provenance'
 import { useTimeFormat } from '@/src/providers/TimeFormatProvider'
 
 import { useRef, useState, type ReactNode } from 'react'
@@ -35,7 +37,7 @@ import {
 
 type Side = 'left' | 'right'
 
-interface VitalRow { side: string, timestamp: Date, heartRate: number | null, hrv: number | null, breathingRate: number | null }
+interface VitalRow { side: string, timestamp: Date, heartRate: number | null, hrv: number | null, breathingRate: number | null, processingRunId?: string | null, provenance?: VitalProvenance }
 
 const RANGES: Array<{ value: BiometricsRange, label: string }> = [
   { value: 'night', label: 'Night' },
@@ -80,7 +82,8 @@ function BiometricsBody({ sectionSwitch, now }: { sectionSwitch?: ReactNode, now
   const referenceQ = trpc.biometrics.getReferenceVitals.useQuery({ side, startDate, endDate, limit: 20000 }, { refetchInterval: 5 * 60_000 })
 
   const rows = (vitalsQ.data ?? []) as VitalRow[]
-  const points: VitalPoint[] = rows.map(r => ({ t: new Date(r.timestamp).getTime(), hr: r.heartRate, hrv: r.hrv, br: r.breathingRate }))
+  const points: VitalPoint[] = rows.map(r => ({ t: new Date(r.timestamp).getTime(), hr: r.heartRate, hrv: r.hrv, br: r.breathingRate,
+    provenanceKey: r.provenance?.processingRunId ?? r.processingRunId ?? 'legacy_unknown', hrvMetricId: r.provenance?.hrvMetricId ?? null }))
   const sessions = splitSessions(points)
   const bands = { hr: baselineBand(points, 'hr'), hrv: baselineBand(points, 'hrv'), br: baselineBand(points, 'br') }
   const reference = ((referenceQ.data ?? []) as Array<{ timestamp: Date | string, heartRate: number }>)
@@ -226,6 +229,28 @@ function BiometricsBody({ sectionSwitch, now }: { sectionSwitch?: ReactNode, now
       </div>
 
       <SummaryRow summary={summaryQ.data ?? null} loading={summaryQ.isLoading} />
+      <div className="space-y-1 text-sm text-fg-2">
+        <p><Trans>These are original recorded readings. Charts separate known processing runs and HRV definitions. Legacy readings with unknown provenance remain unverified.</Trans></p>
+        <p><Trans>The current pod algorithm reports a window IBI variability index, not clinical RMSSD. Older readings may have an unknown definition.</Trans></p>
+        {summaryQ.data?.provenance
+          ? (
+              <p>
+                <Trans>
+                  Recorded configurations:
+                  {' '}
+                  {summaryQ.data.provenance.configurationCount}
+                  ; readings with unknown configuration:
+                  {' '}
+                  {summaryQ.data.provenance.unknownConfigurationRows}
+                  .
+                </Trans>
+              </p>
+            )
+          : null}
+        {summaryQ.data?.provenance?.hrvAggregation === 'incompatible_definitions'
+          ? <p><Trans>HRV definitions differ or are partly unknown. A combined HRV average is unavailable.</Trans></p>
+          : null}
+      </div>
 
       <div ref={chartRef} tabIndex={-1} aria-label="Vitals detail" className="scroll-mt-4 flex min-w-0 flex-col gap-4 rounded-card border border-line bg-surface px-[18px] py-4 min-[900px]:px-6">
         <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
@@ -497,14 +522,17 @@ function SessionsCard({ sessions, rangeLabel, now, ongoing, stale, lastVitalAt, 
 }
 
 function RawLog({ open, onClose, rows, loading, title }: { open: boolean, onClose: () => void, rows: VitalRow[], loading: boolean, title: string }) {
+  const { t } = useLingui()
   const columns: Array<DiagColumn<VitalRow>> = [
     { key: 'timestamp', header: 'Time', render: r => <span className="font-mono text-xs text-fg-2">{new Date(r.timestamp).toLocaleString()}</span>, sortValue: r => new Date(r.timestamp).getTime() },
     { key: 'heartRate', header: 'HR', align: 'right', render: r => fmtNum(r.heartRate), sortValue: r => r.heartRate ?? -1 },
     { key: 'hrv', header: 'HRV', align: 'right', render: r => fmtNum(r.hrv), sortValue: r => r.hrv ?? -1 },
     { key: 'breathingRate', header: 'BR', align: 'right', render: r => fmtNum(r.breathingRate, 1), sortValue: r => r.breathingRate ?? -1 },
+    { key: 'processingRun', header: t`Processing run`, render: r => r.provenance?.processingRunId ?? r.processingRunId ?? t`Unknown` },
+    { key: 'hrvDefinition', header: t`HRV definition`, render: r => r.provenance?.hrvMetricId ?? t`Unknown` },
   ]
   return (
-    <Modal open={open} onClose={onClose} title={title} icon={List} iconClassName="text-icon" width={560}>
+    <Modal open={open} onClose={onClose} title={title} icon={List} iconClassName="text-icon" width={860}>
       <DiagTable
         columns={columns}
         rows={rows}
