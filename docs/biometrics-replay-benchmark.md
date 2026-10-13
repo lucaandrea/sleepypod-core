@@ -351,3 +351,27 @@ scored readings plus ten pre-roll readings. These overlapping timings must not
 be summed. Both startup and numerical processing matter; archive decoding was
 not the dominant cost. A full-night run still needs direct measurement rather
 than extrapolating this short profile into a production runtime guarantee.
+
+### Interrupted eight-hour qualification (2026-10-13 UTC)
+
+The three-configuration, eight-hour synthetic run on `192.168.1.88:8822`
+was cancelled during its third configuration after systemd explicitly stopped
+`sleepypod` at 01:09:44 UTC. Core and piezo services restarted at 01:10:17 UTC;
+`NRestarts=0` and the journal showed the stop request and SIGTERM. This task did
+not issue that stop. The installed release remained `homekit-0b53800`.
+The admission monitor withdrew permission when HTTP health disappeared. This
+run is **not a completed qualification**, regardless of the operation timer's
+`succeeded` field (which only records that the execution RPC returned).
+
+Before cancellation, the benchmark recorded 293 concurrent descriptor reads,
+zero read failures, read p95 1520 ms / maximum 2077 ms, 5962 HTTP probes with six
+failures at shutdown, HTTP p95 42 ms / maximum 937 ms, at least 1,045,213,184 bytes
+available memory, maximum temperature 44.594 C, maximum piezo receipt age 1768 ms,
+and peak benchmark process-tree RSS 396,940 KiB. Canonical observations remained
+unchanged. These observations support cancellation behavior but do not establish
+a production resource policy or a successful full-night replay.
+
+Synthetic measurements and probe metadata were copied locally for analysis.
+After confirming all benchmark descendants had exited, its exact staging directory
+was removed; both installed services were active. Repeat full qualification in an
+uninterrupted window before enabling the production replay host.

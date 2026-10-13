@@ -158,3 +158,88 @@ def test_failed_publisher_leaves_valid_bytes_and_releases_file_lock(tmp_path):
         assert store.collect_released(db, now_ms=3000, minimum_age_ms=0) == [descriptor.name]
     finally:
         db.close()
+
+
+def test_collects_only_old_unpublished_copies_and_parts(tmp_path):
+    import os
+    _, store, descriptor, _, db = fixture(tmp_path)
+    try:
+        orphan = store.directory / ('a' * 64 + '.RAW.gz')
+        part = store.directory / ('.part-' + 'b' * 32)
+        fresh = store.directory / ('c' * 64 + '.RAW.gz')
+        unknown = store.directory / 'unrecognized'
+        for path in [orphan, part, fresh, unknown]:
+            path.write_bytes(b'private fixture')
+            os.utime(path, ns=(1_000_000_000, 1_000_000_000))
+        os.utime(fresh, ns=(3_000_000_000, 3_000_000_000))
+        assert store.collect_orphans(db, now_ms=1999, minimum_age_ms=1000) == []
+        assert store.collect_orphans(db, now_ms=2000, minimum_age_ms=1000) == sorted([orphan.name, part.name])
+        assert fresh.exists() and unknown.exists()
+        assert (store.directory / descriptor.name).exists()
+        assert db.execute('SELECT count(*) FROM biometric_raw_artifacts').fetchone()[0] == 1
+    finally:
+        db.close()
+
+
+def test_orphan_inventory_and_symlink_errors_delete_nothing(tmp_path):
+    import os
+    _, store, _, _, db = fixture(tmp_path)
+    try:
+        orphan = store.directory / ('a' * 64 + '.RAW.gz')
+        orphan.write_bytes(b'old')
+        os.utime(orphan, ns=(0, 0))
+        with pytest.raises(ValueError, match='entry limit'):
+            store.collect_orphans(db, now_ms=10000, maximum_entries=1)
+        assert orphan.exists()
+        symlink = store.directory / ('b' * 64 + '.RAW.gz')
+        symlink.symlink_to(orphan)
+        with pytest.raises(ValueError, match='regular file'):
+            store.collect_orphans(db, now_ms=10000, minimum_age_ms=0)
+        assert orphan.exists() and symlink.is_symlink()
+        assert not db.in_transaction
+    finally:
+        db.close()
+
+
+def test_orphan_collector_preserves_metadata_even_when_unreferenced_or_misnamed(tmp_path):
+    import os
+    _, store, descriptor, _, db = fixture(tmp_path)
+    try:
+        path = store.directory / descriptor.name
+        os.utime(path, ns=(0, 0))
+        db.execute('UPDATE biometric_raw_artifacts SET released_at_ms = NULL, name = ?', ('inconsistent-name',))
+        db.commit()
+        assert store.collect_orphans(db, now_ms=10000, minimum_age_ms=0) == []
+        assert path.exists()
+    finally:
+        db.close()
+
+
+def test_orphan_collection_waits_for_publication_metadata_commit(tmp_path):
+    archive, store, descriptor, database, db = fixture(tmp_path)
+    db.execute('DELETE FROM biometric_raw_artifacts')
+    db.commit()
+    started = Event()
+    pending = []
+
+    def collect():
+        with closing(sqlite3.connect(database)) as connection:
+            started.set()
+            return store.collect_orphans(connection, now_ms=9_000_000_000_000, minimum_age_ms=0)
+
+    try:
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            def publish(actual):
+                pending.append(pool.submit(collect))
+                assert started.wait(2)
+                assert not pending[0].done()
+                with db:
+                    db.execute('INSERT INTO biometric_raw_artifacts VALUES (?, ?, ?, ?, ?, ?)',
+                               (actual.sha256, actual.name, actual.compressed_bytes,
+                                actual.expanded_bytes, 1000, None))
+
+            store.retain(archive, '1.RAW.gz', expected=descriptor, publish=publish)
+            assert pending[0].result(timeout=2) == []
+        assert (store.directory / descriptor.name).exists()
+    finally:
+        db.close()

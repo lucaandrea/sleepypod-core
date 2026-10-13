@@ -334,3 +334,55 @@ class RawArtifactStore:
                 connection.rollback()
                 raise
         return removed
+
+    def collect_orphans(self, connection, *, now_ms, minimum_age_ms=3_600_000,
+                        maximum_entries=10_000):
+        """Reconcile old unpublished copies without guessing metadata ownership.
+
+        Publication holds this same mutex through its SQLite commit. A file with
+        any metadata row is preserved, including released tombstones; its normal
+        release collector owns that lifecycle. Unknown names are never touched.
+        """
+        if self.read_only:
+            raise ValueError('Retained RAW store is read-only')
+        if (type(now_ms) is not int or now_ms < 0 or type(minimum_age_ms) is not int
+                or minimum_age_ms < 0 or type(maximum_entries) is not int
+                or maximum_entries <= 0):
+            raise ValueError('Invalid RAW collection bounds')
+        if connection.in_transaction:
+            raise ValueError('RAW collection requires an independent transaction')
+        with self._lock():
+            names = []
+            with os.scandir(self.directory) as entries:
+                for count, entry in enumerate(entries, 1):
+                    if count > maximum_entries:
+                        raise ValueError('RAW collection entry limit exceeded')
+                    if ARTIFACT_NAME.fullmatch(entry.name) or PART_NAME.fullmatch(entry.name):
+                        names.append(entry.name)
+            connection.execute('BEGIN IMMEDIATE')
+            try:
+                candidates = []
+                for name in sorted(names):
+                    # Check both identities so inconsistent metadata cannot make
+                    # a referenced file look like an orphan.
+                    if ARTIFACT_NAME.fullmatch(name) and connection.execute(
+                            'SELECT 1 FROM biometric_raw_artifacts WHERE name = ? OR content_hash = ?',
+                            (name, name[:-7])).fetchone() is not None:
+                        continue
+                    path = self.directory / name
+                    info = path.lstat()
+                    if not stat.S_ISREG(info.st_mode):
+                        raise ValueError('Orphan RAW artifact must be a regular file')
+                    if info.st_mtime_ns > (now_ms - minimum_age_ms) * 1_000_000:
+                        continue
+                    candidates.append(path)
+                # Complete the bounded inventory and metadata checks first.
+                for path in candidates:
+                    path.unlink()
+                if candidates:
+                    self._sync_directory()
+                connection.commit()
+                return [path.name for path in candidates]
+            except BaseException:
+                connection.rollback()
+                raise
