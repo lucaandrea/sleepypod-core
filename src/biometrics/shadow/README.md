@@ -804,3 +804,30 @@ After restart, pending plans remain schedulable from their durable identity. Run
 attempts are never resumed by this queue; expired ones retain their samples and are
 failed by recovery. Scan cadence and queue size may delay a start, so coverage is
 measured from actual samples and missed windows are recorded explicitly.
+
+## Inspection and cancellation API
+
+The `biometricShadow` tRPC router and corresponding LAN REST endpoints expose:
+
+- `GET /api/biometric-tuning/shadow-runs`: required side, optional `afterId`
+  primary-key cursor and `maximumRuns` (1–50, default 20).
+- `GET /api/biometric-tuning/shadow-runs/{id}`: integrity-checked metadata.
+- `POST /api/biometric-tuning/shadow-runs/{id}/stop`: durable stop followed by
+  awaited local attempt cancellation. Repeated calls preserve terminal evidence.
+
+Inspection and stop use the application's database and remain available without
+execution configuration, an installed worker, current health or qualification.
+A store opened without storage policy cannot create, claim or append observations.
+Metadata includes hashes, window, state, counts and saved candidate identity, but
+not waveforms or deployment paths. Legacy missing revision identity is explicitly
+distinguished from the shipped default through `candidateIdentitySaved`.
+
+Stopping clears database authority before waiting for local worker cleanup. The
+response's `localAttemptSettled` indicates whether a locally owned attempt was
+awaited; it does not claim that another process's worker was reaped. Retained
+samples and completed/failed results are preserved.
+
+MCP uses these same router operations: `inspect_biometric_calibration` actions
+`shadow_runs` and `shadow_run` are read-only; `stop_biometric_shadow` is an explicit
+idempotent mutation. Creation, full report/reference comparison and UI flows are
+not yet exposed by these endpoints.

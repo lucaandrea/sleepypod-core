@@ -70,9 +70,24 @@ export interface ShadowLease { runId: string, attemptId: string }
  * processor. No algorithm imports, canonical writes, activation or hardware.
  * The host must verify qualification/build and enforce CPU/RSS before claim. */
 export class ShadowStore {
-  private readonly policy: z.infer<typeof shadowStoragePolicySchema>
-  constructor(private readonly db: Database.Database, policy: unknown, private readonly now = Date.now) {
-    this.policy = shadowStoragePolicySchema.parse(policy)
+  private readonly policy: z.infer<typeof shadowStoragePolicySchema> | null
+  constructor(private readonly db: Database.Database, policy?: unknown, private readonly now = Date.now) {
+    this.policy = policy === undefined ? null : shadowStoragePolicySchema.parse(policy)
+  }
+
+  private executionPolicy() {
+    if (!this.policy) throw new Error('Shadow execution storage policy required')
+    return this.policy
+  }
+
+  list(options: { side: 'left' | 'right', maximumRuns: number, afterId?: string }) {
+    const input = z.object({ side: z.enum(['left', 'right']), maximumRuns: positive.max(50), afterId: z.string().uuid().optional() }).strict().parse(options)
+    return this.db.transaction(() => {
+      const rows = this.db.prepare('SELECT id FROM biometric_shadow_runs WHERE side = ? AND id > ? ORDER BY id LIMIT ?')
+        .all(input.side, input.afterId ?? '', input.maximumRuns + 1) as { id: string }[]
+      const items = rows.slice(0, input.maximumRuns).map(row => this.get(row.id))
+      return { items, nextCursor: rows.length > input.maximumRuns ? items.at(-1)?.id ?? null : null }
+    }).deferred()
   }
 
   get(id: string) {
@@ -132,6 +147,7 @@ export class ShadowStore {
   }
 
   create(raw: unknown, idempotencyKey: string) {
+    const policy = this.executionPolicy()
     const plan = shadowPlanSchema.parse(raw), planHash = dataHash(plan)
     z.string().min(1).max(200).parse(idempotencyKey)
     return this.db.transaction(() => {
@@ -142,9 +158,9 @@ export class ShadowStore {
       }
       const now = this.now()
       if (plan.startMs < now) throw new Error('Shadow window must be prospective')
-      if (plan.maximumPoints > this.policy.maximumPoints || plan.maximumBytes > this.policy.maximumBytes) throw new Error('Shadow plan exceeds storage policy')
+      if (plan.maximumPoints > policy.maximumPoints || plan.maximumBytes > policy.maximumBytes) throw new Error('Shadow plan exceeds storage policy')
       const count = (this.db.prepare('SELECT COUNT(*) AS count FROM biometric_shadow_runs').get() as { count: number }).count
-      if (count >= this.policy.maximumRuns) throw new Error('Shadow run quota exceeded')
+      if (count >= policy.maximumRuns) throw new Error('Shadow run quota exceeded')
       const id = randomUUID()
       this.db.prepare(`INSERT INTO biometric_shadow_runs
         (id, idempotency_key, plan_hash, plan, side, state, created_at_ms) VALUES (?, ?, ?, ?, ?, 'pending', ?)`).run(id, idempotencyKey, planHash, canonicalJson(plan), plan.side, now)
@@ -175,6 +191,7 @@ export class ShadowStore {
 
   /** Admission is a trusted synchronous host check, never a client boolean. */
   claim(id: string, leaseMs: number, admit: (plan: Plan) => void): ShadowLease {
+    this.executionPolicy()
     z.number().int().min(1000).max(3600000).parse(leaseMs)
     return this.db.transaction(() => {
       const run = this.get(id), now = this.now()
@@ -201,6 +218,7 @@ export class ShadowStore {
   }
 
   append(lease: ShadowLease, raw: unknown) {
+    const policy = this.executionPolicy()
     const sample = shadowSampleSchema.parse(raw), contentHash = dataHash(sample)
     return this.db.transaction(() => {
       const { run, now } = this.current(lease)
@@ -218,7 +236,7 @@ export class ShadowStore {
       const payload = canonicalJson({ ...sample, attemptId: lease.attemptId }), bytes = Buffer.byteLength(payload)
       const totals = this.db.prepare('SELECT COALESCE(SUM(point_count), 0) AS points, COALESCE(SUM(byte_count), 0) AS bytes FROM biometric_shadow_runs').get() as { points: number, bytes: number }
       if (run.point_count + 1 > run.plan.maximumPoints || run.byte_count + bytes > run.plan.maximumBytes
-        || totals.points + 1 > this.policy.maximumPoints || totals.bytes + bytes > this.policy.maximumBytes) {
+        || totals.points + 1 > policy.maximumPoints || totals.bytes + bytes > policy.maximumBytes) {
         this.db.prepare('UPDATE biometric_shadow_runs SET state = \'stopped\', reason = \'storage_quota\', ended_at_ms = ?, lease_until_ms = NULL WHERE id = ?').run(now, run.id)
         return { state: 'quota_reached' as const }
       }

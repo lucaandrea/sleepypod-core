@@ -20,6 +20,7 @@ import { automationsRouter } from './automations'
 import { databasesRouter } from './databases'
 import { sleepStagesRouter } from './sleepStages'
 import { biometricTuningRouter } from './biometricTuning'
+import { biometricShadowRouter } from './biometricShadow'
 
 export const appRouter = router({
   healthcheck: publicProcedure
@@ -51,6 +52,7 @@ export const appRouter = router({
   databases: databasesRouter,
   sleepStages: sleepStagesRouter,
   biometricTuning: biometricTuningRouter,
+  biometricShadow: biometricShadowRouter,
 })
 
 export type AppRouter = typeof appRouter

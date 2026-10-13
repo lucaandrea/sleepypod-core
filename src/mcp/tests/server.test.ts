@@ -42,6 +42,7 @@ const callerMock = vi.hoisted(() => {
       delete: fn(), create: fn(), update: fn(),
     },
     databases: { checkIntegrity: fn() },
+    biometricShadow: { list: fn(), get: fn(), stop: fn() },
     biometricTuning: {
       getReplayAdmission: fn(), listRawSources: fn(), inspectRawSource: fn(), createWaveformDataset: fn(),
       getManifest: fn(), getProfileOverview: fn(), listSessions: fn(), getSessionCapabilities: fn(), listImports: fn(),
@@ -143,6 +144,7 @@ describe('sleepypod MCP server', () => {
       'set_side_settings',
       'set_sleep_stage_rules',
       'set_temperature',
+      'stop_biometric_shadow',
     ])
     for (const tool of tools) {
       expect(tool.description, tool.name).toBeTruthy()
@@ -643,6 +645,25 @@ describe('sleepypod MCP server', () => {
     if (!('text' in content)) throw new Error('expected text content')
     expect(JSON.parse(content.text)).toMatchObject({ left: { powered: true } })
   })
+  it('routes shadow inspection and explicit stop through the shared API', async () => {
+    const client = await connect(), api = callerMock.biometricShadow
+    const id = '11111111-1111-4111-8111-111111111111'
+    api.list.mockResolvedValue({ items: [{ id }], nextCursor: null })
+    api.get.mockResolvedValue({ id, state: 'running' })
+    api.stop.mockResolvedValue({ run: { id, state: 'stopped' }, localAttemptSettled: false })
+    const listed = await client.callTool({ name: 'inspect_biometric_calibration', arguments: { request: { action: 'shadow_runs', side: 'left', maximumRuns: 5 } } }) as CallToolResult
+    expect(parse(listed)).toMatchObject({ items: [{ id }] })
+    expect(api.list).toHaveBeenCalledWith({ side: 'left', maximumRuns: 5, afterId: undefined })
+    await client.callTool({ name: 'inspect_biometric_calibration', arguments: { request: { action: 'shadow_run', id } } })
+    expect(api.get).toHaveBeenCalledWith({ id })
+    expect(api.stop).not.toHaveBeenCalled()
+    const stopped = await client.callTool({ name: 'stop_biometric_shadow', arguments: { id } }) as CallToolResult
+    expect(parse(stopped)).toMatchObject({ run: { state: 'stopped' }, localAttemptSettled: false })
+    expect(api.stop).toHaveBeenCalledWith({ id })
+    const { tools } = await client.listTools()
+    expect(tools.find(tool => tool.name === 'stop_biometric_shadow')?.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true, idempotentHint: true })
+  })
+
   it('runs the calibration tool workflow without applying until the dedicated action', async () => {
     const client = await connect(), api = callerMock.biometricTuning
     const id = '11111111-1111-4111-8111-111111111111', hash = 'a'.repeat(64)

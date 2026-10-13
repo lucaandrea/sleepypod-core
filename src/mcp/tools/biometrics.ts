@@ -37,11 +37,19 @@ async function getReportSummary(id: string) {
 }
 
 export function registerBiometricTools(server: McpServer) {
+  server.registerTool('stop_biometric_shadow', {
+    title: 'Stop a prospective shadow run',
+    description: 'Stop a saved shadow run when requested. Revokes its write authority and waits for local worker cleanup. Preserves samples and terminal evidence; does not activate profiles or change hardware. A settled local attempt is not proof of cleanup in another process.',
+    inputSchema: id.shape, annotations: { ...write, destructiveHint: true },
+  }, input => runTool(async () => jsonResult(await getCaller().biometricShadow.stop(input))))
+
   server.registerTool('inspect_biometric_calibration', {
     title: 'Inspect biometric profiles and replay coverage',
     description: 'Read defaults, effective/pending profiles, real runtime receipts, sessions and references. HRV is the window_ibi_variability_v1 index, not clinical RMSSD. No activation or hardware changes.',
     inputSchema: { request: z.discriminatedUnion('action', [
       z.object({ action: z.literal('manifest') }).strict(),
+      z.object({ action: z.literal('shadow_runs'), side, maximumRuns: z.number().int().min(1).max(50).optional(), afterId: z.string().uuid().optional() }).strict(),
+      z.object({ action: z.literal('shadow_run'), id: z.string().uuid() }).strict(),
       z.object({ action: z.literal('replay_admission') }).strict(),
       z.object({ action: z.literal('raw_sources'), input: rawSourcePageSchema }).strict(),
       z.object({ action: z.literal('overview'), side }).strict(),
@@ -58,6 +66,8 @@ export function registerBiometricTools(server: McpServer) {
     const api = getCaller().biometricTuning
     switch (request.action) {
       case 'manifest': return jsonResult(await api.getManifest({}))
+      case 'shadow_runs': return jsonResult(await getCaller().biometricShadow.list({ side: request.side, maximumRuns: request.maximumRuns, afterId: request.afterId }))
+      case 'shadow_run': return jsonResult(await getCaller().biometricShadow.get({ id: request.id }))
       case 'replay_admission': return jsonResult(await api.getReplayAdmission({}))
       case 'raw_sources': return jsonResult(await api.listRawSources(request.input))
       case 'overview': return jsonResult(await api.getProfileOverview({ side: request.side }))

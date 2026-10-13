@@ -46,3 +46,8 @@ export async function stopShadowService() {
   await current.service.stop()
   if (shared.__biometricShadowService === current) delete shared.__biometricShadowService
 }
+
+/** Durable stop must be recorded before invoking this local cleanup helper. */
+export async function cancelShadowServiceAttempt(runId: string) {
+  return await shared.__biometricShadowService?.service.cancel(runId) ?? false
+}
