@@ -6,10 +6,12 @@ import { workerBuildHash } from '../backtest/child'
 import { configHash } from '../algorithms/canonical'
 import { waveformPythonBuildSchema } from '../backtest/waveform-build'
 
-export const shadowPythonBuildSchema = waveformPythonBuildSchema.extend({ identity: waveformPythonBuildSchema.shape.identity.extend({
-  version: z.literal('shadow-python-build-v1'),
-}).refine(identity => ['shadow_build.py', 'shadow.py', 'shadow_worker.py', 'shadow_process.py'].every(name =>
-  identity.sources[`common/biometrics/${name}`] !== undefined), 'Shadow source identity incomplete') })
+const dependencyPaths = z.object({ record: z.string().min(1).max(4096), wheel: z.string().min(1).max(4096) }).strict()
+export const shadowPythonBuildSchema = waveformPythonBuildSchema.extend({
+  dependencyFiles: z.object({ numpy: dependencyPaths, scipy: dependencyPaths }).strict(), identity: waveformPythonBuildSchema.shape.identity.extend({
+    version: z.literal('shadow-python-build-v1'),
+  }).refine(identity => ['shadow_build.py', 'shadow.py', 'shadow_worker.py', 'shadow_process.py'].every(name =>
+    identity.sources[`common/biometrics/${name}`] !== undefined), 'Shadow source identity incomplete') })
 
 /** Fixed shipped probe, exact worker interpreter, bounded output/deadline. Never
  * accepts a module name, shell command or source code from a request. */

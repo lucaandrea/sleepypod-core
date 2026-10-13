@@ -39,3 +39,20 @@ def test_probe_emits_only_identity_json_and_never_imports_processor():
     assert result.stderr == ''
     code = "from common.biometrics.shadow_build import shadow_build_identity; import sys; shadow_build_identity(); assert 'common.biometrics.shadow' not in sys.modules; assert 'numpy' not in sys.modules"
     subprocess.run([sys.executable, '-B', '-c', code], check=True, timeout=10, env=env)
+
+
+def test_missing_dependency_file_listing_fails_closed(monkeypatch):
+    original = shadow_build.importlib.metadata.distribution
+
+    class WithoutFiles:
+        files = []
+
+        def __init__(self, name):
+            self.original = original(name)
+
+        def __getattr__(self, name):
+            return getattr(self.original, name)
+
+    monkeypatch.setattr(shadow_build.importlib.metadata, 'distribution', WithoutFiles)
+    with pytest.raises(ValueError, match='paths unavailable'):
+        shadow_build.shadow_build_identity()

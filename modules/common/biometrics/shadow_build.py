@@ -4,6 +4,7 @@ Includes shared replay dependencies and shadow-specific control/transport code.
 Wheel metadata hashes are provenance, not full installed-binary attestation.
 """
 import json
+import importlib.metadata
 from pathlib import Path
 import sys
 
@@ -24,7 +25,20 @@ def shadow_build_identity():
     root = Path(__file__).resolve().parents[2]
     identity['sources'].update({name: build_identity._digest_file(root / name)
         for name in SHADOW_SOURCE_FILES})
-    return {'hash': config_hash(identity), 'identity': identity}
+    dependency_files = {}
+    for name in ('numpy', 'scipy'):
+        distribution = importlib.metadata.distribution(name)
+        files = distribution.files or []
+        paths = {}
+        for key, filename in (('record', 'RECORD'), ('wheel', 'WHEEL')):
+            matches = [item for item in files if item.name == filename
+                and item.parent.name.endswith('.dist-info')]
+            if len(matches) != 1:
+                raise ValueError('Shadow dependency metadata paths unavailable')
+            paths[key] = str(Path(distribution.locate_file(matches[0])).absolute())
+        dependency_files[name] = paths
+    return {'hash': config_hash(identity), 'identity': identity,
+        'dependencyFiles': dependency_files}
 
 
 def main():

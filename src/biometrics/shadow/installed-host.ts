@@ -1,3 +1,4 @@
+import { guardShadowPythonInstallation } from './python-installation'
 import { createHash } from 'node:crypto'
 import { constants, openSync, closeSync, fstatSync, lstatSync, readSync, realpathSync } from 'node:fs'
 import { createRequire } from 'node:module'
@@ -65,9 +66,16 @@ export function loadInstalledShadowHost(hostPath: string) {
  * artifact actually loaded, including rechecking it after the async Python probe. */
 export async function inspectInstalledShadowHost(hostPath: string, location: { pythonPath: string, modulesPath: string }, signal?: AbortSignal) {
   if (signal?.aborted) throw new Error('Shadow build inspection cancelled')
+  const target = { ...location }
   const loaded = loadInstalledShadowHost(hostPath)
-  const build = await loaded.api.shadowEngineBuildIdentity(resolve(hostPath), { ...location }, signal)
+  const build = await loaded.api.shadowEngineBuildIdentity(resolve(hostPath), target, signal)
   loaded.assertCurrent()
   if (build.identity.hostHash !== loaded.hostHash) throw new Error('Loaded shadow host differs from inspected artifact')
-  return { ...loaded, build }
+  const pythonCurrent = guardShadowPythonInstallation(target, build.python)
+  const assertCurrent = () => {
+    loaded.assertCurrent()
+    pythonCurrent()
+  }
+  assertCurrent()
+  return { ...loaded, build, assertCurrent }
 }

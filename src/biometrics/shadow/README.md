@@ -605,3 +605,24 @@ and verifies the reported host hash matches the loaded bytes. These guards cover
 the Node artifact. Python source/dependency change monitoring and hardware capture
 remain separate requirements, and the application must actually use this loader
 and its guard when registering production execution.
+
+## Python installation change guard
+
+The shadow probe now supplies absolute RECORD/WHEEL locations for the installed
+NumPy and SciPy distributions; ambiguous or missing metadata paths refuse the
+probe. Locations remain outside the portable build hash. The identity still
+contains source and metadata content hashes.
+
+`guardShadowPythonInstallation` validates every listed source and dependency
+metadata file against the probe with bounded reads (16 MiB per artifact), rejects
+traversing source paths and relative dependency paths, and records requested and
+canonical file identities. Metadata text normalization matches Python's text
+hashing. Subsequent checks detect device/inode, mode, size, mtime/ctime or link-target
+changes without rehashing all content each heartbeat. The interpreter link and
+resolved target are watched too. `inspectInstalledShadowHost` now returns a
+combined Node/Python guard after verifying the actual loaded package.
+
+This covers shipped source, installed wheel metadata, and interpreter replacement;
+it is not a full native-library binary attestation. The guard must still be called
+by production admission alongside actual hardware identity. Service registration,
+crash recovery and current-build qualification remain outstanding.
