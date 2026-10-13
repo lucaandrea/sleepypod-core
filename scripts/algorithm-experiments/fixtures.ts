@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { dataHash } from '../../src/biometrics/algorithms/canonical'
 import { packageRunRequestSchema, signalFrameSchema } from '../../src/biometrics/packages/protocol'
 import { verifyAlgorithmPackage } from '../../src/biometrics/packages/manifest'
+import { assessPackageResources, packageResourcePolicySchema } from './resource-assessment'
 import { packageInputHash } from './input'
 import { executePackageExperiment } from './container'
 
@@ -35,7 +36,7 @@ const fixtureSchema = z.object({
     }
   }
 })
-export const packageFixtureSuiteSchema = z.object({ schema: z.literal('biometric-package-fixtures-v1'),
+export const packageFixtureSuiteSchema = z.object({ schema: z.literal('biometric-package-fixtures-v1'), resourcePolicy: packageResourcePolicySchema,
   fixtures: z.array(fixtureSchema).min(1).max(64),
 }).strict().refine(suite => new Set(suite.fixtures.map(fixture => fixture.id)).size === suite.fixtures.length, 'Duplicate fixture identity')
 
@@ -90,16 +91,18 @@ export async function runPackageFixtures(options: Pick<Parameters<typeof execute
     try {
       const execution = await executePackageExperiment({ ...stable, request: fixture.request, frames: fixture.frames })
       const assessment = assessFixtureReadings(fixture.expectations, execution.results.flatMap(frame => frame.readings))
-      results.push({ ...identity, assessment, execution, error: null })
+      results.push({ ...identity, assessment, resourceAssessment: assessPackageResources(execution.execution, suite.resourcePolicy), execution, error: null })
     }
     catch (error) {
-      results.push({ ...identity, assessment: { passed: false, failures: ['execution_failed'], usableReadings: [] }, execution: null,
+      results.push({ ...identity, assessment: { passed: false, failures: ['execution_failed'], usableReadings: [] }, resourceAssessment: null, execution: null,
         error: error instanceof Error ? error.message.slice(0, 1000) : 'Experiment failed' })
     }
   }
   const covered = new Set(suite.fixtures.map(fixture => fixture.category))
   const missingCategories = fixtureCategories.filter(category => !covered.has(category))
   return { schema: 'biometric-package-fixture-report-v1' as const, packageHash: verified.packageHash, suiteHash, suite,
-    status: results.some(result => !result.assessment.passed) ? 'failed' : missingCategories.length ? 'incomplete' : 'fixture_checks_passed',
+    status: results.some(result => !result.assessment.passed || result.resourceAssessment?.status === 'failed')
+      ? 'failed'
+      : missingCategories.length || results.some(result => result.resourceAssessment?.status !== 'within_observed_limits') ? 'incomplete' : 'fixture_checks_passed',
     missingCategories, results, promotion: 'requires_determinism_resource_holdout_compatibility_and_release_review' as const }
 }

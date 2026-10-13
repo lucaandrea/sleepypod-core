@@ -189,3 +189,20 @@ review the exact hashed suite and its expected behavior. The test suite includes
 synthetic clean/empty-bed examples to verify this workflow; representative
 shipped-algorithm fixtures, held-out agreement, compatibility and pod resource
 qualification remain separate requirements.
+
+Each fixture suite also requires an explicit reviewed `resourcePolicy` with
+schema `biometric-package-resource-policy-v1`, `maximumWallMs`, `maximumCpuMs`,
+`maximumMemoryBytes`, `maximumProcesses`, `minimumSamples`,
+`maximumObservationGapMs`, and `evidenceMode` equal to
+`sampled_counters_and_enforced_limits`. There are no production default
+thresholds. The policy is part of the frozen suite hash and every per-case
+resource assessment records its own policy hash.
+
+An assessment can be `within_observed_limits`, `insufficient_evidence`, or
+`failed`. It requires consistent host receipts, adequate sample count and gaps,
+and enforced limits no wider than the reviewed budget. Known wall, observed
+CPU/memory/process, or enforced-limit overruns fail even when sampling is also
+incomplete. Missing measurements never mean zero cost. A passing signal check
+with incomplete resource evidence makes the overall fixture report incomplete;
+a resource failure makes it fail. These sampled observations plus hard limits
+still do not establish exact lifetime costs or target-pod fitness.

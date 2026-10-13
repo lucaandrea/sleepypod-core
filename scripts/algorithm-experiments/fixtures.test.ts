@@ -1,3 +1,4 @@
+import { fixtureResourceTestPolicy } from './resource-test-policy'
 import { describe, expect, it } from 'vitest'
 import { assessFixtureReadings, packageFixtureSuiteSchema } from './fixtures'
 const numeric = { kind: 'numeric' as const, metric: 'heart_rate', startMs: 1000, endMs: 2000, minimum: 59, maximum: 61, minimumReadings: 2, minimumQuality: 0.8 }
@@ -24,7 +25,7 @@ describe('artifact/noise fixture scoring', () => {
     const fixture = { id: 'clean', category: 'clean_signal',
       request: { schema: 'biometric-package-run-v1', packageHash: 'a'.repeat(64), inputHash: 'b'.repeat(64), hardwareId: 'pod4', sampleRateHz: 1, side: 'left', seed: 1, config: {} },
       frames: [{ schema: 'biometric-signal-frame-v1', sequence: 0, timestampMs: 1000, samples: { left: [1], right: null }, context: { occupied: true, pumpActive: false } }], expectations: [numeric] }
-    const suite = (fixtures: unknown[]) => ({ schema: 'biometric-package-fixtures-v1', fixtures })
+    const suite = (fixtures: unknown[]) => ({ schema: 'biometric-package-fixtures-v1', resourcePolicy: fixtureResourceTestPolicy, fixtures })
     expect(packageFixtureSuiteSchema.safeParse(suite([fixture])).success).toBe(true)
     for (const fixtures of [[fixture, fixture], [{ ...fixture, expectations: [numeric, numeric] }],
       [{ ...fixture, expectations: [{ ...numeric, startMs: 0 }] }], [{ ...fixture, category: 'empty_bed' }],
@@ -33,6 +34,6 @@ describe('artifact/noise fixture scoring', () => {
     }
   })
   it('rejects empty suites', () => {
-    expect(packageFixtureSuiteSchema.safeParse({ schema: 'biometric-package-fixtures-v1', fixtures: [] }).success).toBe(false)
+    expect(packageFixtureSuiteSchema.safeParse({ schema: 'biometric-package-fixtures-v1', resourcePolicy: fixtureResourceTestPolicy, fixtures: [] }).success).toBe(false)
   })
 })

@@ -1,3 +1,4 @@
+import { fixtureResourceTestPolicy } from './resource-test-policy'
 // @vitest-environment node
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
@@ -101,7 +102,7 @@ s.close()
   }, 20000)
   it('checks numeric coverage and catches false vitals during an empty-bed fixture', async () => {
     const reading = '[{\'timestampMs\': frame[\'timestampMs\'], \'side\': \'left\', \'metric\': \'heart_rate\', \'value\': 60, \'quality\': 1, \'flags\': []}]'
-    const makeSuite = (input: ReturnType<typeof options>) => ({ schema: 'biometric-package-fixtures-v1', fixtures: [true, false].map((occupied) => {
+    const makeSuite = (input: ReturnType<typeof options>) => ({ schema: 'biometric-package-fixtures-v1', resourcePolicy: fixtureResourceTestPolicy, fixtures: [true, false].map((occupied) => {
       const frames = input.frames.map(frame => ({ ...frame, context: { ...frame.context, occupied } }))
       return { id: occupied ? 'clean' : 'empty', category: occupied ? 'clean_signal' : 'empty_bed',
         request: { ...input.request, inputHash: packageInputHash(frames) }, frames,
@@ -118,6 +119,12 @@ s.close()
     expect(report.status).toBe('incomplete')
     expect(report.results.every(result => result.assessment.passed)).toBe(true)
     expect(report.missingCategories).toContain('pump')
+    const strictBudget = makeSuite(candidate)
+    strictBudget.resourcePolicy = { ...fixtureResourceTestPolicy, maximumWallMs: 1 }
+    const overBudget = await runPackageFixtures(candidate, strictBudget)
+    expect(overBudget.results.every(result => result.assessment.passed)).toBe(true)
+    expect(overBudget.results.every(result => result.resourceAssessment?.status === 'failed')).toBe(true)
+    expect(overBudget.status).toBe('failed')
     const bad = options(program.replace('\'readings\': []', `'readings': ${reading}`))
     const regression = await runPackageFixtures(bad, makeSuite(bad))
     expect(regression.status).toBe('failed')

@@ -165,7 +165,7 @@ export async function executePackageExperiment(options: {
       await completion
       const measurements = await resourceMonitor.stop()
       return { packageHash: verified.packageHash, runHash: validator.runHash, frozenInput, results,
-        execution: { measurements, environment, image: policy.image, wallMs: performance.now() - started, outputBytes, inputBytes, isolation: 'docker-restricted-v1' as const } }
+        execution: { limits: resources, measurements, environment, image: policy.image, wallMs: performance.now() - started, outputBytes, inputBytes, isolation: 'docker-restricted-v1' as const } }
     }
     catch (error) {
       fail(error instanceof Error ? error : new Error(String(error)))
