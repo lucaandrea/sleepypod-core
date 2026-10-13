@@ -523,3 +523,32 @@ export const biometricDatasetRawArtifacts = sqliteTable('biometric_dataset_raw_a
   uniqueIndex('idx_biometric_dataset_raw_position').on(t.datasetId, t.position),
   index('idx_biometric_raw_artifact_references').on(t.artifactHash, t.releasedAtMs),
 ])
+
+// Prospective candidate output is deliberately separate from canonical vitals.
+// Plans are immutable; attempt leases fence restarted shadow workers.
+export const biometricShadowRuns = sqliteTable('biometric_shadow_runs', {
+  id: text('id').primaryKey(),
+  idempotencyKey: text('idempotency_key').notNull().unique(),
+  planHash: text('plan_hash').notNull(),
+  plan: text('plan', { mode: 'json' }).notNull(),
+  side: text('side', { enum: ['left', 'right'] }).notNull(),
+  state: text('state', { enum: ['pending', 'running', 'completed', 'stopped', 'failed'] }).notNull(),
+  attemptId: text('attempt_id'),
+  leaseUntilMs: integer('lease_until_ms'),
+  heartbeatAtMs: integer('heartbeat_at_ms'),
+  createdAtMs: integer('created_at_ms').notNull(),
+  endedAtMs: integer('ended_at_ms'),
+  reason: text('reason'),
+  pointCount: integer('point_count').notNull().default(0),
+  byteCount: integer('byte_count').notNull().default(0),
+}, t => [index('idx_biometric_shadow_side_state').on(t.side, t.state)])
+
+export const biometricShadowSamples = sqliteTable('biometric_shadow_samples', {
+  runId: text('run_id').notNull().references(() => biometricShadowRuns.id),
+  sequence: integer('sequence').notNull(),
+  timestampMs: integer('timestamp_ms').notNull(),
+  contentHash: text('content_hash').notNull(),
+  payload: text('payload', { mode: 'json' }).notNull(),
+  byteLength: integer('byte_length').notNull(),
+}, t => [uniqueIndex('uq_biometric_shadow_sample').on(t.runId, t.sequence),
+  index('idx_biometric_shadow_sample_time').on(t.runId, t.timestampMs)])

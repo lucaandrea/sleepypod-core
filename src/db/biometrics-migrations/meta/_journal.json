@@ -204,6 +204,13 @@
       "when": 1791843250056,
       "tag": "0028_retained_raw_artifacts",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "6",
+      "when": 1791870638972,
+      "tag": "0029_thick_typhoid_mary",
+      "breakpoints": true
     }
   ]
 }
