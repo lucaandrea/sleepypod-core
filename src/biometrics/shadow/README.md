@@ -522,3 +522,25 @@ imports the numerical processor nor opens live sources. Dependency RECORD/WHEEL
 hashes identify installation metadata, not every installed binary's contents.
 Production composition must still bind the shipped Node host bundle, capture
 hardware identity, and revalidate installation identity during execution.
+
+## Owned attempt host
+
+`openPlannedShadowHost` composes the installed qualification, both-side runtime
+binding collector, live health monitor and saved-policy source factory. It owns
+separate read-only admission connections with file-identity guards and the saved
+busy timeout. Qualification lookup precedes health sampling, and initial admission
+must pass before the host is returned. Subsequent admission also requires the
+entire saved plan to match. Installation paths, candidate configs and expected
+baseline identities are privately copied; they are trusted host inputs, never
+arbitrary RPC executable paths or identity assertions.
+
+`runPlannedShadowAttempt` passes this host to the leased controller and closes its
+resources on success or failure. Closing aborts the attempt first, then closes
+health and admission connections. Partial startup and cancellation while waiting
+for initial health also unwind ownership, including a late returned health handle.
+The source factory separately owns its capture connections and subscriptions.
+
+This composition still requires production code to resolve candidate/baseline
+configs, capture hardware and shipped Node/Python identity, and supply a synchronous
+identity collector that detects changes. It does not recover orphan workers,
+register APIs/UI, install qualification entries or create production budgets.
