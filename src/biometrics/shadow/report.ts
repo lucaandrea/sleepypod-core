@@ -75,6 +75,7 @@ export function reportShadowRun(store: ShadowStore, runId: string, limits: Param
     pairing: { activeOnly: samples.filter(sample => sample.pairing?.activePresent && !sample.pairing.candidatePresent).length,
       candidateOnly: samples.filter(sample => sample.pairing?.candidatePresent && !sample.pairing.activePresent).length,
       unknownInputIdentity: samples.filter(sample => sample.inputHash === null).length },
+    workerReceipt: run.workerReceipt,
     executionPolicyHash: plan.execution ? dataHash(plan.execution) : null,
     contextEvidence: 'host_observations_not_live_processor_cache_attestation' as const,
     limitations: [...new Set(samples.flatMap(sample => sample.candidateProvenance?.limitations ?? []))].sort(),

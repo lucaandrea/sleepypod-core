@@ -1,3 +1,4 @@
+import { shadowReceiptEnvelopeSchema, validateShadowWorkerReceipt } from './receipt'
 import { shadowExecutionPolicySchema } from './execution-policy'
 import type Database from 'better-sqlite3'
 import { randomUUID } from 'node:crypto'
@@ -45,6 +46,8 @@ export const shadowSampleSchema = z.object({ sequence: integer, side: z.enum(['l
 export const shadowStoragePolicySchema = z.object({ maximumRuns: positive, maximumPoints: positive, maximumBytes: positive }).strict()
 type Plan = z.infer<typeof shadowPlanSchema>
 interface RunRow {
+  worker_receipt: string | null
+  worker_receipt_hash: string | null
   id: string
   plan_hash: string
   plan: string
@@ -75,7 +78,16 @@ export class ShadowStore {
     if (!row) throw new Error('Unknown shadow run')
     const plan = shadowPlanSchema.parse(JSON.parse(row.plan))
     if (dataHash(plan) !== row.plan_hash || row.side !== plan.side) throw new Error('Shadow plan integrity mismatch')
-    return { ...row, plan }
+    let workerReceipt = null
+    if (row.worker_receipt !== null) {
+      if (Buffer.byteLength(row.worker_receipt) > 16384) throw new Error('Shadow receipt exceeds storage limit')
+      workerReceipt = shadowReceiptEnvelopeSchema.parse(JSON.parse(row.worker_receipt))
+      if (!plan.execution || dataHash(workerReceipt) !== row.worker_receipt_hash || workerReceipt.runId !== row.id
+        || workerReceipt.recordedAtMs !== row.ended_at_ms || workerReceipt.attemptId !== row.attempt_id || workerReceipt.planHash !== row.plan_hash || row.state !== 'completed') throw new Error('Shadow receipt integrity mismatch')
+      validateShadowWorkerReceipt(workerReceipt.receipt, plan.execution)
+    }
+    else if (row.worker_receipt_hash !== null) throw new Error('Shadow receipt integrity mismatch')
+    return { ...row, plan, workerReceipt }
   }
 
   /** Complete bounded snapshot for scoring. Refuse oversize data rather than
@@ -227,12 +239,22 @@ export class ShadowStore {
     }).immediate()
   }
 
-  finish(lease: ShadowLease, state: 'completed' | 'stopped' | 'failed', reason: string) {
+  finish(lease: ShadowLease, state: 'completed' | 'stopped' | 'failed', reason: string, rawReceipt?: unknown) {
     z.enum(['completed', 'stopped', 'failed']).parse(state)
     z.string().min(1).max(500).parse(reason)
     this.db.transaction(() => {
       const { run, now } = this.current(lease)
-      this.db.prepare('UPDATE biometric_shadow_runs SET state = ?, reason = ?, ended_at_ms = ?, lease_until_ms = NULL WHERE id = ?').run(state, reason, now, run.id)
+      let receipt = null, receiptHash = null
+      if (state === 'completed' && run.plan.execution) {
+        receipt = canonicalJson(shadowReceiptEnvelopeSchema.parse({ schema: 'biometric-shadow-receipt-v1',
+          runId: run.id, attemptId: lease.attemptId, planHash: run.plan_hash, recordedAtMs: now,
+          receipt: validateShadowWorkerReceipt(rawReceipt, run.plan.execution) }))
+        if (Buffer.byteLength(receipt) > 16384) throw new Error('Shadow receipt exceeds storage limit')
+        receiptHash = dataHash(JSON.parse(receipt))
+      }
+      else if (rawReceipt !== undefined) throw new Error('Worker receipt requires a completed executable plan')
+      this.db.prepare('UPDATE biometric_shadow_runs SET state = ?, reason = ?, ended_at_ms = ?, lease_until_ms = NULL, worker_receipt = ?, worker_receipt_hash = ? WHERE id = ?')
+        .run(state, reason, now, receipt, receiptHash, run.id)
     }).immediate()
   }
 }

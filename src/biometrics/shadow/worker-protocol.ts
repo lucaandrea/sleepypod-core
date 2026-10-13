@@ -14,7 +14,7 @@ export const shadowWorkerOutputSchema = z.object({ sequence: integer, inputHash:
   timestampMs: integer, configHash: hash, readings: z.array(metricReading).length(3),
   flags: z.array(z.string().max(200)).max(32).nullable(), limitations: z.array(z.string().max(200)).max(32),
 }).strict().refine(output => new Set(output.readings.map(row => row.metric)).size === 3, 'All typed metrics required')
-const healthSchema = z.object({ state: z.enum(['running', 'completed', 'stopped']), reason: z.string().max(500).nullable(),
+export const shadowWorkerHealthSchema = z.object({ state: z.enum(['running', 'completed', 'stopped']), reason: z.string().max(500).nullable(),
   records: integer, outputs: integer, cpu_ms: z.number().finite().nonnegative(), input_hash: hash,
   counts: z.object({ records: integer, accepted_frames: integer, empty_channel_frames: integer,
     pump_gated_frames: integer, preroll_outputs: integer, scored_outputs: integer }).strict(),
@@ -24,9 +24,9 @@ const identity = { runId: z.string().uuid(), attemptId: z.string().uuid() }
 const hashes = z.object({ left: hash, right: hash }).strict()
 const responseSchema = z.discriminatedUnion('type', [
   z.object({ ...identity, type: z.literal('ready'), configHashes: hashes }).strict(),
-  z.object({ ...identity, type: z.literal('frame_result'), sequence: integer, outputs: z.array(shadowWorkerOutputSchema).max(4), health: healthSchema }).strict(),
-  z.object({ ...identity, type: z.literal('finished'), outputs: z.array(shadowWorkerOutputSchema).max(4), health: healthSchema }).strict(),
-  z.object({ ...identity, type: z.literal('cancelled'), health: healthSchema }).strict(),
+  z.object({ ...identity, type: z.literal('frame_result'), sequence: integer, outputs: z.array(shadowWorkerOutputSchema).max(4), health: shadowWorkerHealthSchema }).strict(),
+  z.object({ ...identity, type: z.literal('finished'), outputs: z.array(shadowWorkerOutputSchema).max(4), health: shadowWorkerHealthSchema }).strict(),
+  z.object({ ...identity, type: z.literal('cancelled'), health: shadowWorkerHealthSchema }).strict(),
 ])
 const expectedSchema = z.object({ ...identity, side, startMs: integer, endMs: integer, configHashes: hashes,
   maximumRecords: integer.positive(), maximumOutputs: integer.positive(), maximumCpuMs: integer.positive(),

@@ -195,15 +195,18 @@ export async function runShadowAttempt(store: ShadowStore, runId: string, host: 
     }
     throw failure
   }
-  if (!receipt) throw new Error('Shadow worker receipt missing')
   try {
-    store.finish(lease, 'completed', 'observation_window_complete')
+    if (!receipt) throw new Error('Shadow worker receipt missing')
+    store.finish(lease, 'completed', 'observation_window_complete', receipt)
   }
   catch (error) {
     // A synchronous final read/cleanup can outlast the remaining lease even
     // when its admission check succeeds. Cleanup is complete; fence the failure.
     try {
-      store.failExpired(lease, 'shadow_completion_lease_lost')
+      try {
+        store.finish(lease, 'failed', 'shadow_completion_failed')
+      }
+      catch { store.failExpired(lease, 'shadow_completion_lease_lost') }
     }
     catch { /* Preserve the original completion error. */ }
     throw error

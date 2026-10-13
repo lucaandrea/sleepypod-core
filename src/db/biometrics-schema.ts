@@ -527,6 +527,8 @@ export const biometricDatasetRawArtifacts = sqliteTable('biometric_dataset_raw_a
 // Prospective candidate output is deliberately separate from canonical vitals.
 // Plans are immutable; attempt leases fence restarted shadow workers.
 export const biometricShadowRuns = sqliteTable('biometric_shadow_runs', {
+  workerReceipt: text('worker_receipt', { mode: 'json' }),
+  workerReceiptHash: text('worker_receipt_hash'),
   id: text('id').primaryKey(),
   idempotencyKey: text('idempotency_key').notNull().unique(),
   planHash: text('plan_hash').notNull(),

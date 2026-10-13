@@ -270,8 +270,8 @@ failed; it cannot affect a replacement, unexpired lease or already terminal run.
 
 The host adapter is still to be implemented and wired to service/API lifecycle.
 The controller does not invent qualification, choose production budgets, subscribe
-to hardware on its own, recover orphan workers after host crashes, or persist the
-returned worker resource receipt. Those integration obligations remain before
+to hardware on its own or recover orphan workers after host crashes. Completion
+now persists the validated worker receipt atomically with terminal state. Those integration obligations remain before
 prospective runs can be enabled or treated as production-qualified evidence.
 
 ## Live waveform source adapter
@@ -326,8 +326,8 @@ generation and manifest identity as `activeProvenance`; the join and candidate
 sink retain these fields in the separate shadow sample payload. This is an
 additive JSON field, requiring no schema migration or canonical-vitals write.
 Polling cadence, final-drain polling, runtime admission/context, connection
-replacement detection, resource receipts and service/API wiring remain host
-integration work; this reader alone does not enable a prospective run.
+replacement detection and receipt persistence are provided by the composed
+components below; production service/API wiring remains host integration work; this reader alone does not enable a prospective run.
 
 ## Composed live sources and drain polling
 
@@ -351,9 +351,9 @@ and after opening and supplies `assertCurrent` to the composed source. Replaceme
 removal, a symlink or a closed connection stops capture instead of reading the old
 file indefinitely. Paths remain trusted host configuration, never caller input.
 
-These pieces still require the production context provider, installed build and
-qualification admission, frozen execution budgets/receipts, orphan recovery and
-service/API registration. No production defaults or qualified registry entries
+These pieces use the context provider, frozen budgets and receipt persistence
+described below. Production installed-build/qualification wiring, orphan recovery
+and service/API registration remain. No production defaults or qualified registry entries
 are inferred by composing the sources.
 
 ## Committed context snapshots
@@ -406,7 +406,7 @@ Source factories receive their own policy copy for configuring capture, and
 cannot change the worker's copy. The production factory must apply those source
 limits and the installed qualification must match the complete policy. Selecting
 this policy does not establish qualification or record observed worker resources;
-those admission/receipt and service integration paths remain outstanding.
+admission/service integration remains, while completion records receipts below.
 
 ## Planned source factory
 
@@ -423,9 +423,8 @@ normal close, abort, source failure, direct flush failure and partial startup.
 Configuration and biometrics path identities are both checked during capture.
 Tests exercise real SQLite connections and the sensor tap, including frozen
 policy substitution, saved queue overflow, cancellation and failed second-database
-startup. Installed qualification/build/current-binding admission, worker resource
-receipt storage, orphan recovery and public service registration remain separate
-requirements; constructing sources does not authorize a candidate to run.
+startup. Installed qualification/build/current-binding admission, orphan recovery
+and public service registration remain separate requirements; constructing sources does not authorize a candidate to run.
 
 ## Installed shadow admission
 
@@ -468,3 +467,23 @@ promise that activation cannot occur after a read; the attempt must keep checkin
 admission. It opens no files and writes no runtime state. Host construction still
 needs to capture both expected baselines, provide file-identity guards, and connect
 this collector with installed build identity and resource-health observations.
+
+
+## Durable completion receipt
+
+Migration 0030 adds nullable receipt and receipt-hash fields without inventing
+measurements for old runs. Completing an executable plan requires a validated
+worker receipt in the same fenced transaction as terminal state. The bounded
+16 KiB envelope binds run, attempt, plan hash and completion time, and retains
+worker health/counters, CPU time, transport bytes, sampled process-group RSS,
+sampling count/gap and frozen child budgets. Its storage is bounded per run in
+addition to sample-byte quotas and the existing run-count limit.
+
+Store reads verify the envelope hash and identities and recheck measurements
+against the saved execution policy. Snapshots and reports retain this evidence.
+RSS remains a sampled sum across the process group, not an exact kernel peak;
+recording a receipt does not establish pod qualification or activation authority.
+Failed/cancelled attempts currently have no successful worker receipt, and crash
+recovery/partial resource evidence remains separate work. Receipt-validation
+failure after cleanup marks the same attempt failed, including the expired-lease
+fallback, without overwriting a replacement attempt.

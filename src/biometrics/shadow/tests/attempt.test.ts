@@ -6,11 +6,12 @@ import { fileURLToPath } from 'node:url'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { defaultConfig, resolveConfig } from '../../algorithms/registry'
 import { configHash } from '../../algorithms/canonical'
+import { validateShadowWorkerReceipt } from '../receipt'
 import { ShadowStore } from '../store'
 import { runShadowAttempt, type ShadowAttemptHost } from '../attempt'
 
-const worker = vi.hoisted(() => ({ calls: 0, cleaned: false, fail: false }))
-vi.mock('../worker-child', () => ({ runShadowChild: async (_location: unknown, init: { side: string, configHashes: Record<string, string> }, frames: AsyncIterable<{ observedAtMs: number }>, output: (row: unknown) => void) => {
+const worker = vi.hoisted(() => ({ calls: 0, cleaned: false, fail: false, corruptReceipt: false }))
+vi.mock('../worker-child', () => ({ runShadowChild: async (_location: unknown, init: { side: string, configHashes: Record<string, string> }, frames: AsyncIterable<{ observedAtMs: number }>, output: (row: unknown) => void, options: { budgets: unknown }) => {
   worker.calls++
   try {
     let sequence = 0
@@ -23,7 +24,11 @@ vi.mock('../worker-child', () => ({ runShadowChild: async (_location: unknown, i
           { metric: 'window_ibi_variability_v1', unit: 'ms', windowMs: 300000, value: null, quality: 0 },
         ] })
     }
-    return { health: { state: 'completed' } }
+    return { health: { state: 'completed', reason: 'window_complete', records: sequence, outputs: sequence, cpu_ms: 1,
+      input_hash: 'a'.repeat(64), counts: { records: sequence, accepted_frames: sequence, empty_channel_frames: 0,
+        pump_gated_frames: 0, preroll_outputs: 0, scored_outputs: sequence }, limitations: [] },
+    inputBytes: worker.corruptReceipt ? 100001 : 100, outputBytes: 100, peakObservedRssBytes: 1000, rssSamples: 2, maximumObservationGapMs: 100,
+    budgets: options.budgets, memoryScope: 'sum_rss_of_shadow_process_group', exactKernelPeak: false }
   }
   finally { worker.cleaned = true }
 } }))
@@ -35,6 +40,7 @@ beforeEach(() => {
   worker.calls = 0
   worker.cleaned = false
   worker.fail = false
+  worker.corruptReceipt = false
 })
 afterEach(() => {
   vi.useRealTimers()
@@ -325,4 +331,42 @@ it('rejects incompatible poll cadence and freezes policy changes into plan idemp
   execution.sources.pollMs = 50
   execution.maximumRecords++
   expect(() => store.create({ ...run.plan, execution }, 'test')).toThrow(/idempotency/)
+})
+
+it('persists the receipt with completion and rejects later corruption', async () => {
+  const { db, store, run, host } = setup()
+  const task = runShadowAttempt(store, run.id, host)
+  await vi.advanceTimersByTimeAsync(2101)
+  const result = await task
+  const reopened = new ShadowStore(db, { maximumRuns: 10, maximumPoints: 100, maximumBytes: 100000 })
+  expect(reopened.get(run.id).workerReceipt).toMatchObject({ runId: run.id, attemptId: result.lease.attemptId,
+    planHash: run.plan_hash, receipt: result.receipt })
+  expect(reopened.snapshot(run.id, { maximumPoints: 10, maximumBytes: 10000 }).run.workerReceipt).not.toBeNull()
+  const execution = result.run.plan.execution
+  if (!execution) throw new Error('Missing execution')
+  for (const bad of [
+    { ...result.receipt, inputBytes: 100001 }, { ...result.receipt, outputBytes: 100001 },
+    { ...result.receipt, peakObservedRssBytes: 100000001 }, { ...result.receipt, rssSamples: 0 },
+    { ...result.receipt, budgets: { ...result.receipt.budgets, cpuSeconds: 3 } },
+    { ...result.receipt, health: { ...result.receipt.health, cpu_ms: 1001 } },
+    { ...result.receipt, health: { ...result.receipt.health, records: 11 } },
+  ]) expect(() => validateShadowWorkerReceipt(bad, execution)).toThrow()
+  db.prepare('UPDATE biometric_shadow_runs SET worker_receipt_hash = \'corrupted\' WHERE id = ?').run(run.id)
+  expect(() => reopened.get(run.id)).toThrow(/receipt integrity/)
+})
+it('does not complete an executable plan without a worker receipt', () => {
+  const { store, run } = setup()
+  const lease = store.claim(run.id, 1500, () => {})
+  expect(() => store.finish(lease, 'completed', 'missing')).toThrow()
+  expect(store.get(run.id)).toMatchObject({ state: 'running', workerReceipt: null })
+})
+it('fails completion after cleanup when the worker receipt violates the saved budget', async () => {
+  const { store, run, host } = setup()
+  worker.corruptReceipt = true
+  const task = runShadowAttempt(store, run.id, host)
+  const rejected = expect(task).rejects.toThrow(/receipt does not match/)
+  await vi.advanceTimersByTimeAsync(2101)
+  await rejected
+  expect(worker.cleaned).toBe(true)
+  expect(store.get(run.id)).toMatchObject({ state: 'failed', workerReceipt: null, reason: 'shadow_completion_failed' })
 })
