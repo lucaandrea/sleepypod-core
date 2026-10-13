@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { previewSummarySchema, referenceImportSchema, referenceMetricSchema } from '../references/contracts'
 import { shadowReceiptEnvelopeSchema } from './receipt'
-import { shadowMonitoringSchema } from './store'
+import { shadowMonitoringSchema } from './plan-contracts'
 
 const count = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER)
 const finite = z.number().finite()

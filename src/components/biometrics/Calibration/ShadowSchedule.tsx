@@ -1,11 +1,12 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useRef, useState, useSyncExternalStore } from 'react'
 import type { z } from 'zod'
 import type { preparedShadowPlanSchema } from '@/src/biometrics/shadow/preparation-contracts'
 import { Trans, useLingui } from '@lingui/react/macro'
 import { Button, InlineError, Skeleton } from '@/src/components/ds'
 import { trpc } from '@/src/utils/trpc'
+import { readShadowScheduleRecovery, saveShadowScheduleRecovery, clearShadowScheduleRecovery } from './shadow-schedule-recovery'
 
 /** Explicit UTC, including short qualification windows; reject date rollover. */
 function utcInput(value: string) {
@@ -16,7 +17,20 @@ function utcInput(value: string) {
   return Number.isFinite(ms) && new Date(ms).toISOString() === iso ? ms : null
 }
 type Prepared = z.infer<typeof preparedShadowPlanSchema>
+const subscribe = () => () => {}
+const clientSnapshot = () => true
+const serverSnapshot = () => false
 export function ShadowSchedule({ side }: { side: 'left' | 'right' }) {
+  const hydrated = useSyncExternalStore(subscribe, clientSnapshot, serverSnapshot)
+  return hydrated ? <ShadowScheduleForm key={side} side={side} /> : <Skeleton className="h-24" />
+}
+function ShadowScheduleForm({ side }: { side: 'left' | 'right' }) {
+  const [recovery] = useState(() => {
+    try {
+      return { value: readShadowScheduleRecovery(window.sessionStorage, side), error: false }
+    }
+    catch { return { value: undefined, error: true } }
+  })
   const { t } = useLingui()
   const [templateId, setTemplate] = useState('')
   const [subjectId, setSubject] = useState('')
@@ -24,12 +38,12 @@ export function ShadowSchedule({ side }: { side: 'left' | 'right' }) {
   const [start, setStart] = useState('')
   const [end, setEnd] = useState('')
   const [cursor, setCursor] = useState<{ createdAtMs: number, id: string }>()
-  const [prepared, setPrepared] = useState<Prepared>()
-  const [attempted, setAttempted] = useState(false)
+  const [prepared, setPrepared] = useState<Prepared | undefined>(recovery.value?.prepared)
+  const [attempted, setAttempted] = useState(Boolean(recovery.value))
   const [saved, setSaved] = useState<string>()
   const [error, setError] = useState<string>()
   const pending = useRef(false)
-  const request = useRef<{ plan: Prepared['plan'], idempotencyKey: string } | undefined>(undefined)
+  const request = useRef<{ plan: Prepared['plan'], idempotencyKey: string } | undefined>(recovery.value ? { plan: recovery.value.prepared.plan, idempotencyKey: recovery.value.idempotencyKey } : undefined)
   const templates = trpc.biometricShadow.templates.useQuery({})
   const profiles = trpc.biometricTuning.listProfileRevisions.useQuery({ side, beforeCreatedAtMs: cursor?.createdAtMs, beforeId: cursor?.id }, { enabled: Boolean(templates.data?.items.length) })
   const prepare = trpc.biometricShadow.prepare.useMutation()
@@ -48,7 +62,7 @@ export function ShadowSchedule({ side }: { side: 'left' | 'right' }) {
     setError(undefined)
   }
   async function review() {
-    if (pending.current || !valid || startMs === null || endMs === null) return
+    if (pending.current || request.current || !valid || startMs === null || endMs === null) return
     if (startMs <= Date.now()) {
       setError(t`Choose a start time in the future.`)
       return
@@ -64,13 +78,22 @@ export function ShadowSchedule({ side }: { side: 'left' | 'right' }) {
     finally { pending.current = false }
   }
   async function schedule() {
-    if (pending.current || !prepared || saved) return
+    if (pending.current || recovery.error || !prepared || saved) return
     pending.current = true
     setError(undefined)
-    request.current ??= { plan: structuredClone(prepared.plan), idempotencyKey: Array.from(crypto.getRandomValues(new Uint8Array(24)), byte => byte.toString(16).padStart(2, '0')).join('') }
-    setAttempted(true)
+    try {
+      request.current ??= { plan: structuredClone(prepared.plan), idempotencyKey: Array.from(crypto.getRandomValues(new Uint8Array(24)), byte => byte.toString(16).padStart(2, '0')).join('') }
+      setAttempted(true)
+      saveShadowScheduleRecovery(window.sessionStorage, side, { version: 1, prepared, idempotencyKey: request.current.idempotencyKey })
+    }
+    catch {
+      setError(t`The request could not be saved for recovery. This attempt was not sent. Keep this tab open and retry the same request.`)
+      pending.current = false
+      return
+    }
     try {
       const result = await create.mutateAsync(request.current)
+      clearShadowScheduleRecovery(window.sessionStorage, side)
       setSaved(result.id)
       void utils.biometricShadow.list.invalidate({ side })
     }
@@ -80,6 +103,13 @@ export function ShadowSchedule({ side }: { side: 'left' | 'right' }) {
         ? failure.data.code
         : undefined
       if (code === 'BAD_REQUEST' || code === 'PAYLOAD_TOO_LARGE') {
+        try {
+          clearShadowScheduleRecovery(window.sessionStorage, side)
+        }
+        catch {
+          setError(t`The rejected request could not be cleared from browser recovery. Keep this tab open and retry.`)
+          return
+        }
         request.current = undefined
         setAttempted(false)
         setPrepared(undefined)
@@ -90,19 +120,21 @@ export function ShadowSchedule({ side }: { side: 'left' | 'right' }) {
     finally { pending.current = false }
   }
   const queryError = templates.error ?? profiles.error
-  if (queryError) return <InlineError>{queryError.message}</InlineError>
-  if (!templates.data) return <Skeleton className="h-24" />
-  if (!templates.data.items.length) return <p><Trans>No prospective observation templates are configured on this pod.</Trans></p>
-  if (!profiles.data) return <Skeleton className="h-24" />
+  if (recovery.error) return <InlineError>{t`Scheduling recovery is unavailable or invalid. Review existing runs before clearing this tab’s session data; an earlier request may have been saved on the pod.`}</InlineError>
+  if (!prepared && queryError) return <InlineError>{queryError.message}</InlineError>
+  if (!prepared && !templates.data) return <Skeleton className="h-24" />
+  if (!prepared && !templates.data?.items.length) return <p><Trans>No prospective observation templates are configured on this pod.</Trans></p>
+  if (!prepared && !profiles.data) return <Skeleton className="h-24" />
   return (
     <section aria-label={t`Schedule an observation`} className="space-y-3">
       <h4><Trans>Schedule an observation</Trans></h4>
+      {attempted ? <p><Trans>This tab retains the exact scheduling request across reloads until its outcome is confirmed. Retry does not prepare a new plan.</Trans></p> : null}
       <fieldset disabled={busy || attempted} className="space-y-3">
         <label className="block">
           <Trans>Observation template</Trans>
           <select className="ml-2 rounded border p-2" value={templateId} onChange={event => edit(() => setTemplate(event.target.value))}>
             <option value="">{t`Choose a template`}</option>
-            {templates.data.items.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}
+            {templates.data?.items.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}
           </select>
         </label>
         {template ? <p>{t`Maximum window: ${template.maximumWindowMs / 60000} minutes.`}</p> : null}
@@ -118,7 +150,7 @@ export function ShadowSchedule({ side }: { side: 'left' | 'right' }) {
             {' '}
             <Trans>System defaults</Trans>
           </label>
-          {profiles.data.items.map(profile => (
+          {profiles.data?.items.map(profile => (
             <label key={profile.id} className="block break-all">
               <input type="radio" name={`shadow-candidate-${side}`} checked={candidate === profile.id} onChange={() => edit(() => setCandidate(profile.id))} />
               {' '}
@@ -126,7 +158,7 @@ export function ShadowSchedule({ side }: { side: 'left' | 'right' }) {
             </label>
           ))}
           {cursor ? <Button onClick={() => setCursor(undefined)}><Trans>Newest profiles</Trans></Button> : null}
-          {profiles.data.nextCursor ? <Button onClick={() => setCursor(profiles.data?.nextCursor ?? undefined)}><Trans>Older profiles</Trans></Button> : null}
+          {profiles.data?.nextCursor ? <Button onClick={() => setCursor(profiles.data?.nextCursor ?? undefined)}><Trans>Older profiles</Trans></Button> : null}
         </fieldset>
         <label className="block">
           <Trans>Start (UTC)</Trans>

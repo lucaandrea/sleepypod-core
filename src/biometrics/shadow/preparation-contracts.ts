@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { shadowPlanSchema } from './store'
+import { shadowPlanSchema } from './plan-contracts'
 import { shadowExecutionPolicySchema } from './execution-policy'
 import { submitShadowSchema } from './submission-contracts'
 

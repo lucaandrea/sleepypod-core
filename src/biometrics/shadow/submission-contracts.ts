@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { shadowPlanSchema, shadowExpectedBindingsSchema } from './store'
+import { shadowPlanSchema, shadowExpectedBindingsSchema } from './plan-contracts'
 import { shadowExecutionPolicySchema } from './execution-policy'
 
 export const submitShadowSchema = z.object({

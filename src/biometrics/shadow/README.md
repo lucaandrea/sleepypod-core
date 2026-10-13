@@ -931,4 +931,10 @@ response, the open form keeps those inputs locked and retries the same request
 without re-preparing it. Explicit bad-request or quota rejection unlocks editing;
 confirmed saves expose a separate new-plan action and refresh the run list. A
 saved request is never presented as proof that execution started. Retry state is
-held in the mounted form; browser navigation/reload recovery still needs review.
+saved before sending in same-origin, per-side session storage, bounded to 64 KiB.
+Reloading this tab restores the exact plan and key without preparing or sending
+automatically, even if template/profile discovery is unavailable. Confirmed saves
+and definite rejections clear the record. A failed storage write prevents sending;
+invalid or inaccessible recovery blocks new scheduling while preserving the record.
+Closing the tab, clearing browser data, or moving to another origin does not carry
+recovery forward. The record contains plan metadata, not reference rows or waveforms.
