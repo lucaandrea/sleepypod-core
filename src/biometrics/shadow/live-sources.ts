@@ -17,7 +17,7 @@ export function openShadowLiveSources(options: {
   maximumLatenessMs: number
   pollMs: number
   frameBudgets: Parameters<typeof openShadowFrameSource>[0]['budgets']
-  context: () => unknown
+  context: Parameters<typeof openShadowFrameSource>[0]['context']
   assertDatabaseCurrent: () => void
   signal: AbortSignal
   active: (reading: unknown) => void

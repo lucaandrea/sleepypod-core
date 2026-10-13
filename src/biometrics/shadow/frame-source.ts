@@ -61,7 +61,7 @@ export function openShadowFrameSource(options: {
   endMs: number
   signal: AbortSignal
   budgets: z.infer<typeof budgetsSchema>
-  context: () => unknown
+  context: (frame: Record<string, unknown>, observedAtMs: number) => unknown
   fail: () => void
 }) {
   const budgets = budgetsSchema.parse(options.budgets)
@@ -108,7 +108,7 @@ export function openShadowFrameSource(options: {
         const eventMs = z.number().finite().nonnegative().parse(frame.ts) * 1000
         if (!Number.isFinite(eventMs) || eventMs > Number.MAX_SAFE_INTEGER || observedAtMs - eventMs > budgets.maximumEventAgeMs || eventMs - observedAtMs > budgets.maximumFutureSkewMs) throw new Error('Prospective event time outside freshness policy')
         if (queue.length >= budgets.maximumFrames) throw new Error('Prospective frame queue full')
-        const value = { type: 'frame', observedAtMs, record: record(frame), context: contextSchema.parse(options.context()) }
+        const value = { type: 'frame', observedAtMs, record: record(frame), context: contextSchema.parse(options.context(frame, observedAtMs)) }
         const text = JSON.stringify(value), size = Buffer.byteLength(text)
         if (size > 128 * 1024 || bytes + size > budgets.maximumBytes) throw new Error('Prospective frame byte quota exceeded')
         previousArrival = observedAtMs

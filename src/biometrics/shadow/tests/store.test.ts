@@ -145,6 +145,7 @@ describe('separate prospective shadow storage', () => {
         comparison: { commonObservationCount: 1, lostObservationTimestamps: 1 } }] })
     expect(report.reportHash).toMatch(/^[a-f0-9]{64}$/)
     advance(10000)
+    expect(report.contextEvidence).toBe('host_observations_not_live_processor_cache_attestation')
     const stale = reportShadowRun(store, lease.runId, { maximumPoints: 10, maximumBytes: 10000 })
     expect(stale.issues).toEqual(expect.arrayContaining(['worker_stale', 'observation_gap']))
   })

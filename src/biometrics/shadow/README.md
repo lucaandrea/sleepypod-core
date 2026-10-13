@@ -355,3 +355,31 @@ These pieces still require the production context provider, installed build and
 qualification admission, frozen execution budgets/receipts, orphan recovery and
 service/API registration. No production defaults or qualified registry entries
 are inferred by composing the sources.
+
+## Committed context snapshots
+
+`ShadowContextReader` supplies the frame adapter's `(frame, observedAtMs)` context
+callback. It reads sleeper configuration through a read-only connection using the
+shared `activeSleeperSides` logic. Both side rows and a valid bed mode are required;
+missing or corrupt settings produce unknown mode instead of invented defaults.
+The host's database identity guard is checked before and after capture.
+
+Occupancy comes from the sleep detector's version-1 committed presence file,
+matching the evidence fields used by Python `BedPresence`: `vitals_presence` and
+`vitals_evidence_ts`. File and per-side evidence freshness are both checked against
+the observed arrival time with an explicit limit no greater than the daemon's
+five-minute ceiling. Missing, stale, future, malformed, oversized, symlinked or
+changing files produce unknown presence. Reads are bounded, no-follow, regular-file
+only; unknown on one side does not erase valid evidence on the other. The virtual
+web/HomeKit occupancy estimate is not substituted for this committed evidence.
+
+Pump availability starts unknown for each attempt. Only observed `frzHealth`
+records with usable pump fields on both sides establish it; incomplete updates
+invalidate availability, and an explicit age limit expires it. This does not
+invent pre-attempt pump state or remove the processor's pump gates.
+
+These are current host observations, not proof of the active daemon's exact
+cached view: Python independently reloads sleeper settings and committed presence.
+Reports explicitly identify that context evidence limitation. Production admission
+and qualification must account for those timing differences. The provider does
+not itself qualify a run, persist execution policy, or register a live service.
