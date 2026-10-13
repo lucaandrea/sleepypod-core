@@ -43,6 +43,7 @@
 
 import { RecentSensorFrames } from './recentSensorFrames'
 import { WebSocketServer, WebSocket } from 'ws'
+import { publishProspectiveFrame, failProspectiveFrames } from './prospectiveFrameTap'
 import * as fs from 'node:fs'
 import type { FileHandle } from 'node:fs/promises'
 import * as path from 'node:path'
@@ -901,7 +902,10 @@ async function startNatsSource(expectedServer: WebSocketServer): Promise<boolean
       decode: decodeSensorFrames,
       onFrame: (frame) => { if (streamState.wss === expectedServer) dispatchSensorFrame(frame) },
       onReady: () => console.log('[sensorStream] NATS frame source active'),
-      onClose: err => console.error('[sensorStream] NATS frame source closed', err ?? ''),
+      onClose: (err) => {
+        if (streamState.wss === expectedServer) failProspectiveFrames()
+        console.error('[sensorStream] NATS frame source closed', err ?? '')
+      },
     })
     if (streamState.wss !== expectedServer) {
       // Server shut down while we were connecting — don't leak the connection.
@@ -928,6 +932,7 @@ async function startNatsSource(expectedServer: WebSocketServer): Promise<boolean
  * and stays in its loop.)
  */
 function dispatchSensorFrame(frame: Record<string, unknown>, backlog = false): void {
+  publishProspectiveFrame(frame, backlog, Date.now())
   streamState.recentFrames.add(frame)
   recordFirstSensorFrame()
   const frameType = frame.type as string
@@ -1215,6 +1220,7 @@ export const __test__ = {
  * Called during graceful shutdown in instrumentation.ts.
  */
 export async function shutdownPiezoStreamServer(): Promise<void> {
+  failProspectiveFrames()
   // Null streamState.wss first so any in-flight source selection / NATS connect aborts
   // instead of attaching to a server that's going away.
   const server = streamState.wss

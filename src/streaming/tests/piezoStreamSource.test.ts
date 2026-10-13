@@ -14,6 +14,7 @@ import * as fs from 'node:fs'
 import * as path from 'node:path'
 import { Encoder } from 'cbor-x'
 import { WebSocket } from 'ws'
+import { subscribeProspectiveFrames } from '../prospectiveFrameTap'
 
 const tmpRawDir = vi.hoisted(() => {
   const fsh = require('node:fs') as typeof import('node:fs')
@@ -205,6 +206,11 @@ describe('startPiezoStreamServer — source selection', () => {
     const before = getLatestCapSenseSnapshot()
     staleOptions.onFrame({ type: 'capSense', ts: Date.now() / 1000, left: 999, right: 999 })
     expect(getLatestCapSenseSnapshot()).toBe(before)
+    const prospectiveFailed = vi.fn()
+    const unsubscribe = subscribeProspectiveFrames({ frame: () => {}, failed: prospectiveFailed })
+    staleOptions.onClose()
+    expect(prospectiveFailed).not.toHaveBeenCalled()
+    unsubscribe()
     resolveStart()
     await waitFor(() => natsMock.stopCalls === 1)
     expect(__test__.natsSourceActive).toBe(true)
@@ -253,9 +259,16 @@ describe('startPiezoStreamServer — source selection', () => {
     expect(snap?.type).toBe('capSense')
     expect(snap?.left).toEqual([100, 100, 200, 200, 300, 300])
 
+    const prospective = vi.fn(), prospectiveFailed = vi.fn()
+    const unsubscribe = subscribeProspectiveFrames({ frame: prospective, failed: prospectiveFailed })
+    const waveform = { type: 'piezo-dual', ts: now, freq: 500, left1: [1], right1: [2] }
+    natsMock.captured.onFrame(waveform)
+    expect(prospective).toHaveBeenCalledWith(waveform, expect.any(Number))
     const closeError = new Error('closed')
     natsMock.captured.onClose(closeError)
     expect(error).toHaveBeenCalledWith('[sensorStream] NATS frame source closed', closeError)
+    expect(prospectiveFailed).toHaveBeenCalledOnce()
+    unsubscribe()
     error.mockRestore()
   })
 

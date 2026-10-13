@@ -273,3 +273,29 @@ The controller does not invent qualification, choose production budgets, subscri
 to hardware on its own, recover orphan workers after host crashes, or persist the
 returned worker resource receipt. Those integration obligations remain before
 prospective runs can be enabled or treated as production-qualified evidence.
+
+## Live waveform source adapter
+
+`openShadowFrameSource` subscribes to the shared RAW/NATS dispatch through the
+separate `prospectiveFrameTap`. The tap lives on `globalThis`, has at most four
+subscribers, excludes ingestion backlogs and unrelated sensor types, and isolates
+consumer failures from canonical live ingestion. Current-source NATS termination
+and server shutdown notify subscribers of failure. Admission/idle monitoring must
+still detect silent sources and temporary disconnects.
+
+The adapter freezes each frame's actual host arrival timestamp and the trusted
+host's contemporaneous occupancy/active-side/pump-availability context. It encodes
+signed little-endian int32 channels (at most 5,000 samples each) for the Python
+worker, and copies only the bounded pump fields used by the shared gate. It never
+retains mutable decoder arrays or invents missing context. Explicit event-age and
+future-skew budgets reject delayed live delivery even when it was not labelled as
+a backlog. Only the shipped 500 Hz waveform format is accepted when a frequency
+is present; hardware compatibility still belongs to admission.
+
+Frame-count and serialized-byte queue budgets are mandatory. Overflow, invalid
+samples/context/clocks, and unread queued frames at collection end fail the
+attempt; there is no silent drop or unbounded catch-up. A single consumer reads
+in arrival order. Abort, window end and iterator return unsubscribe and settle
+pending reads. This adapter supplies candidate input only. The active-reading
+adapter, context provider, installed qualification/admission and service wiring
+remain required before enabling prospective shadow runs.
