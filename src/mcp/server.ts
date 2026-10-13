@@ -25,7 +25,10 @@ const INSTRUCTIONS = `Sleepypod controls an Eight Sleep Pod running the open-sou
 The bed has two independent sides ("left" and "right"), each with its own temperature, schedules and sleeper.
 Temperature control precedence, highest first: manual hold (set_temperature) > run-once curve > automation > schedule.
 Start with get_pod_status for anything about the present, get_sleep_summary for last night, and diagnose_pod when something seems wrong.
-Confirm with the user before prime_pod, pod_maintenance and manage_schedule delete.`
+Confirm with the user before prime_pod, pod_maintenance and manage_schedule delete.
+Run preview_sleep_stage_rules before set_sleep_stage_rules and apply a tuned ruleset only when it improves kappa against the reference stages; a reset or rollback the user asks for does not need to.
+Nights without reference stages cannot be scored (see get_sleep_stage_rules coverage); import Apple Watch stages with import_apple_watch_data first.
+Every classifier change is recorded in the change log with the ruleset before it, and can be reverted by setting that previous ruleset again.`
 
 function json(uri: string, value: unknown) {
   return { contents: [{ uri, mimeType: 'application/json', text: JSON.stringify(value, null, 2) }] }

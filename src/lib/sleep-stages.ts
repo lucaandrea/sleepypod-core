@@ -463,6 +463,9 @@ export function mergeIntoBlocks(epochs: SleepEpoch[]): SleepStageBlock[] {
   return blocks
 }
 
+/** Epoch counts keyed reference stage → predicted stage. */
+export type StageConfusion = Record<SleepStage, Record<SleepStage, number>>
+
 export interface StageAgreement {
   /** Epochs whose midpoint falls inside a reference segment. */
   epochs: number
@@ -470,6 +473,10 @@ export interface StageAgreement {
   accuracy: number
   /** Cohen's kappa: agreement beyond chance; null when chance agreement is total. */
   kappa: number | null
+  /** confusion[reference][predicted]: how many reference epochs of one stage were predicted as each stage. */
+  confusion: StageConfusion
+  /** Fraction of each reference stage's epochs predicted correctly; null when the reference has none of that stage. */
+  recall: Record<SleepStage, number | null>
 }
 
 /**
@@ -479,8 +486,10 @@ export interface StageAgreement {
  */
 export function scoreAgainstReference(epochs: SleepEpoch[], reference: SleepStageBlock[]): StageAgreement | null {
   const stages: SleepStage[] = ['wake', 'light', 'deep', 'rem']
-  const predicted: Record<SleepStage, number> = { wake: 0, light: 0, deep: 0, rem: 0 }
-  const actual: Record<SleepStage, number> = { wake: 0, light: 0, deep: 0, rem: 0 }
+  const zero = (): Record<SleepStage, number> => ({ wake: 0, light: 0, deep: 0, rem: 0 })
+  const predicted = zero()
+  const actual = zero()
+  const confusion: StageConfusion = { wake: zero(), light: zero(), deep: zero(), rem: zero() }
   let covered = 0
   let matches = 0
 
@@ -491,16 +500,22 @@ export function scoreAgainstReference(epochs: SleepEpoch[], reference: SleepStag
     covered++
     predicted[e.stage]++
     actual[ref.stage]++
+    confusion[ref.stage][e.stage]++
     if (ref.stage === e.stage) matches++
   }
 
   if (covered === 0) return null
   const accuracy = matches / covered
   const chance = stages.reduce((sum, s) => sum + (predicted[s] / covered) * (actual[s] / covered), 0)
+  const recall = Object.fromEntries(
+    stages.map(s => [s, actual[s] === 0 ? null : confusion[s][s] / actual[s]]),
+  ) as Record<SleepStage, number | null>
   return {
     epochs: covered,
     accuracy,
     kappa: chance === 1 ? null : (accuracy - chance) / (1 - chance),
+    confusion,
+    recall,
   }
 }
 
@@ -667,10 +682,12 @@ export function classifyNights(
   nights: NightInputs[],
   ruleset: StageRuleset,
 ): { summary: NightsSummary, latestEpochs: SleepEpoch[] } | null {
-  const runs = nights
-    .map(n => ({ ...runStageClassifier(n.vitalsData, n.movementData, n.calibrationQuality, ruleset), night: n }))
-    .filter(r => r.epochs.length > 0)
+  const allRuns = nights.map(n => ({ ...runStageClassifier(n.vitalsData, n.movementData, n.calibrationQuality, ruleset), night: n }))
+  // Aggregates skip nights without vitals, but the latest night stays the
+  // latest night: a preview must not describe an older night as "last night".
+  const runs = allRuns.filter(r => r.epochs.length > 0)
   if (runs.length === 0) return null
+  const latest = allRuns[0]
 
   const allEpochs = runs.flatMap(r => r.epochs)
   const allReference = runs.flatMap(r => r.night.reference)
@@ -679,9 +696,9 @@ export function classifyNights(
   const perNight = (ms: number) => Math.round(ms / runs.length)
 
   return {
-    latestEpochs: runs[0].epochs,
+    latestEpochs: latest.epochs,
     summary: {
-      blocks: mergeIntoBlocks(runs[0].epochs),
+      blocks: mergeIntoBlocks(latest.epochs),
       distribution: calculateDistribution(allEpochs),
       qualityScore: Math.round(quality),
       totalSleepMs: perNight(allEpochs.reduce((sum, e) => sum + e.duration, 0)),

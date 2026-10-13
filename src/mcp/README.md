@@ -22,7 +22,7 @@ claude mcp add --transport http sleepypod http://192.168.1.88:3000/api/mcp
 
 ## Design rules
 
-- **Intent-shaped, not endpoint-shaped.** 29 intent tools cover the main user workflows. A tool is one thing a person would ask for.
+- **Intent-shaped, not endpoint-shaped.** 33 intent tools cover the main user workflows. A tool is one thing a person would ask for.
 - **CRUD collapses into an `action` enum** (`manage_schedule`, `manage_alarm`, `manage_automation`, `pod_maintenance`).
 - **Temperatures accept the caller's unit** (`unit: "F" | "C"`, default = device setting) and are converted to the 55-110°F hardware setpoint in `units.ts`.
 - **Errors come back as `isError` text** with the TRPC code, so the model can explain "pump stall guard tripped" instead of retrying blindly.
@@ -44,10 +44,13 @@ claude mcp add --transport http sleepypod http://192.168.1.88:3000/api/mcp
 
 | Intent | Tool | Procedures |
 |---|---|---|
-| "How did I sleep?" / "Resting HR last night?" / "How much deep sleep?" | `get_sleep_summary` | `biometrics.getLatestSleep`, `getSleepRecords`, `getSleepStages`, `getVitalsSummary`, `getMovementSummary` |
+| "How did I sleep?" / "Resting HR last night?" / "How much deep sleep?" / "Did the pod agree with my watch?" | `get_sleep_summary` | `biometrics.getLatestSleep`, `getSleepRecords`, `getSleepStages`, `getVitalsSummary`, `getMovementSummary`, `getReferenceStages` |
 | "Bedtime this week?" / "How many nights did I get up?" | `get_sleep_history` | `biometrics.getSleepRecords` |
 | "Is my HRV trending down?" / "Was last night unusual?" | `get_vitals_trend` | `biometrics.getVitalsBaseline`, `getVitalsSummary` |
 | "Import my Apple Watch data" | [`import_apple_watch_data`](#apple-watch-imports) | `biometrics.importReferenceVitals`, `biometrics.importReferenceStages` |
+| "How are my stages classified?" / "Do I have enough watch data to tune?" | `get_sleep_stage_rules` | `sleepStages.getClassifier`, `biometrics.getReferenceStages`, `getSleepRecords` |
+| "Would the movement-only preset match my watch better?" / "Try deep below 0.90" (dry run) | [`preview_sleep_stage_rules`](#sleep-stage-tuning) | `sleepStages.getClassifier`, `previewClassifier` |
+| "Apply that ruleset" / "Go back to the default rules" | [`set_sleep_stage_rules`](#sleep-stage-tuning) | `sleepStages.getClassifier`, `setClassifier` |
 
 ### Control tonight
 
@@ -221,3 +224,31 @@ batches skipped while heart rate still imports). A disconnect or timeout can lea
 some batches imported; retrying the same export is safe. Upload has a 30-minute
 budget, followed by a separate 10-minute import budget. The browser allows 41
 minutes for both phases and response cleanup. Like the existing API, this is LAN-only.
+
+### Sleep stage tuning
+
+`get_sleep_stage_rules` returns each side's saved classifier with indexed `rules[i].when[j]` and
+`lowSignalRules[i].when[j]` conditions (nights whose piezo calibration quality is below
+`lowSignalBelow` use the low-signal list), the preset ids, the last five change-log entries (each
+with the classifier `before` it, for rollback), and reference coverage for the last 14 days
+(`nights` with Apple Watch stages, `segments`, 5-minute `epochs`, `latestReferenceAt`, and
+`truncated` when a query hit its row cap). `heartRateAgreement` compares the pod's heart-rate
+estimate with the watch at matching times (Pearson correlation, mean absolute error); when it is
+weak the HR-ratio rules classify noise and the `hint` points at the `hrvFirst` preset. A side with
+`nights: 0` cannot be scored; import first.
+
+`preview_sleep_stage_rules` is a dry run. Give exactly one of `presetId`, a full `ruleset`, or
+`overrides` (`[{ list?, ruleIndex, conditionIndex, value }]` applied to the saved rules; `list`
+defaults to `rules`) and up to 14 `nights`. It returns the resolved `candidateRuleset`, the saved
+and candidate agreement with the reference (accuracy, Cohen's kappa, a
+`confusion[reference][predicted]` epoch matrix and per-stage `recall`), mean stage minutes per
+night, `kappaDelta` and the epochs of the latest night that change stage. Judge by kappa:
+predicting one stage everywhere can score high accuracy with kappa near 0.
+
+`set_sleep_stage_rules` takes the same arguments plus `reset: true` and saves through
+`sleepStages.setClassifier`, so each change is logged with the ruleset before it and accuracy
+before and after on the latest night (`accuracyBefore`/`accuracyAfter`; no-op saves are not
+logged), and can be reverted by saving that previous ruleset again (`before: null`
+means `reset: true`). Pass the preview's `candidateRuleset` as `ruleset` to save exactly what was
+previewed; overrides are re-resolved against the rules saved at save time. A `CONFLICT` means
+another save landed first: re-read with `get_sleep_stage_rules` and retry.

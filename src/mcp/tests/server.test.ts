@@ -25,7 +25,9 @@ const callerMock = vi.hoisted(() => {
     biometrics: {
       getLatestSleep: fn(), getSleepRecord: fn(), getSleepRecords: fn(), getSleepStages: fn(), getVitalsSummary: fn(),
       getMovementSummary: fn(), getVitalsBaseline: fn(), getOccupancy: fn(), importReferenceVitals: fn(), importReferenceStages: fn(),
+      getReferenceStages: fn(), getReferenceVitals: fn(), getVitals: fn(),
     },
+    sleepStages: { getClassifier: fn(), previewClassifier: fn(), setClassifier: fn() },
     environment: {
       getSummary: fn(), getAmbientLightSummary: fn(), getLatestBedTemp: fn(), getLatestFreezerTemp: fn(),
       getLatestAmbientLight: fn(),
@@ -56,6 +58,7 @@ vi.mock('@/src/server/routers/app', () => ({
 }))
 
 import { createSleepypodMcpServer } from '@/src/mcp/server'
+import { DEFAULT_STAGE_CLASSIFIER, DEFAULT_STAGE_RULESET, STAGE_RULESET_PRESETS } from '@/src/lib/sleep-stage-rules'
 
 const SIDE = { currentTemperature: 70, targetTemperature: 72, currentLevel: 10, targetLevel: 20, heatingDuration: 0 }
 const STATUS = {
@@ -118,6 +121,7 @@ describe('sleepypod MCP server', () => {
       'get_schedules',
       'get_settings',
       'get_sleep_history',
+      'get_sleep_stage_rules',
       'get_sleep_summary',
       'get_vitals_trend',
       'import_apple_watch_data',
@@ -128,6 +132,7 @@ describe('sleepypod MCP server', () => {
       'manage_biometric_experiment',
       'manage_schedule',
       'pod_maintenance',
+      'preview_sleep_stage_rules',
       'prime_pod',
       'propose_biometric_profile',
       'release_biometric_artifacts',
@@ -136,6 +141,7 @@ describe('sleepypod MCP server', () => {
       'set_device_settings',
       'set_power',
       'set_side_settings',
+      'set_sleep_stage_rules',
       'set_temperature',
     ])
     for (const tool of tools) {
@@ -268,6 +274,7 @@ describe('sleepypod MCP server', () => {
     callerMock.biometrics.getSleepStages.mockResolvedValue({ epochs: [], blocks: [], distribution: { wake: 1, light: 2, deep: 3, rem: 4 } })
     callerMock.biometrics.getVitalsSummary.mockResolvedValue({ avgHeartRate: 55, recordCount: 10 })
     callerMock.biometrics.getMovementSummary.mockResolvedValue({ positionChanges: 12, restlessMinutes: 3, sampleCount: 480 })
+    callerMock.biometrics.getReferenceStages.mockResolvedValue([])
 
     const result = await client.callTool({ name: 'get_sleep_summary', arguments: { side: 'left' } }) as CallToolResult
     expect(parse(result)).toMatchObject({
@@ -275,7 +282,10 @@ describe('sleepypod MCP server', () => {
       stages: { distribution: { deep: 3 } },
       vitals: { avgHeartRate: 55 },
       movement: { positionChanges: 12 },
+      referenceAgreement: null,
+      referenceHint: expect.stringContaining('import_apple_watch_data'),
     })
+    expect(callerMock.biometrics.getReferenceStages).toHaveBeenCalledWith({ side: 'left', startDate: enteredBedAt, endDate: leftBedAt, limit: 20000 })
     expect(callerMock.biometrics.getSleepStages).toHaveBeenCalledWith({ side: 'left', sleepRecordId: 42 })
     expect(callerMock.biometrics.getVitalsSummary).toHaveBeenCalledWith({ side: 'left', startDate: enteredBedAt, endDate: leftBedAt })
   })
@@ -476,6 +486,7 @@ describe('sleepypod MCP server', () => {
     callerMock.biometrics.getSleepStages.mockResolvedValue({ epochs: [], blocks: [], distribution: {} })
     callerMock.biometrics.getVitalsSummary.mockResolvedValue({})
     callerMock.biometrics.getMovementSummary.mockResolvedValue({})
+    callerMock.biometrics.getReferenceStages.mockResolvedValue([])
     const ok = await client.callTool({ name: 'get_sleep_summary', arguments: { side: 'left', sleepRecordId: 9 } }) as CallToolResult
     expect(parse(ok)).toMatchObject({ record: { id: 9 } })
     expect(callerMock.biometrics.getSleepRecord).toHaveBeenCalledWith({ id: 9 })
@@ -492,6 +503,21 @@ describe('sleepypod MCP server', () => {
     callerMock.biometrics.getVitalsSummary.mockResolvedValue({})
     await client.callTool({ name: 'get_vitals_trend', arguments: { side: 'left', startDate: '2026-09-20' } })
     expect(callerMock.biometrics.getVitalsSummary).toHaveBeenCalledWith({ side: 'left', startDate: new Date('2026-09-20') })
+  })
+
+  it('get_sleep_history defaults to 7 days and get_vitals_trend forwards an endDate alone', async () => {
+    const client = await connect()
+    callerMock.biometrics.getSleepRecords.mockResolvedValue([])
+    callerMock.biometrics.getVitalsBaseline.mockResolvedValue({})
+    callerMock.biometrics.getVitalsSummary.mockResolvedValue({})
+    const before = Date.now()
+    await client.callTool({ name: 'get_sleep_history', arguments: { side: 'left' } })
+    const { startDate, endDate } = callerMock.biometrics.getSleepRecords.mock.calls[0][0]
+    expect(endDate.getTime() - startDate.getTime()).toBe(7 * 24 * 60 * 60 * 1000)
+    expect(endDate.getTime()).toBeGreaterThanOrEqual(before)
+
+    await client.callTool({ name: 'get_vitals_trend', arguments: { side: 'left', endDate: '2026-09-29' } })
+    expect(callerMock.biometrics.getVitalsSummary).toHaveBeenCalledWith({ side: 'left', endDate: new Date('2026-09-29') })
   })
 
   it('get_environment rejects a half-specified range', async () => {
@@ -786,4 +812,319 @@ it('forwards exact validated activation evidence without accepting caller build 
     expect(callerMock.biometricTuning.activateValidatedProfile).toHaveBeenCalledTimes(1)
   }
   finally { await client.close() }
+})
+
+describe('sleep stage tuning tools', () => {
+  const AGREEMENT = {
+    epochs: 10, accuracy: 0.6, kappa: 0.2,
+    confusion: { wake: { wake: 1, light: 0, deep: 0, rem: 0 }, light: { wake: 0, light: 3, deep: 2, rem: 0 }, deep: { wake: 0, light: 2, deep: 1, rem: 0 }, rem: { wake: 0, light: 0, deep: 0, rem: 1 } },
+    recall: { wake: 1, light: 0.6, deep: 1 / 3, rem: 1 },
+  }
+  const STAGES = {
+    blocks: [], distribution: { wake: 10, light: 50, deep: 20, rem: 20 }, qualityScore: 80, totalSleepMs: 8 * 3_600_000,
+    durations: { wake: 48 * 60_000, light: 240 * 60_000, deep: 96 * 60_000, rem: 96 * 60_000 },
+    stats: { epochs: 96, nights: 1, lowSignalNights: 0, rules: null, lowSignalRules: null, metricRanges: {}, heartRateReadings: 0, spikesDropped: 0, smoothed: 0, transitionFixes: 0 },
+  }
+  const PRESETS = Object.entries(STAGE_RULESET_PRESETS).map(([id, p]) => ({ id, label: p.label, description: p.description, classifier: { engine: 'rules', ruleset: p.ruleset } }))
+  const CHANGE = { id: 7, changedAt: 1_791_700_000_000, summary: 'Rule 2: Deep HR ratio < 0.92 → < 0.9', before: DEFAULT_STAGE_CLASSIFIER, agreementBefore: 0.5, agreementAfter: 0.7 }
+  const classifierState = (changes: typeof CHANGE[] = []) => ({
+    classifier: DEFAULT_STAGE_CLASSIFIER, isDefault: true, defaults: DEFAULT_STAGE_CLASSIFIER, engines: [], presets: PRESETS, changes,
+  })
+  const enteredBedAt = new Date('2026-10-12T05:00:00Z')
+  const leftBedAt = new Date('2026-10-12T13:00:00Z')
+  const segment = { id: 1, side: 'left', source: 'apple_watch', start: new Date('2026-10-12T06:00:00Z'), end: new Date('2026-10-12T12:00:00Z'), stage: 'light', createdAt: leftBedAt }
+  const record = { id: 42, side: 'left', enteredBedAt, leftBedAt, sleepDurationSeconds: 28800, timesExitedBed: 0, presentIntervals: [], notPresentIntervals: [], createdAt: leftBedAt }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    callerMock.sleepStages.getClassifier.mockResolvedValue(classifierState())
+    callerMock.biometrics.getReferenceStages.mockResolvedValue([])
+    callerMock.biometrics.getSleepRecords.mockResolvedValue([])
+    callerMock.biometrics.getReferenceVitals.mockResolvedValue([])
+    callerMock.biometrics.getVitals.mockResolvedValue([])
+  })
+
+  async function call(name: string, args: Record<string, unknown>) {
+    const client = await connect()
+    try {
+      return await client.callTool({ name, arguments: args }) as CallToolResult
+    }
+    finally { await client.close() }
+  }
+
+  it('get_sleep_summary scores the night against reference stages when it has them', async () => {
+    callerMock.biometrics.getLatestSleep.mockResolvedValue(record)
+    callerMock.biometrics.getSleepStages.mockResolvedValue({
+      blocks: [], distribution: {},
+      epochs: [
+        { start: segment.start.getTime(), duration: 300_000, stage: 'light', heartRate: null, hrv: null, breathingRate: null, movement: null },
+        { start: segment.start.getTime() + 300_000, duration: 300_000, stage: 'deep', heartRate: null, hrv: null, breathingRate: null, movement: null },
+      ],
+    })
+    callerMock.biometrics.getVitalsSummary.mockResolvedValue({})
+    callerMock.biometrics.getMovementSummary.mockResolvedValue({})
+    callerMock.biometrics.getReferenceStages.mockResolvedValue([segment])
+
+    const result = await call('get_sleep_summary', { side: 'left' })
+    expect(parse(result)).toMatchObject({
+      referenceAgreement: {
+        source: 'apple_watch', epochs: 2, accuracy: 0.5,
+        confusion: { light: { light: 1, deep: 1 } },
+        recall: { light: 0.5, deep: null },
+      },
+      referenceHint: null,
+    })
+  })
+
+  it('get_sleep_stage_rules reports coverage for a side with and without reference', async () => {
+    callerMock.biometrics.getReferenceStages.mockImplementation(async ({ side }: { side: string }) => side === 'left' ? [segment] : [])
+    callerMock.biometrics.getSleepRecords.mockImplementation(async ({ side }: { side: string }) => side === 'left' ? [record] : [record])
+    callerMock.sleepStages.getClassifier.mockResolvedValue(classifierState([CHANGE]))
+
+    const both = parse(await call('get_sleep_stage_rules', {})) as Array<Record<string, unknown>>
+    expect(both.map(r => r.side)).toEqual(['left', 'right'])
+    expect(both[0]).toMatchObject({
+      isDefault: true,
+      presets: [{ id: 'default' }, { id: 'movementOnly' }, { id: 'hrvFirst' }],
+      recentChanges: [{ id: 7, summary: CHANGE.summary, before: DEFAULT_STAGE_CLASSIFIER, accuracyBefore: 0.5, accuracyAfter: 0.7 }],
+      referenceCoverage: { days: 14, nights: 1, segments: 1, epochs: 72, latestReferenceAt: segment.end.toISOString(), source: 'apple_watch', heartRateAgreement: null },
+      hint: null,
+    })
+    expect((both[0].classifier as { ruleset: unknown }).ruleset).toEqual(DEFAULT_STAGE_RULESET)
+    expect(both[1]).toMatchObject({
+      referenceCoverage: { nights: 0, segments: 0, epochs: 0, latestReferenceAt: null, source: null },
+      hint: expect.stringContaining('import_apple_watch_data'),
+    })
+
+    const one = parse(await call('get_sleep_stage_rules', { side: 'right' })) as Record<string, unknown>
+    expect(one.side).toBe('right')
+    expect(callerMock.biometrics.getReferenceStages).toHaveBeenLastCalledWith(expect.objectContaining({ side: 'right', limit: 20000 }))
+  })
+
+  it('preview_sleep_stage_rules dry-runs a preset and never saves', async () => {
+    callerMock.sleepStages.previewClassifier.mockResolvedValue({
+      sleepRecordId: 42, enteredBedAt: enteredBedAt.getTime(), leftBedAt: leftBedAt.getTime(), nights: 3, hasReference: true,
+      saved: { ...STAGES, agreement: AGREEMENT },
+      candidate: { ...STAGES, durations: { ...STAGES.durations, deep: 120 * 60_000 }, agreement: { ...AGREEMENT, accuracy: 0.7, kappa: 0.45 } },
+      changed: { segments: [], changed: 12, total: 96 },
+    })
+
+    const result = parse(await call('preview_sleep_stage_rules', { side: 'left', nights: 3, presetId: 'movementOnly' }))
+    expect(result).toMatchObject({
+      dryRun: true, candidateSource: 'preset:movementOnly', candidateRuleset: STAGE_RULESET_PRESETS.movementOnly.ruleset, nights: 3, hasReference: true, hint: null,
+      saved: { agreement: { kappa: 0.2, confusion: AGREEMENT.confusion, recall: AGREEMENT.recall }, stageMinutesPerNight: { wake: 48, light: 240, deep: 96, rem: 96 } },
+      candidate: { agreement: { kappa: 0.45 }, stageMinutesPerNight: { deep: 120 } },
+      kappaDelta: 0.25, epochsChanged: 12, epochsTotal: 96,
+      apply: expect.stringContaining('set_sleep_stage_rules'),
+    })
+    expect(callerMock.sleepStages.previewClassifier).toHaveBeenCalledWith({
+      side: 'left', nights: 3, classifier: { engine: 'rules', ruleset: STAGE_RULESET_PRESETS.movementOnly.ruleset },
+    })
+    expect(callerMock.sleepStages.setClassifier).not.toHaveBeenCalled()
+  })
+
+  it('preview_sleep_stage_rules applies threshold overrides to the saved rules and defaults to 7 nights', async () => {
+    callerMock.sleepStages.previewClassifier.mockResolvedValue({
+      sleepRecordId: 42, enteredBedAt: 0, leftBedAt: 0, nights: 7, hasReference: false,
+      saved: { ...STAGES, agreement: null }, candidate: { ...STAGES, agreement: null }, changed: { segments: [], changed: 0, total: 96 },
+    })
+
+    const result = parse(await call('preview_sleep_stage_rules', { side: 'left', overrides: [{ ruleIndex: 1, conditionIndex: 0, value: 0.9 }] }))
+    expect(result).toMatchObject({ candidateSource: 'overrides:1', hasReference: false, hint: expect.stringContaining('import_apple_watch_data'), kappaDelta: null, saved: { agreement: null } })
+    const sent = callerMock.sleepStages.previewClassifier.mock.calls[0][0]
+    expect(sent.nights).toBe(7)
+    expect(sent.classifier.ruleset.rules[1].when[0]).toEqual({ ...DEFAULT_STAGE_RULESET.rules[1].when[0], value: 0.9 })
+    expect(sent.classifier.ruleset.rules[0]).toEqual(DEFAULT_STAGE_RULESET.rules[0])
+    expect(DEFAULT_STAGE_RULESET.rules[1].when[0].value).not.toBe(0.9)
+    expect(callerMock.sleepStages.setClassifier).not.toHaveBeenCalled()
+
+    const bad = await call('preview_sleep_stage_rules', { side: 'left', overrides: [{ ruleIndex: 99, conditionIndex: 0, value: 1 }] })
+    expect(bad.isError).toBe(true)
+    expect(text(bad)).toContain('rules[99].when[0]')
+
+    const low = await call('preview_sleep_stage_rules', { side: 'left', overrides: [{ list: 'lowSignalRules', ruleIndex: 0, conditionIndex: 0, value: 150 }] })
+    expect(low.isError).toBeFalsy()
+    const lowSent = callerMock.sleepStages.previewClassifier.mock.calls[1][0]
+    expect(lowSent.classifier.ruleset.lowSignalRules[0].when[0]).toEqual({ ...DEFAULT_STAGE_RULESET.lowSignalRules[0].when[0], value: 150 })
+    expect(lowSent.classifier.ruleset.rules).toEqual(DEFAULT_STAGE_RULESET.rules)
+    const lowBad = await call('preview_sleep_stage_rules', { side: 'left', overrides: [{ list: 'lowSignalRules', ruleIndex: 5, conditionIndex: 0, value: 1 }] })
+    expect(text(lowBad)).toContain('lowSignalRules[5].when[0]')
+  })
+
+  it('preview_sleep_stage_rules rejects several candidates at once and none at all', async () => {
+    const both = await call('preview_sleep_stage_rules', { side: 'left', presetId: 'default', overrides: [{ ruleIndex: 0, conditionIndex: 0, value: 1 }] })
+    expect(both.isError).toBe(true)
+    expect(text(both)).toContain('exactly one')
+    const none = await call('preview_sleep_stage_rules', { side: 'left' })
+    expect(none.isError).toBe(true)
+    expect(text(none)).toContain('exactly one')
+    expect(callerMock.sleepStages.previewClassifier).not.toHaveBeenCalled()
+    expect(callerMock.sleepStages.setClassifier).not.toHaveBeenCalled()
+  })
+
+  it('set_sleep_stage_rules saves a preset and returns the new change-log entry', async () => {
+    const movementOnly = { engine: 'rules', ruleset: STAGE_RULESET_PRESETS.movementOnly.ruleset }
+    callerMock.sleepStages.getClassifier
+      .mockResolvedValueOnce(classifierState([CHANGE]))
+      .mockResolvedValueOnce({ ...classifierState([{ ...CHANGE, id: 8, summary: 'Switched to Movement only', agreementBefore: 0.1, agreementAfter: 0.4 }, CHANGE]), classifier: movementOnly, isDefault: false })
+    callerMock.sleepStages.setClassifier.mockResolvedValue({ classifier: movementOnly, isDefault: false })
+
+    const result = parse(await call('set_sleep_stage_rules', { side: 'left', presetId: 'movementOnly' }))
+    expect(result).toMatchObject({
+      candidateSource: 'preset:movementOnly', isDefault: false, classifier: movementOnly,
+      change: { id: 8, summary: 'Switched to Movement only', before: DEFAULT_STAGE_CLASSIFIER, accuracyBefore: 0.1, accuracyAfter: 0.4 },
+      message: 'Saved: Switched to Movement only',
+    })
+    expect(callerMock.sleepStages.setClassifier).toHaveBeenCalledWith({ side: 'left', classifier: movementOnly })
+  })
+
+  it('set_sleep_stage_rules reset clears the classifier and reports no change when already default', async () => {
+    callerMock.sleepStages.setClassifier.mockResolvedValue({ classifier: DEFAULT_STAGE_CLASSIFIER, isDefault: true })
+    const result = parse(await call('set_sleep_stage_rules', { side: 'right', reset: true }))
+    expect(result).toMatchObject({ candidateSource: 'reset', isDefault: true, change: null, message: expect.stringContaining('No change') })
+    expect(callerMock.sleepStages.setClassifier).toHaveBeenCalledWith({ side: 'right', classifier: null })
+  })
+
+  it('set_sleep_stage_rules applies overrides to the saved ruleset', async () => {
+    callerMock.sleepStages.setClassifier.mockImplementation(async ({ classifier }: { classifier: unknown }) => ({ classifier, isDefault: false }))
+    const result = parse(await call('set_sleep_stage_rules', { side: 'left', overrides: [{ ruleIndex: 1, conditionIndex: 0, value: 0.88 }] })) as { classifier: { ruleset: typeof DEFAULT_STAGE_RULESET } }
+    const sent = callerMock.sleepStages.setClassifier.mock.calls[0][0]
+    expect(sent.side).toBe('left')
+    expect(sent.classifier.ruleset.rules[1].when[0].value).toBe(0.88)
+    expect(sent.classifier.ruleset.outliers).toEqual(DEFAULT_STAGE_RULESET.outliers)
+    expect(result.classifier.ruleset.rules[1].when[0].value).toBe(0.88)
+  })
+
+  it('set_sleep_stage_rules rejects ambiguous input and surfaces CONFLICT as retryable', async () => {
+    const ambiguous = await call('set_sleep_stage_rules', { side: 'left', presetId: 'default', reset: true })
+    expect(ambiguous.isError).toBe(true)
+    expect(text(ambiguous)).toContain('exactly one')
+    const none = await call('set_sleep_stage_rules', { side: 'left' })
+    expect(none.isError).toBe(true)
+    expect(callerMock.sleepStages.setClassifier).not.toHaveBeenCalled()
+
+    callerMock.sleepStages.setClassifier.mockRejectedValue(new TRPCError({ code: 'CONFLICT', message: 'Stage classifier for left changed during save; reload and try again' }))
+    const conflict = await call('set_sleep_stage_rules', { side: 'left', presetId: 'movementOnly' })
+    expect(conflict.isError).toBe(true)
+    expect(text(conflict)).toContain('CONFLICT (retryable)')
+    expect(text(conflict)).toContain('get_sleep_stage_rules')
+  })
+
+  it('get_sleep_summary flags reference stages that cover none of the pod epochs on an in-bed night', async () => {
+    callerMock.biometrics.getLatestSleep.mockResolvedValue({ ...record, leftBedAt: null })
+    callerMock.biometrics.getSleepStages.mockResolvedValue({
+      blocks: [], distribution: {},
+      epochs: [{ start: enteredBedAt.getTime(), duration: 300_000, stage: 'light', heartRate: null, hrv: null, breathingRate: null, movement: null }],
+    })
+    callerMock.biometrics.getVitalsSummary.mockResolvedValue({})
+    callerMock.biometrics.getMovementSummary.mockResolvedValue({})
+    callerMock.biometrics.getReferenceStages.mockResolvedValue([segment])
+
+    const result = parse(await call('get_sleep_summary', { side: 'left' }))
+    expect(result).toMatchObject({
+      record: { leftBedAt: null, inBed: true },
+      referenceAgreement: null,
+      referenceHint: expect.stringContaining('cover none'),
+    })
+    const { endDate } = callerMock.biometrics.getVitalsSummary.mock.calls[0][0]
+    expect(endDate.getTime()).toBeGreaterThan(leftBedAt.getTime())
+  })
+
+  it('get_sleep_stage_rules counts an in-bed night and picks the latest of several reference segments', async () => {
+    const earlier = { ...segment, id: 2, start: new Date('2026-10-11T06:00:00Z'), end: new Date('2026-10-11T12:00:00Z') }
+    callerMock.biometrics.getReferenceStages.mockResolvedValue([segment, earlier])
+    callerMock.biometrics.getSleepRecords.mockResolvedValue([{ ...record, leftBedAt: null }])
+
+    const result = parse(await call('get_sleep_stage_rules', { side: 'left' }))
+    expect(result).toMatchObject({
+      side: 'left',
+      referenceCoverage: { nights: 1, segments: 2, epochs: 144, latestReferenceAt: segment.end.toISOString(), source: 'apple_watch', truncated: false },
+      hint: null,
+    })
+  })
+
+  it('get_sleep_stage_rules marks coverage as truncated when a query hits its row cap', async () => {
+    callerMock.biometrics.getReferenceStages.mockResolvedValue([segment])
+    callerMock.biometrics.getSleepRecords.mockResolvedValue(Array.from({ length: 100 }, (_, i) => ({ ...record, id: i + 1 })))
+
+    const result = parse(await call('get_sleep_stage_rules', { side: 'left' }))
+    expect(result).toMatchObject({ referenceCoverage: { nights: 100, segments: 1, truncated: true }, hint: expect.stringContaining('lower bounds') })
+    expect(callerMock.biometrics.getSleepRecords).toHaveBeenCalledWith(expect.objectContaining({ limit: 100 }))
+  })
+
+  it('get_sleep_stage_rules reports pod-vs-watch heart-rate agreement and warns when it is weak', async () => {
+    const t0 = Date.now() - 2 * 24 * 3_600_000
+    const watch = Array.from({ length: 12 }, (_, i) => ({ id: i, side: 'left', source: 'apple_watch', timestamp: new Date(t0 + i * 300_000), heartRate: 50 + i, createdAt: new Date() }))
+    const pod = watch.map((w, i) => ({ id: i, side: 'left', timestamp: new Date(w.timestamp.getTime() + 20_000), heartRate: 90 - i, hrv: null, breathingRate: null }))
+    callerMock.biometrics.getReferenceStages.mockResolvedValue([segment])
+    callerMock.biometrics.getSleepRecords.mockResolvedValue([record])
+    callerMock.biometrics.getReferenceVitals.mockResolvedValue(watch)
+    callerMock.biometrics.getVitals.mockResolvedValue([...pod, { id: 99, side: 'left', timestamp: new Date(t0 + 3_600_000), heartRate: 200, hrv: null, breathingRate: null }])
+
+    const result = parse(await call('get_sleep_stage_rules', { side: 'left' }))
+    expect(result).toMatchObject({
+      referenceCoverage: { heartRateAgreement: { pairs: 12, correlation: -1, watchMeanBpm: 55.5, podMeanBpm: 84.5 } },
+      hint: expect.stringContaining('hrvFirst'),
+    })
+    expect(callerMock.biometrics.getVitals).toHaveBeenCalledWith(expect.objectContaining({ side: 'left', limit: 100000 }))
+
+    callerMock.biometrics.getVitals.mockResolvedValue(watch.map((w, i) => ({ id: i, side: 'left', timestamp: w.timestamp, heartRate: w.heartRate + 1, hrv: null, breathingRate: null })))
+    const good = parse(await call('get_sleep_stage_rules', { side: 'left' }))
+    expect(good).toMatchObject({ referenceCoverage: { heartRateAgreement: { correlation: 1, meanAbsErrorBpm: 1 } }, hint: null })
+  })
+
+  it('get_sleep_stage_rules clips segment durations to the coverage window', async () => {
+    const straddling = { ...segment, start: new Date(Date.now() - 20 * 24 * 3_600_000), end: new Date(Date.now() - 14 * 24 * 3_600_000 + 10 * 60_000) }
+    callerMock.biometrics.getReferenceStages.mockResolvedValue([straddling])
+    callerMock.biometrics.getSleepRecords.mockResolvedValue([])
+    const result = parse(await call('get_sleep_stage_rules', { side: 'left' })) as { referenceCoverage: { epochs: number, segments: number } }
+    expect(result.referenceCoverage.segments).toBe(1)
+    expect(result.referenceCoverage.epochs).toBe(2)
+  })
+
+  it('preview_sleep_stage_rules explains a null agreement when reference covers no classified epoch', async () => {
+    callerMock.sleepStages.previewClassifier.mockResolvedValue({
+      sleepRecordId: 42, enteredBedAt: 0, leftBedAt: 0, nights: 1, hasReference: true,
+      saved: { ...STAGES, agreement: null }, candidate: { ...STAGES, agreement: null }, changed: { segments: [], changed: 0, total: 96 },
+    })
+    const result = parse(await call('preview_sleep_stage_rules', { side: 'left', presetId: 'default' }))
+    expect(result).toMatchObject({ hasReference: true, hint: expect.stringContaining('cover none of the classified epochs') })
+  })
+
+  it('set_sleep_stage_rules does not claim another writer\'s change entry', async () => {
+    const movementOnly = { engine: 'rules', ruleset: STAGE_RULESET_PRESETS.movementOnly.ruleset }
+    callerMock.sleepStages.getClassifier
+      .mockResolvedValueOnce(classifierState([CHANGE]))
+      .mockResolvedValueOnce(classifierState([{ ...CHANGE, id: 9, summary: 'Reset to default' }, CHANGE]))
+    callerMock.sleepStages.setClassifier.mockResolvedValue({ classifier: movementOnly, isDefault: false })
+    const result = parse(await call('set_sleep_stage_rules', { side: 'left', presetId: 'movementOnly' }))
+    expect(result).toMatchObject({ classifier: movementOnly, change: null, message: expect.stringContaining('another save landed') })
+  })
+
+  it('preview_sleep_stage_rules accepts a full ruleset and reports a side with no nights', async () => {
+    callerMock.sleepStages.previewClassifier.mockResolvedValue({
+      sleepRecordId: null, enteredBedAt: null, leftBedAt: null, nights: 0, hasReference: false, saved: null, candidate: null, changed: null,
+    })
+
+    const result = parse(await call('preview_sleep_stage_rules', { side: 'right', ruleset: STAGE_RULESET_PRESETS.movementOnly.ruleset }))
+    expect(result).toMatchObject({
+      side: 'right', candidateSource: 'ruleset', nights: 0, hasReference: false,
+      hint: 'No sleep records for this side yet.',
+      saved: null, candidate: null, kappaDelta: null, epochsChanged: 0, epochsTotal: 0,
+    })
+    expect(callerMock.sleepStages.previewClassifier).toHaveBeenCalledWith({
+      side: 'right', nights: 7, classifier: { engine: 'rules', ruleset: STAGE_RULESET_PRESETS.movementOnly.ruleset },
+    })
+  })
+
+  it('set_sleep_stage_rules saves a full ruleset and rethrows errors other than CONFLICT', async () => {
+    callerMock.sleepStages.setClassifier.mockRejectedValue(new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'disk full' }))
+    const result = await call('set_sleep_stage_rules', { side: 'left', ruleset: STAGE_RULESET_PRESETS.movementOnly.ruleset })
+    expect(result.isError).toBe(true)
+    expect(text(result)).toContain('INTERNAL_SERVER_ERROR')
+    expect(text(result)).not.toContain('CONFLICT (retryable)')
+    expect(callerMock.sleepStages.setClassifier).toHaveBeenCalledWith({
+      side: 'left', classifier: { engine: 'rules', ruleset: STAGE_RULESET_PRESETS.movementOnly.ruleset },
+    })
+  })
 })
