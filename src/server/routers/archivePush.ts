@@ -123,7 +123,7 @@ function confToShape(parsed: Record<string, string>): ConfigShape {
 
 async function readConfig(): Promise<ConfigShape> {
   try {
-    const text = await readFile(paths().config, 'utf8')
+    const text = await readFile(/* turbopackIgnore: true */ paths().config, 'utf8')
     return confToShape(parseConf(text))
   }
   catch (err) {
@@ -140,7 +140,7 @@ async function writeConfig(cfg: ConfigShape): Promise<void> {
 
 async function readPublicKey(): Promise<string | null> {
   try {
-    return (await readFile(paths().pubkey, 'utf8')).trim()
+    return (await readFile(/* turbopackIgnore: true */ paths().pubkey, 'utf8')).trim()
   }
   catch (err) {
     if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null

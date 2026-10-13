@@ -15,11 +15,11 @@ const SAFE_FILENAME = /^[\w.-]+\.RAW$/i
 
 export async function listRawFiles() {
   try {
-    const entries = await readdir(RAW_DIR)
+    const entries = await readdir(/* turbopackIgnore: true */ RAW_DIR)
     const rawFiles = entries.filter(f => SAFE_FILENAME.test(f))
 
     const results = await Promise.all(rawFiles.map(async (name) => {
-      const s = await stat(path.join(RAW_DIR, name))
+      const s = await stat(/* turbopackIgnore: true */ path.join(/* turbopackIgnore: true */ RAW_DIR, name))
       return {
         name,
         sizeBytes: s.size,
@@ -76,12 +76,12 @@ export const rawRouter = router({
 
       try {
         // Reject symlinks and verify canonical path (matches download route)
-        const lstats = await lstat(resolved)
+        const lstats = await lstat(/* turbopackIgnore: true */ resolved)
         if (lstats.isSymbolicLink()) {
           throw new TRPCError({ code: 'BAD_REQUEST', message: 'Path traversal detected' })
         }
-        const canonicalFile = await realpath(resolved)
-        const canonicalDir = await realpath(RAW_DIR)
+        const canonicalFile = await realpath(/* turbopackIgnore: true */ resolved)
+        const canonicalDir = await realpath(/* turbopackIgnore: true */ RAW_DIR)
         if (!canonicalFile.startsWith(canonicalDir)) {
           throw new TRPCError({ code: 'BAD_REQUEST', message: 'Path traversal detected' })
         }

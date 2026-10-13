@@ -293,3 +293,19 @@ sudo bash /tmp/sleepypod-install --purge-free-sleep
 It also flushes the running iptables and ip6tables rules; the install then reconfigures iptables itself. Without the flag, run the cleanup block the installer prints, reboot, and re-run the installer. free-sleep's `unblock_internet_access.sh` is not a substitute: it flushes runtime rules only and leaves the persisted files in place.
 
 Run `sp-uninstall` if you want to revert (the script flushes iptables and removes sleepypod's units); the purge is not undone, so reinstall free-sleep from its own installer.
+
+
+### Runtime filesystem reads and standalone tracing
+
+Pod data (RAW captures, saved alarm state, HomeKit identity seeds, archive-push
+configuration, procfs and storage-accounting paths) is read on the destination
+pod. These dynamic filesystem reads use `turbopackIgnore` call annotations so
+Next does not infer that the build machine's whole checkout belongs in the
+standalone output. The annotations affect packaging only; existing validation,
+file access and error handling still run on the pod.
+
+The biometrics worker location probes are also excluded from automatic tracing:
+`scripts/build/biometrics-worker.mjs` explicitly generates `worker.cjs`,
+`coordinator.cjs` and `shadow-host.cjs` in the standalone bundle after Next builds.
+Keep that packaging step and its dependency-graph checks when changing tracing.
+Do not apply these annotations to shipped assets that need inclusion in a release.

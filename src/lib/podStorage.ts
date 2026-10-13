@@ -157,8 +157,8 @@ export async function getStorageReport(): Promise<StorageReport> {
     rawHistory(),
     dataDir(),
   ])
-  const app = await realpath(INSTALL_DIR).catch(() => null)
-  const dbFiles = LIVE_DB_FILES.map(f => join(dir, f))
+  const app = await realpath(/* turbopackIgnore: true */ INSTALL_DIR).catch(() => null)
+  const dbFiles = LIVE_DB_FILES.map(f => join(/* turbopackIgnore: true */ dir, f))
   const reclaimPaths = reclaimable.items.map(i => i.path)
   const sizes = await duMany([ARCHIVE_DIR, ...(app?.startsWith(`${PERSISTENT_ROOT}/`) ? [app] : []), SWAPFILE, ...dbFiles, ...reclaimPaths])
 

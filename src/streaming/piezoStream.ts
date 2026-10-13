@@ -373,7 +373,7 @@ export function findLatestRaw(dir: string): string | null {
 async function findLatestRawAsync(dir: string): Promise<string | null> {
   for (const candidate of [dir, path.join(dir, RAW_DATA_FALLBACK_SUBDIR)]) {
     try {
-      const entries = await fs.promises.readdir(candidate)
+      const entries = await fs.promises.readdir(/* turbopackIgnore: true */ candidate)
       let latest: { path: string, mtime: number } | null = null
       for (const entry of entries) {
         if (!entry.endsWith('.RAW') || entry === 'SEQNO.RAW') continue
@@ -1048,7 +1048,7 @@ function startRawTailingLoop(): void {
         nextScanAt = performance.now() + RAW_SCAN_INTERVAL_MS
         let replaced = false
         if (latest && latest === currentPath && handle) {
-          const [openInfo, pathInfo] = await Promise.all([handle.stat(), fs.promises.stat(latest)])
+          const [openInfo, pathInfo] = await Promise.all([handle.stat(), fs.promises.stat(/* turbopackIgnore: true */ latest)])
           if (!active()) return
           replaced = openInfo.ino !== pathInfo.ino || openInfo.dev !== pathInfo.dev
         }
@@ -1061,7 +1061,7 @@ function startRawTailingLoop(): void {
         }
       }
       if (!active() || !currentPath) return
-      if (!handle) handle = await fs.promises.open(currentPath, 'r')
+      if (!handle) handle = await fs.promises.open(/* turbopackIgnore: true */ currentPath, 'r')
       if (!active()) return
       if (needsMore) {
         const info = await handle.stat()

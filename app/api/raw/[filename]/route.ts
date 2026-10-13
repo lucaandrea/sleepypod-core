@@ -20,26 +20,26 @@ export async function GET(
   }
 
   const resolved = path.resolve(RAW_DIR, filename)
-  if (!resolved.startsWith(path.resolve(RAW_DIR))) {
+  if (!resolved.startsWith(path.resolve(/* turbopackIgnore: true */ RAW_DIR))) {
     return NextResponse.json({ error: 'Path traversal detected' }, { status: 400 })
   }
 
   try {
     // Reject symlinks to prevent escaping RAW_DIR
-    const lstats = await lstat(resolved)
+    const lstats = await lstat(/* turbopackIgnore: true */ resolved)
     if (lstats.isSymbolicLink()) {
       return NextResponse.json({ error: 'Path traversal detected' }, { status: 400 })
     }
 
     // Verify canonical path is still inside RAW_DIR
-    const canonicalFile = await realpath(resolved)
-    const canonicalDir = await realpath(RAW_DIR)
+    const canonicalFile = await realpath(/* turbopackIgnore: true */ resolved)
+    const canonicalDir = await realpath(/* turbopackIgnore: true */ RAW_DIR)
     if (!canonicalFile.startsWith(canonicalDir)) {
       return NextResponse.json({ error: 'Path traversal detected' }, { status: 400 })
     }
 
-    const s = await stat(resolved)
-    const stream = createReadStream(resolved)
+    const s = await stat(/* turbopackIgnore: true */ resolved)
+    const stream = createReadStream(/* turbopackIgnore: true */ resolved)
     const webStream = Readable.toWeb(stream) as ReadableStream
 
     return new Response(webStream, {

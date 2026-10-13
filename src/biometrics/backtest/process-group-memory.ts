@@ -7,7 +7,7 @@ import type { ProcessGroupMemory } from './process-group-memory-contract'
 export async function sampleProcessGroupRss(group: number, root = '/proc'): Promise<number | null> {
   if (!Number.isSafeInteger(group) || group < 1) return null
   try {
-    const pids = (await readdir(root)).filter(name => /^[1-9]\d*$/.test(name))
+    const pids = (await readdir(/* turbopackIgnore: true */ root)).filter(name => /^[1-9]\d*$/.test(name))
     if (pids.length > 4096) return null
     let total = 0, members = 0
     for (let i = 0; i < pids.length; i += 16) {

@@ -129,7 +129,7 @@ function isDegenerateSeed(value: string): boolean {
 export function readSeed(): { source: SeedSourceName, value: string } {
   for (const spec of SEED_SOURCES) {
     try {
-      const v = readFileSync(spec.path, 'utf8').trim()
+      const v = readFileSync(/* turbopackIgnore: true */ spec.path, 'utf8').trim()
       if (!isDegenerateSeed(v)) return { source: spec.name, value: v }
     }
     catch { /* try next */ }
@@ -148,7 +148,7 @@ export function probeSeedSources(): SeedProbeResult {
     let readable = false
     let looksDegenerate = false
     try {
-      const v = readFileSync(spec.path, 'utf8').trim()
+      const v = readFileSync(/* turbopackIgnore: true */ spec.path, 'utf8').trim()
       present = true
       readable = true
       looksDegenerate = isDegenerateSeed(v)

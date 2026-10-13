@@ -58,7 +58,7 @@ export function loadAlarmState(): PersistedAlarmState {
   if (cached) return cached
   const state = empty()
   try {
-    const raw = JSON.parse(readFileSync(alarmStatePath(), 'utf8')) as Partial<PersistedAlarmState>
+    const raw = JSON.parse(readFileSync(/* turbopackIgnore: true */ alarmStatePath(), 'utf8')) as Partial<PersistedAlarmState>
     for (const group of ['alarms', 'snoozes'] as const) {
       for (const side of ['left', 'right'] as const) {
         const entry = raw[group]?.[side]
