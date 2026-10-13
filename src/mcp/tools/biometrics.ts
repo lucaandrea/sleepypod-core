@@ -9,7 +9,7 @@ import { compareReadingsSchema } from '@/src/biometrics/references/comparison'
 import { referenceImportSchema } from '@/src/biometrics/references/contracts'
 import { commitReferenceSchema } from '@/src/biometrics/references/store'
 import { revisionInput } from '@/src/biometrics/profiles/store'
-import { activationIntentSchema } from '@/src/biometrics/profiles/activation'
+import { activationIntentSchema, validatedActivationIntentSchema } from '@/src/biometrics/profiles/activation'
 import { createDatasetSchema } from '@/src/biometrics/backtest/datasets'
 import { experimentProtocolSchema } from '@/src/biometrics/backtest/contracts'
 import { traceRequestSchema } from '@/src/biometrics/backtest/trace-contracts'
@@ -163,10 +163,14 @@ export function registerBiometricTools(server: McpServer) {
 
   server.registerTool('apply_biometric_profile', {
     title: 'Apply, reset or roll back an explicitly authorized profile',
-    description: 'Use only when the user authorized changing active processing. Comparison or candidate creation alone is not authorization. Requires exact revision/hash/generation, boundary and explicit unvalidated acknowledgement. Reset follows defaults; rollback restores the previous revision. Poll activation status for actual adoption.',
-    inputSchema: { input: activationIntentSchema }, annotations: { ...write, destructiveHint: true },
+    description: 'Use only when the user authorized changing active processing. Comparison or candidate creation alone is not authorization. Requires exact revision/hash/generation and boundary. activate_validated additionally pins evaluation ID/report hash and requires server-qualified evidence. Manual activation requires explicit unvalidated acknowledgement. Reset follows defaults; rollback restores the previous revision. Poll activation status for actual adoption.',
+    inputSchema: { input: z.union([activationIntentSchema, validatedActivationIntentSchema.extend({ action: z.literal('activate_validated') })]) }, annotations: { ...write, destructiveHint: true },
   }, ({ input }) => runTool(async () => {
     const api = getCaller().biometricTuning
+    if (input.action === 'activate_validated') {
+      const validated = validatedActivationIntentSchema.omit({ action: true }).strip().parse(input)
+      return jsonResult(await api.activateValidatedProfile(validated))
+    }
     const { action, ...intent } = input
     if (action === 'activate') {
       if (!intent.revisionId) throw new Error('Activation requires an exact candidate revision')

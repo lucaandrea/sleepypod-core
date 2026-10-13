@@ -51,6 +51,17 @@ export function requestValidatedActivation(db: BetterSQLite3Database<typeof sche
     { ...verified, evaluationId: input.evaluationId }), { behavior: 'immediate' })
 }
 
+/** Retry before artifact/build access. Recheck again after the async probe so
+ * concurrent identical requests still create only one activation event. */
+export async function requestValidatedActivationWithBuild(db: BetterSQLite3Database<typeof schema>, bioDb: BetterSQLite3Database<typeof bioSchema>,
+  raw: z.input<typeof validatedActivationIntentSchema>, resolveBuild: () => Promise<PromotionBuild>, now = Date.now()) {
+  const input = validatedActivationIntentSchema.parse(raw)
+  const existing = retryActivation(db, input.idempotencyKey, configHash(input))
+  if (existing) return existing
+  const build = await resolveBuild()
+  return requestValidatedActivation(db, bioDb, input, build, now)
+}
+
 function commitActivationIntent(db: BetterSQLite3Database<typeof schema>, input: z.infer<typeof activationIntentSchema>, requestHash: string, now: number,
   verified?: ReturnType<typeof prepareVerifiedEvaluation> & { evaluationId: string }) {
   return db.transaction((tx) => {

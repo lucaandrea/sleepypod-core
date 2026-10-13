@@ -1,3 +1,4 @@
+import { resolvePromotionBuild } from '@/src/biometrics/profiles/promotion-build'
 import { referenceTracePageSchema, referenceTraceRequestSchema } from '@/src/biometrics/backtest/reference-trace-page'
 import { numericTracePageSchema } from '@/src/biometrics/backtest/numeric-trace-page'
 import { replayAdmission, replayAdmissionSchema, replayAdmitter } from '@/src/biometrics/backtest/admission-service'
@@ -18,7 +19,7 @@ import { ProfileStore, revisionInput } from '@/src/biometrics/profiles/store'
 import { biometricConfigSchema, overrideSchema, profileOverviewSchema, revisionSchema } from '@/src/biometrics/profiles/contracts'
 import { diffProfiles } from '@/src/biometrics/profiles/diff'
 import { profileOverview } from '@/src/biometrics/profiles/overview'
-import { activationIntentSchema, requestManualActivation } from '@/src/biometrics/profiles/activation'
+import { activationIntentSchema, requestManualActivation, validatedActivationIntentSchema, requestValidatedActivationWithBuild } from '@/src/biometrics/profiles/activation'
 import { activationStatus, activationStatusSchema } from '@/src/biometrics/profiles/status'
 import { activationEventSchema, activationHistorySchema, listActivationHistory } from '@/src/biometrics/profiles/history'
 import { DatasetStore, createDatasetSchema } from '@/src/biometrics/backtest/datasets'
@@ -80,6 +81,13 @@ export const biometricTuningRouter = router({
     .input(activationIntentSchema.omit({ action: true }).extend({ revisionId: z.string().uuid() }))
     .output(activationEventSchema)
     .mutation(({ input }) => references(() => profiles(() => requestManualActivation(db, { ...input, action: 'activate' })))),
+
+  activateValidatedProfile: publicProcedure
+    .meta({ openapi: { method: 'POST', path: '/biometric-tuning/activate-validated', protect: false, tags: ['Biometric tuning'] } })
+    .input(validatedActivationIntentSchema.omit({ action: true }))
+    .output(activationEventSchema)
+    .mutation(({ input }) => references(() => requestValidatedActivationWithBuild(db, biometricsDb, { ...input, action: 'activate' },
+      () => resolvePromotionBuild(biometricsDb, input.evaluationId)))),
 
   resetProfile: publicProcedure
     .meta({ openapi: { method: 'POST', path: '/biometric-tuning/reset', protect: false, tags: ['Biometric tuning'] } })
@@ -146,7 +154,7 @@ export const biometricTuningRouter = router({
     .output(jobDescriptorSchema)
     .mutation(async ({ input }) => {
       const build = await references(() => resolveSubmissionBuild(biometricsDb, input))
-      if (build.existing) return describeJob(build.existing)
+      if ('existing' in build) return describeJob(build.existing)
       return references(() => profiles(() => describeJob(submitBacktest(db, biometricsDb, build.evaluatorBuildHash, input, build.pythonBuildHash))))
     }),
 

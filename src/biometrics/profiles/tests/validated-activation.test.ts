@@ -9,7 +9,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import * as configSchema from '@/src/db/schema'
 import * as bioSchema from '@/src/db/biometrics-schema'
 import { ProfileStore } from '../store'
-import { requestManualActivation, requestValidatedActivation } from '../activation'
+import { requestManualActivation, requestValidatedActivation, requestValidatedActivationWithBuild } from '../activation'
 import { deliverRuntimeOutbox } from '../runtime'
 import { prepareVerifiedEvaluation } from '../evaluation-store'
 import { BacktestJobStore } from '../../backtest/jobs'
@@ -190,4 +190,44 @@ it('rolls back binding, evidence and outbox together and keeps manual/validated 
   expect(() => requestValidatedActivation(config, bio, { ...work.input, boundary: 'immediate' }, work.build)).toThrow('idempotency')
   expect(() => requestManualActivation(config, { side: 'left', action: 'reset', revisionId: null, expectedGeneration: 1,
     expectedResolvedHash: configHash(defaultConfig), boundary: 'immediate', requester: 'fixture', idempotencyKey: work.input.idempotencyKey, allowUnvalidated: true })).toThrow('idempotency')
+})
+
+it('resolves build authority lazily and retries after artifact release without probing', async () => {
+  const work = fixture()
+  const resolve = vi.fn(async () => work.build)
+  const event = await requestValidatedActivationWithBuild(config, bio, work.input, resolve, now)
+  expect(resolve).toHaveBeenCalledTimes(1)
+  work.jobs.releaseResult(work.input.evaluationId, work.input.expectedReportHash)
+  work.datasets.release(work.dataset.id)
+  resolve.mockRejectedValue(new Error('Build no longer installed'))
+  expect(await requestValidatedActivationWithBuild(config, bio, work.input, resolve, now + 1)).toEqual(event)
+  expect(resolve).toHaveBeenCalledTimes(1)
+  await expect(requestValidatedActivationWithBuild(config, bio, { ...work.input, expectedReportHash: '0'.repeat(64) }, resolve))
+    .rejects.toThrow('idempotency key changed')
+  expect(resolve).toHaveBeenCalledTimes(1)
+})
+
+it('coalesces identical activation intents that race across asynchronous build resolution', async () => {
+  const work = fixture()
+  let finish!: (build: typeof work.build) => void
+  const pending = new Promise<typeof work.build>((resolve) => {
+    finish = resolve
+  })
+  const first = requestValidatedActivationWithBuild(config, bio, work.input, () => pending, now)
+  const second = await requestValidatedActivationWithBuild(config, bio, work.input, async () => work.build, now)
+  work.jobs.releaseResult(work.input.evaluationId, work.input.expectedReportHash)
+  finish(work.build)
+  expect(await first).toEqual(second)
+  expect(config.select().from(configSchema.biometricActivationEvents).all()).toHaveLength(1)
+  expect(config.select().from(configSchema.biometricConfigOutbox).all()).toHaveLength(1)
+})
+
+it('leaves activation state unchanged when build resolution fails', async () => {
+  const work = fixture()
+  await expect(requestValidatedActivationWithBuild(config, bio, work.input, async () => {
+    throw new Error('Worker missing')
+  }))
+    .rejects.toThrow('Worker missing')
+  expect(work.profiles.binding('left').generation).toBe(0)
+  expect(config.select().from(configSchema.biometricActivationEvents).all()).toEqual([])
 })

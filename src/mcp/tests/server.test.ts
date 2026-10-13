@@ -46,7 +46,7 @@ const callerMock = vi.hoisted(() => {
       getProfileRevision: fn(), listProfileRevisions: fn(), compareReadings: fn(), deleteImport: fn(), releaseDataset: fn(), releaseBacktestResult: fn(), getActivationStatus: fn(), listActivationHistory: fn(), previewImport: fn(), commitImport: fn(),
       createProfileRevision: fn(), createDataset: fn(), getDataset: fn(), listDatasets: fn(), createExperiment: fn(),
       getExperiment: fn(), listExperiments: fn(), enqueueBacktest: fn(), getBacktest: fn(), cancelBacktest: fn(), listBacktests: fn(),
-      getBacktestSummary: fn(), getBacktestTrace: fn(), getBacktestNumericTrace: fn(), getBacktestReferenceTrace: fn(), activateProfile: fn(), rollbackProfile: fn(), resetProfile: fn(),
+      getBacktestSummary: fn(), getBacktestTrace: fn(), getBacktestNumericTrace: fn(), getBacktestReferenceTrace: fn(), activateProfile: fn(), activateValidatedProfile: fn(), rollbackProfile: fn(), resetProfile: fn(),
     },
   }
 })
@@ -765,6 +765,25 @@ it('imports stage-only Watch data and rejects empty import requests', async () =
       side: 'left', samples: [{ timestamp: 1791700000, heartRate: 60 }],
     } }) as CallToolResult
     expect(JSON.parse(text(vitalsOnly))).toEqual({ vitals: 1, stages: 0, stageError: null })
+  }
+  finally { await client.close() }
+})
+
+it('forwards exact validated activation evidence without accepting caller build authority', async () => {
+  const client = await connect()
+  const input = { action: 'activate_validated', side: 'left', revisionId: '11111111-1111-4111-8111-111111111111',
+    evaluationId: '22222222-2222-4222-8222-222222222222', expectedReportHash: 'a'.repeat(64), expectedResolvedHash: 'b'.repeat(64),
+    expectedGeneration: 0, boundary: 'next_session', requester: 'test', idempotencyKey: 'validated' }
+  try {
+    callerMock.biometricTuning.activateValidatedProfile.mockResolvedValue({ state: 'pending_delivery' })
+    const result = await client.callTool({ name: 'apply_biometric_profile', arguments: { input } }) as CallToolResult
+    expect(JSON.parse(text(result))).toEqual({ state: 'pending_delivery' })
+    const expected = { ...input }
+    Reflect.deleteProperty(expected, 'action')
+    expect(callerMock.biometricTuning.activateValidatedProfile).toHaveBeenCalledWith(expected)
+    const invalid = await client.callTool({ name: 'apply_biometric_profile', arguments: { input: { ...input, evaluatorBuildHash: 'c'.repeat(64) } } }) as CallToolResult
+    expect(invalid.isError).toBe(true)
+    expect(callerMock.biometricTuning.activateValidatedProfile).toHaveBeenCalledTimes(1)
   }
   finally { await client.close() }
 })

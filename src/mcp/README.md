@@ -135,7 +135,7 @@ app/api/mcp/route.ts   Next.js route handler (stateless Streamable HTTP)
 | `propose_biometric_profile` | Save an immutable agent-origin candidate; never activate |
 | `manage_biometric_experiment` | Freeze datasets, inspect archive cursors, retain selected waveform sources, and create/list/read experiments with pinned protocols |
 | `backtest_biometrics` | Enqueue/status/list/cancel and compact report summaries |
-| `apply_biometric_profile` | Explicitly authorized manual activation, reset or rollback; exact revision/hash/generation and unvalidated acknowledgement required |
+| `apply_biometric_profile` | Explicitly authorized validated/manual activation, reset or rollback; validated activation pins evaluation/report identity, manual activation requires unvalidated acknowledgement |
 | `release_biometric_artifacts` | Explicit reference deletion or dataset/report release; report release requires its content hash |
 
 Tools use shared input contracts and call `biometricTuning` through `getCaller()`;

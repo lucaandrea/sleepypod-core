@@ -53,9 +53,14 @@ export async function resolveSubmissionBuild(bioDb: BetterSQLite3Database<typeof
   const existing = retryBacktestSubmission(bioDb, input)
   if (existing) return { existing }
   const experiment = new BacktestJobStore(bioDb).getExperiment(input.experimentId)
+  return resolveInstalledReplayBuild(experiment.protocol.mode)
+}
+
+/** Read installed artifacts; never accept evaluator identity from an RPC caller. */
+export async function resolveInstalledReplayBuild(mode: z.infer<typeof experimentProtocolSchema>['mode']) {
   try {
     const workerPath = packagedWorkerPath()
-    if (experiment.protocol.mode === 'signal_replay') {
+    if (mode === 'signal_replay') {
       const build = await sharedWaveformBuild(workerPath)
       return { evaluatorBuildHash: build.hash, pythonBuildHash: build.python.hash }
     }

@@ -387,3 +387,13 @@ it('exposes bounded waveform discovery and defers new I/O without a deployment p
   expect(page.items[0]).toMatchObject({ id: sourceId, availability: 'requires_reverification', inspection: { retained: false, source_name: 'fixture.RAW.gz' } })
   expect(await caller.listRawSources({ startMs: 1000, endMs: 2001, afterId: sourceId })).toEqual({ items: [], nextCursor: null })
 })
+
+it('exposes validated activation with exact evidence identity and rejects client build authority', async () => {
+  const input = { side: 'left' as const, revisionId: '11111111-1111-4111-8111-111111111111',
+    evaluationId: '22222222-2222-4222-8222-222222222222', expectedReportHash: 'a'.repeat(64), expectedResolvedHash: 'b'.repeat(64),
+    expectedGeneration: 0, boundary: 'next_session' as const, requester: 'test', idempotencyKey: 'validated' }
+  await expect(caller.activateValidatedProfile(input)).rejects.toMatchObject({ code: 'NOT_FOUND' })
+  await expect(caller.activateValidatedProfile({ ...input, evaluatorBuildHash: 'c'.repeat(64) } as typeof input)).rejects.toMatchObject({ code: 'BAD_REQUEST' })
+  await expect(caller.activateValidatedProfile({ ...input, allowUnvalidated: true } as typeof input)).rejects.toMatchObject({ code: 'BAD_REQUEST' })
+  expect((holder.config as ReturnType<typeof drizzle<typeof configSchema>>).select().from(configSchema.biometricActivationEvents).all()).toEqual([])
+})
