@@ -61,7 +61,9 @@ export function reportShadowRun(store: ShadowStore, runId: string, limits: Param
   const issues: string[] = []
   if (clockSkew) issues.push('clock_skew')
   if (run.reason?.startsWith('join_')) issues.push('join_failed')
-  if (run.state === 'failed') issues.push('processor_failed')
+  if (run.reason === 'shadow_observation_window_missed') issues.push('observation_window_missed')
+  else if (run.state === 'failed') issues.push('processor_failed')
+  if (run.reason === 'shadow_lease_expired_cleanup_unconfirmed') issues.push('worker_cleanup_unconfirmed')
   if (run.reason === 'storage_quota') issues.push('storage_quota')
   if (run.state === 'running' && ((run.lease_until_ms ?? 0) <= capturedAtMs || run.heartbeat_at_ms === null
     || capturedAtMs - run.heartbeat_at_ms > policy.heartbeatStaleMs)) issues.push('worker_stale')

@@ -225,6 +225,42 @@ export class ShadowStore {
     }).immediate()
   }
 
+  /** Bounded keyset maintenance. Revoke expired authority, not a claim that an
+   * OS process was reaped. A resumed worker cannot append/renew after recovery;
+   * the kernel execution slot still excludes overlap until that worker exits. */
+  reconcileExpired(options: { maximumRuns: number, afterId?: string }) {
+    const input = z.object({ maximumRuns: positive.max(100), afterId: z.string().uuid().optional() }).strict().parse(options)
+    return this.db.transaction(() => {
+      const now = integer.parse(this.now())
+      const rows = this.db.prepare('SELECT id, state FROM biometric_shadow_runs WHERE id > ? ORDER BY id LIMIT ?')
+        .all(input.afterId ?? '', input.maximumRuns + 1) as { id: string, state: RunRow['state'] }[]
+      const batch = rows.slice(0, input.maximumRuns)
+      const recovered: { runId: string, attemptId: string | null, reason: string }[] = []
+      for (const row of batch) {
+        if (row.state !== 'pending' && row.state !== 'running') continue
+        const run = this.get(row.id)
+        let reason: string
+        if (run.state === 'pending') {
+          if (now < run.plan.endMs) continue
+          if (run.attempt_id !== null || run.lease_until_ms !== null) throw new Error('Invalid pending shadow authority')
+          reason = 'shadow_observation_window_missed'
+        }
+        else {
+          z.string().uuid().parse(run.attempt_id)
+          integer.parse(run.lease_until_ms)
+          if ((run.lease_until_ms ?? 0) > now && now < run.plan.endMs + (run.plan.joining?.drainGraceMs ?? 0)) continue
+          reason = 'shadow_lease_expired_cleanup_unconfirmed'
+        }
+        const updated = this.db.prepare(`UPDATE biometric_shadow_runs SET state = 'failed', reason = ?, ended_at_ms = ?, lease_until_ms = NULL
+          WHERE id = ? AND state = ? AND attempt_id IS ? AND lease_until_ms IS ?`)
+          .run(reason, now, run.id, run.state, run.attempt_id, run.lease_until_ms)
+        if (updated.changes !== 1) throw new Error('Shadow recovery authority changed')
+        recovered.push({ runId: run.id, attemptId: run.attempt_id, reason })
+      }
+      return { scanned: batch.length, recovered, nextCursor: rows.length > input.maximumRuns ? batch.at(-1)?.id ?? null : null }
+    }).immediate()
+  }
+
   /** After the host has reaped its worker, record an expired attempt's failure.
    * A newer attempt or an already terminal run is never changed. */
   failExpired(lease: ShadowLease, reason: string) {

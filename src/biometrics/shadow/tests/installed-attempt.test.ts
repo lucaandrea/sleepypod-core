@@ -1,11 +1,11 @@
 // @vitest-environment node
 import { beforeEach, expect, it, vi } from 'vitest'
 import { dataHash } from '../../algorithms/canonical'
-import { inspectInstalledShadowHost } from '../installed-host'
+import { inspectInstalledShadowHost, loadInstalledShadowHost } from '../installed-host'
 import { installedShadowIdentity } from '../device-identity'
 import { openShadowStateDatabase } from '../active-database'
-import { runInstalledShadowAttempt } from '../installed-attempt'
-vi.mock('../installed-host', () => ({ inspectInstalledShadowHost: vi.fn() }))
+import { runInstalledShadowAttempt, reconcileInstalledShadowRuns } from '../installed-attempt'
+vi.mock('../installed-host', () => ({ inspectInstalledShadowHost: vi.fn(), loadInstalledShadowHost: vi.fn() }))
 vi.mock('../device-identity', () => ({ installedShadowIdentity: vi.fn() }))
 vi.mock('../active-database', () => ({ openShadowStateDatabase: vi.fn() }))
 vi.mock('@/src/streaming/piezoStream', () => ({ getSensorFrameTimes: () => ({ 'piezo-dual': 1234 }) }))
@@ -17,14 +17,19 @@ function setup() {
   const plan = { qualificationHash: dataHash(entry), execution: { sources: { databaseBusyTimeoutMs: 50 } } }
   const get = vi.fn(() => ({ plan })), execute = vi.fn().mockResolvedValue('completed')
   const registry = vi.fn(() => ({ entries: [entry] })), guard = vi.fn()
-  class Store { get = get }
+  const recover = vi.fn(() => ({ scanned: 1, recovered: [], nextCursor: null }))
+  class Store {
+    get = get
+    reconcileExpired = recover
+  }
   const inspected = { api: { ShadowStore: Store, runProfiledShadowAttempt: execute, readInstalledShadowQualifications: registry }, assertCurrent: guard }
   vi.mocked(inspectInstalledShadowHost).mockResolvedValue(inspected as unknown as Awaited<ReturnType<typeof inspectInstalledShadowHost>>)
+  vi.mocked(loadInstalledShadowHost).mockReturnValue(inspected as unknown as ReturnType<typeof loadInstalledShadowHost>)
   const database = { db: {}, close: vi.fn(), assertCurrent: vi.fn() }
   vi.mocked(openShadowStateDatabase).mockReturnValue(database as unknown as ReturnType<typeof openShadowStateDatabase>)
   const identity = vi.fn(() => ({ hardwareId: 'test', sampleRateHz: 500 as const, engineBuildHash: 'a'.repeat(64), pythonBuildHash: 'b'.repeat(64) }))
   vi.mocked(installedShadowIdentity).mockReturnValue(identity)
-  return { plan, execute, registry, guard, database, identity }
+  return { plan, execute, registry, guard, database, identity, recover }
 }
 beforeEach(() => vi.resetAllMocks())
 it('executes the loaded package with real frame-clock wiring and guarded state ownership', async () => {
@@ -62,4 +67,16 @@ it('does not open state after cancelled inspection', async () => {
   abort.abort()
   await expect(pending).rejects.toThrow(/cancelled/)
   expect(openShadowStateDatabase).not.toHaveBeenCalled()
+})
+
+it('reconciles through the installed store without starting probes, hardware checks or workers', () => {
+  const { recover, execute, database, guard } = setup()
+  expect(reconcileInstalledShadowRuns(paths, {}, 50, { maximumRuns: 10 })).toEqual({ scanned: 1, recovered: [], nextCursor: null })
+  expect(recover).toHaveBeenCalledWith({ maximumRuns: 10 })
+  expect(database.assertCurrent).toHaveBeenCalledTimes(2)
+  expect(guard).toHaveBeenCalledTimes(2)
+  expect(database.close).toHaveBeenCalledOnce()
+  expect(inspectInstalledShadowHost).not.toHaveBeenCalled()
+  expect(installedShadowIdentity).not.toHaveBeenCalled()
+  expect(execute).not.toHaveBeenCalled()
 })

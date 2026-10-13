@@ -1,7 +1,8 @@
 import { z } from 'zod'
 import { dataHash } from '../algorithms/canonical'
 import { getSensorFrameTimes } from '@/src/streaming/piezoStream'
-import { inspectInstalledShadowHost } from './installed-host'
+import type { ShadowStore } from './store'
+import { inspectInstalledShadowHost, loadInstalledShadowHost } from './installed-host'
 import { installedShadowIdentity } from './device-identity'
 import { openShadowStateDatabase } from './active-database'
 import type { ShadowHostInstallation } from './host'
@@ -36,6 +37,25 @@ export async function runInstalledShadowAttempt(runId: string, revisionId: strin
     identity()
     return await inspected.api.runProfiledShadowAttempt(store, runId, { ...paths, identity,
       piezoReceivedAt: () => getSensorFrameTimes()['piezo-dual'] }, revisionId, signal)
+  }
+  finally { database.close() }
+}
+
+/** Recovery needs the installed store implementation but never starts a Python
+ * probe/worker, subscribes to sensors or requires an admission qualification. */
+export function reconcileInstalledShadowRuns(installation: Pick<Installation, 'workerPath' | 'biometricsDatabase'>,
+  storagePolicy: unknown, busyTimeoutMs: number, options: Parameters<ShadowStore['reconcileExpired']>[0]) {
+  z.number().int().min(1).max(1000).parse(busyTimeoutMs)
+  const loaded = loadInstalledShadowHost(installation.workerPath)
+  loaded.assertCurrent()
+  const database = openShadowStateDatabase(installation.biometricsDatabase, { busyTimeoutMs })
+  try {
+    database.assertCurrent()
+    const store = new loaded.api.ShadowStore(database.db, storagePolicy)
+    const result = store.reconcileExpired(options)
+    database.assertCurrent()
+    loaded.assertCurrent()
+    return result
   }
   finally { database.close() }
 }

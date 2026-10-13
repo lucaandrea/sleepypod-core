@@ -712,3 +712,27 @@ verifies signal termination and then reacquires the execution lock. Parent-side
 process-group cleanup remains necessary; a process explicitly stopped by SIGSTOP
 cannot handle ordinary pending signals until resumed, and the lock continues to
 exclude competing shadow workers in that condition.
+
+## Bounded expired-run reconciliation
+
+`ShadowStore.reconcileExpired` scans at most 100 runs per immediate transaction
+using a primary-key cursor, including future and terminal rows so maintenance
+cannot get stuck on the first unexpired window. It validates candidate plans and
+compares state, attempt and lease when changing authority. A corrupt plan rolls
+back the batch. Unexpired replacement attempts and terminal evidence are preserved;
+final-drain authority remains valid until its lease/deadline expires.
+
+Expired running attempts become failed with
+`shadow_lease_expired_cleanup_unconfirmed`. This revokes append/renew authority
+without claiming that an OS process was reaped. Retained samples and attempt IDs
+remain available, reports flag unconfirmed cleanup, and the kernel slot continues
+to exclude overlapping shadow workers. Pending runs whose observation window was
+missed become failed with `shadow_observation_window_missed`; reports do not call
+that a processor failure or fabricate observations.
+
+`reconcileInstalledShadowRuns` exposes this maintenance through the loaded package's
+store with owned state-handle cleanup and artifact/database guards. It starts no
+Python probe, worker or hardware operation and needs no admission qualification.
+Periodic service scheduling must retain the returned cursor until a sweep ends,
+then start another sweep. Recovery revokes authority; process cleanup confirmation
+and shared replay/shadow resource ownership are separate lifecycle requirements.
