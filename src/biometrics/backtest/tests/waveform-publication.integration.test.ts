@@ -79,7 +79,7 @@ print(json.dumps({'start':start,'artifacts':artifacts,'inspections':inspections}
       cohorts: [{ cohortId: manifest.splitProtocol.assignments[0].cohortId, sourceIds }], idempotencyKey: 'waveform' }
     const { prepared } = prepareSelectedWaveformDataset(db, request, now)
     execFileSync(process.execPath, ['scripts/build/biometrics-worker.mjs', directory])
-    const options = { databasePath: database, coordinatorPath: join(directory, 'coordinator.cjs'), workerPath: join(directory, 'worker.cjs'),
+    const options = { replayBudget: { jobWallMs: 300000, waveformWallMs: 200000, waveformCpuSeconds: 180 }, databasePath: database, coordinatorPath: join(directory, 'coordinator.cjs'), workerPath: join(directory, 'worker.cjs'),
       modulePath: resolve('node_modules'), rawLocation: { pythonPath: python, modulesPath: resolve('modules'), archiveDirectory: archive } }
     expect(await runCoordinatorTask(options, { type: 'createWaveformDataset', input: request })).toEqual({ status: 'deferred' })
     let admissionChecks = 0

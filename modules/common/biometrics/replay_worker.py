@@ -75,7 +75,9 @@ def run(input_stream, output_stream, retained_directory):
     emit({'type': 'result', 'result': {**result, 'build_hash': build['hash']}})
 
 
-def configure_process_limits():
+def configure_process_limits(cpu_seconds=120):
+    if type(cpu_seconds) is not int or not 1 <= cpu_seconds <= 3600:
+        raise ValueError('Invalid waveform CPU budget')
     # Provisional execution caps; qualified scheduling/admission belongs to
     # the parent. It must also enforce wall time and kill on cancellation.
     try:
@@ -87,12 +89,12 @@ def configure_process_limits():
         # system utility to limit this process before importing numerical code.
         # Missing utility, refusal, or timeout remains a startup failure.
         subprocess.run(['/usr/bin/prlimit', '--pid', str(os.getpid()),
-            '--core=0:0', '--cpu=120:121', '--nofile=64:64'],
+            '--core=0:0', f'--cpu={cpu_seconds}:{cpu_seconds + 1}', '--nofile=64:64'],
             check=True, timeout=5, stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     else:
         resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
-        resource.setrlimit(resource.RLIMIT_CPU, (120, 121))
+        resource.setrlimit(resource.RLIMIT_CPU, (cpu_seconds, cpu_seconds + 1))
         resource.setrlimit(resource.RLIMIT_NOFILE, (64, 64))
     os.nice(19)
     for key in ('OPENBLAS_NUM_THREADS', 'OMP_NUM_THREADS', 'MKL_NUM_THREADS', 'NUMEXPR_NUM_THREADS'):
@@ -101,12 +103,13 @@ def configure_process_limits():
 
 def main():
     parser = argparse.ArgumentParser(description='Replay fixed retained waveform inputs')
+    parser.add_argument('--cpu-seconds', type=int, default=120)
     target = parser.add_mutually_exclusive_group(required=True)
     target.add_argument('--retained-directory')
     target.add_argument('--describe-build', action='store_true')
     args = parser.parse_args()
     try:
-        configure_process_limits()
+        configure_process_limits(args.cpu_seconds)
         if args.describe_build:
             from .build_identity import replay_build_identity
             sys.stdout.write(json.dumps(replay_build_identity(), allow_nan=False, separators=(',', ':')) + '\n')

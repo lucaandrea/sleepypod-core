@@ -1,3 +1,4 @@
+import type { ReplayBudget } from './execution-budget'
 import { z } from 'zod'
 import { summarizeBacktestResult } from './report-summary'
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3'
@@ -51,6 +52,7 @@ export interface CoordinatorResults {
 export async function performCoordinatorTask(db: BetterSQLite3Database<typeof schema>, raw: unknown, options: {
   workerPath: string
   rawLocation?: RawInspectionLocation
+  replayBudget?: ReplayBudget
   signal: AbortSignal
   admit: () => Promise<boolean>
 }) {
@@ -79,6 +81,7 @@ async function inspectRawSource(db: BetterSQLite3Database<typeof schema>, input:
   signal: AbortSignal
   admit: () => Promise<boolean>
   rawLocation?: RawInspectionLocation
+  replayBudget?: ReplayBudget
 }) {
   const deferred = { status: 'deferred' as const, nextCursor: input.afterName }
   if (options.signal.aborted || !await options.admit()) return deferred

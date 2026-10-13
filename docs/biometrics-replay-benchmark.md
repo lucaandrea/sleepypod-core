@@ -327,3 +327,27 @@ After both runs, no benchmark descendants remained. Synthetic telemetry and
 logs were copied locally, and the staging directory was removed. Both installed
 services remained active on the original `homekit-0b53800` release. No deployment,
 restart, live-database modification, or hardware command was part of this test.
+
+### Where waveform execution time goes
+
+A subsequent synthetic 30-minute profile on the same pod separated startup
+from processing. The Yocto Python installation also lacks `_lsprof`, so the
+diagnostic used `time.monotonic()` and `time.process_time()` around the shipped
+functions. These timings include small wrapper overhead and are not a complete
+function profiler. It retained the same noisy dual-channel fixture in a new
+directory and discarded derived readings after counting them.
+
+| Operation | Wall time | CPU time |
+| --- | --- | --- |
+| Import replay and numerical dependencies | 12.726 s | Not measured |
+| Retain the synthetic archive | 0.369 s | Not measured |
+| Complete one-configuration retained replay | 45.184 s | 44.751 s |
+| Inner CBOR decoding (included above) | 0.596 s | 0.583 s |
+| Per-side ingestion (included above) | 41.623 s | 41.238 s |
+| Numerical estimates (included in ingestion) | 30.365 s | 30.082 s |
+
+The run consumed 1,860 records including 1,800 piezo frames and produced 50
+scored readings plus ten pre-roll readings. These overlapping timings must not
+be summed. Both startup and numerical processing matter; archive decoding was
+not the dominant cost. A full-night run still needs direct measurement rather
+than extrapolating this short profile into a production runtime guarantee.

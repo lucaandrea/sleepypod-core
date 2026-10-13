@@ -1,3 +1,4 @@
+import { replayBudgetSchema } from './execution-budget'
 import { sql } from 'drizzle-orm'
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3'
 import type * as schema from '@/src/db/biometrics-schema'
@@ -15,7 +16,10 @@ export function coordinatorRequest<T extends CoordinatorTask>(db: BetterSQLite3D
   if (!path) throw new ReferenceInputError('WORKER_UNAVAILABLE', 'Coordinator requires a persistent biometrics database')
   if (shared.__biometricCoordinator && shared.__biometricCoordinator.path !== path) throw new Error('Stop the coordinator before changing its database')
   shared.__biometricCoordinator ??= { path, queue: new CoordinatorQueue({ databasePath: path,
-    coordinatorPath: packagedCoordinatorPath(), workerPath: packagedWorkerPath() }) }
+    coordinatorPath: packagedCoordinatorPath(), workerPath: packagedWorkerPath(),
+    replayBudget: process.env.SLEEPYPOD_BIOMETRICS_REPLAY_BUDGET === undefined
+      ? undefined
+      : replayBudgetSchema.parse(JSON.parse(process.env.SLEEPYPOD_BIOMETRICS_REPLAY_BUDGET)) }) }
   return shared.__biometricCoordinator.queue.request(task, control)
 }
 export async function stopBiometricCoordinator() {

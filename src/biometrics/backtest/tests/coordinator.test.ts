@@ -77,6 +77,28 @@ it('bounds a stalled coordinator and permits subsequent work', async () => {
   await expect(runCoordinatorTask({ ...options(), coordinatorPath: stalled, timeoutMs: 100 }, { type: 'collectArtifacts' })).rejects.toThrow('time budget')
   expect(await runCoordinatorTask(options(), { type: 'collectArtifacts' })).toBeNull()
 })
+it('allows an explicit longer execution budget without extending read deadlines', async () => {
+  const fixture = join(directory, 'budget.cjs')
+  const replayBudget = { jobWallMs: 300000, waveformWallMs: 200000, waveformCpuSeconds: 180 }
+  await writeFile(fixture, `process.on('message',()=>{process.send({type:'result',result:JSON.parse(process.argv[5])},()=>process.disconnect())})`)
+  const configured = { ...options(), coordinatorPath: fixture, replayBudget }
+  expect(await runCoordinatorTask({ ...configured, timeoutMs: 200000 }, { type: 'execute', owner: 'test' })).toEqual(replayBudget)
+  expect(await runCoordinatorTask(configured, { type: 'collectArtifacts' })).toBeNull()
+  expect(() => runCoordinatorTask({ ...configured, timeoutMs: 200000 }, { type: 'collectArtifacts' })).toThrow('Invalid coordinator timeout')
+  expect(() => runCoordinatorTask({ ...configured, timeoutMs: 300001 }, { type: 'execute', owner: 'test' })).toThrow('Invalid coordinator timeout')
+  for (const changed of [{ jobWallMs: 500 }, { waveformWallMs: 400000 }, { waveformCpuSeconds: 201 }, { jobWallMs: 172800001 }]) {
+    expect(() => runCoordinatorTask({ ...configured, replayBudget: { ...replayBudget, ...changed } }, { type: 'execute', owner: 'test' })).toThrow()
+  }
+})
+it('enforces the configured job deadline when no test timeout overrides it', async () => {
+  const stalled = join(directory, 'budget-stalled.cjs')
+  await writeFile(stalled, 'process.on("message",()=>{});setInterval(()=>{},1000)')
+  const began = performance.now()
+  await expect(runCoordinatorTask({ ...options(), coordinatorPath: stalled,
+    replayBudget: { jobWallMs: 1000, waveformWallMs: 1000, waveformCpuSeconds: 1 } },
+  { type: 'execute', owner: 'test' })).rejects.toThrow('time budget')
+  expect(performance.now() - began).toBeLessThan(3000)
+})
 it.skipIf(process.platform === 'win32')('kills evaluator descendants when a coordinator crashes', async () => {
   const script = join(directory, 'crash.cjs'), pidPath = join(directory, 'descendant.pid')
   await writeFile(script, `const {spawn}=require('node:child_process');const fs=require('node:fs');process.on('message',()=>{const child=spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{stdio:'ignore'});fs.writeFileSync(${JSON.stringify(pidPath)},String(child.pid));process.exit(1)})`)

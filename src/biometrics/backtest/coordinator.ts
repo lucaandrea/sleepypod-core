@@ -4,6 +4,7 @@ import { dirname, resolve } from 'node:path'
 import { ReferenceInputError } from '../references/time'
 import { coordinatorTaskSchema, type CoordinatorTask, type CoordinatorResults } from './coordinator-tasks'
 
+import { replayBudgetSchema, type ReplayBudget } from './execution-budget'
 import type { RawInspectionLocation } from './raw-inspection-child'
 
 export interface CoordinatorOptions {
@@ -13,6 +14,7 @@ export interface CoordinatorOptions {
   rawLocation?: RawInspectionLocation
   modulePath?: string
   timeoutMs?: number
+  replayBudget?: ReplayBudget
 }
 
 /** Own an OS process group so crashes/timeouts cannot orphan the evaluator. */
@@ -22,11 +24,13 @@ export function runCoordinatorTask<T extends CoordinatorTask>(options: Coordinat
 } = {}): Promise<CoordinatorResults[T['type']]> {
   const parsed = coordinatorTaskSchema.parse(task)
   if (Buffer.byteLength(JSON.stringify(parsed)) > 65536) return Promise.reject(new ReferenceInputError('RESOURCE_LIMIT', 'Coordinator input exceeds 64 KiB'))
-  const timeoutMs = options.timeoutMs ?? 150000
-  if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 10 || timeoutMs > 180000) throw new Error('Invalid coordinator timeout')
+  const replayBudget = options.replayBudget === undefined ? undefined : replayBudgetSchema.parse(options.replayBudget)
+  const timeoutMs = options.timeoutMs ?? (parsed.type === 'execute' ? replayBudget?.jobWallMs : undefined) ?? 150000
+  const maximumTimeout = parsed.type === 'execute' && replayBudget ? replayBudget.jobWallMs : 180000
+  if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 10 || timeoutMs > maximumTimeout) throw new Error('Invalid coordinator timeout')
   if (control.signal?.aborted) return Promise.reject(new Error('Coordinator cancelled'))
   return new Promise((resolveResult, reject) => {
-    const child = fork(resolve(options.coordinatorPath), [resolve(options.databasePath), resolve(options.workerPath), JSON.stringify(options.rawLocation ?? null)], {
+    const child = fork(resolve(options.coordinatorPath), [resolve(options.databasePath), resolve(options.workerPath), JSON.stringify(options.rawLocation ?? null), JSON.stringify(parsed.type === 'execute' ? replayBudget ?? null : null)], {
       cwd: dirname(resolve(options.databasePath)), detached: process.platform !== 'win32', serialization: 'advanced',
       execArgv: ['--max-old-space-size=384'], silent: true,
       env: { NODE_ENV: 'production', LANG: 'C.UTF-8', TZ: 'UTC', NODE_PATH: options.modulePath ?? resolve('node_modules') },

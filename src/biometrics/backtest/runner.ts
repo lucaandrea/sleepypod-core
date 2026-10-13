@@ -1,3 +1,4 @@
+import type { ReplayBudget } from './execution-budget'
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3'
 import { z } from 'zod'
 import type * as schema from '@/src/db/biometrics-schema'
@@ -13,6 +14,7 @@ export async function executeNextBacktest(db: BetterSQLite3Database<typeof schem
   owner: string
   workerPath: string
   rawLocation?: RawInspectionLocation
+  replayBudget?: ReplayBudget
   signal?: AbortSignal
   timeoutMs?: number
   admit: () => Promise<boolean>

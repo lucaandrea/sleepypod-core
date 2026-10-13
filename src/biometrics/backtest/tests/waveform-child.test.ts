@@ -25,6 +25,14 @@ async function worker(body: string) {
 }
 const emit = (value: unknown) => `process.stdout.write(${JSON.stringify(JSON.stringify(value) + '\n')});`
 
+it('passes a trusted CPU limit to the fixed worker and rejects invalid limits before spawning', async () => {
+  await worker(`if (process.argv.slice(-2).join(' ') !== '--cpu-seconds 1800') process.exit(1); ${events.map(emit).join('')}`)
+  expect(await runWaveformChild(location(), {}, { cpuSeconds: 1800 })).toEqual({ readings: [reading], run: result })
+  for (const cpuSeconds of [0, -1, 1.5, NaN, Infinity, 3601]) {
+    await expect(runWaveformChild(location(), {}, { cpuSeconds })).rejects.toThrow('Invalid waveform CPU budget')
+  }
+})
+
 it('returns readings only after a valid success event and zero exit with a clean environment', async () => {
   await worker(`if (process.env.WAVEFORM_TEST_SECRET
     || JSON.stringify(process.argv.slice(2)) !== ${JSON.stringify(JSON.stringify(['-B', '-m', 'common.biometrics.replay_worker', '--retained-directory', directory]))}
@@ -102,10 +110,10 @@ it('escalates cancellation when a running worker ignores SIGTERM', async () => {
 
 it('enforces time-budget bounds while accepting their exact endpoints', async () => {
   await worker(events.map(emit).join(''))
-  for (const timeoutMs of [0, 9, 1.5, Infinity, NaN, 1800001]) {
+  for (const timeoutMs of [0, 9, 1.5, Infinity, NaN, 3600001]) {
     await expect(runWaveformChild(location(), {}, { timeoutMs })).rejects.toThrow('Invalid waveform time budget')
   }
-  expect(await runWaveformChild(location(), {}, { timeoutMs: 1800000 })).toEqual({ readings: [reading], run: result })
+  expect(await runWaveformChild(location(), {}, { timeoutMs: 3600000 })).toEqual({ readings: [reading], run: result })
   await worker('setInterval(() => {}, 1000);')
   await expect(runWaveformChild(location(), {}, { timeoutMs: 10 })).rejects.toThrow('exceeded its time budget')
 })

@@ -1,3 +1,4 @@
+import type { ReplayBudget } from './execution-budget'
 import { sql } from 'drizzle-orm'
 import { dirname, join } from 'node:path'
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3'
@@ -28,6 +29,7 @@ export async function executeWaveformInputs(db: BetterSQLite3Database<typeof sch
   rawLocation?: RawInspectionLocation
   signal: AbortSignal
   timeoutMs?: number
+  replayBudget?: ReplayBudget
 }) {
   const { job, dataset } = work
   if (job.protocol.mode !== 'signal_replay' || !job.waveform || dataset.snapshot.version !== 'waveform-dataset-v1') throw new Error('Missing retained waveform job inputs')
@@ -48,7 +50,8 @@ export async function executeWaveformInputs(db: BetterSQLite3Database<typeof sch
         ? { left: config.resolved, right: job.waveform.otherSide.resolved }
         : { left: job.waveform.otherSide.resolved, right: config.resolved }
       const output = await runWaveformChild(location, { version: 'retained-waveform-work-v1', input, configs }, {
-        signal: options.signal, timeoutMs: options.timeoutMs, expectedBuildHash: job.waveform.pythonBuildHash,
+        signal: options.signal, timeoutMs: options.replayBudget?.waveformWallMs ?? options.timeoutMs,
+        cpuSeconds: options.replayBudget?.waveformCpuSeconds, expectedBuildHash: job.waveform.pythonBuildHash,
       })
       count += output.readings.length
       if (count > 20000) throw new Error('Waveform job derived reading budget exceeded')

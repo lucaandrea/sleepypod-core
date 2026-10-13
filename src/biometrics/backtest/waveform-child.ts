@@ -21,15 +21,17 @@ export function runWaveformChild(location: WaveformWorkerLocation, work: unknown
   signal?: AbortSignal
   timeoutMs?: number
   expectedBuildHash?: string
+  cpuSeconds?: number
 } = {}): Promise<{ readings: z.infer<typeof waveformReadingSchema>[], run: z.infer<typeof waveformRunSchema> }> {
+  if (options.cpuSeconds !== undefined && (!Number.isSafeInteger(options.cpuSeconds) || options.cpuSeconds < 1 || options.cpuSeconds > 3600)) return Promise.reject(new Error('Invalid waveform CPU budget'))
   if (options.expectedBuildHash !== undefined) hash.parse(options.expectedBuildHash)
   const serialized = JSON.stringify(options.expectedBuildHash === undefined ? work : { ...z.record(z.string(), z.unknown()).parse(work), expected_build_hash: options.expectedBuildHash })
   if (!serialized || Buffer.byteLength(serialized) > 8 * 1024 * 1024) return Promise.reject(new Error('Waveform input exceeds 8 MiB'))
   const timeoutMs = options.timeoutMs ?? 120000
-  if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 10 || timeoutMs > 1800000) return Promise.reject(new Error('Invalid waveform time budget'))
+  if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 10 || timeoutMs > 3600000) return Promise.reject(new Error('Invalid waveform time budget'))
   if (options.signal?.aborted) return Promise.reject(new Error('Waveform replay cancelled'))
   return new Promise((resolve, reject) => {
-    const child: ChildProcessWithoutNullStreams = spawn(location.pythonPath, ['-B', '-m', 'common.biometrics.replay_worker', '--retained-directory', location.retainedDirectory], {
+    const child: ChildProcessWithoutNullStreams = spawn(location.pythonPath, ['-B', '-m', 'common.biometrics.replay_worker', '--retained-directory', location.retainedDirectory, ...(options.cpuSeconds === undefined ? [] : ['--cpu-seconds', String(options.cpuSeconds)])], {
       cwd: tmpdir(), env: { NODE_ENV: 'production', PYTHONPATH: location.modulesPath, LANG: 'C.UTF-8', TZ: 'UTC',
         OPENBLAS_NUM_THREADS: '1', OMP_NUM_THREADS: '1', MKL_NUM_THREADS: '1', NUMEXPR_NUM_THREADS: '1' },
       stdio: ['pipe', 'pipe', 'pipe'],

@@ -135,6 +135,23 @@ measured thresholds and full publication-load qualification remain required.
 
 ## Explicit report release
 
+Trusted deployment configuration may set `SLEEPYPOD_BIOMETRICS_REPLAY_BUDGET`
+to JSON containing `jobWallMs`, `waveformWallMs`, and `waveformCpuSeconds`.
+These are operational ceilings, not candidate parameters or RPC inputs. The
+coordinator validates the complete budget before spawning: the job wall limit
+is at most 48 hours, each waveform process at most one hour, and CPU time at
+most 3,600 seconds. CPU time must fit within waveform wall time, which must fit
+within job wall time. No production values are inferred from those ceilings.
+
+Only execution tasks receive the extended job deadline. Read, publication,
+inspection, and cleanup deadlines remain unchanged, as does the Node scorer's
+separate deadline. Python applies the selected CPU limit before importing the
+numerical implementation. Without explicit configuration, existing short
+deadlines and the 120-second CPU limit remain. Changing this environment setting
+requires restarting the coordinator service; it does not start the worker host,
+grant resource admission, or establish hardware qualification. The synthetic
+waveform benchmark accepts the same setting for qualification runs.
+
 The coordinator reserves a separate process slot for read-only report, trace,
 dataset-descriptor, and raw-catalog requests. At most one reader and one work
 process run at once. Replay, scanning, publication, release, and cleanup share

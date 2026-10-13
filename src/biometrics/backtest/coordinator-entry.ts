@@ -1,3 +1,4 @@
+import { replayBudgetSchema } from './execution-budget'
 import Database from 'better-sqlite3'
 import { drizzle } from 'drizzle-orm/better-sqlite3'
 import * as schema from '@/src/db/biometrics-schema'
@@ -6,7 +7,7 @@ import { performCoordinatorTask } from './coordinator-tasks'
 
 // One operation per process. The supervisor owns this process group, including
 // the evaluator grandchild; losing the supervisor IPC channel cancels all work.
-const [databasePath, workerPath, rawLocationJson] = process.argv.slice(2)
+const [databasePath, workerPath, rawLocationJson, replayBudgetJson] = process.argv.slice(2)
 let started = false, completed = false, sequence = 0
 const controller = new AbortController()
 const pending = new Map<number, (allowed: boolean) => void>()
@@ -36,10 +37,11 @@ process.on('message', async (message: unknown) => {
   started = true
   let sqlite: Database.Database | undefined
   try {
+    const replayBudget = replayBudgetJson && replayBudgetJson !== 'null' ? replayBudgetSchema.parse(JSON.parse(replayBudgetJson)) : undefined
     sqlite = new Database(databasePath, { fileMustExist: true, timeout: 1000 })
     sqlite.pragma('foreign_keys = ON')
     const db = drizzle(sqlite, { schema })
-    const result = await performCoordinatorTask(db, data.task, { workerPath, rawLocation: rawLocationJson ? JSON.parse(rawLocationJson) ?? undefined : undefined, signal: controller.signal, admit: () => new Promise<boolean>((resolve) => {
+    const result = await performCoordinatorTask(db, data.task, { workerPath, replayBudget, rawLocation: rawLocationJson ? JSON.parse(rawLocationJson) ?? undefined : undefined, signal: controller.signal, admit: () => new Promise<boolean>((resolve) => {
       const id = ++sequence
       const finish = (allowed: boolean) => {
         clearTimeout(timer)

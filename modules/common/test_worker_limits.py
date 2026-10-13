@@ -52,7 +52,8 @@ def test_missing_resource_on_other_platform_does_not_use_linux_utility(monkeypat
         replay_worker.configure_process_limits()
 
 
-def test_standard_resource_extension_sets_limits_without_external_command(monkeypatch):
+@pytest.mark.parametrize('cpu_seconds', [120, 1800, 3600])
+def test_standard_resource_extension_sets_limits_without_external_command(monkeypatch, cpu_seconds):
     limits = []
     monkeypatch.setitem(sys.modules, 'resource', SimpleNamespace(RLIMIT_CORE=4,
         RLIMIT_CPU=0, RLIMIT_NOFILE=7, setrlimit=lambda key, value: limits.append((key, value))))
@@ -62,5 +63,19 @@ def test_standard_resource_extension_sets_limits_without_external_command(monkey
         pytest.fail('The standard resource path must not spawn a utility')
 
     monkeypatch.setattr(replay_worker.subprocess, 'run', unexpected)
-    replay_worker.configure_process_limits()
-    assert limits == [(4, (0, 0)), (0, (120, 121)), (7, (64, 64))]
+    replay_worker.configure_process_limits(cpu_seconds)
+    assert limits == [(4, (0, 0)), (0, (cpu_seconds, cpu_seconds + 1)), (7, (64, 64))]
+
+
+def test_configured_cpu_limit_reaches_yocto_utility(monkeypatch):
+    without_resource(monkeypatch)
+    calls = []
+    monkeypatch.setattr(replay_worker.subprocess, 'run', lambda args, **kwargs: calls.append(args))
+    replay_worker.configure_process_limits(1800)
+    assert '--cpu=1800:1801' in calls[0]
+
+
+@pytest.mark.parametrize('value', [True, 0, -1, 1.5, 3601, float('inf'), None])
+def test_invalid_cpu_limit_fails_before_changing_process_limits(value):
+    with pytest.raises(ValueError, match='CPU budget'):
+        replay_worker.configure_process_limits(value)

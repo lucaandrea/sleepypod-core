@@ -63,6 +63,9 @@ def sample():
 
 if len(sys.argv) < 3:
     raise SystemExit("OUTPUT.json COMMAND [ARG ...] required")
+timeout_seconds = int(os.environ.get('BIOMETRICS_BENCHMARK_TIMEOUT_SECONDS', '600'))
+if not 1 <= timeout_seconds <= 10800:
+    raise SystemExit('Benchmark timeout must be between 1 and 10800 seconds')
 thread = threading.Thread(target=sample)
 thread.start()
 try:
@@ -71,7 +74,7 @@ try:
     result = subprocess.Popen(sys.argv[2:], start_new_session=True)
     benchmark_pid = result.pid
     try:
-        result.wait(timeout=600)
+        result.wait(timeout=timeout_seconds)
     except subprocess.TimeoutExpired:
         os.killpg(result.pid, signal.SIGKILL)
         result.wait()
@@ -81,5 +84,5 @@ try:
 finally:
     stop.set()
     thread.join()
-    pathlib.Path(sys.argv[1]).write_text(json.dumps({"version": "read-only-biometric-probe-v2", "samples": samples}, indent=2))
+    pathlib.Path(sys.argv[1]).write_text(json.dumps({"version": "read-only-biometric-probe-v2", "timeoutSeconds": timeout_seconds, "samples": samples}, indent=2))
 raise SystemExit(result.returncode)
