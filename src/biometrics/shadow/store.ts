@@ -7,12 +7,21 @@ const integer = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER)
 const positive = integer.positive()
 const hash = z.string().regex(/^[a-f0-9]{64}$/)
 const metric = z.enum(['heart_rate', 'breathing_rate', 'window_ibi_variability_v1'])
+export const shadowMonitoringSchema = z.object({
+  expectedIntervalMs: positive, maximumGapMs: positive, heartbeatStaleMs: positive,
+  minimumCandidateCoverage: z.number().positive().max(1), maximumCoverageLoss: z.number().min(0).max(1), minimumQuality: z.number().min(0).max(1),
+  alignment: z.object({ version: z.literal('reference-alignment-v1'), pointToleranceMs: integer.max(300000),
+    clockOffsetMs: z.number().int().min(-3600000).max(3600000), offsetSource: z.enum(['fixed', 'training']) }).strict(),
+}).strict()
 export const shadowPlanSchema = z.object({ schema: z.literal('biometric-shadow-plan-v1'), side: z.enum(['left', 'right']),
+  subjectId: z.string().min(1).max(200), monitoring: shadowMonitoringSchema,
+  windowIbiWindowMs: positive.max(86400000).optional(),
   candidateConfigHash: hash, activeConfigHash: hash, qualificationHash: hash, engineBuildHash: hash,
   startMs: integer, endMs: integer, maximumPoints: positive, maximumBytes: positive,
   metrics: z.array(metric).min(1).max(3),
 }).strict().refine(plan => plan.endMs > plan.startMs && plan.endMs - plan.startMs <= 7 * 86400000
-  && new Set(plan.metrics).size === plan.metrics.length, 'Invalid shadow window or metrics')
+  && new Set(plan.metrics).size === plan.metrics.length
+  && (!plan.metrics.includes('window_ibi_variability_v1') || plan.windowIbiWindowMs !== undefined), 'Invalid shadow window or metrics')
 const reading = z.object({ value: z.number().finite().nullable(), quality: z.number().min(0).max(1) }).strict()
 export const shadowSampleSchema = z.object({ sequence: integer, side: z.enum(['left', 'right']), timestampMs: integer, inputHash: hash,
   candidateConfigHash: hash, activeConfigHash: hash,
@@ -52,6 +61,36 @@ export class ShadowStore {
     const plan = shadowPlanSchema.parse(JSON.parse(row.plan))
     if (dataHash(plan) !== row.plan_hash || row.side !== plan.side) throw new Error('Shadow plan integrity mismatch')
     return { ...row, plan }
+  }
+
+  /** Complete bounded snapshot for scoring. Refuse oversize data rather than
+   * silently scoring a paginated/downsampled subset. */
+  snapshot(id: string, limits: { maximumPoints: number, maximumBytes: number }) {
+    z.object({ maximumPoints: positive.max(100000), maximumBytes: positive.max(32 * 1024 * 1024) }).strict().parse(limits)
+    return this.db.transaction(() => {
+      const run = this.get(id)
+      const totals = this.db.prepare(`SELECT COUNT(*) AS points, COALESCE(SUM(byte_length), 0) AS bytes,
+        COALESCE(SUM(length(CAST(payload AS BLOB))), 0) AS actual_bytes FROM biometric_shadow_samples WHERE run_id = ?`).get(id) as { points: number, bytes: number, actual_bytes: number }
+      if (totals.points !== run.point_count || totals.bytes !== run.byte_count || totals.bytes !== totals.actual_bytes) throw new Error('Shadow sample totals integrity mismatch')
+      if (totals.points > limits.maximumPoints || totals.actual_bytes > limits.maximumBytes) throw new Error('Shadow report input limit exceeded')
+      const rows = this.db.prepare('SELECT sequence, timestamp_ms, content_hash, payload, byte_length FROM biometric_shadow_samples WHERE run_id = ? ORDER BY sequence').all(id) as { sequence: number, timestamp_ms: number, content_hash: string, payload: string, byte_length: number }[]
+      const capturedAtMs = this.now()
+      let previousTime = -1
+      const samples = rows.map((row, index) => {
+        const envelope = shadowSampleSchema.extend({ attemptId: z.string().uuid() }).parse(JSON.parse(row.payload))
+        const { attemptId, ...sample } = envelope
+        if (dataHash(sample) !== row.content_hash || row.byte_length !== Buffer.byteLength(row.payload)
+          || row.sequence !== index || sample.sequence !== index || sample.timestampMs !== row.timestamp_ms
+          || sample.timestampMs <= previousTime || sample.timestampMs < run.plan.startMs || sample.timestampMs >= run.plan.endMs
+          || sample.side !== run.side || sample.candidateConfigHash !== run.plan.candidateConfigHash || sample.activeConfigHash !== run.plan.activeConfigHash
+          || sample.readings.length !== run.plan.metrics.length || new Set(sample.readings.map(row => row.metric)).size !== run.plan.metrics.length
+          || sample.readings.some(row => !run.plan.metrics.includes(row.metric))) throw new Error('Shadow sample integrity mismatch')
+        previousTime = sample.timestampMs
+        return { ...sample, attemptId }
+      })
+      const snapshot = { schema: 'biometric-shadow-snapshot-v1' as const, run, capturedAtMs, samples }
+      return { ...snapshot, snapshotHash: dataHash(snapshot) }
+    }).deferred()
   }
 
   create(raw: unknown, idempotencyKey: string) {

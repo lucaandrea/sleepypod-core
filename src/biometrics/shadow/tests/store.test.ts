@@ -5,13 +5,15 @@ import { migrate } from 'drizzle-orm/better-sqlite3/migrator'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import { ShadowStore } from '../store'
+import { reportShadowRun } from '../report'
 
 const databases: Database.Database[] = []
 afterEach(() => databases.splice(0).forEach(db => db.close()))
 const hash = 'a'.repeat(64), start = 1700000000000
-const plan = { schema: 'biometric-shadow-plan-v1', side: 'left', candidateConfigHash: hash, activeConfigHash: 'b'.repeat(64),
-  qualificationHash: 'c'.repeat(64), engineBuildHash: 'd'.repeat(64), startMs: start, endMs: start + 60000,
-  maximumPoints: 3, maximumBytes: 10000, metrics: ['heart_rate'] }
+const plan = { subjectId: 'fixture', monitoring: { expectedIntervalMs: 1000, maximumGapMs: 2000, heartbeatStaleMs: 2000, minimumCandidateCoverage: 0.8, maximumCoverageLoss: 0.1, minimumQuality: 0.8,
+  alignment: { version: 'reference-alignment-v1', pointToleranceMs: 0, clockOffsetMs: 0, offsetSource: 'fixed' } }, schema: 'biometric-shadow-plan-v1', side: 'left', candidateConfigHash: hash, activeConfigHash: 'b'.repeat(64),
+qualificationHash: 'c'.repeat(64), engineBuildHash: 'd'.repeat(64), startMs: start, endMs: start + 60000,
+maximumPoints: 3, maximumBytes: 10000, metrics: ['heart_rate'] }
 function setup(policy = { maximumRuns: 10, maximumPoints: 10, maximumBytes: 100000 }) {
   const db = new Database(':memory:')
   databases.push(db)
@@ -23,7 +25,7 @@ function setup(policy = { maximumRuns: 10, maximumPoints: 10, maximumBytes: 1000
 }
 function sample(sequence = 0) {
   return { sequence, side: 'left', timestampMs: start + sequence, inputHash: hash, candidateConfigHash: hash, activeConfigHash: plan.activeConfigHash,
-    readings: [{ metric: 'heart_rate', candidate: { value: null, quality: 0 }, active: { value: 60, quality: 1 } }] }
+    readings: [{ metric: 'heart_rate', candidate: { value: null as number | null, quality: 0 }, active: { value: 60, quality: 1 } }] }
 }
 describe('separate prospective shadow storage', () => {
   it('uses the generated additive migration and never writes canonical observations', () => {
@@ -114,6 +116,70 @@ describe('separate prospective shadow storage', () => {
     expect(store.stop(run.id, 'window_elapsed')).toMatchObject({ state: 'stopped', reason: 'window_elapsed', point_count: 1 })
     expect(store.stop(run.id, 'retry')).toMatchObject({ reason: 'window_elapsed' })
     expect(() => store.claim(run.id, 1000, () => undefined)).toThrow('unavailable')
+  })
+  it('reports dropped candidate values, common reference support and current worker health', () => {
+    const { store, advance } = setup()
+    const lease = store.claim(store.create(plan, 'first').id, 10000, () => undefined)
+    const first = sample()
+    first.readings[0].candidate = { value: 61, quality: 1 }
+    store.append(lease, first)
+    advance(1000)
+    store.append(lease, { ...sample(1), timestampMs: start + 1000 })
+    const reference = { subjectId: 'fixture', side: 'left', source: 'test', rows: [0, 1000].map((offset, index) => ({
+      recordKey: String(index), metric: 'heart_rate', value: 60, unit: 'bpm', timestampMs: start + offset })) }
+    const report = reportShadowRun(store, lease.runId, { maximumPoints: 10, maximumBytes: 10000 }, reference)
+    expect(report).toMatchObject({ expectedSlots: 2, observedSamples: 2, health: 'issues_detected', issues: ['coverage_degraded'],
+      metrics: [{ candidate: { coverage: 0.5, usableCount: 1 }, current: { coverage: 1 }, coverageDifference: -0.5,
+        comparison: { commonObservationCount: 1, lostObservationTimestamps: 1 } }] })
+    expect(report.reportHash).toMatch(/^[a-f0-9]{64}$/)
+    advance(10000)
+    const stale = reportShadowRun(store, lease.runId, { maximumPoints: 10, maximumBytes: 10000 })
+    expect(stale.issues).toEqual(expect.arrayContaining(['worker_stale', 'observation_gap']))
+  })
+  it('does not inflate coverage from bursts within one cadence slot', () => {
+    const { store, advance } = setup()
+    const lease = store.claim(store.create(plan, 'first').id, 10000, () => undefined)
+    for (let index = 0; index < 3; index++) {
+      const point = sample(index)
+      point.readings[0].candidate = { value: 60, quality: 1 }
+      store.append(lease, point)
+      advance(1)
+    }
+    advance(1997)
+    const report = reportShadowRun(store, lease.runId, { maximumPoints: 10, maximumBytes: 10000 })
+    expect(report).toMatchObject({ expectedSlots: 3, metrics: [{ candidate: { usableCount: 3, usableSlots: 1, coverage: 1 / 3 } }] })
+  })
+  it('requires matching reference identity and never compares RMSSD to the variability index', () => {
+    const { store } = setup()
+    const lease = store.claim(store.create({ ...plan, metrics: ['window_ibi_variability_v1'], windowIbiWindowMs: 300000 }, 'first').id, 10000, () => undefined)
+    store.append(lease, { ...sample(), readings: [{ metric: 'window_ibi_variability_v1', active: { value: 20, quality: 1 }, candidate: { value: 20, quality: 1 } }] })
+    const reference = { subjectId: 'fixture', side: 'left', source: 'test', rows: [{ recordKey: '0', metric: 'hrv_rmssd', value: 20, unit: 'ms', windowMs: 300000, timestampMs: start }] }
+    const limits = { maximumPoints: 10, maximumBytes: 10000 }
+    expect(reportShadowRun(store, lease.runId, limits, reference).metrics[0]).toMatchObject({
+      referenceExclusions: { incompatible_metric_definition: 1 }, comparison: { commonSupport: { candidate: { status: 'incompatible', metrics: null } } },
+    })
+    expect(() => reportShadowRun(store, lease.runId, limits, { ...reference, subjectId: 'other' })).toThrow('subject or side')
+    expect(() => reportShadowRun(store, lease.runId, limits, { ...reference, side: 'right' })).toThrow('subject or side')
+    expect(() => store.create({ ...plan, metrics: ['window_ibi_variability_v1'] }, 'invalid')).toThrow()
+  })
+  it('refuses oversized or corrupted snapshots instead of scoring partial history', () => {
+    const { db, store } = setup()
+    const lease = store.claim(store.create(plan, 'first').id, 10000, () => undefined)
+    store.append(lease, sample())
+    expect(() => store.snapshot(lease.runId, { maximumPoints: 10, maximumBytes: 1 })).toThrow('input limit')
+    db.prepare('UPDATE biometric_shadow_samples SET content_hash = ? WHERE run_id = ?').run('f'.repeat(64), lease.runId)
+    expect(() => store.snapshot(lease.runId, { maximumPoints: 10, maximumBytes: 10000 })).toThrow('integrity')
+  })
+  it('reports clock skew and missing observations without converting unknown values to zero', () => {
+    const { store, advance } = setup()
+    const run = store.create(plan, 'first')
+    expect(reportShadowRun(store, run.id, { maximumPoints: 10, maximumBytes: 10000 }).issues).toContain('no_observations')
+    const lease = store.claim(run.id, 10000, () => undefined)
+    store.append(lease, sample())
+    advance(-1)
+    expect(reportShadowRun(store, run.id, { maximumPoints: 10, maximumBytes: 10000 })).toMatchObject({
+      health: 'issues_detected', issues: expect.arrayContaining(['clock_skew']), metrics: [{ candidate: { coverage: null } }],
+    })
   })
   it('enforces byte quotas and terminal states', () => {
     const { store } = setup()

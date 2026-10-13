@@ -6,7 +6,7 @@ additive biometrics migration. It does not write canonical vitals, activate a
 profile, import algorithm code, or control hardware. It is not yet wired to a
 live worker or public API.
 
-A frozen plan binds side, active/candidate configuration hashes, reviewed
+A frozen plan binds subject and side, active/candidate configuration hashes, reviewed
 qualification and engine-build identities, a prospective time window (at most
 seven days), selected metric definitions, and explicit point/byte limits.
 Identities alone do not establish qualification: the eventual controller must
@@ -37,6 +37,35 @@ There is no automatic deletion of reports, plans, or exposure history.
 
 `stop` supports host/operator cancellation even after deadline or worker loss,
 retaining the original terminal reason on retries. The controller must stop
-elapsed windows and enforce execution budgets separately. Heartbeat and sample
-identity support later health/coverage and reference-comparison reporting; those
-services and the live shadow processor are still to be connected.
+elapsed windows and enforce execution budgets separately. Heartbeat and sample identity feed the reporting component below. The live
+shadow processor, admission controller and public API are still to be connected.
+
+## Health and reference reporting
+
+Plans also freeze `monitoring`: expected sample interval, maximum gap, heartbeat
+staleness, minimum candidate coverage, maximum coverage loss, minimum quality,
+and the shared reference-alignment policy. There are no implicit quality or
+production thresholds. Selecting `window_ibi_variability_v1` requires an explicit
+`windowIbiWindowMs` contract; the eventual admitted processor must match it.
+
+`snapshot(runId, limits)` reads the entire selected run in one SQLite snapshot,
+checking row counts, actual payload bytes, per-sample hashes, sequence/time order,
+side/configuration/metric identities and original attempt IDs. It refuses an
+oversized or corrupted run rather than silently scoring a partial page. Callers
+supply limits (at most 100,000 points and 32 MiB); small chart pages must never be
+substituted for a report input.
+
+`reportShadowRun` derives health, gaps, current/candidate coverage, attempt count
+and typed reference agreement. Coverage counts distinct usable cadence slots
+against slots elapsed in the frozen prospective window: a burst in one slot
+cannot hide missing slots. Low-quality and null values remain missing. Reports
+identify stale workers, processor failure, quota stops, observation gaps, clock
+skew and coverage regressions. A completed/stopped run is not assumed healthy.
+
+Optional reference imports must match subject and side. The shared normalization
+and common-support comparison code handles alignment and metric/window
+compatibility. RMSSD and SDNN are not scored against the window variability
+index. Out-of-window/future reference rows and incompatibility reasons remain
+visible. Reports carry plan/snapshot/report hashes and reference provenance;
+they are descriptive prospective evidence, not clinical validation or activation
+authorization. Whole-night uncertainty and promotion review remain separate.
