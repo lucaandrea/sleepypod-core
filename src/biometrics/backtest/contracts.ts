@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { objectivePolicySchema } from './objective-policy'
 import { waveformDatasetInputsSchema } from './waveform-contracts'
 import { nightBootstrapSchema } from './uncertainty-policy'
 import { normalizedMeasurementSchema } from '../references/contracts'
@@ -13,7 +14,8 @@ export const experimentProtocolSchema = z.object({
   pointToleranceMs: z.number().int().min(0).max(300000),
   clockOffsetMs: z.number().int().min(-3600000).max(3600000),
   nightUncertainty: nightBootstrapSchema.optional(),
-}).strict()
+  objectivePolicy: objectivePolicySchema.optional(),
+}).strict().refine(protocol => !protocol.objectivePolicy || protocol.mode === 'signal_replay', 'Numeric objectives require waveform replay')
 export const replayBaselineProvenanceSchema = z.object({ source: z.enum(['acknowledged_runtime', 'unacknowledged_defaults']),
   generation: z.number().int().nonnegative().nullable(), effectiveSampleTimeMs: z.number().int().nonnegative().nullable(), warning: z.string().max(1000).nullable() }).strict()
 export const enqueueBacktestSchema = z.object({

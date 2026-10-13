@@ -1,3 +1,4 @@
+import { assessNumericObjective } from './objective-policy'
 import { createNumericNightSummary } from './numeric-night-summary'
 import { compareNumericConfigurations } from './numeric-comparison'
 import { z } from 'zod'
@@ -176,10 +177,29 @@ export function createBacktestEvaluator(dependencies: { configHash: (value: unkn
           : vitals.length,
         ...(signalReplay ? { numericComparisons, recordedObservationCount: vitals.length, observationCountBasis: 'union_of_derived_timestamps' } : {}), evaluations, comparisons }
     })
+    const numericNightSummary = signalReplay ? summarizeNumericNights(nights, job.protocol.nightUncertainty) : []
+    const objectivePolicy = job.protocol.objectivePolicy
+    const objectiveAssessments = objectivePolicy
+      ? numericNightSummary
+          .filter(summary => summary.metric === objectivePolicy.metric && summary.candidate === 'candidate')
+          .map(summary => ({ baseline: summary.baseline, candidate: summary.candidate, baselineHash: summary.baselineHash, candidateHash: summary.candidateHash,
+            ...assessNumericObjective(objectivePolicy, {
+              metricCompatible: !nights.some(night => night.numericComparisons?.some(window => window.metrics.some(row => row.metric === summary.metric
+                && row.baseline === summary.baseline && row.candidate === summary.candidate && row.commonSupport.candidate.status === 'incompatible'))),
+              split: job.split, holdoutUse: job.holdoutUse,
+              nights: summary.nights.map(night => ({ cohortId: night.cohortId, pairedReferences: night.commonSupport.candidate.pairedCount,
+                maeDifference: night.commonMaeDifference, lostObservations: night.lostObservationTimestamps,
+                baselineObservationCount: nights.find(row => row.cohortId === night.cohortId)?.numericComparisons?.reduce((sum, window) => sum
+                  + (window.metrics.find(row => row.metric === summary.metric && row.baseline === summary.baseline && row.candidate === summary.candidate)?.ownSupport.baseline.validObservationCount ?? 0), 0) ?? 0 })),
+              intervalUpper: summary.uncertainty.interval?.upper ?? null, subgroups: [], operational: null,
+            }, null),
+          }))
+      : []
     return { version: signalReplay ? 'waveform-backtest-report-v1' as const : 'processed-backtest-report-v1' as const,
       ...(signalReplay ? { waveform: { ...(job.waveform?.baselineProvenance ? { baselineProvenance: job.waveform.baselineProvenance } : {}), pythonBuildHash: job.waveform?.pythonBuildHash, otherSideConfigHash: job.waveform?.otherSide.resolvedHash, ...waveform } } : {}), datasetId: job.datasetId, datasetHash: job.datasetHash,
       evaluatorBuildHash: job.evaluatorBuildHash, protocol: job.protocol, protocolHash: job.protocolHash, manifestHash, support: signalReplay ? 'identical_retained_waveform_inputs' as const : 'identical_retained_epoch_intervals' as const, split: job.split, holdoutUse: job.holdoutUse,
-      ...(signalReplay ? { numericNightSummary: summarizeNumericNights(nights, job.protocol.nightUncertainty) } : {}),
+      ...(signalReplay ? { numericNightSummary } : {}),
+      objectiveAssessments,
       status: 'insufficient_evidence' as const, evidence: job.evidence, nights, stageNightSummary: summarizeStageNights(nights, job.protocol.nightUncertainty),
       calibration: { source: 'explicit_assumption' as const, quality: job.protocol.assumedStageCalibrationQuality },
       limitations: ['This descriptive report does not establish validated improvement.',

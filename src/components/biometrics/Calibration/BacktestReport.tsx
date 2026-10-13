@@ -50,6 +50,41 @@ export function BacktestReport({ id }: { id: string }) {
       {report.evidence === 'reused_holdout_is_validation' || descriptor.currentHoldoutUseCount > 1 ? <p><Trans>Repeated holdout exposure weakens independent evidence. Treat reused holdout results as validation, not untouched holdout evidence.</Trans></p> : null}
       {hasStages ? <p>{t`Assumed stage calibration quality: ${report.calibration.quality}`}</p> : null}
       {waveform ? <p><Trans>Numerical readings were recomputed from retained waveforms. Original stored readings remain unchanged.</Trans></p> : report.protocol.mode === 'comparison' ? <p><Trans>Original stored readings were compared; numerical parameter changes were not replayed.</Trans></p> : null}
+      {report.protocol.objectivePolicy
+        ? (
+            <details>
+              <summary><Trans>Frozen objective thresholds</Trans></summary>
+              <p><Trans>Thresholds are part of this experiment. Supplying thresholds does not qualify a promotion policy.</Trans></p>
+              <dl className="text-sm">
+                {Object.entries(report.protocol.objectivePolicy).filter(([key]) => key !== 'operational').map(([key, value]) => (
+                  <div key={key}>
+                    <dt>{key}</dt>
+                    <dd>{Array.isArray(value) ? value.join(', ') || t`None` : String(value)}</dd>
+                  </div>
+                ))}
+                {Object.entries(report.protocol.objectivePolicy.operational).map(([key, value]) => (
+                  <div key={key}>
+                    <dt>{key}</dt>
+                    <dd>{value}</dd>
+                  </div>
+                ))}
+              </dl>
+              {report.objectiveAssessments?.map(assessment => (
+                <div key={`${assessment.baseline}:${assessment.candidate}`}>
+                  <p>
+                    {assessment.candidate}
+                    {' / '}
+                    {assessment.baseline}
+                    {': '}
+                    {assessment.status}
+                  </p>
+                  {assessment.missingEvidence.map(reason => <p key={reason}>{t`Missing evidence: ${reason}`}</p>)}
+                  {assessment.failedThresholds.map(reason => <p key={reason}>{t`Threshold failed: ${reason}`}</p>)}
+                </div>
+              ))}
+            </details>
+          )
+        : null}
       {report.limitations.map(limitation => <p key={limitation} className="text-sm text-fg-2">{limitation}</p>)}
       {report.stageNightSummary.map(summary => (
         <div key={`${summary.baselineHash}:${summary.candidateHash}:${summary.baseline}:${summary.candidate}`} className="space-y-2 border-t border-border pt-3">

@@ -70,3 +70,17 @@ it('rejects waveform evidence supplied to processed evaluation and missing evide
   const work = fixture()
   expect(() => evaluateBacktest({ ...work, waveform: undefined })).toThrow('Missing or corrupt')
 })
+
+it('retains objective thresholds but cannot promote without qualified measured evidence', () => {
+  const work = fixture()
+  const protocol = { ...work.job.protocol, objectivePolicy: { version: 'numeric-objective-v1' as const, qualificationId: 'test-only', metric: 'heart_rate' as const,
+    minimumNights: 3, minimumPairedReferencesPerNight: 10, maximumLostObservationFraction: 0, minimumMaeImprovement: 2,
+    maximumNightMaeRegression: 1, maximumRegressedNightFraction: 0, maximumSubgroupMaeRegression: 1, requiredSubgroups: [],
+    operational: { maximumWallMs: 1000, maximumPeakRssBytes: 1000, maximumIngestionAgeMs: 1000 } } }
+  const report = evaluateBacktest({ ...work, job: { ...work.job, protocol, protocolHash: configHash(protocol),
+    configs: [...work.job.configs, { ...work.job.configs[0], label: 'candidate' }] } })
+  expect(report.objectiveAssessments).toHaveLength(2)
+  expect(report.objectiveAssessments[0]).toMatchObject({ status: 'insufficient_evidence', designated: false,
+    missingEvidence: expect.arrayContaining(['policy_not_designated', 'operational_evidence_unavailable']) })
+  expect(report.protocol.objectivePolicy).toEqual(protocol.objectivePolicy)
+})

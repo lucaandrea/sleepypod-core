@@ -239,3 +239,20 @@ quality assumption; numerical-only replay does not. Protocol creation and queued
 submission still depend on the separate worker host for execution. The browser
 demo contains no RAW archive fixture or qualified pod telemetry, so its waveform
 operations remain explicitly deferred.
+
+### Numeric objective policies
+
+Signal-replay protocols may pin an `objectivePolicy` with version
+`numeric-objective-v1`. Its metric, minimum supported nights and paired references,
+maximum lost-observation fraction, minimum MAE improvement, night and subgroup
+regression tolerances, required subgroup names, and operational limits are included
+in the protocol hash. Processed-reading protocols reject numeric objectives.
+Reports retain the thresholds and per-baseline `objectiveAssessments`.
+
+Caller-supplied thresholds are not a designated promotion policy. The current
+production evaluator has no designated policy and does not yet attach measured
+operational or subgroup evidence, so its assessments remain insufficient evidence.
+The pure assessor checks an independent first-use holdout, supported whole nights,
+uncertainty, coverage, subgroup regressions, and measured operational limits before
+it can award improvement under a designated policy. Test-only thresholds exercise
+boundaries; they are not release defaults or evidence of clinical validation.

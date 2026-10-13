@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { objectivePolicySchema } from '@/src/biometrics/backtest/objective-policy'
 
 const score = z.number().finite().nullable()
 const pooled = z.object({ agreement: score, macroF1: score, pairedDurationMs: z.number().nonnegative() })
@@ -7,7 +8,9 @@ export const reportViewSchema = z.object({
   version: z.enum(['processed-backtest-report-v1', 'waveform-backtest-report-v1']), status: z.literal('insufficient_evidence'),
   datasetHash: z.string(), protocolHash: z.string(), manifestHash: z.string(), evaluatorBuildHash: z.string(),
   split: z.enum(['tuning', 'validation', 'holdout']), evidence: z.string(), holdoutUse: z.number(),
-  protocol: z.object({ mode: z.enum(['comparison', 'stage_replay', 'signal_replay']), waveformStages: z.boolean().optional() }),
+  protocol: z.object({ mode: z.enum(['comparison', 'stage_replay', 'signal_replay']), waveformStages: z.boolean().optional(), objectivePolicy: objectivePolicySchema.optional() }),
+  objectiveAssessments: z.array(z.object({ baseline: z.string(), candidate: z.string(), status: z.enum(['insufficient_evidence', 'incompatible', 'regressed', 'improved', 'no_material_change']),
+    missingEvidence: z.array(z.string()), failedThresholds: z.array(z.string()), designated: z.boolean() })).max(2).optional(),
   calibration: z.object({ source: z.literal('explicit_assumption'), quality: z.number() }),
   limitations: z.array(z.string()),
   stageNightSummary: z.array(z.object({ baseline: z.string(), candidate: z.string(), baselineHash: z.string(), candidateHash: z.string(),
