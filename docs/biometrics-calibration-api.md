@@ -292,3 +292,9 @@ applied to the returned timestamp. Opposite-side readings and internal `hrRaw`
 values are excluded. No downsampling is performed. Historical reports without
 explicit side provenance cannot supply this projection. Numeric trace UI and
 reference overlays remain separate consumers of this API.
+
+Waveform reports expose these pages through **Inspect numeric traces**. Select a
+night, configuration, and metric; the chart shows only that page's individual
+readings. The exact-value table includes missing values, quality, flags, source
+channel, and limitations. Changing night/configuration resets the cursor. The
+processed-only demo does not fabricate waveform readings for this view.

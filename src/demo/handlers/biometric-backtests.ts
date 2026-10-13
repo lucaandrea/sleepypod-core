@@ -1,3 +1,4 @@
+import { pageNumericTraces } from '@/src/biometrics/backtest/numeric-trace-page'
 import type { DemoHandlers, RouterOutputs, RouterInputs } from '../types'
 import { experimentProtocolSchema } from '@/src/biometrics/backtest/contracts'
 import { summarizeBacktestResult } from '@/src/biometrics/backtest/report-summary'
@@ -151,6 +152,12 @@ export function createDemoBacktestHandlers(loadProfiles: Profiles): DemoHandlers
       if (!report?.available) throw new Error('RESULT_RELEASED: report unavailable')
       if (report.contentHash !== input.expectedContentHash) throw new Error('REVISION_CONFLICT: report hash changed')
       return pageStageTraces(report.report, input)
+    },
+    getBacktestNumericTrace: (input) => {
+      const report = result(job(input.id))
+      if (!report?.available) throw new Error('RESULT_RELEASED: report unavailable')
+      if (report.contentHash !== input.expectedContentHash) throw new Error('REVISION_CONFLICT: report hash changed')
+      return pageNumericTraces(report.report, input)
     },
     releaseBacktestResult: ({ id, expectedContentHash }) => {
       const row = job(id)

@@ -42,6 +42,7 @@ it('pins three configurations and produces real paged reports without activating
   expect(result.contentHash).toBe(dataHash(result.report))
   expect(result.report).toMatchObject({ status: 'insufficient_evidence', datasetHash: prepared.dataset.contentHash })
   const trace = await required(handlers.getBacktestTrace)({ id: queued.id, expectedContentHash: result.contentHash, configuration: 'candidate', limit: 1 })
+  expect(() => required(handlers.getBacktestNumericTrace)({ id: queued.id, expectedContentHash: result.contentHash, configuration: 'candidate' })).toThrow('Numeric trace format or side provenance is unavailable')
   expect(trace.items).toHaveLength(1)
   expect(trace.nextCursor?.offset).toBe(1)
   expect((await required(handlers.getProfileOverview)({ side: 'left' })).desired.binding.generation).toBe(0)

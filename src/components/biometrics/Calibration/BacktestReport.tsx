@@ -7,12 +7,14 @@ import { Button, InlineError, Skeleton } from '@/src/components/ds'
 import { reportViewSchema, numericReportViewSchema, stageReportViewSchema } from './report-view'
 import { NumericReport } from './NumericReport'
 import { StageReport } from './StageReport'
+import { NumericTrace } from './NumericTrace'
 import { StageTrace } from './StageTrace'
 
 export function BacktestReport({ id }: { id: string }) {
   const { t, i18n } = useLingui()
   const [confirmRelease, setConfirmRelease] = useState(false)
   const [showTrace, setShowTrace] = useState(false)
+  const [showNumericTrace, setShowNumericTrace] = useState(false)
   const result = trpc.biometricTuning.getBacktestSummary.useQuery({ id }, { staleTime: 60000 })
   const release = trpc.biometricTuning.releaseBacktestResult.useMutation()
   const utils = trpc.useUtils()
@@ -126,6 +128,14 @@ export function BacktestReport({ id }: { id: string }) {
       ))}
       {hasStages ? (stages.success ? <StageReport key={`stages:${descriptor.contentHash}`} report={stages.data} /> : <InlineError><Trans>Stage details are unavailable or incompatible.</Trans></InlineError>) : null}
       {numeric.success ? <NumericReport key={`numeric:${descriptor.contentHash}`} report={numeric.data} waveform={waveform} /> : <InlineError><Trans>Numerical details are unavailable or incompatible.</Trans></InlineError>}
+      {waveform && numeric.success
+        ? (
+            <div>
+              <Button onClick={() => setShowNumericTrace(!showNumericTrace)} aria-expanded={showNumericTrace}><Trans>Inspect numeric traces</Trans></Button>
+              {showNumericTrace ? <NumericTrace key={descriptor.contentHash} id={id} hash={descriptor.contentHash} nights={numeric.data.nights} /> : null}
+            </div>
+          )
+        : null}
       {hasStages && numeric.success
         ? (
             <div>
