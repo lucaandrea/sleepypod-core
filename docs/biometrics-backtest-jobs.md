@@ -135,6 +135,16 @@ measured thresholds and full publication-load qualification remain required.
 
 ## Explicit report release
 
+The coordinator reserves a separate process slot for read-only report, trace,
+dataset-descriptor, and raw-catalog requests. At most one reader and one work
+process run at once. Replay, scanning, publication, release, and cleanup share
+the serialized work slot. Each lane accepts at most seven active-plus-pending
+requests, with a combined limit of eight, reserving capacity for the other lane.
+Pending requests expire after 30 seconds; shutdown cancels both active children
+and rejects pending work. This prevents a long replay from consuming report-read
+capacity. Resource qualification must include the additional reader's memory
+and CPU, and execution time budgets remain independently enforced.
+
 Completed results support an exact-hash, idempotent release. The release
 transaction replaces payload bytes with an empty stored object and records
 `released_at_ms`, preserving the original content hash and completion/attempt

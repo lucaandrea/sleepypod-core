@@ -3,14 +3,22 @@ import { runCoordinatorTask, type CoordinatorOptions } from './coordinator'
 import type { CoordinatorTask, CoordinatorResults } from './coordinator-tasks'
 
 interface Control { signal?: AbortSignal, admit?: () => Promise<boolean> }
-interface Entry { start: () => Promise<void>, reject: (error: Error) => void }
+type Lane = 'read' | 'work'
+const taskLanes: Record<CoordinatorTask['type'], Lane> = {
+  pageRawSources: 'read', datasetDescriptor: 'read', readResult: 'read', readSummary: 'read', readTrace: 'read',
+  createWaveformDataset: 'work', inspectRawSource: 'work', createDataset: 'work', releaseDataset: 'work',
+  releaseResult: 'work', createExperiment: 'work', collectArtifacts: 'work', execute: 'work',
+}
+interface Entry { lane: Lane, start: () => Promise<void>, reject: (error: Error) => void }
 
-/** All heavy operations share one process slot, including HTTP reads and replay.
- * Pending requests are bounded in count and wait time; shutdown drains no work.
+/** One serialized work slot plus one read slot, so replay cannot starve report
+ * access. No writes or scans use the read slot. Eight requests total and seven
+ * per lane reserve capacity for the other lane; pending waits remain bounded.
+ * Both processes count toward the deployment's admission/resource qualification.
  */
 export class CoordinatorQueue {
   private pending: Entry[] = []
-  private active: Promise<void> | null = null
+  private active = new Map<Lane, Promise<void>>()
   private stopped = false
   private abort = new AbortController()
   constructor(private readonly options: CoordinatorOptions, private readonly execute = runCoordinatorTask) {}
@@ -18,7 +26,9 @@ export class CoordinatorQueue {
   request<T extends CoordinatorTask>(task: T, control: Control = {}): Promise<CoordinatorResults[T['type']]> {
     if (this.stopped) return Promise.reject(new Error('Coordinator stopped'))
     if (control.signal?.aborted) return Promise.reject(new Error('Coordinator cancelled'))
-    if (this.pending.length + (this.active ? 1 : 0) >= 8) return Promise.reject(new ReferenceInputError('RESOURCE_LIMIT', 'Biometrics coordinator queue is full'))
+    const lane = taskLanes[task.type] ?? 'work'
+    if (this.pending.length + this.active.size >= 8
+      || this.pending.filter(entry => entry.lane === lane).length + (this.active.has(lane) ? 1 : 0) >= 7) return Promise.reject(new ReferenceInputError('RESOURCE_LIMIT', 'Biometrics coordinator queue is full'))
     return new Promise((resolve, reject) => {
       const controller = new AbortController()
       let started = false, finished = false
@@ -40,6 +50,7 @@ export class CoordinatorQueue {
       }
       const timer = setTimeout(() => fail(new ReferenceInputError('RESOURCE_LIMIT', 'Biometrics coordinator queue wait exceeded')), 30000)
       const entry: Entry = {
+        lane,
         reject: fail,
         start: async () => {
           started = true
@@ -63,19 +74,23 @@ export class CoordinatorQueue {
   }
 
   private pump() {
-    if (this.stopped || this.active) return
-    const next = this.pending.shift()
-    if (!next) return
-    this.active = next.start().finally(() => {
-      this.active = null
-      this.pump()
-    })
+    if (this.stopped) return
+    for (const lane of ['read', 'work'] as const) {
+      if (this.active.has(lane)) continue
+      const index = this.pending.findIndex(entry => entry.lane === lane)
+      if (index === -1) continue
+      const [next] = this.pending.splice(index, 1)
+      this.active.set(lane, next.start().finally(() => {
+        this.active.delete(lane)
+        this.pump()
+      }))
+    }
   }
 
   async stop() {
     this.stopped = true
     this.abort.abort()
     for (const entry of [...this.pending]) entry.reject(new Error('Coordinator stopped'))
-    await this.active
+    await Promise.all(this.active.values())
   }
 }
