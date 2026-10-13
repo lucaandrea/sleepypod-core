@@ -2,7 +2,7 @@
 import { beforeEach, expect, it, vi } from 'vitest'
 import { resolveShadowProfiles } from '../profiles'
 import { dataHash } from '../../algorithms/canonical'
-import { openPlannedShadowHost, runPlannedShadowAttempt, runProfiledShadowAttempt } from '../host'
+import { openPlannedShadowHost, openProfiledShadowHost, runPlannedShadowAttempt, runProfiledShadowAttempt } from '../host'
 import { openShadowActiveDatabase } from '../active-database'
 import { openShadowHealthMonitor } from '../health-monitor'
 import { installedShadowAdmitter, readInstalledShadowQualifications } from '../admission'
@@ -141,4 +141,38 @@ it('resolves profiles using temporary handles then reopens admission with captur
   await expect(runProfiledShadowAttempt(store, 'test', installation, null)).rejects.toThrow(/test attempt finished/)
   expect(resolveShadowProfiles).toHaveBeenCalledWith(capture[0].db, capture[1].db, plan, null, expect.any(Function))
   databases.forEach(db => expect(db.close).toHaveBeenCalledOnce())
+})
+
+it('checks both captured database identities during profile resolution and closes them on rejection', async () => {
+  const { plan, installation, databases } = setup()
+  vi.mocked(resolveShadowProfiles).mockImplementation((_config, _bio, _plan, _revision, assertCurrent) => {
+    assertCurrent()
+    throw new Error('profile incompatible')
+  })
+  await expect(openProfiledShadowHost(plan, installation, null)).rejects.toThrow('profile incompatible')
+  databases.forEach((db) => {
+    expect(db.assertCurrent).toHaveBeenCalledOnce()
+    expect(db.close).toHaveBeenCalledOnce()
+  })
+  expect(openShadowHealthMonitor).not.toHaveBeenCalled()
+  expect(runShadowAttempt).not.toHaveBeenCalled()
+})
+
+it('unwinds profile capture if the biometrics database cannot be opened', async () => {
+  const { plan, installation, databases } = setup()
+  vi.mocked(openShadowActiveDatabase).mockReset().mockReturnValueOnce(databases[0] as unknown as ReturnType<typeof openShadowActiveDatabase>)
+    .mockImplementationOnce(() => { throw new Error('open failed') })
+  await expect(openProfiledShadowHost(plan, installation, null)).rejects.toThrow('open failed')
+  expect(databases[0].close).toHaveBeenCalledOnce()
+  expect(resolveShadowProfiles).not.toHaveBeenCalled()
+})
+
+it('requires execution policy before opening either kind of host and honors pre-cancellation', async () => {
+  const { plan, installation } = setup()
+  const withoutExecution: Partial<typeof plan> = { ...plan }
+  delete withoutExecution.execution
+  await expect(openPlannedShadowHost(withoutExecution, installation)).rejects.toThrow(/execution policy/)
+  await expect(openProfiledShadowHost(withoutExecution, installation, null)).rejects.toThrow(/execution policy/)
+  await expect(openProfiledShadowHost(plan, installation, null, AbortSignal.abort())).rejects.toThrow(/cancelled/)
+  expect(openShadowActiveDatabase).not.toHaveBeenCalled()
 })

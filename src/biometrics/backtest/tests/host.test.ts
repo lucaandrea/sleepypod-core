@@ -1,7 +1,13 @@
 // @vitest-environment node
 import { afterEach, expect, it, vi } from 'vitest'
-import { BacktestHost } from '../host'
-afterEach(() => vi.useRealTimers())
+import { BacktestHost, startBacktestHost, stopBacktestHost } from '../host'
+import { coordinatorRequest } from '../coordinator-service'
+vi.mock('../coordinator-service', () => ({ coordinatorRequest: vi.fn() }))
+afterEach(async () => {
+  await stopBacktestHost()
+  vi.restoreAllMocks()
+  vi.useRealTimers()
+})
 it('never overlaps attempts and awaits aborted execution before shutdown completes', async () => {
   vi.useFakeTimers()
   let release: (() => void) | undefined
@@ -78,5 +84,39 @@ it('aborts the active cleanup on shutdown and waits for its acknowledgement', as
   await host.stop()
   expect(aborted).toBe(true)
   expect(execute).not.toHaveBeenCalled()
+  expect(vi.getTimerCount()).toBe(0)
+})
+
+it('shares one background host and forwards health admission to cleanup and execution', async () => {
+  vi.useFakeTimers()
+  vi.mocked(coordinatorRequest).mockResolvedValue(null)
+  const db = {} as Parameters<typeof startBacktestHost>[0]
+  const admit = vi.fn().mockResolvedValue(false)
+  const healthAdmission = vi.fn().mockResolvedValue({ allowed: false, sample: null })
+  const first = startBacktestHost(db, admit, healthAdmission)
+  expect(startBacktestHost(db, admit, healthAdmission)).toBe(first)
+  await vi.advanceTimersByTimeAsync(0)
+  expect(coordinatorRequest).toHaveBeenCalledTimes(2)
+  expect(coordinatorRequest).toHaveBeenNthCalledWith(1, db, { type: 'collectArtifacts' }, { signal: expect.any(AbortSignal), admit, healthAdmission })
+  expect(coordinatorRequest).toHaveBeenNthCalledWith(2, db, { type: 'execute', owner: expect.stringMatching(/^core:/) }, { signal: expect.any(AbortSignal), admit, healthAdmission })
+  const signal = vi.mocked(coordinatorRequest).mock.calls[0][2]?.signal
+  await stopBacktestHost()
+  expect(signal?.aborted).toBe(true)
+  expect(vi.getTimerCount()).toBe(0)
+  await stopBacktestHost()
+  expect(startBacktestHost(db, admit, healthAdmission)).not.toBe(first)
+})
+
+it('reports coordinator failures without exporting their private diagnostic content', async () => {
+  vi.useFakeTimers()
+  vi.mocked(coordinatorRequest).mockReset().mockRejectedValue(new Error('private-data'))
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+  startBacktestHost({} as Parameters<typeof startBacktestHost>[0], async () => false)
+  await vi.advanceTimersByTimeAsync(0)
+  expect(warn.mock.calls).toEqual([
+    ['[biometrics] Backtest cleanup failed; host will retry'],
+    ['[biometrics] Backtest execution failed; host will retry'],
+  ])
+  await stopBacktestHost()
   expect(vi.getTimerCount()).toBe(0)
 })
