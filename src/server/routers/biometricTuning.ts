@@ -19,7 +19,7 @@ import { ProfileStore, revisionInput } from '@/src/biometrics/profiles/store'
 import { biometricConfigSchema, overrideSchema, profileOverviewSchema, revisionSchema } from '@/src/biometrics/profiles/contracts'
 import { diffProfiles } from '@/src/biometrics/profiles/diff'
 import { profileOverview } from '@/src/biometrics/profiles/overview'
-import { activationIntentSchema, requestManualActivation, validatedActivationIntentSchema, requestValidatedActivationWithBuild } from '@/src/biometrics/profiles/activation'
+import { activationIntentSchema, requestManualActivation, validatedActivationIntentSchema, requestValidatedActivationWithBuild, validatedActivationReviewSchema, reviewValidatedActivation } from '@/src/biometrics/profiles/activation'
 import { activationStatus, activationStatusSchema } from '@/src/biometrics/profiles/status'
 import { activationEventSchema, activationHistorySchema, listActivationHistory } from '@/src/biometrics/profiles/history'
 import { DatasetStore, createDatasetSchema } from '@/src/biometrics/backtest/datasets'
@@ -81,6 +81,13 @@ export const biometricTuningRouter = router({
     .input(activationIntentSchema.omit({ action: true }).extend({ revisionId: z.string().uuid() }))
     .output(activationEventSchema)
     .mutation(({ input }) => references(() => profiles(() => requestManualActivation(db, { ...input, action: 'activate' })))),
+
+  reviewValidatedActivation: publicProcedure
+    .meta({ openapi: { method: 'GET', path: '/biometric-tuning/validated-activation-review', protect: false, tags: ['Biometric tuning'] } })
+    .input(validatedActivationReviewSchema)
+    .output(z.object({ eligible: z.literal(true) }))
+    .query(({ input }) => references(() => reviewValidatedActivation(db, biometricsDb, input,
+      () => resolvePromotionBuild(biometricsDb, input.evaluationId)))),
 
   activateValidatedProfile: publicProcedure
     .meta({ openapi: { method: 'POST', path: '/biometric-tuning/activate-validated', protect: false, tags: ['Biometric tuning'] } })

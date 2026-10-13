@@ -33,7 +33,7 @@ export function BacktestJobs({ side }: { side: 'left' | 'right' }) {
                         <p className="break-all font-mono text-xs">{job.id}</p>
                         <p>{t`Attempt ${job.attempt}`}</p>
                         <Button aria-expanded={selected === job.id} onClick={() => setSelected(selected === job.id ? undefined : job.id)}><Trans>Inspect job</Trans></Button>
-                        {selected === job.id ? <BacktestJobDetails key={job.id} id={job.id} /> : null}
+                        {selected === job.id ? <BacktestJobDetails key={job.id} id={job.id} side={side} /> : null}
                       </li>
                     ))}
                   </ul>
@@ -44,7 +44,7 @@ export function BacktestJobs({ side }: { side: 'left' | 'right' }) {
     </Card>
   )
 }
-export function BacktestJobDetails({ id }: { id: string }) {
+export function BacktestJobDetails({ id, side }: { id: string, side?: 'left' | 'right' }) {
   const { t } = useLingui()
   const labels = useJobLabels()
   const [showReport, setShowReport] = useState(false)
@@ -59,6 +59,7 @@ export function BacktestJobDetails({ id }: { id: string }) {
   if (job.error) return <InlineError>{job.error.message}</InlineError>
   if (!job.data) return <Skeleton className="h-24" />
   const data = job.data
+  const candidate = data.configurations.find(config => config.label === 'candidate')
   const splits = { tuning: t`Tuning`, validation: t`Validation`, holdout: t`Holdout` }
   const configurations: Record<string, string> = { default: t`System defaults`, current: t`Current stage view`, candidate: t`Candidate` }
   return (
@@ -67,7 +68,7 @@ export function BacktestJobDetails({ id }: { id: string }) {
       <p>
         {splits[data.split]}
         {' — '}
-        {data.evaluationScope === 'stage_rules_on_original_readings' ? <Trans>Stage rules on original readings</Trans> : <Trans>Original stored-reading comparison</Trans>}
+        {data.evaluationScope === 'retained_waveform_replay' ? <Trans>Retained waveform replay</Trans> : data.evaluationScope === 'stage_rules_on_original_readings' ? <Trans>Stage rules on original readings</Trans> : <Trans>Original stored-reading comparison</Trans>}
       </p>
       <p>{t`Progress: ${data.progress.completedNights} / ${data.progress.totalNights} nights`}</p>
       {data.progress.totalNights > 0 ? <progress aria-label={t`Completed nights`} value={data.progress.completedNights} max={data.progress.totalNights} /> : <p><Trans>Night progress is not available yet.</Trans></p>}
@@ -78,7 +79,7 @@ export function BacktestJobDetails({ id }: { id: string }) {
       {['queued', 'running', 'interrupted'].includes(data.state) ? <Button disabled={cancel.isPending} onClick={() => void requestCancellation().catch(() => {})}><Trans>Cancel backtest</Trans></Button> : null}
       {cancel.error ? <InlineError>{cancel.error.message}</InlineError> : null}
       {data.state === 'succeeded' ? <Button aria-expanded={showReport} onClick={() => setShowReport(!showReport)}><Trans>Review report</Trans></Button> : null}
-      {showReport && data.state === 'succeeded' ? <BacktestReport id={id} /> : null}
+      {showReport && data.state === 'succeeded' ? <BacktestReport id={id} candidate={side && data.split === 'holdout' && candidate?.revisionId ? { side, revisionId: candidate.revisionId, hash: candidate.hash } : undefined} /> : null}
       <details>
         <summary><Trans>Pinned job inputs</Trans></summary>
         <dl className="break-all text-xs">

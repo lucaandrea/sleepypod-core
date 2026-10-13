@@ -141,6 +141,8 @@ export function writeDemoStageClassifier(side: Side, classifier: StageClassifier
 }
 
 export const biometricTuning: DemoHandlers<'biometricTuning'> = {
+  reviewValidatedActivation: () => { throw new Error('SIMULATED DEMO: synthetic evidence cannot validate a live profile.') },
+  activateValidatedProfile: () => { throw new Error('SIMULATED DEMO: validated activation is unavailable.') },
   ...referenceHandlers,
   ...datasetHandlers,
   ...createDemoBacktestHandlers(async (side, revisionId, generation) => {

@@ -9,7 +9,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import * as configSchema from '@/src/db/schema'
 import * as bioSchema from '@/src/db/biometrics-schema'
 import { ProfileStore } from '../store'
-import { requestManualActivation, requestValidatedActivation, requestValidatedActivationWithBuild } from '../activation'
+import { requestManualActivation, requestValidatedActivation, requestValidatedActivationWithBuild, validatedActivationReviewSchema, reviewValidatedActivation } from '../activation'
 import { deliverRuntimeOutbox } from '../runtime'
 import { prepareVerifiedEvaluation } from '../evaluation-store'
 import { BacktestJobStore } from '../../backtest/jobs'
@@ -230,4 +230,17 @@ it('leaves activation state unchanged when build resolution fails', async () => 
     .rejects.toThrow('Worker missing')
   expect(work.profiles.binding('left').generation).toBe(0)
   expect(config.select().from(configSchema.biometricActivationEvents).all()).toEqual([])
+})
+
+it('reviews qualified evidence without writing intent and still revalidates after review', async () => {
+  const work = fixture()
+  const reviewInput = validatedActivationReviewSchema.strip().parse(work.input)
+  expect(await reviewValidatedActivation(config, bio, reviewInput, async () => work.build)).toEqual({ eligible: true })
+  expect(work.profiles.binding('left').generation).toBe(0)
+  expect(config.select().from(configSchema.biometricActivationEvents).all()).toEqual([])
+  expect(config.select().from(configSchema.biometricConfigOutbox).all()).toEqual([])
+  work.jobs.releaseResult(work.input.evaluationId, work.input.expectedReportHash)
+  await expect(requestValidatedActivationWithBuild(config, bio, work.input, async () => work.build)).rejects.toThrow()
+  await expect(reviewValidatedActivation(config, bio, reviewInput, async () => work.build)).rejects.toThrow()
+  expect(work.profiles.binding('left').generation).toBe(0)
 })

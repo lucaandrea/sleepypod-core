@@ -67,7 +67,7 @@ export function ManualProfileActivation({ side, revisionId, review, action = 'ac
     </section>
   )
 }
-function ActivationReceipt({ side, id }: { side: 'left' | 'right', id: string }) {
+export function ActivationReceipt({ side, id }: { side: 'left' | 'right', id: string }) {
   const { t } = useLingui()
   const status = trpc.biometricTuning.getActivationStatus.useQuery({ side, id }, { refetchInterval: 5000 })
   const labels: Record<string, string> = { unreported: t`Not reported`, pending_delivery: t`Waiting for delivery`, pending_boundary: t`Waiting for a processing boundary`, applied: t`Applied`, failed: t`Failed` }

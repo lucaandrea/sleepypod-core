@@ -25,6 +25,17 @@ export const validatedActivationIntentSchema = activationIntentSchema.omit({ all
   expectedReportHash: z.string().regex(/^[a-f0-9]{64}$/),
 }).strict()
 
+export const validatedActivationReviewSchema = validatedActivationIntentSchema.omit({ action: true, boundary: true, requester: true, idempotencyKey: true })
+
+/** A point-in-time review only; application repeats every verification. */
+export async function reviewValidatedActivation(db: BetterSQLite3Database<typeof schema>, bioDb: BetterSQLite3Database<typeof bioSchema>,
+  raw: z.input<typeof validatedActivationReviewSchema>, resolveBuild: () => Promise<PromotionBuild>) {
+  const input = validatedActivationReviewSchema.parse(raw)
+  const verified = prepareVerifiedEvaluation(db, bioDb, input, await resolveBuild())
+  verified.recheck()
+  return { eligible: true as const }
+}
+
 function retryActivation(db: BetterSQLite3Database<typeof schema>, idempotencyKey: string, requestHash: string) {
   const existing = db.select().from(events).where(eq(events.idempotencyKey, idempotencyKey)).get()
   if (existing && existing.requestHash !== requestHash) throw new ReferenceInputError('REVISION_CONFLICT', 'Activation idempotency key changed')

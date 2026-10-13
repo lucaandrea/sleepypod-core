@@ -10,9 +10,22 @@ import { StageReport } from './StageReport'
 import { NumericTrace } from './NumericTrace'
 import { ObjectiveThresholds } from './ObjectiveThresholds'
 import { ReplayResources } from './ReplayResources'
+import { ValidatedProfileActivation } from './ValidatedProfileActivation'
 import { StageTrace } from './StageTrace'
 
-export function BacktestReport({ id }: { id: string }) {
+export function BacktestReport({ id, candidate }: { id: string, candidate?: { side: 'left' | 'right', revisionId: string, hash: string } }) {
+  const result = trpc.biometricTuning.getBacktestSummary.useQuery({ id }, { staleTime: 60000 })
+  const [reportHash, setReportHash] = useState<string>()
+  if (result.data?.contentHash && result.data.contentHash !== reportHash) setReportHash(result.data.contentHash)
+  return (
+    <div className="space-y-3">
+      {candidate && reportHash ? <ValidatedProfileActivation key={`${id}:${reportHash}:${candidate.revisionId}:${candidate.side}`} selection={{ side: candidate.side, revisionId: candidate.revisionId, expectedResolvedHash: candidate.hash, evaluationId: id, expectedReportHash: reportHash }} /> : null}
+      <BacktestReportContent id={id} />
+    </div>
+  )
+}
+
+function BacktestReportContent({ id }: { id: string }) {
   const { t, i18n } = useLingui()
   const [confirmRelease, setConfirmRelease] = useState(false)
   const [showTrace, setShowTrace] = useState(false)

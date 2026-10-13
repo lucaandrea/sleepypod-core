@@ -416,7 +416,7 @@ returns `pending_delivery`, not proof of processor adoption.
 Stage replay now captures the entire acknowledged current configuration, including
 numeric parameters, instead of substituting defaults for those parameters. Pending
 or incompatible personalization blocks validated activation. Qualified production
-policy designation and the validated-activation UI remain unfinished. The shared
+policy designation remains unfinished. The shared
 `activateValidatedProfile` procedure (`POST /biometric-tuning/activate-validated`)
 accepts the exact revision, resolved hash, binding generation, evaluation ID,
 report hash, processing boundary, requester, and idempotency key. Build hashes and
@@ -425,3 +425,14 @@ because no production policy is designated. Exact retries precede build probing
 and artifact lookup. MCP `apply_biometric_profile` exposes the same procedure with
 `action: "activate_validated"`; it does not accept `allowUnvalidated`. Explicit
 manual activation retains its existing unvalidated semantics.
+
+
+The holdout report UI offers application of its exact candidate and report hash.
+`reviewValidatedActivation` (`GET /biometric-tuning/validated-activation-review`)
+performs a read-only eligibility check using the same stored evidence and installed
+build authority. A review creates no activation event or outbox item, and cannot
+reserve evidence: application repeats verification and its transactional guards.
+The apply control remains disabled when review fails or is refreshing. Once sent,
+an uncertain request retains its exact identity and boundary for retry, including
+when detailed report data is subsequently released. Processor adoption is polled
+separately. The demo explicitly rejects validated activation of synthetic evidence.

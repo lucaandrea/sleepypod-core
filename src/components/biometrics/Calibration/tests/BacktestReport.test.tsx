@@ -4,12 +4,17 @@ import { setupI18n } from '@lingui/core'
 import { I18nProvider } from '@lingui/react'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { BacktestReport } from '../BacktestReport'
-const mock = vi.hoisted(() => ({ get: vi.fn(), release: vi.fn(), invalidate: vi.fn() }))
+const mock = vi.hoisted(() => ({ get: vi.fn(), release: vi.fn(), invalidate: vi.fn(), activate: vi.fn() }))
 vi.mock('@/src/providers/TimeFormatProvider', () => ({ useTimeFormat: () => '24h' }))
 vi.mock('@/src/utils/trpc', () => ({ trpc: {
   settings: { getAll: { useQuery: () => ({ data: { device: { timezone: 'UTC' } } }) } },
-  useUtils: () => ({ biometricTuning: { getBacktestSummary: { invalidate: mock.invalidate } } }),
-  biometricTuning: { getBacktestSummary: { useQuery: mock.get }, releaseBacktestResult: { useMutation: () => ({ mutateAsync: mock.release, isPending: false }) } },
+  useUtils: () => ({ biometricTuning: { getBacktestSummary: { invalidate: mock.invalidate }, getProfileOverview: { invalidate: mock.invalidate }, listActivationHistory: { invalidate: mock.invalidate } } }),
+  biometricTuning: {
+    getProfileOverview: { useQuery: () => ({ data: { desired: { binding: { generation: 2 } } } }) },
+    reviewValidatedActivation: { useQuery: () => ({ data: { eligible: true } }) },
+    activateValidatedProfile: { useMutation: () => ({ mutateAsync: mock.activate }) },
+    getActivationStatus: { useQuery: () => ({ data: { observedState: 'pending_boundary', isCurrent: true } }) },
+    getBacktestSummary: { useQuery: mock.get }, releaseBacktestResult: { useMutation: () => ({ mutateAsync: mock.release, isPending: false }) } },
 } }))
 const report = {
   version: 'processed-backtest-report-v1', status: 'insufficient_evidence', datasetHash: 'dataset', protocolHash: 'protocol', manifestHash: 'manifest', evaluatorBuildHash: 'worker',
@@ -122,4 +127,18 @@ it('keeps each metric threshold and its own assessment reasons together', () => 
       expect(sections[index]?.textContent?.includes(`missing_${objectivePolicies[other].metric}`)).toBe(index === other)
     }
   }
+})
+
+it('preserves uncertain activation intent when the detailed report is released', async () => {
+  mock.activate.mockRejectedValueOnce(new Error('Uncertain response')).mockResolvedValue({ id: 'activation-id' })
+  const component = <I18nProvider i18n={i18n}><BacktestReport id="job-id" candidate={{ side: 'left', revisionId: 'candidate-id', hash: 'candidate-hash' }} /></I18nProvider>
+  const rendered = render(component)
+  fireEvent.click(screen.getByRole('button', { name: 'Apply evaluated revision' }))
+  await waitFor(() => expect(mock.activate).toHaveBeenCalledTimes(1))
+  mock.get.mockReturnValue({ data: { ...descriptor, report: null, available: false } })
+  rendered.rerender(<I18nProvider i18n={i18n}><BacktestReport id="job-id" candidate={{ side: 'left', revisionId: 'candidate-id', hash: 'candidate-hash' }} /></I18nProvider>)
+  await screen.findByText('This report was released. Its audit hash remains, but detailed results are unavailable.')
+  fireEvent.click(screen.getByRole('button', { name: 'Retry exact activation request' }))
+  await screen.findByText('Waiting for a processing boundary')
+  expect(mock.activate.mock.calls[1][0]).toEqual(mock.activate.mock.calls[0][0])
 })
