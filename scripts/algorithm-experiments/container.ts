@@ -41,7 +41,9 @@ export async function executePackageExperiment(options: {
   request: unknown
   frames: Iterable<unknown>
   policy: ExperimentPolicy
+  signal?: AbortSignal
 }) {
+  options.signal?.throwIfAborted()
   if (existsSync('/persistent/deviceinfo/dac.sock') || existsSync('/deviceinfo/dac.sock')) throw new Error('Algorithm experiments must run off-pod')
   const policy = structuredClone(options.policy)
   if (!/^sha256:[a-f0-9]{64}$/.test(policy.image)) throw new Error('A local immutable image ID is required')
@@ -82,6 +84,7 @@ export async function executePackageExperiment(options: {
     // than the CPU budget. Idle time consumes that budget too. This is not a
     // measured CPU receipt and cannot qualify a package's runtime performance.
     const deadlineMs = Math.min(resources.wallMs, resources.cpuMs)
+    options.signal?.throwIfAborted()
     created = true
     const creation = await exec('docker', ['create', '--name', name, '--network', 'none', '--ipc', 'none', '--read-only',
       '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges=true', '--user', '65534:65534',
@@ -108,6 +111,9 @@ export async function executePackageExperiment(options: {
       stopPromise = exec('docker', ['kill', name], { timeout: 10000, maxBuffer: 65536 }).catch(() => undefined)
       child.kill('SIGKILL')
     }
+    const abort = () => fail(new Error('Experiment aborted'))
+    options.signal?.addEventListener('abort', abort, { once: true })
+    if (options.signal?.aborted) abort()
     child.stdin.on('error', error => fail(error))
     child.on('error', error => fail(error))
     child.stdout.on('data', (chunk: Buffer) => {
@@ -173,6 +179,7 @@ export async function executePackageExperiment(options: {
       throw error
     }
     finally {
+      options.signal?.removeEventListener('abort', abort)
       clearTimeout(timer)
       await resourceMonitor.stop()
       if (stopPromise) await stopPromise

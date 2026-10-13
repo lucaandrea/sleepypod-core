@@ -159,6 +159,14 @@ s.close()
     input.request.packageHash = configHash(input.manifest)
     await expect(executePackageExperiment(input)).rejects.toThrow('deadline')
   }, 20000)
+  it('stops a cancelled experiment and removes its container', async () => {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 1000)
+    try {
+      await expect(executePackageExperiment({ ...options('import time\ntime.sleep(60)\n'), signal: controller.signal })).rejects.toThrow(/abort/i)
+    }
+    finally { clearTimeout(timer) }
+  }, 20000)
   it('terminates memory exhaustion', async () => {
     await expect(executePackageExperiment(options('data = bytearray(256 * 1024 * 1024)\n'))).rejects.toThrow()
   }, 20000)

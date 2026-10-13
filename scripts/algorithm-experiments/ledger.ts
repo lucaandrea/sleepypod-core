@@ -76,7 +76,7 @@ export class PackageExperimentLedger {
     }).immediate()
   }
 
-  private study(id: string) {
+  study(id: string) {
     const row = this.db.prepare('SELECT * FROM package_studies WHERE id = ?').get(id) as StudyRow | undefined
     if (!row) throw new Error('Unknown experiment study')
     const study = packageStudySchema.parse(JSON.parse(row.payload))

@@ -268,7 +268,40 @@ its workflow cannot prove independent holdout use. Final qualification must
 bind subjects and windows to retained datasets and recheck exposure while
 publishing its decision.
 
-The ledger is currently an internal orchestration component. The exploratory
-`run`, `compare`, `determinism`, and `fixtures` commands do not yet claim studies
-through it and cannot issue independent-holdout promotion evidence. The managed
-whole-night executor and qualification workflow still need to integrate it.
+The exploratory `run`, `compare`, `determinism`, and `fixtures` commands do not
+claim studies through this ledger and cannot issue independent-holdout promotion
+evidence. `runManagedTrial` integrates it as described below; file-based managed
+commands and final qualification/installation orchestration remain to be added.
+
+## Managed whole-night runner
+
+`runManagedTrial` in `managed.ts` accepts a reserved ledger trial, its frozen
+`biometric-managed-protocol-v1`, exactly three package variants, a private report
+directory, and a trusted retained-night loader. The protocol freezes hardware,
+sample rate, metric, quality threshold, reference alignment, whole-night
+bootstrap settings and resource policy. Each trial variant binds the package
+hash, runtime image, and `configHash({ config, seed })`.
+
+It verifies package/configuration/protocol identities before claiming a lease.
+The loader runs only after all selected night exposures are committed. Loaded
+references must match the study's subject, side and shared import content hash.
+Frames must lie within their frozen night and match its actual input hash. All
+three variants run in independent containers; results use the shared typed
+comparison and paired whole-night uncertainty functions. Resource assessments
+remain attached to every variant.
+
+Private per-night and trial reports are published under their content hashes,
+then the ledger's live attempt fence selects the winning report. Heartbeats and
+checks between expensive steps renew leases; lost leases abort active execution
+or reject publication. Failures retain partial-night evidence and exposure.
+An old worker may leave an unreferenced artifact but cannot overwrite the winning
+ledger pointer. Restarted completed trials verify the existing report hash and
+identity before reusing it and never silently reread holdout input. Missing or
+corrupted reports fail rather than trigger a new evaluation.
+
+A successful run means the evaluation completed, not that its candidate passed
+all promotion criteria. Check current ledger exposure, coverage, uncertainty,
+resource assessments, deterministic/noise/compatibility evidence and reviewed
+release admission. The runner does not install packages or claim pod fitness.
+Hard process termination can still leave orphan containers/artifacts; durable
+cleanup and the final qualification controller remain required.
