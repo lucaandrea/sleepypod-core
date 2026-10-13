@@ -27,3 +27,31 @@ candidate process. Deterministic replay, artifact/noise fixtures, resource
 measurements, held-out comparisons, and compatibility checks remain required.
 An experiment result never grants installation rights: promotion goes through
 code review and a release into the shipped registry.
+
+## Streaming frame contract
+
+`protocol.ts` defines the host-side exchange. A run names the exact package and
+input hashes, hardware, sample rate, side, seed, and finite JSON configuration.
+Its canonical hash binds all those choices. Create a fresh validator and reset
+candidate state for each independent run; never carry state between nights or
+qualification repetitions unless a future protocol explicitly declares it.
+
+Frames carry increasing sequence numbers from zero, explicit sample-start
+timestamps, one or both channels of at most 4096 finite samples, and explicit
+nullable occupancy/pump context. Missing context is unknown, not false.
+Channels must agree in length. Sample duration determines the next permissible
+frame time; gaps are permitted, overlaps are rejected. The executor must call
+`validateFrame` before exposing each frame to the candidate.
+
+A response echoes the run hash, canonical input-frame hash, and sequence. It
+contains bounded numeric/null metric readings and JSON state. The host checks
+metric definitions, side, ranges, strictly increasing timestamps per metric,
+observed time bounds, declared retrospective lookahead, state bytes, and the
+cumulative canonical response-byte budget. Validation failure does not advance
+the run. No response can authorize database or hardware writes.
+
+The external executor must bound transport bytes before JSON decoding (including
+whitespace), enforce process resources independently, and expose only the current
+frame and previously returned state. The validator cannot prove that code obeys
+causality, initialization, reset, or determinism; those need the executor and
+repeated qualification runs. This protocol is not itself an isolation boundary.
