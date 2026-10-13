@@ -1,3 +1,7 @@
+import { ReferenceStore } from '../../references/store'
+import { previewReferenceImport } from '../../references/normalize'
+import { configHash } from '../../algorithms/canonical'
+import { defaultConfig, manifestHash } from '../../algorithms/registry'
 import { stageObjectiveTestPolicy } from './fixtures/stage-objective'
 // @vitest-environment node
 import Database from 'better-sqlite3'
@@ -79,6 +83,56 @@ describe('durable replay execution', () => {
       { baseline: 'current', status: 'insufficient_evidence', evidence: { operational: null } },
     ] })
   })
+  it.each([['wake', 'improved'], ['deep', 'regressed']] as const)('publishes %s candidate evidence as %s through the real scoring worker', async (stage, status) => {
+    jobs.cancel(jobId)
+    const first = 1791673200000
+    const ids = Array.from({ length: 12 }, (_, index) => index + 10)
+    const rows = ids.flatMap((id, index) => {
+      const start = first + id * 86400000, end = start + 600000
+      db.insert(schema.sleepRecords).values({ id, side: 'left', enteredBedAt: new Date(start), leftBedAt: new Date(end), sleepDurationSeconds: 600, timesExitedBed: 0 }).run()
+      for (let minute = 0; minute < 10; minute++) db.insert(schema.vitals).values({ side: 'left', timestamp: new Date(start + minute * 60000), heartRate: 60, hrv: 30, breathingRate: 14 }).run()
+      const middle = start + 360000 + index % 3 * 60000
+      return [{ recordKey: `${id}-wake`, metric: 'sleep_stages', value: 'wake', unit: 'stage', startMs: start, endMs: middle },
+        { recordKey: `${id}-light`, metric: 'sleep_stages', value: 'light', unit: 'stage', startMs: middle, endMs: end }]
+    })
+    const input = { side: 'left' as const, source: 'synthetic-runner-test', subjectId: 'fixture', rows }
+    const reference = new ReferenceStore(db).commit({ import: input, previewHash: previewReferenceImport(input).summary.contentHash })
+    const dataset = new DatasetStore(db).create({ side: 'left', subjectId: 'fixture', sessionIds: ids, referenceImportIds: [reference.id], timezone: 'UTC', idempotencyKey: 'qualified-test' })
+    const policy = { ...stageObjectiveTestPolicy, requiredStages: ['wake' as const], maximumMacroF1Regression: 0.5,
+      operational: { maximumWallMs: 60000, maximumPeakRssBytes: 1000000000, maximumIngestionAgeMs: 1000,
+        observations: { version: 'sampled-process-group-v1' as const, maximumMemoryGapMs: 60000, maximumIngestionGapMs: 60000 } } }
+    const protocol = { ...backtestFixture().job.protocol, assumedStageCalibrationQuality: 1, stageObjectivePolicy: policy,
+      nightUncertainty: { version: 'paired-night-percentile-v1' as const, seed: 'runner-qualified', resamples: 200, minimumNights: 3 } }
+    const experiment = jobs.createExperiment(dataset.id, protocol)
+    const candidate = structuredClone(defaultConfig)
+    candidate.sleep_stages.ruleset.rules = [{ stage, when: [] }]
+    const configurations = [...backtestFixture().job.configs, { label: 'candidate' as const, revisionId: '33333333-3333-4333-8333-333333333333',
+      resolved: candidate, resolvedHash: configHash(candidate), manifestHash }]
+    const request = { evaluatorBuildHash, experimentId: experiment.id, configs: configurations, split: 'holdout' as const }
+    const staged = jobs.enqueue({ ...request, idempotencyKey: 'qualified' })
+    const registry = join(directory, 'promotion-qualifications.json')
+    await writeFile(registry, JSON.stringify({ version: 'biometric-promotion-qualifications-v1', entries: [{
+      qualificationId: policy.qualificationId, manifestHash, evaluatorBuildHash, protocol,
+      fixtureEvidenceHash: 'a'.repeat(64), podEvidenceHash: 'b'.repeat(64), waveformContext: null,
+    }] }))
+    const before = sqlite.prepare('SELECT * FROM vitals').all()
+    const measuredOptions = { ...options, admissionReceipt: () => ({ allowed: true,
+      sample: { qualificationId: policy.qualificationId, checkedAtMs: Date.now(), ingestionAgeMs: 10 },
+      memory: { version: 'process-group-rss-observations-v1' as const, scope: 'sum_rss_of_replay_process_group' as const,
+        attempts: 2, samples: 2, allSamplesAvailable: true, peakObservedRssBytes: 1000, maximumObservationGapMs: 1, intervalMs: 1000 as const, exactKernelPeak: false as const } }) }
+    try {
+      expect(await executeNextBacktest(db, measuredOptions)).toEqual({ state: 'succeeded', jobId: staged.id })
+      expect(jobs.result(staged.id)?.report).toMatchObject({ status,
+        stageObjectiveAssessments: [{ status, designated: true }, { status, designated: true }] })
+      if (status === 'improved') expect(jobs.result(staged.id)?.report).toMatchObject({ evidence: 'qualified_reference_agreement' })
+      expect(sqlite.prepare('SELECT * FROM vitals').all()).toEqual(before)
+      const reused = jobs.enqueue({ ...request, idempotencyKey: 'reused' })
+      expect(await executeNextBacktest(db, measuredOptions)).toEqual({ state: 'succeeded', jobId: reused.id })
+      expect(jobs.result(reused.id)?.report).toMatchObject({ status: 'insufficient_evidence' })
+    }
+    finally { await rm(registry, { force: true }) }
+  })
+
   it('refuses to execute a different worker bundle after enqueue', async () => {
     sqlite.prepare('UPDATE biometric_backtest_jobs SET input = json_set(input, \'$.evaluatorBuildHash\', ?)').run('0'.repeat(64))
     expect(await executeNextBacktest(db, options)).toEqual({ state: 'stopped', jobId })
