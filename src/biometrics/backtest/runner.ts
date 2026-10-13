@@ -1,3 +1,4 @@
+import { numericObjectivePolicies } from './contracts'
 import { finalizeObjectiveReport, finalizeStageObjectiveReport } from './objective-finalization'
 import { createJobOperations, type AdmissionReceipt } from './job-operations'
 import type { ReplayBudget } from './execution-budget'
@@ -94,7 +95,7 @@ export async function executeNextBacktest(db: BetterSQLite3Database<typeof schem
       || identity.nights.length !== progress.totalNights || progress.completedNights !== progress.totalNights) throw new Error('Worker report identity/progress mismatch')
     if (controller.signal.aborted) throw new Error('Replay cancelled')
     const jobOperations = operations.finish()
-    const finalized = finalizeObjectiveReport(report, work.job.protocol.objectivePolicy, jobOperations, null)
+    const finalized = finalizeObjectiveReport(report, numericObjectivePolicies(work.job.protocol), jobOperations, null)
     jobs.complete(lease, { ...finalizeStageObjectiveReport(finalized, work.job.protocol.stageObjectivePolicy, jobOperations, null), jobOperations })
     return { state: 'succeeded' as const, jobId: claimed.id }
   }

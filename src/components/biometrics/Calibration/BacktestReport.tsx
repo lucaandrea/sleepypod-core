@@ -54,7 +54,9 @@ export function BacktestReport({ id }: { id: string }) {
       {report.evidence === 'reused_holdout_is_validation' || descriptor.currentHoldoutUseCount > 1 ? <p><Trans>Repeated holdout exposure weakens independent evidence. Treat reused holdout results as validation, not untouched holdout evidence.</Trans></p> : null}
       {hasStages ? <p>{t`Assumed stage calibration quality: ${report.calibration.quality}`}</p> : null}
       {waveform ? <p><Trans>Numerical readings were recomputed from retained waveforms. Original stored readings remain unchanged.</Trans></p> : report.protocol.mode === 'comparison' ? <p><Trans>Original stored readings were compared; numerical parameter changes were not replayed.</Trans></p> : null}
-      {report.protocol.objectivePolicy ? <ObjectiveThresholds policy={report.protocol.objectivePolicy} assessments={report.objectiveAssessments} /> : null}
+      {(report.protocol.objectivePolicies ?? (report.protocol.objectivePolicy ? [report.protocol.objectivePolicy] : [])).map(policy => (
+        <ObjectiveThresholds key={policy.metric} policy={policy} assessments={report.objectiveAssessments?.filter(row => row.policy?.metric === policy.metric || (!row.policy && !report.protocol.objectivePolicies))} />
+      ))}
       {report.protocol.stageObjectivePolicy ? <ObjectiveThresholds stage policy={report.protocol.stageObjectivePolicy} assessments={report.stageObjectiveAssessments} /> : null}
       {report.limitations.map(limitation => <p key={limitation} className="text-sm text-fg-2">{limitation}</p>)}
       {report.stageNightSummary.map(summary => (

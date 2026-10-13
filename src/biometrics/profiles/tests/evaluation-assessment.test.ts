@@ -110,4 +110,26 @@ it('requires numeric improvement while allowing unchanged downstream stages, and
   job.configs[2].resolvedHash = configHash(candidate)
   expected.resolvedHash = configHash(candidate)
   expect(() => verifyEvaluationAssessments(job, result(), expected, designations)).toThrow('numeric component')
+
+  const breathingPolicy: ObjectivePolicy = { ...policy, metric: 'breathing_rate' }
+  const rest = { ...work.job.protocol, mode: protocol.mode, waveformStages: true }
+  const multiProtocol = { ...rest, objectivePolicies: [policy, breathingPolicy] }
+  const multiJob = { ...job, protocol: multiProtocol, protocolHash: configHash(multiProtocol) }
+  const multiReport = { ...report, protocol: multiProtocol, protocolHash: multiJob.protocolHash,
+    stageObjectiveAssessments: report.stageObjectiveAssessments.map(row => ({ ...row, candidateHash: configHash(candidate) })),
+    objectiveAssessments: multiProtocol.objectivePolicies.flatMap(item => ['default', 'current'].map(baseline => ({
+      baseline, candidate: 'candidate', baselineHash: configHash(defaultConfig), candidateHash: configHash(candidate),
+      ...assessNumericObjective(item, structuredClone(evidence), null),
+    }))) }
+  const multiResult = () => ({ ...result(), report: multiReport, contentHash: dataHash(multiReport) })
+  const qualified = { ...designations, numeric: multiProtocol.objectivePolicies }
+  expect(verifyEvaluationAssessments(multiJob, multiResult(), expected, qualified)).toMatchObject({
+    changedDomains: ['heart_rate', 'breathing_rate'], numericAssessments: [
+      { metric: 'heart_rate', status: 'improved' }, { metric: 'heart_rate', status: 'improved' },
+      { metric: 'breathing_rate', status: 'improved' }, { metric: 'breathing_rate', status: 'improved' },
+    ],
+  })
+  expect(() => verifyEvaluationAssessments(multiJob, multiResult(), expected, designations)).toThrow()
+  multiReport.objectiveAssessments[3].evidence.nights.pop()
+  expect(() => verifyEvaluationAssessments(multiJob, multiResult(), expected, qualified)).toThrow()
 })

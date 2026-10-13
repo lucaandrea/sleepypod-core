@@ -23,17 +23,27 @@ const assessment = z.object({ version: z.literal('numeric-objective-assessment-v
 
 /** Called after final admission, before immutable report publication. Operational
  * evidence from the scoring child is replaced, never trusted as host telemetry. */
-export function finalizeObjectiveReport(raw: unknown, policy: ObjectivePolicy | undefined, operations: unknown, designatedPolicy: ObjectivePolicy | null) {
+export function finalizeObjectiveReport(raw: unknown, policy: ObjectivePolicy | readonly ObjectivePolicy[] | undefined, operations: unknown, designatedPolicy: ObjectivePolicy | readonly ObjectivePolicy[] | null) {
   const report = z.record(z.string(), z.unknown()).parse(raw)
-  if (!policy) return report
-  const assessments = z.array(assessment).length(2).parse(report.objectiveAssessments)
-  if (new Set(assessments.map(row => row.baseline)).size !== 2
-    || assessments.some(row => JSON.stringify(row.policy) !== JSON.stringify(objectivePolicySchema.parse(policy)))) throw new Error('Objective report identity mismatch')
-  const operational = objectiveOperations(operations, policy)
-  return { ...report, objectiveAssessments: assessments.map(row => ({ baseline: row.baseline, candidate: row.candidate,
-    baselineHash: row.baselineHash, candidateHash: row.candidateHash,
-    ...assessNumericObjective(policy, { ...row.evidence, operational }, designatedPolicy),
-  })) }
+  const policies = policy === undefined ? [] : Array.isArray(policy) ? policy : [policy]
+  if (!policies.length) return report
+  const parsedPolicies = policies.map(item => objectivePolicySchema.parse(item))
+  if (new Set(parsedPolicies.map(item => item.metric)).size !== parsedPolicies.length) throw new Error('Duplicate numeric objective metric')
+  const designations = designatedPolicy === null ? [] : Array.isArray(designatedPolicy) ? designatedPolicy : [designatedPolicy]
+  const parsedDesignations = designations.map(item => objectivePolicySchema.parse(item))
+  if (new Set(parsedDesignations.map(item => item.metric)).size !== parsedDesignations.length) throw new Error('Duplicate numeric policy designation')
+  const assessments = z.array(assessment).length(parsedPolicies.length * 2).parse(report.objectiveAssessments)
+  const identities = new Set<string>()
+  const finalized = assessments.map((row) => {
+    const selected = parsedPolicies.find(item => item.metric === row.policy.metric)
+    const identity = `${row.policy.metric}:${row.baseline}`
+    if (!selected || identities.has(identity) || JSON.stringify(row.policy) !== JSON.stringify(selected)) throw new Error('Objective report identity mismatch')
+    identities.add(identity)
+    return { baseline: row.baseline, candidate: row.candidate, baselineHash: row.baselineHash, candidateHash: row.candidateHash,
+      ...assessNumericObjective(selected, { ...row.evidence, operational: objectiveOperations(operations, selected) },
+        parsedDesignations.find(item => item.metric === selected.metric) ?? null) }
+  })
+  return { ...report, objectiveAssessments: finalized }
 }
 
 const stageAssessment = z.object({ version: z.literal('stage-objective-assessment-v1'), policy: stageObjectivePolicySchema,

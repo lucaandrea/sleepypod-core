@@ -14,7 +14,7 @@ import { classifySleepStages, type SleepStageBlock } from '@/src/lib/sleep-stage
 import { biometricManifest, validateConfig } from '../algorithms/registry-core'
 import { alignReferences, DEFAULT_ALIGNMENT } from '../references/alignment'
 import { scoreStageDurations } from '../references/stage-scoring'
-import { datasetSnapshotSchema, backtestJobSnapshotSchema } from './contracts'
+import { datasetSnapshotSchema, backtestJobSnapshotSchema, numericObjectivePolicies } from './contracts'
 
 export const waveformEvaluationSchema = z.object({ hash: z.string().regex(/^[a-f0-9]{64}$/), outputs: z.array(z.object({
   cohortId: z.string().min(1).max(200), configHash: z.string().regex(/^[a-f0-9]{64}$/),
@@ -170,11 +170,12 @@ export function createBacktestEvaluator(dependencies: { configHash: (value: unkn
             metrics: (['heart_rate', 'breathing_rate', 'window_ibi_variability_v1'] as const).flatMap(metric => compareWindow(window, metric, windowReferences(window, metric))),
           }))
         : []
-      const subgroupMetric = job.protocol.objectivePolicy?.metric
-      const numericSubgroups = signalReplay && subgroupMetric
+      const subgroupMetrics = numericObjectivePolicies(job.protocol).map(policy => policy.metric)
+      const numericSubgroups = signalReplay && subgroupMetrics.length
         ? numericSubgroupNames.map(name => ({ name, numericComparisons: windows.map(window => ({ ...window,
-            metrics: compareWindow(window, subgroupMetric, subgroupReferences(name, windowReferences(window, subgroupMetric), window)),
-            excludedBoundaryReferenceCount: subgroupBoundaryExclusions(name, windowReferences(window, subgroupMetric), window),
+            metrics: subgroupMetrics.flatMap(metric => compareWindow(window, metric, subgroupReferences(name, windowReferences(window, metric), window))),
+            excludedBoundaryReferenceCount: subgroupMetrics.reduce((sum, metric) => sum + subgroupBoundaryExclusions(name, windowReferences(window, metric), window), 0),
+            excludedByMetric: Object.fromEntries(subgroupMetrics.map(metric => [metric, subgroupBoundaryExclusions(name, windowReferences(window, metric), window)])),
           })) }))
         : []
       progress(nightIndex + 1, assignments.length)
@@ -204,31 +205,28 @@ export function createBacktestEvaluator(dependencies: { configHash: (value: unkn
         }))
       : []
     const numericNightSummary = signalReplay ? summarizeNumericNights(nights, job.protocol.nightUncertainty) : []
-    const numericSubgroupSummary = signalReplay && job.protocol.objectivePolicy
+    const numericSubgroupSummary = signalReplay && numericObjectivePolicies(job.protocol).length
       ? numericSubgroupNames.flatMap(name => summarizeNumericNights(nights.map(night => ({ cohortId: night.cohortId,
           numericComparisons: night.numericSubgroups?.find(group => group.name === name)?.numericComparisons })))
           .map(summary => ({ name, version: 'reference-defined-numeric-subgroups-v1' as const,
             referenceMembershipBasis: 'native_reference_time' as const, observationCoverageScope: 'complete_scoring_windows' as const,
-            excludedBoundaryReferenceCount: nights.reduce((sum, night) => sum + (night.numericSubgroups?.find(group => group.name === name)?.numericComparisons.reduce((count, window) => count + window.excludedBoundaryReferenceCount, 0) ?? 0), 0), summary })))
+            excludedBoundaryReferenceCount: nights.reduce((sum, night) => sum + (night.numericSubgroups?.find(group => group.name === name)?.numericComparisons.reduce((count, window) => count + (window.excludedByMetric[summary.metric] ?? 0), 0) ?? 0), 0), summary })))
       : []
-    const objectivePolicy = job.protocol.objectivePolicy
-    const objectiveAssessments = objectivePolicy
-      ? numericNightSummary
-          .filter(summary => summary.metric === objectivePolicy.metric && summary.candidate === 'candidate')
-          .map(summary => ({ baseline: summary.baseline, candidate: summary.candidate, baselineHash: summary.baselineHash, candidateHash: summary.candidateHash,
-            ...assessNumericObjective(objectivePolicy, {
-              metricCompatible: !nights.some(night => night.numericComparisons?.some(window => window.metrics.some(row => row.metric === summary.metric
-                && row.baseline === summary.baseline && row.candidate === summary.candidate && row.commonSupport.candidate.status === 'incompatible'))),
-              split: job.split, holdoutUse: job.holdoutUse,
-              nights: summary.nights.map(night => ({ cohortId: night.cohortId, pairedReferences: night.commonSupport.candidate.pairedCount,
-                maeDifference: night.commonMaeDifference, lostObservations: night.lostObservationTimestamps,
-                baselineObservationCount: nights.find(row => row.cohortId === night.cohortId)?.numericComparisons?.reduce((sum, window) => sum
-                  + (window.metrics.find(row => row.metric === summary.metric && row.baseline === summary.baseline && row.candidate === summary.candidate)?.ownSupport.baseline.validObservationCount ?? 0), 0) ?? 0 })),
-              intervalUpper: summary.uncertainty.interval?.upper ?? null,
-              subgroups: subgroupObjectiveEvidence(numericSubgroupSummary.map(group => ({ ...group.summary, name: group.name })), summary, objectivePolicy.minimumPairedReferencesPerNight), operational: null,
-            }, null),
-          }))
-      : []
+    const objectiveAssessments = numericObjectivePolicies(job.protocol).flatMap(objectivePolicy => numericNightSummary
+      .filter(summary => summary.metric === objectivePolicy.metric && summary.candidate === 'candidate')
+      .map(summary => ({ baseline: summary.baseline, candidate: summary.candidate, baselineHash: summary.baselineHash, candidateHash: summary.candidateHash,
+        ...assessNumericObjective(objectivePolicy, {
+          metricCompatible: !nights.some(night => night.numericComparisons?.some(window => window.metrics.some(row => row.metric === summary.metric
+            && row.baseline === summary.baseline && row.candidate === summary.candidate && row.commonSupport.candidate.status === 'incompatible'))),
+          split: job.split, holdoutUse: job.holdoutUse,
+          nights: summary.nights.map(night => ({ cohortId: night.cohortId, pairedReferences: night.commonSupport.candidate.pairedCount,
+            maeDifference: night.commonMaeDifference, lostObservations: night.lostObservationTimestamps,
+            baselineObservationCount: nights.find(row => row.cohortId === night.cohortId)?.numericComparisons?.reduce((sum, window) => sum
+              + (window.metrics.find(row => row.metric === summary.metric && row.baseline === summary.baseline && row.candidate === summary.candidate)?.ownSupport.baseline.validObservationCount ?? 0), 0) ?? 0 })),
+          intervalUpper: summary.uncertainty.interval?.upper ?? null,
+          subgroups: subgroupObjectiveEvidence(numericSubgroupSummary.map(group => ({ ...group.summary, name: group.name })), summary, objectivePolicy.minimumPairedReferencesPerNight), operational: null,
+        }, null),
+      })))
     return { side: dataset.snapshot.side, version: signalReplay ? 'waveform-backtest-report-v1' as const : 'processed-backtest-report-v1' as const,
       ...(signalReplay ? { waveform: { ...(job.waveform?.baselineProvenance ? { baselineProvenance: job.waveform.baselineProvenance } : {}), pythonBuildHash: job.waveform?.pythonBuildHash, otherSideConfigHash: job.waveform?.otherSide.resolvedHash, ...waveform, resources: summarizeWaveformResources(waveform?.outputs ?? []) } } : {}), datasetId: job.datasetId, datasetHash: job.datasetHash,
       evaluatorBuildHash: job.evaluatorBuildHash, protocol: job.protocol, protocolHash: job.protocolHash, manifestHash, support: signalReplay ? 'identical_retained_waveform_inputs' as const : 'identical_retained_epoch_intervals' as const, split: job.split, holdoutUse: job.holdoutUse,

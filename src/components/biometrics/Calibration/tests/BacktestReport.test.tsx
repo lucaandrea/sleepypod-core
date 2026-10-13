@@ -100,3 +100,26 @@ it('shows frozen stage policy support requirements and regression reasons withou
   expect(screen.getByText('Threshold failed: stage_regression:deep')).toBeTruthy()
   expect(screen.getByText(/It does not establish clinical stage accuracy/)).toBeTruthy()
 })
+
+it('keeps each metric threshold and its own assessment reasons together', () => {
+  const objectivePolicies = (['heart_rate', 'breathing_rate', 'window_ibi_variability_v1'] as const).map(metric => ({
+    version: 'numeric-objective-v1', qualificationId: 'test-only', metric, minimumNights: 3, minimumPairedReferencesPerNight: 1,
+    maximumLostObservationFraction: 0, minimumMaeImprovement: 1, maximumNightMaeRegression: 1, maximumRegressedNightFraction: 0,
+    maximumSubgroupMaeRegression: 1, requiredSubgroups: [], operational: { maximumWallMs: 1000, maximumPeakRssBytes: 1000, maximumIngestionAgeMs: 1000 },
+  }))
+  mock.get.mockReturnValue({ data: { ...descriptor, report: { ...report, version: 'waveform-backtest-report-v1',
+    protocol: { mode: 'signal_replay', objectivePolicies }, stageNightSummary: [], nights: [],
+    objectiveAssessments: objectivePolicies.flatMap(policy => ['default', 'current'].map(baseline => ({
+      policy, baseline, candidate: 'candidate', status: 'insufficient_evidence', designated: false,
+      missingEvidence: [`missing_${policy.metric}`], failedThresholds: [],
+    }))),
+  } } })
+  render(view())
+  const sections = screen.getAllByText('Frozen objective thresholds').map(element => element.closest('details'))
+  expect(sections).toHaveLength(3)
+  for (let index = 0; index < objectivePolicies.length; index++) {
+    for (let other = 0; other < objectivePolicies.length; other++) {
+      expect(sections[index]?.textContent?.includes(`missing_${objectivePolicies[other].metric}`)).toBe(index === other)
+    }
+  }
+})

@@ -51,3 +51,14 @@ it('pins thresholds in protocol identity and rejects duplicate evidence', () => 
   data.nights.push(data.nights[0])
   expect(() => assessNumericObjective(policy, data, policy)).toThrow('identity')
 })
+
+it('freezes one policy per numeric metric without rewriting legacy protocols', () => {
+  const base = { version: 'descriptive-evaluation-v1', mode: 'signal_replay', assumedStageCalibrationQuality: 0, pointToleranceMs: 30000, clockOffsetMs: 0 }
+  const policies = ['heart_rate', 'breathing_rate', 'window_ibi_variability_v1'].map(metric => ({ ...policy, metric }))
+  expect(experimentProtocolSchema.parse({ ...base, objectivePolicies: policies }).objectivePolicies).toEqual(policies)
+  expect(experimentProtocolSchema.parse({ ...base, objectivePolicy: policy })).not.toHaveProperty('objectivePolicies')
+  for (const patch of [{ objectivePolicies: [] }, { objectivePolicies: [policy, policy] }, { objectivePolicies: policies, objectivePolicy: policy },
+    { objectivePolicies: policies, mode: 'comparison' }, { objectivePolicies: policies, mode: 'stage_replay' }]) {
+    expect(experimentProtocolSchema.safeParse({ ...base, ...patch }).success).toBe(false)
+  }
+})

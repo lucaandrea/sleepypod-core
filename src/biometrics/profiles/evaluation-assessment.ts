@@ -1,3 +1,4 @@
+import { numericObjectivePolicies } from '../backtest/contracts'
 import { z } from 'zod'
 import { configHash } from '../algorithms/canonical'
 import { validateConfig } from '../algorithms/registry'
@@ -16,7 +17,7 @@ const assessmentSchema = z.object({
 
 /** Internal qualified-build dependency, never populated from experiment JSON. */
 export interface DesignatedEvaluationPolicies {
-  numeric: ObjectivePolicy | null
+  numeric: ObjectivePolicy | readonly ObjectivePolicy[] | null
   stages: StageObjectivePolicy | null
 }
 
@@ -42,14 +43,12 @@ export function verifyEvaluationAssessments(
   if (!domains.length) reject('Candidate does not change the current configuration')
   const numericMetrics = { heart_rate: 'heart_rate', breathing_rate: 'breathing_rate', hrv_index: 'window_ibi_variability_v1' } as const
   const requiredMetrics = domains.filter((domain): domain is keyof typeof numericMetrics => domain !== 'sleep_stages').map(domain => numericMetrics[domain])
-  // A single numeric objective cannot validate an unrelated or second metric.
-  // Multi-metric profiles require a future multi-objective protocol, not a
-  // relaxed claim about the one metric this evaluator currently assesses.
-  if (requiredMetrics.some(metric => job.protocol.objectivePolicy?.metric !== metric)) reject('Every changed numeric component requires its own objective evidence')
+  const policies = numericObjectivePolicies(job.protocol)
+  if (requiredMetrics.some(metric => !policies.some(policy => policy.metric === metric))) reject('Every changed numeric component requires its own objective evidence')
   if (!job.protocol.stageObjectivePolicy) reject('Stage agreement and downstream effects require stage objective evidence')
   if (requiredMetrics.length && (job.protocol.mode !== 'signal_replay' || job.protocol.waveformStages !== true)) reject('Numeric changes require waveform replay with downstream stages')
   const raw = z.record(z.string(), z.unknown()).parse(result.report)
-  const numeric = finalizeObjectiveReport(raw, job.protocol.objectivePolicy, raw.jobOperations, designations.numeric)
+  const numeric = finalizeObjectiveReport(raw, policies, raw.jobOperations, designations.numeric)
   const finalized = finalizeStageObjectiveReport(numeric, job.protocol.stageObjectivePolicy, raw.jobOperations, designations.stages)
   const check = (rawAssessments: unknown, improvementRequired: boolean) => {
     const assessments = z.array(assessmentSchema).length(2).parse(rawAssessments)
@@ -63,14 +62,16 @@ export function verifyEvaluationAssessments(
     }
     return assessments.map(row => ({ baseline: row.baseline, baselineHash: row.baselineHash, candidateHash: row.candidateHash, status: row.status }))
   }
-  const numericAssessments = job.protocol.objectivePolicy ? check(finalized.objectiveAssessments, true) : []
+  const numericRows = z.array(z.object({ policy: z.object({ metric: z.string() }) }).passthrough()).parse(finalized.objectiveAssessments ?? [])
+  const numericAssessments = policies.flatMap(policy => check(numericRows.filter(row => row.policy.metric === policy.metric), true)
+    .map(row => ({ ...row, metric: policy.metric })))
   const stageAssessments = check(finalized.stageObjectiveAssessments, domains.includes('sleep_stages'))
   return { version: 'verified-evaluation-v1' as const, interpretation: 'agreement_with_named_reference_not_clinical_validation' as const,
     reportHash: result.contentHash, revisionId: expected.revisionId, resolvedHash: expected.resolvedHash,
     currentResolvedHash: expected.currentResolvedHash, datasetId: job.datasetId, datasetHash: job.datasetHash,
     evaluatorBuildHash: job.evaluatorBuildHash, manifestHash: identity.report.manifestHash, protocolHash: job.protocolHash,
     changedDomains: domains, numericAssessments, stageAssessments,
-    policies: { numeric: job.protocol.objectivePolicy ?? null, stages: job.protocol.stageObjectivePolicy },
+    policies: { numeric: job.protocol.objectivePolicies ?? job.protocol.objectivePolicy ?? null, stages: job.protocol.stageObjectivePolicy },
     ...(expected.waveform ? { waveform: expected.waveform } : {}),
   }
 }

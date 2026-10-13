@@ -44,3 +44,49 @@ it('replaces worker-supplied operational evidence and rejects mismatched policie
   expect(() => finalizeObjectiveReport(report(), { ...policy, minimumMaeImprovement: 3 }, operations(), policy)).toThrow('identity')
   expect(() => finalizeObjectiveReport({ objectiveAssessments: report().objectiveAssessments.slice(0, 1) }, policy, operations(), policy)).toThrow()
 })
+
+const metrics = ['heart_rate', 'breathing_rate', 'window_ibi_variability_v1'] as const
+const policies = metrics.map(metric => ({ ...policy, metric }))
+const multiReport = () => ({ objectiveAssessments: policies.flatMap(item => ['default', 'current'].map(baseline => ({
+  baseline, candidate: 'candidate', baselineHash: baseline, candidateHash: 'candidate', ...assessNumericObjective(item, evidence, null),
+}))) })
+
+it('reassesses both baselines independently for all three numeric metrics', () => {
+  const result = finalizeObjectiveReport(multiReport(), policies, operations(), policies)
+  expect(result.objectiveAssessments).toHaveLength(6)
+  for (const metric of metrics) {
+    expect(result.objectiveAssessments).toEqual(expect.arrayContaining(['default', 'current'].map(baseline => expect.objectContaining({
+      baseline, policy: expect.objectContaining({ metric }), status: 'improved', designated: true,
+    }))))
+  }
+  const partial = finalizeObjectiveReport(multiReport(), policies, operations(), policies.slice(0, 2))
+  expect(partial.objectiveAssessments).toEqual(expect.arrayContaining([expect.objectContaining({
+    policy: expect.objectContaining({ metric: 'window_ibi_variability_v1' }), status: 'insufficient_evidence', missingEvidence: ['policy_not_designated'],
+  })]))
+})
+
+it('rejects missing, duplicated, substituted or policy-mismatched metric/baseline pairs', () => {
+  const source = multiReport()
+  const rows = source.objectiveAssessments
+  for (const objectiveAssessments of [rows.slice(1), [...rows, rows[0]], [rows[0], rows[0], ...rows.slice(2)],
+    rows.map((row, index) => index === 5 ? { ...row, policy: { ...row.policy, minimumMaeImprovement: 3 } } : row)]) {
+    expect(() => finalizeObjectiveReport({ objectiveAssessments }, policies, operations(), policies)).toThrow()
+  }
+  expect(() => finalizeObjectiveReport(source, [policies[0], policies[0], policies[2]], operations(), policies)).toThrow('Duplicate')
+  expect(() => finalizeObjectiveReport(source, policies, operations(), [policies[0], policies[0]])).toThrow('Duplicate')
+})
+
+it('uses each metric policy for operational bounds and replaces child telemetry for every metric', () => {
+  const strict = policies.map(item => item.metric === 'breathing_rate'
+    ? { ...item, operational: { ...item.operational, maximumWallMs: 999 } }
+    : item)
+  const raw = { objectiveAssessments: strict.flatMap(item => ['default', 'current'].map(baseline => ({
+    baseline, candidate: 'candidate', baselineHash: baseline, candidateHash: 'candidate',
+    ...assessNumericObjective(item, { ...evidence, operational: { wallMs: 0, peakRssBytes: 0, maximumIngestionAgeMs: 0 } }, item),
+  }))) }
+  const result = finalizeObjectiveReport(raw, strict, operations(), strict)
+  for (const row of result.objectiveAssessments as Array<{ policy: ObjectivePolicy, status: string, evidence: ObjectiveEvidence }>) {
+    expect(row.evidence.operational?.wallMs).toBe(1000)
+    expect(row.status).toBe(row.policy.metric === 'breathing_rate' ? 'regressed' : 'improved')
+  }
+})

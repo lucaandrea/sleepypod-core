@@ -1,6 +1,6 @@
 import { stageObjectivePolicySchema } from './stage-objective'
 import { z } from 'zod'
-import { objectivePolicySchema } from './objective-policy'
+import { objectivePolicySchema, type ObjectivePolicy } from './objective-policy'
 import { waveformDatasetInputsSchema } from './waveform-contracts'
 import { nightBootstrapSchema } from './uncertainty-policy'
 import { normalizedMeasurementSchema } from '../references/contracts'
@@ -16,9 +16,16 @@ export const experimentProtocolSchema = z.object({
   clockOffsetMs: z.number().int().min(-3600000).max(3600000),
   nightUncertainty: nightBootstrapSchema.optional(),
   objectivePolicy: objectivePolicySchema.optional(),
+  objectivePolicies: z.array(objectivePolicySchema).min(1).max(3).optional(),
   stageObjectivePolicy: stageObjectivePolicySchema.optional(),
-}).strict().refine(protocol => !protocol.objectivePolicy || protocol.mode === 'signal_replay', 'Numeric objectives require waveform replay')
+}).strict().refine(protocol => !(protocol.objectivePolicy && protocol.objectivePolicies), 'Use one numeric objective policy representation')
+  .refine(protocol => new Set(numericObjectivePolicies(protocol).map(policy => policy.metric)).size === numericObjectivePolicies(protocol).length, 'Numeric objective metrics must be unique')
+  .refine(protocol => !numericObjectivePolicies(protocol).length || protocol.mode === 'signal_replay', 'Numeric objectives require waveform replay')
   .refine(protocol => !protocol.stageObjectivePolicy || protocol.mode === 'stage_replay' || (protocol.mode === 'signal_replay' && protocol.waveformStages === true), 'Stage objectives require stage replay')
+/** Preserve old protocol hashes: normalize at consumption, never mutate snapshots. */
+export function numericObjectivePolicies(protocol: { objectivePolicy?: ObjectivePolicy, objectivePolicies?: ObjectivePolicy[] }): ObjectivePolicy[] {
+  return protocol.objectivePolicies ?? (protocol.objectivePolicy ? [protocol.objectivePolicy] : [])
+}
 export const replayBaselineProvenanceSchema = z.object({ source: z.enum(['acknowledged_runtime', 'unacknowledged_defaults']),
   generation: z.number().int().nonnegative().nullable(), effectiveSampleTimeMs: z.number().int().nonnegative().nullable(), warning: z.string().max(1000).nullable() }).strict()
 export const enqueueBacktestSchema = z.object({

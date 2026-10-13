@@ -386,9 +386,15 @@ comparisons and every frozen holdout night. A changed stage configuration must
 improve stage agreement; a numeric change must improve its metric and pass
 downstream stage coverage/regression checks, which may report no material change.
 An assessment of one numeric metric cannot validate changes to another metric.
-The current single-numeric-objective protocol therefore cannot validate a change
-to multiple numeric components; multi-objective evaluation remains required for
-that case.
+A signal replay can freeze `objectivePolicies`, a list of one to three numeric
+policies with unique metric identities. It is mutually exclusive with legacy
+`objectivePolicy`; legacy snapshots and hashes remain unchanged. Evaluation,
+supervisor finalization, and activation verification require candidate comparisons
+against both default and current for every policy. Each changed numeric component
+must have its own qualified improvement evidence; a passing heart-rate objective
+cannot validate breathing or HRV changes. Stage objectives remain separately
+required for downstream effects. Report displays group thresholds and reasons by
+metric. These policy lists do not themselves designate a production policy.
 
 The internal validated activation service loads the retained job, experiment,
 dataset, report, profile revision and current runtime baseline. It verifies

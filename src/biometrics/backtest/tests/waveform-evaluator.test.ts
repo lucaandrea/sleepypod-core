@@ -128,3 +128,23 @@ it('exposes a late-window regression hidden by lower whole-night error', () => {
   expect(report.objectiveAssessments[0].evidence.subgroups).toContainEqual({ name: 'window_second_half', pairedNights: 1, maeDifference: 5 })
   expect(report.objectiveAssessments[0].evidence.subgroups).toContainEqual({ name: 'reference_intervals', pairedNights: 0, maeDifference: null })
 })
+
+it('evaluates each numeric policy against both baselines without mixing metric subgroups', () => {
+  const work = fixture()
+  const objectivePolicies = (['heart_rate', 'breathing_rate', 'window_ibi_variability_v1'] as const).map(metric => ({
+    version: 'numeric-objective-v1' as const, qualificationId: 'multi-test', metric, minimumNights: 3,
+    minimumPairedReferencesPerNight: 1, maximumLostObservationFraction: 0, minimumMaeImprovement: 1,
+    maximumNightMaeRegression: 1, maximumRegressedNightFraction: 0, maximumSubgroupMaeRegression: 1,
+    requiredSubgroups: ['reference_points'], operational: { maximumWallMs: 1000, maximumPeakRssBytes: 1000, maximumIngestionAgeMs: 1000 },
+  }))
+  const protocol = { ...work.job.protocol, objectivePolicies }
+  const report = evaluateBacktest({ ...work, job: { ...work.job, protocol, protocolHash: configHash(protocol),
+    configs: [...work.job.configs, { ...work.job.configs[0], label: 'candidate' }] } })
+  expect(report.objectiveAssessments).toHaveLength(6)
+  for (const policy of objectivePolicies) {
+    const assessments = report.objectiveAssessments.filter(row => row.policy.metric === policy.metric)
+    expect(assessments.map(row => row.baseline).sort()).toEqual(['current', 'default'])
+    expect(assessments.every(row => row.status === 'insufficient_evidence' && !row.designated)).toBe(true)
+    expect(report.numericSubgroupSummary?.filter(row => row.summary.metric === policy.metric)).toHaveLength(12)
+  }
+})
