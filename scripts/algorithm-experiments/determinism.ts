@@ -12,7 +12,7 @@ export async function checkPackageDeterminism(options: Omit<ExperimentOptions, '
   if (!Number.isInteger(repetitions) || repetitions < 2 || repetitions > 5) throw new Error('Determinism requires 2–5 independent runs')
   verifyAlgorithmPackage(options.manifest, options.files)
   const stable = { manifest: structuredClone(options.manifest), request: structuredClone(options.request),
-    policy: structuredClone(options.policy), files: new Map([...options.files].map(([path, bytes]) => [path, Buffer.from(bytes)])) }
+    policy: structuredClone(options.policy), signal: options.signal, files: new Map([...options.files].map(([path, bytes]) => [path, Buffer.from(bytes)])) }
   type Result = Awaited<ReturnType<typeof executePackageExperiment>>
   const runs: (Pick<Result, 'packageHash' | 'runHash' | 'execution'> & { input: Result['frozenInput'], outputHash: string, responseCount: number })[] = []
   for (let index = 0; index < repetitions; index++) {

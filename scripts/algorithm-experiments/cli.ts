@@ -1,3 +1,4 @@
+import { runPackagePreflight } from './preflight'
 import { recoverExpiredContainers } from './recovery'
 import { pathToFileURL } from 'node:url'
 import { z } from 'zod'
@@ -12,10 +13,18 @@ import { checkPackageDeterminism } from './determinism'
 import { publishJson, readJsonFile, readJsonLines, readPackageProposal } from './files'
 
 const positive = z.number().int().positive().max(Number.MAX_SAFE_INTEGER)
-const usage = 'Usage: recover OUTPUT | managed WORKSPACE DESCRIPTOR RECEIPT | compare INPUT OUTPUT | fixtures PROPOSAL SUITE POLICY OUTPUT | lock IMAGE OUTPUT | input-hash FRAMES MAX_BYTES OUTPUT | inspect PROPOSAL OUTPUT | run PROPOSAL REQUEST FRAMES POLICY OUTPUT | determinism PROPOSAL REQUEST FRAMES POLICY REPETITIONS OUTPUT'
+const usage = 'Usage: preflight PROPOSAL PLAN SUITE POLICY OUTPUT | recover OUTPUT | managed WORKSPACE DESCRIPTOR RECEIPT | compare INPUT OUTPUT | fixtures PROPOSAL SUITE POLICY OUTPUT | lock IMAGE OUTPUT | input-hash FRAMES MAX_BYTES OUTPUT | inspect PROPOSAL OUTPUT | run PROPOSAL REQUEST FRAMES POLICY OUTPUT | determinism PROPOSAL REQUEST FRAMES POLICY REPETITIONS OUTPUT'
 
 export async function runExperimentCli(args: string[]) {
   const [command, ...paths] = args
+  if (command === 'preflight' && paths.length === 5) {
+    const proposal = readPackageProposal(paths[0])
+    const plan = readJsonFile(paths[1], 16384)
+    const suite = readJsonFile(paths[2], 32 * 1024 * 1024)
+    const policy = policySchema.parse(readJsonFile(paths[3], 16384))
+    await publishJson(paths[4], await runPackagePreflight({ ...proposal, policy }, plan, suite))
+    return
+  }
   if (command === 'recover' && paths.length === 1) {
     await publishJson(paths[0], await recoverExpiredContainers())
     return

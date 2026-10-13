@@ -419,3 +419,32 @@ not clinical validation or package qualification: determinism, resource/noise
 fixtures, compatibility, pod fitness, prospective monitoring and reviewed release
 promotion still apply. The assessment retains exact failures and missing evidence
 and never installs code or changes live processing.
+
+## Combined external preflight
+
+```sh
+pnpm biometrics:experiment preflight proposal.json plan.json suite.json operator-policy.json preflight-report.json
+```
+
+The plan uses `biometric-package-preflight-plan-v1`, `suiteHash` (the canonical
+`dataHash` of the parsed fixture suite), `repetitions` (2–5), `configHash`
+(`configHash({ config, seed })`), `hardwareId`, `sampleRateHz`, and `side`.
+Every fixture must use that exact candidate configuration and seed, hardware,
+rate and side. A changed suite or configuration is rejected before execution.
+Use reviewed synthetic fixtures here, not undisclosed holdout data.
+
+The runner snapshots candidate bytes, suite and operator policy, executes the
+fixture suite, then repeats every fixture in independent containers to check
+full-output/state determinism. Each repeat also receives a resource assessment
+under the suite's frozen policy. Execution failures and nondeterminism fail the
+preflight. Missing fixture categories or incomplete resource observations keep
+it incomplete. Cancellation propagates to active experiments and stops further
+fixtures/repeats. Reports retain the exact plan and its hash, fixture report,
+per-fixture determinism reports, resource assessments and bounded errors.
+
+`external_checks_passed` is external preflight only. Connecting the preflight
+artifact to the durable study's frozen qualification plan and final decision
+remains required; standalone reports cannot prove holdout independence or pod
+fitness. The candidate still needs representative fixture review, current
+held-out accuracy, target-pod compatibility/resources, and normal reviewed
+release promotion before it can become live.

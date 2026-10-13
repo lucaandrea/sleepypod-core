@@ -14,6 +14,7 @@ import { PackageExperimentLedger } from './ledger'
 import { runManagedFiles } from './managed-files'
 import { runManagedTrial } from './managed'
 import { readManagedEvidence } from './managed-evidence'
+import { runPackagePreflight } from './preflight'
 import { fixtureResourceTestPolicy } from './resource-test-policy'
 const image = process.env.BIOMETRIC_EXPERIMENT_TEST_IMAGE
 let environmentBytes: Buffer<ArrayBuffer>
@@ -51,6 +52,40 @@ for line in sys.stdin:
   return { trialId: ledger.reserveTrial(request, 'first'), request, protocol, variants, referenceImport, frames }
 }
 describe.skipIf(!image)('managed package trials through real Docker', () => {
+  it('executes combined fixture and determinism preflight for the exact candidate configuration', async () => {
+    const db = new Database(':memory:')
+    try {
+      const input = fixture(new PackageExperimentLedger(db)), candidate = input.variants[2]
+      const suite = { schema: 'biometric-package-fixtures-v1', resourcePolicy: fixtureResourceTestPolicy,
+        fixtures: [{ id: 'clean', category: 'clean_signal', frames: input.frames,
+          request: { schema: 'biometric-package-run-v1', packageHash: configHash(candidate.manifest), inputHash: packageInputHash(input.frames),
+            hardwareId: 'pod4', sampleRateHz: 500, side: 'left', config: candidate.config, seed: candidate.seed },
+          expectations: [{ kind: 'numeric', metric: 'heart_rate', startMs: start, endMs: start + 1006,
+            minimum: 59, maximum: 61, minimumReadings: 2, minimumQuality: 0.8 }] }] }
+      const plan = { schema: 'biometric-package-preflight-plan-v1', suiteHash: dataHash(suite), repetitions: 2,
+        configHash: configHash({ config: candidate.config, seed: candidate.seed }), hardwareId: 'pod4', sampleRateHz: 500, side: 'left' }
+      const result = await runPackagePreflight(candidate, plan, suite)
+      expect(result).toMatchObject({ status: 'incomplete', packageHash: configHash(candidate.manifest), planHash: configHash(plan),
+        fixtureReport: { missingCategories: expect.arrayContaining(['empty_bed', 'motion']) },
+        determinism: [{ fixtureId: 'clean', error: null, report: { deterministic: true, runs: expect.any(Array) } }] })
+      expect(result.determinism[0].report?.runs).toHaveLength(2)
+      expect(result.determinism[0].resources).toHaveLength(2)
+      const failingSuite = structuredClone(suite)
+      failingSuite.fixtures[0].expectations[0].minimum = 58
+      failingSuite.fixtures[0].expectations[0].maximum = 59
+      expect(await runPackagePreflight(candidate, { ...plan, suiteHash: dataHash(failingSuite) }, failingSuite)).toMatchObject({
+        status: 'failed', fixtureReport: { status: 'failed' },
+      })
+      for (const change of [{ configHash: 'f'.repeat(64) }, { side: 'right' }, { hardwareId: 'other' }, { sampleRateHz: 100 }, { suiteHash: 'f'.repeat(64) }]) {
+        await expect(runPackagePreflight(candidate, { ...plan, ...change }, suite)).rejects.toThrow(/mismatch/)
+      }
+      const controller = new AbortController()
+      controller.abort()
+      await expect(runPackagePreflight({ ...candidate, signal: controller.signal }, plan, suite)).rejects.toThrow()
+    }
+    finally { db.close() }
+  }, 30000)
+
   it('records exposure before loading, compares all variants, publishes verified artifacts and reuses completion', async () => {
     const db = new Database(':memory:'), root = await mkdtemp(join(tmpdir(), 'managed-trial-test-'))
     try {

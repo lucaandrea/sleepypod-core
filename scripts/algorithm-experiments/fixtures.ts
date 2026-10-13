@@ -74,11 +74,11 @@ export function assessFixtureReadings(expectations: Expectation[], readings: Rea
 
 /** This is one qualification dimension, not a held-out improvement claim.
  * Fresh containers also prevent state leaking between independent fixtures. */
-export async function runPackageFixtures(options: Pick<Parameters<typeof executePackageExperiment>[0], 'manifest' | 'files' | 'policy'>, suiteInput: unknown) {
+export async function runPackageFixtures(options: Pick<Parameters<typeof executePackageExperiment>[0], 'manifest' | 'files' | 'policy' | 'signal'>, suiteInput: unknown) {
   const suite = packageFixtureSuiteSchema.parse(structuredClone(suiteInput))
   const suiteHash = dataHash(suite)
   const verified = verifyAlgorithmPackage(options.manifest, options.files)
-  const stable = { manifest: verified.manifest, files: new Map([...options.files].map(([path, bytes]) => [path, Buffer.from(bytes)])), policy: structuredClone(options.policy) }
+  const stable = { manifest: verified.manifest, files: new Map([...options.files].map(([path, bytes]) => [path, Buffer.from(bytes)])), policy: structuredClone(options.policy), signal: options.signal }
   for (const fixture of suite.fixtures) {
     for (const expected of fixture.expectations) {
       if (!verified.manifest.metrics.some(metric => metric.id === expected.metric)) throw new Error('Fixture expects an undeclared metric')
@@ -87,6 +87,7 @@ export async function runPackageFixtures(options: Pick<Parameters<typeof execute
   }
   const results = []
   for (const fixture of suite.fixtures) {
+    options.signal?.throwIfAborted()
     const identity = { fixtureId: fixture.id, category: fixture.category, fixtureHash: dataHash(fixture) }
     try {
       const execution = await executePackageExperiment({ ...stable, request: fixture.request, frames: fixture.frames })
@@ -94,6 +95,7 @@ export async function runPackageFixtures(options: Pick<Parameters<typeof execute
       results.push({ ...identity, assessment, resourceAssessment: assessPackageResources(execution.execution, suite.resourcePolicy), execution, error: null })
     }
     catch (error) {
+      options.signal?.throwIfAborted()
       results.push({ ...identity, assessment: { passed: false, failures: ['execution_failed'], usableReadings: [] }, resourceAssessment: null, execution: null,
         error: error instanceof Error ? error.message.slice(0, 1000) : 'Experiment failed' })
     }
