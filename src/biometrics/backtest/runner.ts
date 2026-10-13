@@ -1,4 +1,4 @@
-import { finalizeObjectiveReport } from './objective-finalization'
+import { finalizeObjectiveReport, finalizeStageObjectiveReport } from './objective-finalization'
 import { createJobOperations, type AdmissionReceipt } from './job-operations'
 import type { ReplayBudget } from './execution-budget'
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3'
@@ -95,7 +95,7 @@ export async function executeNextBacktest(db: BetterSQLite3Database<typeof schem
     if (controller.signal.aborted) throw new Error('Replay cancelled')
     const jobOperations = operations.finish()
     const finalized = finalizeObjectiveReport(report, work.job.protocol.objectivePolicy, jobOperations, null)
-    jobs.complete(lease, { ...finalized, jobOperations })
+    jobs.complete(lease, { ...finalizeStageObjectiveReport(finalized, work.job.protocol.stageObjectivePolicy, jobOperations, null), jobOperations })
     return { state: 'succeeded' as const, jobId: claimed.id }
   }
   catch {

@@ -347,3 +347,27 @@ exclusions. Groups overlap and are not independent statistical experiments.
 They do not establish motion, pump, empty-bed, or artifact-specific performance;
 those require separately qualified context/fixture evidence. Unrecognized required
 group names remain unsupported and cannot award improvement.
+
+### Stage objective evidence
+
+`stageObjectivePolicy` freezes a `stage-objective-v1` policy alongside the
+experiment protocol. It requires `stage_replay`, or `signal_replay` with
+`waveformStages: true`; plain comparison cannot evaluate a stage objective.
+Numeric and stage policies are separate, and a joint replay may retain both.
+
+The stage policy sets minimum independent nights and paired reference duration,
+minimum candidate output coverage, maximum loss of baseline output from shared
+support, minimum equal-night agreement improvement, tolerated night regressions,
+macro-F1 regression, and required-stage F1 regression/support. Common-support
+confusion durations are combined within each whole night before scoring. The
+uncertainty gate uses the lower bound of the frozen whole-night agreement
+bootstrap; epochs are not treated as independent nights. Missing required stages
+on any evaluated night remain insufficient evidence, never fabricated zero error.
+
+`stageObjectiveAssessments` preserve the exact policy and evidence for candidate
+versus both default and current configurations. The coordinator replaces any
+scorer-supplied operational evidence after the final admission check, using the
+same explicit sampling-policy rules as numeric objectives. Only a separately
+designated qualified policy can award improvement. The UI presents thresholds,
+missing evidence and regression reasons. These are agreement results against the
+named stage reference, not claims of clinical stage accuracy or live activation.

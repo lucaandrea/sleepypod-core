@@ -1,3 +1,4 @@
+import { stageObjectiveTestPolicy } from './fixtures/stage-objective'
 // @vitest-environment node
 import Database from 'better-sqlite3'
 import { drizzle } from 'drizzle-orm/better-sqlite3'
@@ -64,6 +65,19 @@ describe('durable replay execution', () => {
     })).toEqual({ state: 'succeeded', jobId })
     expect(jobs.result(jobId)?.report).toMatchObject({ jobOperations: { version: 'backtest-job-operations-v1',
       ingestion: { allChecksMeasured: true, checks: 2, samples: 2, maximumObservedAgeMs: 200, qualificationId: 'test-policy' } } })
+  })
+  it('finalizes retained stage objectives after the real scoring child completes', async () => {
+    const datasetId = jobs.getExperiment(jobs.get(jobId).experimentId).datasetId
+    jobs.cancel(jobId)
+    const fixture = backtestFixture()
+    const experiment = jobs.createExperiment(datasetId, { ...fixture.job.protocol, stageObjectivePolicy: stageObjectiveTestPolicy })
+    const staged = jobs.enqueue({ evaluatorBuildHash, experimentId: experiment.id, idempotencyKey: 'stage-objective', split: 'tuning',
+      configs: [...fixture.job.configs, { ...fixture.job.configs[0], label: 'candidate' }] })
+    expect(await executeNextBacktest(db, options)).toEqual({ state: 'succeeded', jobId: staged.id })
+    expect(jobs.result(staged.id)?.report).toMatchObject({ stageObjectiveAssessments: [
+      { baseline: 'default', status: 'insufficient_evidence', evidence: { operational: null } },
+      { baseline: 'current', status: 'insufficient_evidence', evidence: { operational: null } },
+    ] })
   })
   it('refuses to execute a different worker bundle after enqueue', async () => {
     sqlite.prepare('UPDATE biometric_backtest_jobs SET input = json_set(input, \'$.evaluatorBuildHash\', ?)').run('0'.repeat(64))

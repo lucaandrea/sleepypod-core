@@ -1,3 +1,4 @@
+import { assessStageObjective } from './stage-objective'
 import { numericSubgroupNames, subgroupReferences, subgroupObjectiveEvidence, subgroupBoundaryExclusions } from './numeric-subgroups'
 import { summarizeWaveformResources } from './waveform-resources'
 import { assessNumericObjective } from './objective-policy'
@@ -188,6 +189,23 @@ export function createBacktestEvaluator(dependencies: { configHash: (value: unkn
           : vitals.length,
         ...(signalReplay ? { numericComparisons, numericSubgroups, recordedObservationCount: vitals.length, observationCountBasis: 'union_of_derived_timestamps' } : {}), evaluations, comparisons }
     })
+    const stageNightSummary = summarizeStageNights(nights, job.protocol.nightUncertainty)
+    const stagePolicy = job.protocol.stageObjectivePolicy
+    const stageObjectiveAssessments = stagePolicy
+      ? stageNightSummary.filter(row => row.candidate === 'candidate').map(summary => ({
+          baseline: summary.baseline, candidate: summary.candidate, baselineHash: summary.baselineHash, candidateHash: summary.candidateHash,
+          ...assessStageObjective(stagePolicy, { split: job.split, holdoutUse: job.holdoutUse, intervalLower: summary.uncertainty.interval?.lower ?? null, operational: null,
+            nights: summary.nights.map(night => ({ cohortId: night.cohortId, pairedDurationMs: night.commonSupport.candidate.pairedDurationMs,
+              agreementDifference: night.commonAgreementDifference, macroF1Difference: night.commonMacroF1Difference,
+              candidateOutputCoverage: night.ownSupport.candidate.outputCoverage, baselineOutputMs: night.ownSupport.baseline.outputMs, commonOutputMs: night.commonOutputDurationMs,
+              perStage: night.commonSupport.candidate.perStage.map((row) => {
+                const baseline = night.commonSupport.baseline.perStage.find(item => item.stage === row.stage)
+                return { stage: row.stage, referenceMs: row.referenceMs, f1Difference: row.f1 === null || baseline?.f1 == null ? null : row.f1 - baseline.f1 }
+              }),
+            })),
+          }, null),
+        }))
+      : []
     const numericNightSummary = signalReplay ? summarizeNumericNights(nights, job.protocol.nightUncertainty) : []
     const numericSubgroupSummary = signalReplay && job.protocol.objectivePolicy
       ? numericSubgroupNames.flatMap(name => summarizeNumericNights(nights.map(night => ({ cohortId: night.cohortId,
@@ -218,8 +236,8 @@ export function createBacktestEvaluator(dependencies: { configHash: (value: unkn
       ...(signalReplay ? { waveform: { ...(job.waveform?.baselineProvenance ? { baselineProvenance: job.waveform.baselineProvenance } : {}), pythonBuildHash: job.waveform?.pythonBuildHash, otherSideConfigHash: job.waveform?.otherSide.resolvedHash, ...waveform, resources: summarizeWaveformResources(waveform?.outputs ?? []) } } : {}), datasetId: job.datasetId, datasetHash: job.datasetHash,
       evaluatorBuildHash: job.evaluatorBuildHash, protocol: job.protocol, protocolHash: job.protocolHash, manifestHash, support: signalReplay ? 'identical_retained_waveform_inputs' as const : 'identical_retained_epoch_intervals' as const, split: job.split, holdoutUse: job.holdoutUse,
       ...(signalReplay ? { numericNightSummary, numericSubgroupSummary } : {}),
-      objectiveAssessments,
-      status: 'insufficient_evidence' as const, evidence: job.evidence, nights, stageNightSummary: summarizeStageNights(nights, job.protocol.nightUncertainty),
+      objectiveAssessments, stageObjectiveAssessments,
+      status: 'insufficient_evidence' as const, evidence: job.evidence, nights, stageNightSummary,
       calibration: { source: 'explicit_assumption' as const, quality: job.protocol.assumedStageCalibrationQuality },
       limitations: ['This descriptive report does not establish validated improvement.',
         ...(signalReplay ? ['Numeric comparisons retain own-support scores and scores on observation timestamps shared by all configurations; coverage loss and ambiguous timestamps are reported separately. Common-support differences remain descriptive, not validated improvement.'] : []),

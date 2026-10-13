@@ -1,10 +1,11 @@
+import { assessStageObjective, stageObjectivePolicySchema, stageObjectiveEvidenceSchema, type StageObjectivePolicy } from './stage-objective'
 import { z } from 'zod'
 import { jobOperationsSchema } from './job-operations'
 import { assessNumericObjective, objectiveEvidenceSchema, objectivePolicySchema, type ObjectivePolicy, type ObjectiveEvidence } from './objective-policy'
 
 /** Convert supervisor measurements only when this frozen policy explicitly
  * permits sampled RSS. Legacy peak policies do not silently change meaning. */
-export function objectiveOperations(raw: unknown, policy: ObjectivePolicy): ObjectiveEvidence['operational'] {
+export function objectiveOperations(raw: unknown, policy: Pick<ObjectivePolicy, 'qualificationId' | 'operational'>): ObjectiveEvidence['operational'] {
   if (!policy.operational.observations) return null
   const parsed = jobOperationsSchema.safeParse(raw)
   if (!parsed.success) return null
@@ -32,5 +33,20 @@ export function finalizeObjectiveReport(raw: unknown, policy: ObjectivePolicy | 
   return { ...report, objectiveAssessments: assessments.map(row => ({ baseline: row.baseline, candidate: row.candidate,
     baselineHash: row.baselineHash, candidateHash: row.candidateHash,
     ...assessNumericObjective(policy, { ...row.evidence, operational }, designatedPolicy),
+  })) }
+}
+
+const stageAssessment = z.object({ version: z.literal('stage-objective-assessment-v1'), policy: stageObjectivePolicySchema,
+  evidence: stageObjectiveEvidenceSchema, baseline: z.enum(['default', 'current']), candidate: z.literal('candidate'), baselineHash: z.string(), candidateHash: z.string() })
+export function finalizeStageObjectiveReport(raw: unknown, policy: StageObjectivePolicy | undefined, operations: unknown, designation: StageObjectivePolicy | null) {
+  const report = z.record(z.string(), z.unknown()).parse(raw)
+  if (!policy) return report
+  const assessments = z.array(stageAssessment).length(2).parse(report.stageObjectiveAssessments)
+  if (new Set(assessments.map(row => row.baseline)).size !== 2
+    || assessments.some(row => JSON.stringify(row.policy) !== JSON.stringify(stageObjectivePolicySchema.parse(policy)))) throw new Error('Stage objective report identity mismatch')
+  const operational = objectiveOperations(operations, policy)
+  return { ...report, stageObjectiveAssessments: assessments.map(row => ({ baseline: row.baseline, candidate: row.candidate,
+    baselineHash: row.baselineHash, candidateHash: row.candidateHash,
+    ...assessStageObjective(policy, { ...row.evidence, operational }, designation),
   })) }
 }

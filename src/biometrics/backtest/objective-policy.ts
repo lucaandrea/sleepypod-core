@@ -1,6 +1,13 @@
 import { z } from 'zod'
 
 const nonnegative = z.number().finite().nonnegative()
+export const operationalPolicySchema = z.object({ maximumWallMs: z.number().int().positive(), maximumPeakRssBytes: z.number().int().positive(),
+  maximumIngestionAgeMs: z.number().int().positive(),
+  observations: z.object({ version: z.literal('sampled-process-group-v1'),
+    maximumMemoryGapMs: z.number().int().positive(), maximumIngestionGapMs: z.number().int().positive(),
+  }).strict().optional(),
+}).strict()
+
 /** Frozen with the experiment. Supplying thresholds never designates this as a
  * release promotion policy; that authority belongs to the qualified build. */
 export const objectivePolicySchema = z.object({
@@ -15,14 +22,15 @@ export const objectivePolicySchema = z.object({
   maximumRegressedNightFraction: z.number().min(0).max(1),
   maximumSubgroupMaeRegression: nonnegative,
   requiredSubgroups: z.array(z.string().min(1).max(100)).max(20),
-  operational: z.object({ maximumWallMs: z.number().int().positive(), maximumPeakRssBytes: z.number().int().positive(),
-    maximumIngestionAgeMs: z.number().int().positive(),
-    observations: z.object({ version: z.literal('sampled-process-group-v1'),
-      maximumMemoryGapMs: z.number().int().positive(), maximumIngestionGapMs: z.number().int().positive(),
-    }).strict().optional(),
-  }).strict(),
+  operational: operationalPolicySchema,
 }).strict().refine(policy => new Set(policy.requiredSubgroups).size === policy.requiredSubgroups.length, 'Duplicate objective subgroups')
 export type ObjectivePolicy = z.infer<typeof objectivePolicySchema>
+
+export const operationalEvidenceSchema = z.object({ wallMs: nonnegative, peakRssBytes: nonnegative, maximumIngestionAgeMs: nonnegative,
+  observations: z.object({ version: z.literal('sampled-process-group-v1'), qualificationId: z.string(),
+    maximumMemoryGapMs: nonnegative, maximumIngestionGapMs: nonnegative,
+  }).strict().optional(),
+}).strict()
 
 const nightSchema = z.object({ cohortId: z.string(), pairedReferences: z.number().int().nonnegative(),
   maeDifference: z.number().finite().nullable(), baselineObservationCount: z.number().int().nonnegative(), lostObservations: z.number().int().nonnegative() }).strict()
@@ -31,11 +39,7 @@ export const objectiveEvidenceSchema = z.object({
   nights: z.array(nightSchema).max(60),
   intervalUpper: z.number().finite().nullable(),
   subgroups: z.array(z.object({ name: z.string(), pairedNights: z.number().int().nonnegative(), maeDifference: z.number().finite().nullable() }).strict()).max(20),
-  operational: z.object({ wallMs: nonnegative, peakRssBytes: nonnegative, maximumIngestionAgeMs: nonnegative,
-    observations: z.object({ version: z.literal('sampled-process-group-v1'), qualificationId: z.string(),
-      maximumMemoryGapMs: nonnegative, maximumIngestionGapMs: nonnegative,
-    }).strict().optional(),
-  }).strict().nullable(),
+  operational: operationalEvidenceSchema.nullable(),
 }).strict()
 export type ObjectiveEvidence = z.infer<typeof objectiveEvidenceSchema>
 
@@ -54,20 +58,9 @@ export function assessNumericObjective(rawPolicy: ObjectivePolicy, rawEvidence: 
   if (scored.length < policy.minimumNights) missing.push('insufficient_supported_nights')
   if (scored.length !== evidence.nights.length) missing.push('unsupported_nights')
   if (evidence.intervalUpper === null) missing.push('uncertainty_unavailable')
-  if (!evidence.operational) missing.push('operational_evidence_unavailable')
-  else {
-    const required = policy.operational.observations, observed = evidence.operational.observations
-    if (required && !observed) missing.push('operational_sampling_evidence_unavailable')
-    if (!required && observed) missing.push('sampled_memory_not_authorized_by_policy')
-    if (required && observed) {
-      if (observed.qualificationId !== policy.qualificationId) missing.push('operational_qualification_mismatch')
-      if (observed.maximumMemoryGapMs > required.maximumMemoryGapMs) missing.push('memory_sampling_gap')
-      if (observed.maximumIngestionGapMs > required.maximumIngestionGapMs) missing.push('ingestion_sampling_gap')
-    }
-    if (evidence.operational.wallMs > policy.operational.maximumWallMs) failures.push('wall_time_limit')
-    if (evidence.operational.peakRssBytes > policy.operational.maximumPeakRssBytes) failures.push('memory_limit')
-    if (evidence.operational.maximumIngestionAgeMs > policy.operational.maximumIngestionAgeMs) failures.push('ingestion_limit')
-  }
+  const operational = assessOperationalEvidence(policy.qualificationId, policy.operational, evidence.operational)
+  missing.push(...operational.missing)
+  failures.push(...operational.failures)
   if (evidence.nights.some(night => night.baselineObservationCount === 0)) missing.push('coverage_unavailable')
   if (evidence.nights.some(night => night.baselineObservationCount > 0 && night.lostObservations / night.baselineObservationCount > policy.maximumLostObservationFraction)) failures.push('coverage_loss')
   const deltas = scored.map(night => night.maeDifference ?? 0)
@@ -91,4 +84,23 @@ export function assessNumericObjective(rawPolicy: ObjectivePolicy, rawEvidence: 
   return { version: 'numeric-objective-assessment-v1' as const, policy, evidence, designated, status, missingEvidence: missing, failedThresholds: failures,
     equalNightMeanMaeDifference: estimate, intervalUpper: evidence.intervalUpper,
     interpretation: 'agreement_with_named_reference_not_clinical_validation' as const }
+}
+
+export function assessOperationalEvidence(qualificationId: string, policy: z.infer<typeof operationalPolicySchema>, evidence: z.infer<typeof operationalEvidenceSchema> | null) {
+  const missing: string[] = [], failures: string[] = []
+  if (!evidence) missing.push('operational_evidence_unavailable')
+  else {
+    const required = policy.observations, observed = evidence.observations
+    if (required && !observed) missing.push('operational_sampling_evidence_unavailable')
+    if (!required && observed) missing.push('sampled_memory_not_authorized_by_policy')
+    if (required && observed) {
+      if (observed.qualificationId !== qualificationId) missing.push('operational_qualification_mismatch')
+      if (observed.maximumMemoryGapMs > required.maximumMemoryGapMs) missing.push('memory_sampling_gap')
+      if (observed.maximumIngestionGapMs > required.maximumIngestionGapMs) missing.push('ingestion_sampling_gap')
+    }
+    if (evidence.wallMs > policy.maximumWallMs) failures.push('wall_time_limit')
+    if (evidence.peakRssBytes > policy.maximumPeakRssBytes) failures.push('memory_limit')
+    if (evidence.maximumIngestionAgeMs > policy.maximumIngestionAgeMs) failures.push('ingestion_limit')
+  }
+  return { missing, failures }
 }

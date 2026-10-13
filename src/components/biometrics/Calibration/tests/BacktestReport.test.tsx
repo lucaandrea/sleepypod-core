@@ -1,3 +1,4 @@
+import { stageObjectiveTestPolicy } from '@/src/biometrics/backtest/tests/fixtures/stage-objective'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { setupI18n } from '@lingui/core'
 import { I18nProvider } from '@lingui/react'
@@ -84,4 +85,18 @@ it('renders waveform reports with truthful provenance and optional stages', () =
   rendered.rerender(view())
   expect(screen.getByRole('button', { name: 'Inspect stage traces' })).toBeTruthy()
   expect(screen.getByText('Assumed stage calibration quality: 0')).toBeTruthy()
+})
+
+it('shows frozen stage policy support requirements and regression reasons without clinical claims', () => {
+  mock.get.mockReturnValue({ data: { jobId: 'job', contentHash: 'hash', available: true, currentHoldoutUseCount: 1,
+    report: { ...report, protocol: { ...report.protocol, stageObjectivePolicy: stageObjectiveTestPolicy }, stageObjectiveAssessments: [{
+      baseline: 'default', candidate: 'candidate', status: 'insufficient_evidence', designated: false,
+      missingEvidence: ['stage_support:rem'], failedThresholds: ['stage_regression:deep'],
+    }] } } })
+  render(<I18nProvider i18n={i18n}><BacktestReport id="job" /></I18nProvider>)
+  fireEvent.click(screen.getByText('Frozen stage objective thresholds'))
+  expect(screen.getByText('minimumPairedDurationMsPerNight')).toBeTruthy()
+  expect(screen.getByText('Missing evidence: stage_support:rem')).toBeTruthy()
+  expect(screen.getByText('Threshold failed: stage_regression:deep')).toBeTruthy()
+  expect(screen.getByText(/It does not establish clinical stage accuracy/)).toBeTruthy()
 })

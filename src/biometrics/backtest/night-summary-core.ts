@@ -48,7 +48,7 @@ function summarizeNight(cohortId: string, comparison: NightComparison) {
       outputCoverage: durationMs ? totals.outputMs / durationMs : null,
       referenceCoverage: totals.referenceMs ? totals.pairedMs / totals.referenceMs : null }
   }
-  return { cohortId, evaluationDurationMs: durationMs, commonSupport: { baseline, candidate },
+  return { cohortId, evaluationDurationMs: durationMs, commonOutputDurationMs: comparison.windows.reduce((sum, window) => sum + window.commonSupport.baseline.outputDurationMs, 0), commonSupport: { baseline, candidate },
     ownSupport: { baseline: ownSupport('baseline'), candidate: ownSupport('candidate') },
     commonAgreementDifference: difference(candidate.agreement, baseline.agreement),
     commonMacroF1Difference: difference(candidate.macroF1, baseline.macroF1),

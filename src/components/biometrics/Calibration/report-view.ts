@@ -1,3 +1,4 @@
+import { stageObjectivePolicySchema } from '@/src/biometrics/backtest/stage-objective'
 import { numericSubgroupNames } from '@/src/biometrics/backtest/numeric-subgroups'
 import { jobOperationsSchema } from '@/src/biometrics/backtest/job-operations'
 import { waveformResourceSummarySchema } from '@/src/biometrics/backtest/waveform-resources'
@@ -13,8 +14,10 @@ export const reportViewSchema = z.object({
   waveform: z.object({ resources: waveformResourceSummarySchema.optional() }).optional(),
   datasetHash: z.string(), protocolHash: z.string(), manifestHash: z.string(), evaluatorBuildHash: z.string(),
   split: z.enum(['tuning', 'validation', 'holdout']), evidence: z.string(), holdoutUse: z.number(),
-  protocol: z.object({ mode: z.enum(['comparison', 'stage_replay', 'signal_replay']), waveformStages: z.boolean().optional(), objectivePolicy: objectivePolicySchema.optional() }),
+  protocol: z.object({ mode: z.enum(['comparison', 'stage_replay', 'signal_replay']), waveformStages: z.boolean().optional(), objectivePolicy: objectivePolicySchema.optional(), stageObjectivePolicy: stageObjectivePolicySchema.optional() }),
   objectiveAssessments: z.array(z.object({ baseline: z.string(), candidate: z.string(), status: z.enum(['insufficient_evidence', 'incompatible', 'regressed', 'improved', 'no_material_change']),
+    missingEvidence: z.array(z.string()), failedThresholds: z.array(z.string()), designated: z.boolean() })).max(2).optional(),
+  stageObjectiveAssessments: z.array(z.object({ baseline: z.string(), candidate: z.string(), status: z.enum(['insufficient_evidence', 'regressed', 'improved', 'no_material_change']),
     missingEvidence: z.array(z.string()), failedThresholds: z.array(z.string()), designated: z.boolean() })).max(2).optional(),
   calibration: z.object({ source: z.literal('explicit_assumption'), quality: z.number() }),
   limitations: z.array(z.string()),
