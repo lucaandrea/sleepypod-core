@@ -1,10 +1,11 @@
 {
-  "verifiedAt": "2026-10-13T13:39:34.720436+00:00",
+  "verifiedAt": "2026-10-13T14:14:45.388115+00:00",
   "build": {
     "branch": "feat/biometrics-calibration",
-    "commitHash": "fc61e0e8",
-    "commitTitle": "docs(biometrics): keep private reference inventory out of release evidence",
-    "buildDate": "2026-10-13T13:36:49.208Z"
+    "commitHash": "4c3a6a6e",
+    "commitTitle": "fix(biometrics): handle shadow RSS disappearance during clean exit",
+    "buildDate": "2026-10-13T14:12:14.467Z",
+    "version": null
   },
   "admission": {
     "httpStatus": 200,

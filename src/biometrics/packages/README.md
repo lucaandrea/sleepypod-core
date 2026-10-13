@@ -2,9 +2,12 @@
 
 `manifest.ts` validates inert proposals for the algorithm-development workflow.
 It does not import, execute, install, or approve their code. No API currently
-accepts these proposals. An off-pod Docker executor is available in
-`scripts/algorithm-experiments/container.ts`; qualification and deployment
-integration are not yet implemented.
+accepts these proposals. The [off-pod experiment workflow](../../../scripts/algorithm-experiments/README.md)
+provides Docker execution, deterministic/noise checks, managed whole-night
+comparisons, resource assessments and combined external qualification evidence.
+That evidence cannot install code. Promotion requires representative-fixture
+review, matching target-pod and prospective evidence, and a reviewed release
+into the shipped registry.
 
 The versioned manifest declares engine identity, frame schema identifiers,
 metric definitions and units, supported hardware/sample rates, causal or

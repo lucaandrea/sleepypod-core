@@ -53,7 +53,7 @@ acceptance is separate from fixture and browser results.
 - The measured replay policy is installed and the pod reports admitted.
   Reviewed promotion/shadow registries still need their own matching fixture and
   held-out evidence; absence must remain visible and deny qualified promotion.
-- Build `fc61e0e8` is deployed. Migrations succeeded; the calibration API, live
+- Build `4c3a6a6e` is deployed, including the live-shadow exit-race fix. Migrations succeeded; the calibration API, live
   data path and core/numerical services are healthy, and new vitals carry processing
   provenance. [Deployment receipt](performance/biometrics-replay-2026-10-13/deployment-verification.json).
   Unpersonalized defaults have no requested activation generation, so this check

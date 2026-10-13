@@ -276,7 +276,8 @@ publishing its decision.
 The exploratory `run`, `compare`, `determinism`, and `fixtures` commands do not
 claim studies through this ledger and cannot issue independent-holdout promotion
 evidence. `runManagedTrial` and the `managed` command integrate it as described
-below; final qualification/installation orchestration remains to be added.
+below. `assessManagedQualification` combines verified external evidence as
+described below; installation remains a separate reviewed code/release step.
 
 ## Managed whole-night runner
 
@@ -308,8 +309,9 @@ A successful run means the evaluation completed, not that its candidate passed
 all promotion criteria. Check current ledger exposure, coverage, uncertainty,
 resource assessments, deterministic/noise/compatibility evidence and reviewed
 release admission. The runner does not install packages or claim pod fitness.
-Hard process termination can still leave orphan containers/artifacts; durable
-cleanup and the final qualification controller remain required.
+Hard process termination can still leave orphan containers/artifacts; use the
+ownership-checked recovery procedures below. Combined external qualification
+rechecks the retained evidence and current exposure without authorizing installation.
 
 ## Managed descriptor command
 
