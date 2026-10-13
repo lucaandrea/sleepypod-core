@@ -82,6 +82,7 @@ export class ShadowStreamJoin {
       const result = this.store.append(this.lease, { sequence: this.nextSequence, timestampMs, side: this.plan.side,
         candidateConfigHash: this.plan.candidateConfigHash, activeConfigHash: this.plan.activeConfigHash, inputHash,
         inputIdentityKind: candidate ? 'candidate_prefix' : inputHash ? 'active_provenance' : 'unavailable',
+        ...(active?.provenance ? { activeProvenance: active.provenance } : {}),
         pairing: { policy: 'exact_timestamp_union_v1', candidatePresent: Boolean(candidate), activePresent: Boolean(active) }, readings,
         ...(candidate
           ? { candidateProvenance: { sourceSide: candidate.sourceSide, outputSequence: candidate.sequence, flags: candidate.flags,

@@ -26,11 +26,14 @@ export const shadowPlanSchema = z.object({ schema: z.literal('biometric-shadow-p
   && new Set(plan.metrics).size === plan.metrics.length
   && (!plan.metrics.includes('window_ibi_variability_v1') || plan.windowIbiWindowMs !== undefined), 'Invalid shadow window or metrics')
 const reading = z.object({ value: z.number().finite().nullable(), quality: z.number().min(0).max(1) }).strict()
+export const shadowActiveProvenanceSchema = z.object({ processingRunId: z.string().uuid(), sourceSide: z.enum(['left', 'right']),
+  generation: integer, manifestHash: hash }).strict()
 export const shadowSampleSchema = z.object({ sequence: integer, side: z.enum(['left', 'right']), timestampMs: integer, inputHash: hash.nullable(),
   candidateConfigHash: hash, activeConfigHash: hash,
   readings: z.array(z.object({ metric, candidate: reading, active: reading }).strict()).min(1).max(3),
   pairing: z.object({ policy: z.literal('exact_timestamp_union_v1'), candidatePresent: z.boolean(), activePresent: z.boolean() }).strict().optional(),
   inputIdentityKind: z.enum(['candidate_prefix', 'active_provenance', 'unavailable']).optional(),
+  activeProvenance: shadowActiveProvenanceSchema.optional(),
   candidateProvenance: z.object({ sourceSide: z.enum(['left', 'right']), outputSequence: integer,
     flags: z.array(z.string().max(200)).max(32).nullable(), limitations: z.array(z.string().max(200)).max(33) }).strict().optional(),
 }).strict()

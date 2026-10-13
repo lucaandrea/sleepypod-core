@@ -299,3 +299,32 @@ in arrival order. Abort, window end and iterator return unsubscribe and settle
 pending reads. This adapter supplies candidate input only. The active-reading
 adapter, context provider, installed qualification/admission and service wiring
 remain required before enabling prospective shadow runs.
+
+## Read-only active observation capture
+
+`ShadowActiveReader` polls an existing read-only biometrics SQLite connection.
+It starts at the current vitals ID and accepts only subsequently inserted rows
+for the selected side and observation window. Each poll reads one consistent
+snapshot with an explicit row quota (at most 100); overflow refuses the whole
+batch. Bundle and input metadata are bounded in SQL before materialization.
+The cursor advances only after the complete batch validates. A deleted or changed
+cursor anchor fails rather than silently continuing through a reset or rewrite.
+The host must close/reopen its connection on database replacement and treat any
+capture failure as an attempt failure.
+
+Every accepted row must have exactly one matching quality record and a live
+processing run with the expected configuration, validated resolved parameters,
+shipped manifest, component and source identities, side and time boundaries.
+Legacy/unknown, replay, corrupt, mismatched, missing-quality and future observations
+are refused. Null metric values remain null, quality is copied from the committed
+quality row, and original second-resolution timestamps remain unchanged. Physical
+source side can differ from the logical side under single-sleeper routing.
+
+The existing daemon explicitly records `rawIdentity: not_retained`, so this reader
+returns a null input hash. It preserves processing-run ID, physical source side,
+generation and manifest identity as `activeProvenance`; the join and candidate
+sink retain these fields in the separate shadow sample payload. This is an
+additive JSON field, requiring no schema migration or canonical-vitals write.
+Polling cadence, final-drain polling, runtime admission/context, connection
+replacement detection, resource receipts and service/API wiring remain host
+integration work; this reader alone does not enable a prospective run.
