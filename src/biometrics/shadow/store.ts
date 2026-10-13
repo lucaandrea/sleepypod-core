@@ -17,6 +17,8 @@ export const shadowMonitoringSchema = z.object({
 }).strict()
 export const shadowPlanSchema = z.object({ schema: z.literal('biometric-shadow-plan-v1'), side: z.enum(['left', 'right']),
   execution: shadowExecutionPolicySchema.optional(),
+  // Absent on legacy evidence; null explicitly selects the shipped default.
+  candidateRevisionId: z.string().uuid().nullable().optional(),
   subjectId: z.string().min(1).max(200), monitoring: shadowMonitoringSchema,
   windowIbiWindowMs: positive.max(86400000).optional(),
   joining: z.object({ maximumPendingPoints: positive.max(10000), maximumLatenessMs: positive.max(120000),
@@ -148,6 +150,27 @@ export class ShadowStore {
         (id, idempotency_key, plan_hash, plan, side, state, created_at_ms) VALUES (?, ?, ?, ?, ?, 'pending', ?)`).run(id, idempotencyKey, planHash, canonicalJson(plan), plan.side, now)
       return this.get(id)
     }).immediate()
+  }
+
+  /** Read-only bounded queue scan. It never resumes a running attempt after a
+   * restart: recovery must revoke that authority, retaining incomplete evidence.
+   * The caller still has to claim and revalidate the selected plan. */
+  pending(options: { maximumRuns: number, afterId?: string }) {
+    const input = z.object({ maximumRuns: positive.max(100), afterId: z.string().uuid().optional() }).strict().parse(options)
+    return this.db.transaction(() => {
+      const now = integer.parse(this.now())
+      const rows = this.db.prepare('SELECT id, state FROM biometric_shadow_runs WHERE id > ? ORDER BY id LIMIT ?')
+        .all(input.afterId ?? '', input.maximumRuns + 1) as { id: string, state: RunRow['state'] }[]
+      const batch = rows.slice(0, input.maximumRuns)
+      for (const row of batch) {
+        if (row.state !== 'pending') continue
+        const run = this.get(row.id)
+        if (run.attempt_id !== null || run.lease_until_ms !== null) throw new Error('Invalid pending shadow authority')
+        if (!run.plan.execution || run.plan.candidateRevisionId === undefined || now < run.plan.startMs || now >= run.plan.endMs) continue
+        return { run: { runId: run.id, revisionId: run.plan.candidateRevisionId }, nextCursor: row.id }
+      }
+      return { run: null, nextCursor: rows.length > input.maximumRuns ? batch.at(-1)?.id ?? null : null }
+    }).deferred()
   }
 
   /** Admission is a trusted synchronous host check, never a client boolean. */

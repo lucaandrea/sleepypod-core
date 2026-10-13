@@ -1,5 +1,5 @@
 import { dataHash } from '../algorithms/canonical'
-import { runInstalledShadowAttempt, reconcileInstalledShadowRuns } from './installed-attempt'
+import { runInstalledShadowAttempt, reconcileInstalledShadowRuns, pendingInstalledShadowRun } from './installed-attempt'
 import { shadowStoragePolicySchema } from './store'
 import { ShadowService } from './service'
 
@@ -29,9 +29,11 @@ export function startShadowService(raw: InstallationOptions) {
     recoveryIntervalMs: options.recoveryIntervalMs,
     recoveryMaximumRuns: options.recoveryMaximumRuns,
     recover: cursor => reconcileInstalledShadowRuns(options.installation, options.storagePolicy, options.busyTimeoutMs, cursor),
+    pending: cursor => pendingInstalledShadowRun(options.installation, options.storagePolicy, options.busyTimeoutMs, cursor),
     execute: (runId, revisionId, signal) => runInstalledShadowAttempt(runId, revisionId, options.installation,
       options.storagePolicy, options.busyTimeoutMs, signal),
     onRecoveryError: () => console.warn('[biometrics] Shadow recovery failed; service will retry'),
+    onExecutionError: () => console.warn('[biometrics] Shadow scheduling or execution failed'),
   })
   shared.__biometricShadowService = { service, configurationHash }
   service.start()

@@ -26,6 +26,7 @@ export async function runInstalledShadowAttempt(runId: string, revisionId: strin
   try {
     const store = new inspected.api.ShadowStore(database.db, policy)
     const plan = store.get(runId).plan
+    if (plan.candidateRevisionId === undefined || plan.candidateRevisionId !== revisionId) throw new Error('Shadow candidate revision differs from saved plan')
     if (!plan.execution || busyTimeoutMs > plan.execution.sources.databaseBusyTimeoutMs) throw new Error('Shadow store timeout exceeds saved execution policy')
     const entries = inspected.api.readInstalledShadowQualifications(paths.workerPath).entries.filter(entry => dataHash(entry) === plan.qualificationHash)
     if (entries.length !== 1) throw new Error('Shadow qualification missing or ambiguous')
@@ -37,6 +38,23 @@ export async function runInstalledShadowAttempt(runId: string, revisionId: strin
     identity()
     return await inspected.api.runProfiledShadowAttempt(store, runId, { ...paths, identity,
       piezoReceivedAt: () => getSensorFrameTimes()['piezo-dual'] }, revisionId, signal)
+  }
+  finally { database.close() }
+}
+
+/** Queue inspection runs the verified package with an owned state connection. */
+export function pendingInstalledShadowRun(installation: Pick<Installation, 'workerPath' | 'biometricsDatabase'>,
+  storagePolicy: unknown, busyTimeoutMs: number, options: Parameters<ShadowStore['pending']>[0]) {
+  z.number().int().min(1).max(1000).parse(busyTimeoutMs)
+  const loaded = loadInstalledShadowHost(installation.workerPath)
+  loaded.assertCurrent()
+  const database = openShadowStateDatabase(installation.biometricsDatabase, { busyTimeoutMs })
+  try {
+    database.assertCurrent()
+    const result = new loaded.api.ShadowStore(database.db, storagePolicy).pending(options)
+    database.assertCurrent()
+    loaded.assertCurrent()
+    return result
   }
   finally { database.close() }
 }

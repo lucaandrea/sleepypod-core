@@ -7,15 +7,18 @@ interface ShadowServiceOptions {
   recoveryIntervalMs: number
   recoveryMaximumRuns: number
   onRecoveryError?: () => void
+  pending?: (options: Parameters<ShadowStore['pending']>[0]) => ReturnType<ShadowStore['pending']>
+  onExecutionError?: () => void
 }
 
 /** Owns local attempts and bounded maintenance. The store lease and worker flock
  * remain authoritative across processes. An aborted attempt keeps its slot until
- * execution has finished cleanup. This is not a durable scheduling queue. */
+ * execution has finished cleanup. Scheduling reads saved pending plans only. */
 export class ShadowService {
   private stopped = false
   private timer: ReturnType<typeof setTimeout> | null = null
   private cursor: string | undefined
+  private pendingCursor: string | undefined
   private active: { runId: string, controller: AbortController, done: Promise<unknown> } | null = null
   private readonly options: ShadowServiceOptions
 
@@ -42,6 +45,15 @@ export class ShadowService {
       }
       catch { /* Logging must not disable recovery. */ }
     }
+    if (!this.stopped && !this.active && this.options.pending) {
+      try {
+        const result = this.options.pending({ maximumRuns: this.options.recoveryMaximumRuns,
+          ...(this.pendingCursor ? { afterId: this.pendingCursor } : {}) })
+        this.pendingCursor = result.nextCursor ?? undefined
+        if (result.run) void this.run(result.run.runId, result.run.revisionId).catch(() => this.reportExecutionError())
+      }
+      catch { this.reportExecutionError() }
+    }
     if (!this.stopped) {
       this.timer = setTimeout(() => {
         this.timer = null
@@ -49,6 +61,13 @@ export class ShadowService {
       }, this.options.recoveryIntervalMs)
       this.timer.unref()
     }
+  }
+
+  private reportExecutionError() {
+    try {
+      this.options.onExecutionError?.()
+    }
+    catch { /* Logging must not interrupt scheduling or cause rejection. */ }
   }
 
   run(runId: string, revisionId: string | null) {

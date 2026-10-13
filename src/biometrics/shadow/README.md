@@ -752,7 +752,28 @@ shutdown calls `stopShadowService` before database closure. The database lease a
 Linux worker lock still enforce authority across processes; this local owner does
 not replace them or serialize replay workers.
 
-This provides an explicit service entry point, not automatic production startup
-or a durable queue. Scheduling still needs a saved candidate revision identity,
-qualified deployment configuration and API/UI wiring. No production resource
+This provides an explicit service entry point; qualified deployment startup
+configuration and API/UI wiring are still required. No production resource
 thresholds or qualification evidence are inferred by this service.
+
+### Durable prospective scheduling
+
+Plans now include `candidateRevisionId`: a saved revision UUID or explicit `null`
+for the shipped default. This identity is covered by the plan hash and idempotency
+check. Legacy plans remain readable, but the installed execution boundary rejects
+missing or mismatched revision identities. Profile resolution still validates the
+saved configuration hashes and both acknowledged physical-channel baselines.
+
+The service scans bounded primary-key pages through the installed package's store
+at its maintenance cadence, with a separate scheduling cursor. It selects only
+pending executable plans with a saved revision whose observation window is open.
+Future plans are revisited on later sweeps; terminal, running and legacy plans are
+skipped. Each selected run goes through ordinary qualification, admission and lease
+claim checks. A selection is not a reservation and cannot bypass cross-process
+authority. Scheduled attempts are serialized locally while recovery continues.
+Errors are observed and reported without disabling subsequent sweeps.
+
+After restart, pending plans remain schedulable from their durable identity. Running
+attempts are never resumed by this queue; expired ones retain their samples and are
+failed by recovery. Scan cadence and queue size may delay a start, so coverage is
+measured from actual samples and missed windows are recorded explicitly.

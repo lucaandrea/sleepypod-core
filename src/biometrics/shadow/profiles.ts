@@ -16,6 +16,7 @@ export function resolveShadowProfiles(configuration: Database.Database, biometri
   rawRevisionId: string | null, assertCurrent: () => void, now = Date.now()) {
   const plan = shadowPlanSchema.parse(rawPlan), revisionId = z.string().uuid().nullable().parse(rawRevisionId)
   if (!plan.execution) throw new Error('Shadow profile resolution requires execution policy')
+  if (plan.candidateRevisionId !== undefined && plan.candidateRevisionId !== revisionId) throw new Error('Shadow candidate revision differs from saved plan')
   const execution = plan.execution
   for (const db of [configuration, biometrics]) {
     if (!db.open || (!db.readonly && db.pragma('query_only', { simple: true }) !== 1)) throw new Error('Shadow profile resolution requires read-only databases')

@@ -1,13 +1,16 @@
 // @vitest-environment node
-import { afterEach, expect, it, vi } from 'vitest'
-import { runInstalledShadowAttempt, reconcileInstalledShadowRuns } from '../installed-attempt'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { runInstalledShadowAttempt, reconcileInstalledShadowRuns, pendingInstalledShadowRun } from '../installed-attempt'
 import { startShadowService, stopShadowService } from '../service-host'
 
-vi.mock('../installed-attempt', () => ({ runInstalledShadowAttempt: vi.fn(), reconcileInstalledShadowRuns: vi.fn() }))
+vi.mock('../installed-attempt', () => ({ runInstalledShadowAttempt: vi.fn(), reconcileInstalledShadowRuns: vi.fn(), pendingInstalledShadowRun: vi.fn() }))
 const runId = '11111111-1111-4111-8111-111111111111'
 const options = () => ({ installation: { workerPath: '/trusted/shadow-host.cjs', pythonPath: '/trusted/python', modulesPath: '/trusted/modules',
   configurationDatabase: '/trusted/config.db', biometricsDatabase: '/trusted/bio.db', presenceFile: '/trusted/presence' },
 storagePolicy: { maximumRuns: 10, maximumPoints: 1000, maximumBytes: 1000000 }, busyTimeoutMs: 50, recoveryIntervalMs: 1000, recoveryMaximumRuns: 10 })
+beforeEach(() => {
+  vi.mocked(pendingInstalledShadowRun).mockReturnValue({ run: null, nextCursor: null })
+})
 afterEach(async () => {
   await stopShadowService()
   vi.resetAllMocks()

@@ -4,7 +4,7 @@ import { dataHash } from '../../algorithms/canonical'
 import { inspectInstalledShadowHost, loadInstalledShadowHost } from '../installed-host'
 import { installedShadowIdentity } from '../device-identity'
 import { openShadowStateDatabase } from '../active-database'
-import { runInstalledShadowAttempt, reconcileInstalledShadowRuns } from '../installed-attempt'
+import { runInstalledShadowAttempt, reconcileInstalledShadowRuns, pendingInstalledShadowRun } from '../installed-attempt'
 vi.mock('../installed-host', () => ({ inspectInstalledShadowHost: vi.fn(), loadInstalledShadowHost: vi.fn() }))
 vi.mock('../device-identity', () => ({ installedShadowIdentity: vi.fn() }))
 vi.mock('../active-database', () => ({ openShadowStateDatabase: vi.fn() }))
@@ -14,11 +14,13 @@ const paths = { workerPath: '/trusted/shadow-host.cjs', pythonPath: '/trusted/py
   configurationDatabase: '/trusted/config.db', biometricsDatabase: '/trusted/bio.db', presenceFile: '/trusted/presence' }
 function setup() {
   const entry = { qualificationId: 'test' }
-  const plan = { qualificationHash: dataHash(entry), execution: { sources: { databaseBusyTimeoutMs: 50 } } }
+  const plan = { candidateRevisionId: null as string | null | undefined, qualificationHash: dataHash(entry), execution: { sources: { databaseBusyTimeoutMs: 50 } } }
   const get = vi.fn(() => ({ plan })), execute = vi.fn().mockResolvedValue('completed')
   const registry = vi.fn(() => ({ entries: [entry] })), guard = vi.fn()
   const recover = vi.fn(() => ({ scanned: 1, recovered: [], nextCursor: null }))
+  const pending = vi.fn(() => ({ run: { runId, revisionId: null }, nextCursor: runId }))
   class Store {
+    pending = pending
     get = get
     reconcileExpired = recover
   }
@@ -29,7 +31,7 @@ function setup() {
   vi.mocked(openShadowStateDatabase).mockReturnValue(database as unknown as ReturnType<typeof openShadowStateDatabase>)
   const identity = vi.fn(() => ({ hardwareId: 'test', sampleRateHz: 500 as const, engineBuildHash: 'a'.repeat(64), pythonBuildHash: 'b'.repeat(64) }))
   vi.mocked(installedShadowIdentity).mockReturnValue(identity)
-  return { plan, execute, registry, guard, database, identity, recover }
+  return { plan, execute, registry, guard, database, identity, recover, pending }
 }
 beforeEach(() => vi.resetAllMocks())
 it('executes the loaded package with real frame-clock wiring and guarded state ownership', async () => {
@@ -79,4 +81,19 @@ it('reconciles through the installed store without starting probes, hardware che
   expect(inspectInstalledShadowHost).not.toHaveBeenCalled()
   expect(installedShadowIdentity).not.toHaveBeenCalled()
   expect(execute).not.toHaveBeenCalled()
+})
+
+it.each([undefined, '22222222-2222-4222-8222-222222222222'])('refuses missing or substituted saved revision %s', async (revision) => {
+  const { plan, execute, database } = setup()
+  plan.candidateRevisionId = revision
+  await expect(runInstalledShadowAttempt(runId, null, paths, {}, 50)).rejects.toThrow('revision differs')
+  expect(execute).not.toHaveBeenCalled()
+  expect(database.close).toHaveBeenCalledOnce()
+})
+it('reads pending identity from the installed store without worker inspection', () => {
+  const { pending, database } = setup()
+  expect(pendingInstalledShadowRun(paths, {}, 50, { maximumRuns: 10 })).toEqual({ run: { runId, revisionId: null }, nextCursor: runId })
+  expect(pending).toHaveBeenCalledWith({ maximumRuns: 10 })
+  expect(inspectInstalledShadowHost).not.toHaveBeenCalled()
+  expect(database.close).toHaveBeenCalledOnce()
 })

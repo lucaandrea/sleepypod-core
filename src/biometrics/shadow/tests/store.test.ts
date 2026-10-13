@@ -30,6 +30,62 @@ function sample(sequence = 0) {
     readings: [{ metric: 'heart_rate', candidate: { value: null as number | null, quality: 0 }, active: { value: 60, quality: 1 } }] }
 }
 const joining = { maximumPendingPoints: 10, maximumLatenessMs: 1000, drainGraceMs: 2000 }
+const executable = { ...plan, joining, candidateRevisionId: null,
+  execution: { version: 'shadow-execution-policy-v1', configHashes: { left: hash, right: hash },
+    maximumRecords: 10, maximumOutputs: 10, maximumCpuMs: 1000, maximumInputBytes: 100000, maximumOutputBytes: 100000,
+    budgets: { cpuSeconds: 2, addressSpaceBytes: 100000000, maximumRssBytes: 100000000, wallMs: 10000, acknowledgmentMs: 1000, idleMs: 1000, rssIntervalMs: 100, rssTimeoutMs: 100 },
+    leaseMs: 1500, heartbeatMs: 200, sources: { pollMs: 50, maximumActiveRows: 10, databaseBusyTimeoutMs: 50,
+      frames: { maximumFrames: 10, maximumBytes: 100000, maximumEventAgeMs: 1000, maximumFutureSkewMs: 0 },
+      context: { presenceStaleMs: 300000, pumpStaleMs: 5000, maximumPresenceBytes: 4096 } } } }
+
+it('persists candidate revision identity and rejects identity changes on retry', () => {
+  const { store } = setup()
+  const revision = '11111111-1111-4111-8111-111111111111'
+  const run = store.create({ ...executable, candidateRevisionId: revision }, 'identity')
+  expect(store.get(run.id).plan.candidateRevisionId).toBe(revision)
+  expect(() => store.create(executable, 'identity')).toThrow('idempotency')
+  expect(() => store.create({ ...executable, candidateRevisionId: 'latest' }, 'invalid')).toThrow()
+})
+
+it('scans bounded pages past legacy, future and running plans using saved identity', () => {
+  const { store, advance } = setup()
+  store.create(plan, 'legacy')
+  const { candidateRevisionId, ...legacyExecution } = executable
+  expect(candidateRevisionId).toBeNull()
+  store.create(legacyExecution, 'no-identity')
+  const future = store.create({ ...executable, startMs: start + 1000 }, 'future')
+  const running = store.create(executable, 'running')
+  store.claim(running.id, 10000, () => {})
+  const ready = store.create(executable, 'ready')
+  const scan = () => {
+    const results: string[] = []
+    let cursor: string | undefined
+    let pages = 0
+    do {
+      const page = store.pending({ maximumRuns: 1, ...(cursor ? { afterId: cursor } : {}) })
+      if (page.run) {
+        expect(page.run.revisionId).toBeNull()
+        results.push(page.run.runId)
+      }
+      cursor = page.nextCursor ?? undefined
+      expect(++pages).toBeLessThan(8)
+    } while (cursor)
+    return results
+  }
+  expect(scan()).toEqual([ready.id])
+  advance(1000)
+  expect(scan().sort()).toEqual([ready.id, future.id].sort())
+  advance(60000)
+  expect(scan()).toEqual([])
+  expect(store.get(running.id).state).toBe('running')
+})
+
+it('fails queue inspection on corrupted pending evidence', () => {
+  const { store, db } = setup()
+  const run = store.create(executable, 'ready')
+  db.prepare('UPDATE biometric_shadow_runs SET plan_hash = \'corrupt\' WHERE id = ?').run(run.id)
+  expect(() => store.pending({ maximumRuns: 1 })).toThrow('integrity')
+})
 function workerOutput(timestampMs: number, sequence = 0) {
   return { sequence, inputHash: hash, side: 'left', sourceSide: 'left', timestampMs, configHash: hash,
     readings: [{ metric: 'heart_rate', unit: 'bpm', windowMs: null, value: 60, quality: 1 },

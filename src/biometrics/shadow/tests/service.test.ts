@@ -13,6 +13,51 @@ function setup() {
 }
 afterEach(() => vi.useRealTimers())
 
+it('schedules saved pending identity while maintenance continues during worker cleanup', async () => {
+  vi.useFakeTimers()
+  const { execute, recover } = setup()
+  const pending = vi.fn().mockReturnValueOnce({ run: { runId, revisionId: otherId }, nextCursor: runId })
+    .mockReturnValue({ run: null, nextCursor: null })
+  let release!: () => void
+  execute.mockImplementationOnce(async () => {
+    await new Promise<void>((resolve) => {
+      release = resolve
+    })
+  })
+  const service = new ShadowService({ execute, recover, pending, recoveryIntervalMs: 100, recoveryMaximumRuns: 7 })
+  service.start()
+  await Promise.resolve()
+  expect(execute).toHaveBeenCalledWith(runId, otherId, expect.any(AbortSignal))
+  await vi.advanceTimersByTimeAsync(300)
+  expect(recover).toHaveBeenCalledTimes(4)
+  expect(pending).toHaveBeenCalledOnce()
+  release()
+  await vi.advanceTimersByTimeAsync(100)
+  expect(pending).toHaveBeenLastCalledWith({ maximumRuns: 7, afterId: runId })
+  await service.stop()
+})
+
+it('retries failed queue scans and observes scheduled execution errors', async () => {
+  vi.useFakeTimers()
+  const { execute, recover } = setup()
+  const pending = vi.fn().mockImplementationOnce(() => {
+    throw new Error('database busy')
+  }).mockReturnValueOnce({ run: { runId, revisionId: null }, nextCursor: runId })
+    .mockReturnValue({ run: null, nextCursor: null })
+  const onExecutionError = vi.fn(() => {
+    throw new Error('logging failed')
+  })
+  execute.mockRejectedValueOnce(new Error('admission refused'))
+  const service = new ShadowService({ execute, recover, pending, onExecutionError, recoveryIntervalMs: 100, recoveryMaximumRuns: 7 })
+  service.start()
+  await vi.advanceTimersByTimeAsync(100)
+  expect(pending.mock.calls.slice(0, 2)).toEqual([[{ maximumRuns: 7 }], [{ maximumRuns: 7 }]])
+  expect(onExecutionError).toHaveBeenCalledTimes(2)
+  await vi.advanceTimersByTimeAsync(100)
+  expect(pending).toHaveBeenLastCalledWith({ maximumRuns: 7, afterId: runId })
+  await service.stop()
+})
+
 it('advances bounded sweeps, retains the cursor on failure and stops maintenance', async () => {
   vi.useFakeTimers()
   const { service, recover, onRecoveryError } = setup()
