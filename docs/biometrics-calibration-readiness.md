@@ -56,7 +56,6 @@ acceptance is separate from fixture and browser results.
   health, and record the installed commit and deployment outcome.
 - Push the branch, open the PR and request CodeRabbit review.
 
-The legacy reference tables on the target pod were inspected read-only for row
-counts (106 stage intervals and 1,597 heart-rate samples). Counts alone do not
-establish independent nights, metric compatibility, reference reliability or
-sufficient held-out support. No qualification is inferred from those counts.
+Legacy reference availability alone does not establish independent nights, metric
+compatibility, reference reliability or sufficient held-out support. No accuracy
+qualification is inferred from an inventory of existing references.
