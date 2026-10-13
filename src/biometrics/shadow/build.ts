@@ -1,0 +1,24 @@
+import { execFile } from 'node:child_process'
+import { tmpdir } from 'node:os'
+import { promisify } from 'node:util'
+import { z } from 'zod'
+import { configHash } from '../algorithms/canonical'
+import { waveformPythonBuildSchema } from '../backtest/waveform-build'
+
+export const shadowPythonBuildSchema = waveformPythonBuildSchema.extend({ identity: waveformPythonBuildSchema.shape.identity.extend({
+  version: z.literal('shadow-python-build-v1'),
+}).refine(identity => ['shadow_build.py', 'shadow.py', 'shadow_worker.py', 'shadow_process.py'].every(name =>
+  identity.sources[`common/biometrics/${name}`] !== undefined), 'Shadow source identity incomplete') })
+
+/** Fixed shipped probe, exact worker interpreter, bounded output/deadline. Never
+ * accepts a module name, shell command or source code from a request. */
+export async function probeShadowBuild(location: { pythonPath: string, modulesPath: string }, signal?: AbortSignal) {
+  const { stdout } = await promisify(execFile)(location.pythonPath, ['-B', '-m', 'common.biometrics.shadow_build'], {
+    cwd: tmpdir(), env: { NODE_ENV: 'production', PYTHONPATH: location.modulesPath, LANG: 'C.UTF-8', TZ: 'UTC',
+      OPENBLAS_NUM_THREADS: '1', OMP_NUM_THREADS: '1', MKL_NUM_THREADS: '1', NUMEXPR_NUM_THREADS: '1' },
+    encoding: 'utf8', maxBuffer: 65536, timeout: 10000, killSignal: 'SIGKILL', signal,
+  }).catch(() => { throw new Error('Shadow build identity is unavailable') })
+  const result = shadowPythonBuildSchema.parse(JSON.parse(stdout))
+  if (configHash(result.identity) !== result.hash) throw new Error('Shadow build identity integrity mismatch')
+  return result
+}

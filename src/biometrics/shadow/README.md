@@ -505,3 +505,20 @@ evidence. Successful null/unhealthy samples can be refreshed, but never admitted
 The attempt's next admission check stops it when the monitor cannot provide health.
 Host service ownership, installed build identity and qualification selection still
 need to wire this monitor into the complete attempt lifecycle.
+
+## Shadow Python build identity
+
+`probeShadowBuild` invokes the fixed `common.biometrics.shadow_build` probe using
+the same interpreter and module directory as the worker, with sanitized thread
+settings, a ten-second deadline and a 64 KiB output bound. It checks the canonical
+identity hash and requires the shadow-specific source entries. Replay fingerprints
+alone cannot qualify a shadow worker.
+
+The Python fingerprint uses `shadow-python-build-v1` and covers all shared replay
+sources and locked dependency metadata plus `shadow.py`, `shadow_worker.py`,
+`shadow_process.py` and the probe itself. Thus prospective processing, JSONL
+transport and kernel-limit changes invalidate qualification. The probe neither
+imports the numerical processor nor opens live sources. Dependency RECORD/WHEEL
+hashes identify installation metadata, not every installed binary's contents.
+Production composition must still bind the shipped Node host bundle, capture
+hardware identity, and revalidate installation identity during execution.
