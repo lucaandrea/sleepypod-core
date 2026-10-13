@@ -129,3 +129,26 @@ outputs and should be treated as private biometric data. No command sends it to
 a reviewer or installs the package. A successful `run` is explicitly marked
 `experiment_only`; use the remaining qualification checks and normal reviewed
 release process before promotion.
+
+## Host resource observations
+
+Experiment reports now include `execution.measurements`, collected from the
+Docker Engine stats API on the host, never from candidate output. The collector
+uses the actual created container ID, validates each response's identity, and
+records observed cumulative CPU milliseconds, memory bytes including cache,
+and process counts. It attempts sampling every 250 ms without overlapping
+requests, and requests a final sample while the candidate is still waiting for
+stdin EOF. Reads have time and byte limits.
+
+The receipt records attempts, usable samples, and maximum gaps including
+startup and shutdown. Missing, stale, or regressing samples leave it incomplete. Memory is an observed peak,
+not an exact lifetime high-water mark; CPU is the largest observed cumulative
+counter, not a guaranteed final lifetime total. A process may consume resources
+between samples. The collector's overhead counts toward the experiment's wall
+deadline. Qualification must inspect coverage and gaps and retain these limits.
+No fit-for-pod decision is inferred from measurements on an external host.
+
+Currently measurement supports local Unix Docker endpoints and API 1.41 or
+newer. Unsupported transports or failed observations leave nullable counters
+and incomplete evidence; they do not fabricate zero usage or waive the existing
+container resource limits. See the [Docker stats API](https://docs.docker.com/reference/api/engine/version/v1.51/).

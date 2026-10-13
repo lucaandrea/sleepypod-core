@@ -8,6 +8,7 @@ import { promisify } from 'node:util'
 import { performance } from 'node:perf_hooks'
 import { verifyAlgorithmPackage } from '../../src/biometrics/packages/manifest'
 import { PackageFrameValidator } from '../../src/biometrics/packages/protocol'
+import { dockerResourceReader, startResourceMonitor } from './resources'
 import { inspectPythonEnvironment, matchPythonEnvironment, parsePythonEnvironmentLock } from './environment'
 import { freezePackageInput, readFrozenPackageInput } from './input'
 import { dataHash } from '../../src/biometrics/algorithms/canonical'
@@ -82,7 +83,7 @@ export async function executePackageExperiment(options: {
     // measured CPU receipt and cannot qualify a package's runtime performance.
     const deadlineMs = Math.min(resources.wallMs, resources.cpuMs)
     created = true
-    await exec('docker', ['create', '--name', name, '--network', 'none', '--ipc', 'none', '--read-only',
+    const creation = await exec('docker', ['create', '--name', name, '--network', 'none', '--ipc', 'none', '--read-only',
       '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges=true', '--user', '65534:65534',
       '--pids-limit', String(resources.processes), '--memory', String(resources.memoryBytes),
       '--memory-swap', String(resources.memoryBytes), '--cpus', '1', '--ulimit', 'core=0',
@@ -90,7 +91,9 @@ export async function executePackageExperiment(options: {
       '--mount', `type=bind,source=${packagePath},target=/package,readonly`, '--workdir', '/package',
       '--entrypoint', 'python', policy.image, '-I', '-B', `/package/${verified.manifest.entrypoint}`],
     { timeout: 10000, maxBuffer: 65536 })
+    const resourceReader = await dockerResourceReader(creation.stdout.trim()).catch(() => null)
     const started = performance.now()
+    const resourceMonitor = startResourceMonitor(resourceReader, started)
     const child = spawn('docker', ['start', '-ai', name], { stdio: ['pipe', 'pipe', 'pipe'] })
     let failure: Error | null = null
     let pending = Buffer.alloc(0), outputBytes = 0, inputBytes = 0
@@ -157,10 +160,12 @@ export async function executePackageExperiment(options: {
         const result = validator.validateStep(frame, JSON.parse(await response)).result
         results.push(result)
       }
+      await resourceMonitor.sample()
       child.stdin.end()
       await completion
+      const measurements = await resourceMonitor.stop()
       return { packageHash: verified.packageHash, runHash: validator.runHash, frozenInput, results,
-        execution: { environment, image: policy.image, wallMs: performance.now() - started, outputBytes, inputBytes, isolation: 'docker-restricted-v1' as const } }
+        execution: { measurements, environment, image: policy.image, wallMs: performance.now() - started, outputBytes, inputBytes, isolation: 'docker-restricted-v1' as const } }
     }
     catch (error) {
       fail(error instanceof Error ? error : new Error(String(error)))
@@ -169,6 +174,7 @@ export async function executePackageExperiment(options: {
     }
     finally {
       clearTimeout(timer)
+      await resourceMonitor.stop()
       if (stopPromise) await stopPromise
     }
   }
