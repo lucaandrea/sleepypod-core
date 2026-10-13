@@ -487,3 +487,21 @@ Failed/cancelled attempts currently have no successful worker receipt, and crash
 recovery/partial resource evidence remains separate work. Receipt-validation
 failure after cleanup marks the same attempt failed, including the expired-lease
 fallback, without overwriting a replacement attempt.
+
+## Host health sampling
+
+`openShadowHealthMonitor` connects the existing Linux memory, filesystem space,
+load, event-loop delay and thermal collector to the real piezo receive clock.
+The host supplies the database directory and installed qualification policy.
+The monitor waits for an initial collection, then exposes a synchronous `read`
+for admission. Every read re-evaluates health and freshness against that policy;
+missing, stale, future or unhealthy evidence returns null.
+
+Refresh cadence and collection deadline are each half the allowed sample age,
+capped at one second. Only one collection can be in flight. A rejection or timeout
+closes the monitor; uncancellable filesystem I/O is observed but never retried or
+allowed to publish a late result. Abort/close cancels timers and invalidates cached
+evidence. Successful null/unhealthy samples can be refreshed, but never admitted.
+The attempt's next admission check stops it when the monitor cannot provide health.
+Host service ownership, installed build identity and qualification selection still
+need to wire this monitor into the complete attempt lifecycle.
