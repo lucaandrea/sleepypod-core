@@ -1,0 +1,76 @@
+import { z } from 'zod'
+import { configHash } from '../algorithms/canonical'
+import { validateConfig } from '../algorithms/registry'
+import { finalizeObjectiveReport, finalizeStageObjectiveReport } from '../backtest/objective-finalization'
+import type { ObjectivePolicy } from '../backtest/objective-policy'
+import type { StageObjectivePolicy } from '../backtest/stage-objective'
+import { ReferenceInputError } from '../references/time'
+import { verifyEvaluationIdentity } from './evaluation-identity'
+
+const assessmentSchema = z.object({
+  baseline: z.enum(['default', 'current']), candidate: z.literal('candidate'), baselineHash: z.string(), candidateHash: z.string(),
+  status: z.enum(['improved', 'no_material_change', 'regressed', 'insufficient_evidence', 'incompatible']),
+  designated: z.literal(true), missingEvidence: z.array(z.string()).length(0), failedThresholds: z.array(z.string()).length(0),
+  evidence: z.object({ split: z.literal('holdout'), holdoutUse: z.literal(1), nights: z.array(z.object({ cohortId: z.string() })) }),
+})
+
+/** Internal qualified-build dependency, never populated from experiment JSON. */
+export interface DesignatedEvaluationPolicies {
+  numeric: ObjectivePolicy | null
+  stages: StageObjectivePolicy | null
+}
+
+/** Reassess retained evidence; claimed report statuses are never authority.
+ * The caller still must commit activation under a current binding generation
+ * and recheck holdout exposure immediately before that commit. */
+export function verifyEvaluationAssessments(
+  rawJob: Parameters<typeof verifyEvaluationIdentity>[0],
+  result: Parameters<typeof verifyEvaluationIdentity>[1],
+  expected: Parameters<typeof verifyEvaluationIdentity>[2],
+  designations: DesignatedEvaluationPolicies,
+) {
+  const identity = verifyEvaluationIdentity(rawJob, result, expected)
+  const reject = (message: string): never => {
+    throw new ReferenceInputError('EVALUATION_NOT_VALIDATED', message)
+  }
+  const { job } = identity
+  const configuration = (label: 'candidate' | 'current' | 'default') => job.configs.find(row => row.label === label) ?? reject('Missing evaluated configuration')
+  const candidate = configuration('candidate')
+  const current = configuration('current')
+  const after = validateConfig(candidate.resolved), before = validateConfig(current.resolved)
+  const domains = (Object.keys(after) as Array<keyof typeof after>).filter(domain => configHash(after[domain]) !== configHash(before[domain]))
+  if (!domains.length) reject('Candidate does not change the current configuration')
+  const numericMetrics = { heart_rate: 'heart_rate', breathing_rate: 'breathing_rate', hrv_index: 'window_ibi_variability_v1' } as const
+  const requiredMetrics = domains.filter((domain): domain is keyof typeof numericMetrics => domain !== 'sleep_stages').map(domain => numericMetrics[domain])
+  // A single numeric objective cannot validate an unrelated or second metric.
+  // Multi-metric profiles require a future multi-objective protocol, not a
+  // relaxed claim about the one metric this evaluator currently assesses.
+  if (requiredMetrics.some(metric => job.protocol.objectivePolicy?.metric !== metric)) reject('Every changed numeric component requires its own objective evidence')
+  if (!job.protocol.stageObjectivePolicy) reject('Stage agreement and downstream effects require stage objective evidence')
+  if (requiredMetrics.length && (job.protocol.mode !== 'signal_replay' || job.protocol.waveformStages !== true)) reject('Numeric changes require waveform replay with downstream stages')
+  const raw = z.record(z.string(), z.unknown()).parse(result.report)
+  const numeric = finalizeObjectiveReport(raw, job.protocol.objectivePolicy, raw.jobOperations, designations.numeric)
+  const finalized = finalizeStageObjectiveReport(numeric, job.protocol.stageObjectivePolicy, raw.jobOperations, designations.stages)
+  const check = (rawAssessments: unknown, improvementRequired: boolean) => {
+    const assessments = z.array(assessmentSchema).length(2).parse(rawAssessments)
+    for (const assessment of assessments) {
+      const baseline = configuration(assessment.baseline)
+      if (assessment.baselineHash !== baseline.resolvedHash || assessment.candidateHash !== candidate.resolvedHash) reject('Objective evidence belongs to another configuration')
+      const cohorts = assessment.evidence.nights.map(row => row.cohortId)
+      if (new Set(cohorts).size !== cohorts.length || cohorts.length !== identity.cohortIds.length
+        || cohorts.some(id => !identity.cohortIds.includes(id))) reject('Objective evidence omits frozen holdout nights')
+      if (assessment.status !== 'improved' && (improvementRequired || assessment.status !== 'no_material_change')) reject('Objective evidence does not support this activation')
+    }
+    return assessments.map(row => ({ baseline: row.baseline, baselineHash: row.baselineHash, candidateHash: row.candidateHash, status: row.status }))
+  }
+  const numericAssessments = job.protocol.objectivePolicy ? check(finalized.objectiveAssessments, true) : []
+  const stageAssessments = check(finalized.stageObjectiveAssessments, domains.includes('sleep_stages'))
+  return { version: 'verified-evaluation-v1' as const, interpretation: 'agreement_with_named_reference_not_clinical_validation' as const,
+    reportHash: result.contentHash, revisionId: expected.revisionId, resolvedHash: expected.resolvedHash,
+    currentResolvedHash: expected.currentResolvedHash, datasetId: job.datasetId, datasetHash: job.datasetHash,
+    evaluatorBuildHash: job.evaluatorBuildHash, manifestHash: identity.report.manifestHash, protocolHash: job.protocolHash,
+    changedDomains: domains, numericAssessments, stageAssessments,
+    policies: { numeric: job.protocol.objectivePolicy ?? null, stages: job.protocol.stageObjectivePolicy },
+    ...(expected.waveform ? { waveform: expected.waveform } : {}),
+  }
+}

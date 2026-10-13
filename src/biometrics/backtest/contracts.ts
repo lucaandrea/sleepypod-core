@@ -29,6 +29,11 @@ export const enqueueBacktestSchema = z.object({
     manifestHash: hash, resolvedHash: hash, resolved: z.unknown() }).strict()).min(1).max(3),
 }).strict()
 
+export const backtestJobSnapshotSchema = enqueueBacktestSchema.extend({ version: z.literal('backtest-job-v1'), datasetId: z.string().uuid(),
+  datasetHash: z.string(), protocol: experimentProtocolSchema, protocolHash: z.string(), holdoutUse: z.number().int().nonnegative(),
+  evidence: z.enum(['descriptive_only', 'reused_holdout_is_validation']),
+})
+
 const vitalSchema = z.object({ id: z.number().int(), timestampMs: z.number().int(), heartRate: z.number().nullable(),
   hrv: z.number().nullable(), breathingRate: z.number().nullable(), processingRunId: z.string().nullable() })
 const movementSchema = z.object({ id: z.number().int(), timestampMs: z.number().int(), totalMovement: z.number() })

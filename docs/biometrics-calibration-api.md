@@ -371,3 +371,28 @@ same explicit sampling-policy rules as numeric objectives. Only a separately
 designated qualified policy can award improvement. The UI presents thresholds,
 missing evidence and regression reasons. These are agreement results against the
 named stage reference, not claims of clinical stage accuracy or live activation.
+
+### Evidence verification before activation
+
+The internal profile evidence verifier checks retained report bytes and exact
+candidate revision, current configuration, shipped default, dataset/side, frozen
+holdout cohorts, protocol, evaluator build, and waveform dependencies. Reused
+holdout data or released artifacts cannot pass. These expectations must be
+loaded by the service; they are not client assertions.
+
+The verifier recomputes objective assessments using supervised operational
+measurements and separately designated policies. It requires both baseline
+comparisons and every frozen holdout night. A changed stage configuration must
+improve stage agreement; a numeric change must improve its metric and pass
+downstream stage coverage/regression checks, which may report no material change.
+An assessment of one numeric metric cannot validate changes to another metric.
+The current single-numeric-objective protocol therefore cannot validate a change
+to multiple numeric components; multi-objective evaluation remains required for
+that case.
+
+This verifier returns an audit snapshot, not an activation or an adoption
+receipt. The activation service still needs to load authoritative identities,
+recheck binding generation and holdout exposure, and persist the evidence with
+the intent/outbox transaction. Qualified production policy designation and this
+validated activation path are not yet enabled. Explicit manual activation keeps
+its existing unvalidated semantics.

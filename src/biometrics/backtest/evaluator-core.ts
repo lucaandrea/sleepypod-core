@@ -14,7 +14,7 @@ import { classifySleepStages, type SleepStageBlock } from '@/src/lib/sleep-stage
 import { biometricManifest, validateConfig } from '../algorithms/registry-core'
 import { alignReferences, DEFAULT_ALIGNMENT } from '../references/alignment'
 import { scoreStageDurations } from '../references/stage-scoring'
-import { datasetSnapshotSchema, enqueueBacktestSchema, experimentProtocolSchema } from './contracts'
+import { datasetSnapshotSchema, backtestJobSnapshotSchema } from './contracts'
 
 export const waveformEvaluationSchema = z.object({ hash: z.string().regex(/^[a-f0-9]{64}$/), outputs: z.array(z.object({
   cohortId: z.string().min(1).max(200), configHash: z.string().regex(/^[a-f0-9]{64}$/),
@@ -22,10 +22,7 @@ export const waveformEvaluationSchema = z.object({ hash: z.string().regex(/^[a-f
 }).strict()).max(180) }).strict().refine(value => value.outputs.reduce((sum, output) => sum + output.readings.length, 0) <= 20000, 'Waveform reading budget exceeded')
 
 export const backtestWorkSchema = z.object({
-  job: enqueueBacktestSchema.extend({ version: z.literal('backtest-job-v1'), datasetId: z.string().uuid(),
-    datasetHash: z.string(), protocol: experimentProtocolSchema, protocolHash: z.string(), holdoutUse: z.number().int().nonnegative(),
-    evidence: z.enum(['descriptive_only', 'reused_holdout_is_validation']),
-  }),
+  job: backtestJobSnapshotSchema,
   dataset: z.object({ manifest: z.unknown(), snapshot: datasetSnapshotSchema }),
   waveform: waveformEvaluationSchema.optional(),
 })
