@@ -239,3 +239,36 @@ The command does not trust file-provided results as execution attestations,
 record holdout access, estimate whole-night uncertainty, designate an objective,
 or authorize promotion. Those require the authoritative experiment/qualification
 workflow, not a report assembled from arbitrary files.
+
+## Durable study ledger (orchestration component)
+
+`PackageExperimentLedger` maintains frozen study identities, exact trial
+requests, idempotency keys, expiring worker leases and report hashes in a
+**dedicated off-pod SQLite database**. Its generated schema and migrations are
+under `src/db/package-experiment-*`; generate changes with
+`pnpm exec drizzle-kit generate --config=drizzle.package-experiments.config.ts`.
+Do not use either pod database for this ledger. Initialization refuses nonempty
+foreign databases, uses an application identifier, and rejects future format
+versions rather than migrating them backward.
+
+Study nights bind subject/side, start/end, input/reference hashes, split and
+protocol hash. Splits must be chronological and nonoverlapping. Claims record
+exposure transactionally before selected input is opened. Every attempt counts,
+including failures, expired leases and retries; changed study IDs or corrected
+input/reference hashes cannot erase overlap with an earlier attempt on the
+same subject and side. A stale attempt cannot renew a replacement's lease or
+publish over its report. Completed trials return their retained report identity
+rather than silently running again.
+
+Claim-time `unexposedHoldoutAtClaim` is historical information. Re-read
+`currentEvidence` for current eligibility: another overlapping trial can make a
+previously unique holdout attempt non-unique. Keeping this ledger across studies
+is required; a new/deleted ledger, relabelled subjects, or data inspected outside
+its workflow cannot prove independent holdout use. Final qualification must
+bind subjects and windows to retained datasets and recheck exposure while
+publishing its decision.
+
+The ledger is currently an internal orchestration component. The exploratory
+`run`, `compare`, `determinism`, and `fixtures` commands do not yet claim studies
+through it and cannot issue independent-holdout promotion evidence. The managed
+whole-night executor and qualification workflow still need to integrate it.
