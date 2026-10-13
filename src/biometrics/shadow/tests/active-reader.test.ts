@@ -3,13 +3,15 @@ import Database from 'better-sqlite3'
 import { drizzle } from 'drizzle-orm/better-sqlite3'
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator'
 import { randomUUID } from 'node:crypto'
-import { mkdtempSync, rmSync, renameSync, copyFileSync, symlinkSync } from 'node:fs'
+import { mkdtempSync, rmSync, renameSync, copyFileSync, symlinkSync, writeFileSync, utimesSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, expect, it, vi } from 'vitest'
 import { biometricManifest, defaultConfig, manifestHash } from '../../algorithms/registry'
 import { configHash } from '../../algorithms/canonical'
+import { plannedShadowSourceFactory } from '../planned-sources'
+import { shadowPlanSchema } from '../store'
 import { openShadowActiveDatabase } from '../active-database'
 import { openShadowLiveSources } from '../live-sources'
 import { publishProspectiveFrame } from '../../../streaming/prospectiveFrameTap'
@@ -246,4 +248,88 @@ it('rechecks database identity after the snapshot and before active delivery', a
   await vi.advanceTimersByTimeAsync(50)
   expect(active).not.toHaveBeenCalled()
   expect(fail).toHaveBeenCalledOnce()
+})
+function plannedSetup() {
+  vi.useFakeTimers()
+  vi.setSystemTime(start)
+  const fixture = setup()
+  const configPath = join(dirname(fixture.path), 'configuration.db'), presencePath = join(dirname(fixture.path), 'presence.json')
+  const config = new Database(configPath)
+  config.exec('CREATE TABLE side_settings(side TEXT, away_mode INTEGER); INSERT INTO side_settings VALUES(\'left\',0),(\'right\',1); CREATE TABLE device_settings(id INTEGER, bed_mode TEXT); INSERT INTO device_settings VALUES(1,\'two\');')
+  cleanups.unshift(() => config.close())
+  writeFileSync(presencePath, JSON.stringify({ version: 1, left: { vitals_presence: true, vitals_evidence_ts: start / 1000 } }))
+  utimesSync(presencePath, start / 1000, start / 1000)
+  const plan = shadowPlanSchema.parse({ schema: 'biometric-shadow-plan-v1', subjectId: 'test', side: 'left', startMs: start, endMs: start + 10000,
+    candidateConfigHash: hash, activeConfigHash: hash, qualificationHash: hash, engineBuildHash: hash, maximumPoints: 100, maximumBytes: 100000, metrics: ['heart_rate'],
+    joining: { maximumPendingPoints: 10, maximumLatenessMs: 100, drainGraceMs: 500 },
+    monitoring: { expectedIntervalMs: 1000, maximumGapMs: 1000, heartbeatStaleMs: 1000, minimumCandidateCoverage: 0.8, maximumCoverageLoss: 0.1, minimumQuality: 0.8,
+      alignment: { version: 'reference-alignment-v1', pointToleranceMs: 0, clockOffsetMs: 0, offsetSource: 'fixed' } },
+    execution: { version: 'shadow-execution-policy-v1', configHashes: { left: hash, right: hash },
+      maximumRecords: 10, maximumOutputs: 10, maximumCpuMs: 1000, maximumInputBytes: 100000, maximumOutputBytes: 100000,
+      budgets: { cpuSeconds: 2, addressSpaceBytes: 100000000, maximumRssBytes: 100000000, wallMs: 15000, acknowledgmentMs: 1000, idleMs: 1000, rssIntervalMs: 100, rssTimeoutMs: 100 },
+      leaseMs: 1500, heartbeatMs: 200, sources: { pollMs: 50, maximumActiveRows: 10, databaseBusyTimeoutMs: 50,
+        frames: { maximumFrames: 1, maximumBytes: 10000, maximumEventAgeMs: 1000, maximumFutureSkewMs: 0 },
+        context: { presenceStaleMs: 300000, pumpStaleMs: 1000, maximumPresenceBytes: 4096 } } } })
+  const paths = { biometricsDatabase: fixture.path, configurationDatabase: configPath, presenceFile: presencePath }
+  const abort = new AbortController(), active = vi.fn(), fail = vi.fn()
+  const execution = plan.execution
+  if (!execution) throw new Error('Fixture execution missing')
+  const input = { execution, collectionEndsAtMs: plan.endMs, signal: abort.signal, active, fail }
+  const factory = plannedShadowSourceFactory(plan, paths)
+  const open = () => {
+    const source = factory(input)
+    cleanups.unshift(source.close)
+    return source
+  }
+  return { ...fixture, paths, plan, input, factory, open, abort, active, fail }
+}
+it('applies the saved context and capture policy to real connections and subscriptions', async () => {
+  const { open, insert, active, fail } = plannedSetup()
+  const source = open(), frames = source.frames[Symbol.asyncIterator]()
+  const next = frames.next()
+  publishProspectiveFrame({ type: 'piezo-dual', ts: start / 1000, freq: 500, left1: [1], right1: [2] }, false, start)
+  expect((await next).value.context).toEqual({ activeSides: ['left'], leftOccupied: true, rightOccupied: null, pumpContextKnown: false })
+  insert()
+  source.flush?.()
+  expect(active).toHaveBeenCalledOnce()
+  expect(fail).not.toHaveBeenCalled()
+})
+it('refuses changed source policies before opening resources', () => {
+  const { factory, input } = plannedSetup()
+  const changed = structuredClone(input.execution)
+  changed.sources.frames.maximumFrames++
+  expect(() => factory({ ...input, execution: changed })).toThrow(/saved plan/)
+  expect(vi.getTimerCount()).toBe(0)
+})
+it('closes both owned read-only handles on abort exactly once', () => {
+  const { open, abort } = plannedSetup()
+  const close = vi.spyOn(Database.prototype, 'close')
+  const source = open()
+  abort.abort()
+  expect(close).toHaveBeenCalledTimes(2)
+  source.close()
+  expect(close).toHaveBeenCalledTimes(2)
+  expect(vi.getTimerCount()).toBe(0)
+  close.mockRestore()
+})
+it('unwinds the first connection if the second database cannot open', () => {
+  const { plan, paths, input } = plannedSetup()
+  const factory = plannedShadowSourceFactory(plan, { ...paths, configurationDatabase: paths.configurationDatabase + '.missing' })
+  const close = vi.spyOn(Database.prototype, 'close')
+  expect(() => factory(input)).toThrow()
+  expect(close).toHaveBeenCalledOnce()
+  expect(vi.getTimerCount()).toBe(0)
+  close.mockRestore()
+})
+it('enforces the saved frame count and releases owned resources on overflow', () => {
+  const { open, fail } = plannedSetup()
+  open()
+  const frame = { type: 'piezo-dual', ts: start / 1000, freq: 500, left1: [1], right1: [2] }
+  const close = vi.spyOn(Database.prototype, 'close')
+  publishProspectiveFrame(frame, false, start)
+  publishProspectiveFrame(frame, false, start)
+  expect(fail).toHaveBeenCalledOnce()
+  expect(close).toHaveBeenCalledTimes(2)
+  expect(vi.getTimerCount()).toBe(0)
+  close.mockRestore()
 })

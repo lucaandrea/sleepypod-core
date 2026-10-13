@@ -407,3 +407,22 @@ cannot change the worker's copy. The production factory must apply those source
 limits and the installed qualification must match the complete policy. Selecting
 this policy does not establish qualification or record observed worker resources;
 those admission/receipt and service integration paths remain outstanding.
+
+## Planned source factory
+
+`plannedShadowSourceFactory` is the concrete `openSources` implementation for an
+attempt. It snapshots and validates the saved plan and trusted installation paths,
+then refuses a different execution policy or collection end at invocation. It
+opens both databases read-only with the saved busy timeout, creates a fresh
+committed-context reader, and applies the saved active polling, waveform queue,
+freshness and context limits to the composed sources. There are no alternate
+numeric limits at this layer.
+
+The factory owns both connections. It unsubscribes before closing handles on
+normal close, abort, source failure, direct flush failure and partial startup.
+Configuration and biometrics path identities are both checked during capture.
+Tests exercise real SQLite connections and the sensor tap, including frozen
+policy substitution, saved queue overflow, cancellation and failed second-database
+startup. Installed qualification/build/current-binding admission, worker resource
+receipt storage, orphan recovery and public service registration remain separate
+requirements; constructing sources does not authorize a candidate to run.
