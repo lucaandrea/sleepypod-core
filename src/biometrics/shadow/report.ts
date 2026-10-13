@@ -60,6 +60,7 @@ export function reportShadowRun(store: ShadowStore, runId: string, limits: Param
   })
   const issues: string[] = []
   if (clockSkew) issues.push('clock_skew')
+  if (run.reason?.startsWith('join_')) issues.push('join_failed')
   if (run.state === 'failed') issues.push('processor_failed')
   if (run.reason === 'storage_quota') issues.push('storage_quota')
   if (run.state === 'running' && ((run.lease_until_ms ?? 0) <= capturedAtMs || run.heartbeat_at_ms === null
@@ -71,6 +72,9 @@ export function reportShadowRun(store: ShadowStore, runId: string, limits: Param
     capturedAtMs, state: run.state, reason: run.reason, health: issues.length ? 'issues_detected' as const : capturedAtMs < plan.startMs ? 'waiting' as const : 'within_observed_limits' as const,
     issues, expectedSlots, observedSamples: windowSamples.length, maximumGapMs,
     attemptsObserved: new Set(samples.map(sample => sample.attemptId)).size, metrics,
+    pairing: { activeOnly: samples.filter(sample => sample.pairing?.activePresent && !sample.pairing.candidatePresent).length,
+      candidateOnly: samples.filter(sample => sample.pairing?.candidatePresent && !sample.pairing.activePresent).length,
+      unknownInputIdentity: samples.filter(sample => sample.inputHash === null).length },
     limitations: [...new Set(samples.flatMap(sample => sample.candidateProvenance?.limitations ?? []))].sort(),
     referenceSummary: reference?.summary ?? null, excludedBoundaryReferences: reference ? reference.measurements.length - measurements.length : 0,
     interpretation: 'prospective_observation_and_reference_agreement_not_activation_authorization' as const }

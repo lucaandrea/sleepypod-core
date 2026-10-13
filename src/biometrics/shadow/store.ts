@@ -16,16 +16,21 @@ export const shadowMonitoringSchema = z.object({
 export const shadowPlanSchema = z.object({ schema: z.literal('biometric-shadow-plan-v1'), side: z.enum(['left', 'right']),
   subjectId: z.string().min(1).max(200), monitoring: shadowMonitoringSchema,
   windowIbiWindowMs: positive.max(86400000).optional(),
+  joining: z.object({ maximumPendingPoints: positive.max(10000), maximumLatenessMs: positive.max(120000),
+    drainGraceMs: positive.max(300000) }).strict().refine(value => value.drainGraceMs > value.maximumLatenessMs, 'Drain grace must exceed lateness').optional(),
   candidateConfigHash: hash, activeConfigHash: hash, qualificationHash: hash, engineBuildHash: hash,
   startMs: integer, endMs: integer, maximumPoints: positive, maximumBytes: positive,
   metrics: z.array(metric).min(1).max(3),
 }).strict().refine(plan => plan.endMs > plan.startMs && plan.endMs - plan.startMs <= 7 * 86400000
+  && Number.isSafeInteger(plan.endMs + (plan.joining?.drainGraceMs ?? 0))
   && new Set(plan.metrics).size === plan.metrics.length
   && (!plan.metrics.includes('window_ibi_variability_v1') || plan.windowIbiWindowMs !== undefined), 'Invalid shadow window or metrics')
 const reading = z.object({ value: z.number().finite().nullable(), quality: z.number().min(0).max(1) }).strict()
-export const shadowSampleSchema = z.object({ sequence: integer, side: z.enum(['left', 'right']), timestampMs: integer, inputHash: hash,
+export const shadowSampleSchema = z.object({ sequence: integer, side: z.enum(['left', 'right']), timestampMs: integer, inputHash: hash.nullable(),
   candidateConfigHash: hash, activeConfigHash: hash,
   readings: z.array(z.object({ metric, candidate: reading, active: reading }).strict()).min(1).max(3),
+  pairing: z.object({ policy: z.literal('exact_timestamp_union_v1'), candidatePresent: z.boolean(), activePresent: z.boolean() }).strict().optional(),
+  inputIdentityKind: z.enum(['candidate_prefix', 'active_provenance', 'unavailable']).optional(),
   candidateProvenance: z.object({ sourceSide: z.enum(['left', 'right']), outputSequence: integer,
     flags: z.array(z.string().max(200)).max(32).nullable(), limitations: z.array(z.string().max(200)).max(33) }).strict().optional(),
 }).strict()
@@ -95,6 +100,15 @@ export class ShadowStore {
     }).deferred()
   }
 
+  cursor(id: string) {
+    return this.db.transaction(() => {
+      const run = this.get(id)
+      const last = this.db.prepare('SELECT sequence, timestamp_ms FROM biometric_shadow_samples WHERE run_id = ? ORDER BY sequence DESC LIMIT 1').get(id) as { sequence: number, timestamp_ms: number } | undefined
+      if ((last ? last.sequence + 1 : 0) !== run.point_count) throw new Error('Shadow cursor integrity mismatch')
+      return { nextSequence: run.point_count, lastTimestampMs: last?.timestamp_ms ?? null }
+    }).deferred()
+  }
+
   create(raw: unknown, idempotencyKey: string) {
     const plan = shadowPlanSchema.parse(raw), planHash = dataHash(plan)
     z.string().min(1).max(200).parse(idempotencyKey)
@@ -132,14 +146,14 @@ export class ShadowStore {
       }
       const attemptId = randomUUID()
       this.db.prepare('UPDATE biometric_shadow_runs SET state = \'running\', attempt_id = ?, lease_until_ms = ?, heartbeat_at_ms = ? WHERE id = ?')
-        .run(attemptId, Math.min(run.plan.endMs, now + leaseMs), now, id)
+        .run(attemptId, Math.min(run.plan.endMs + (run.plan.joining?.drainGraceMs ?? 0), now + leaseMs), now, id)
       return { runId: id, attemptId }
     }).immediate()
   }
 
   private current(lease: ShadowLease) {
     const run = this.get(lease.runId), now = this.now()
-    if (run.state !== 'running' || run.attempt_id !== lease.attemptId || (run.lease_until_ms ?? 0) <= now || now >= run.plan.endMs) throw new Error('Stale shadow lease')
+    if (run.state !== 'running' || run.attempt_id !== lease.attemptId || (run.lease_until_ms ?? 0) <= now || now >= run.plan.endMs + (run.plan.joining?.drainGraceMs ?? 0)) throw new Error('Stale shadow lease')
     return { run, now }
   }
 
@@ -187,7 +201,7 @@ export class ShadowStore {
     z.number().int().min(1000).max(3600000).parse(leaseMs)
     this.db.transaction(() => {
       const { run, now } = this.current(lease)
-      this.db.prepare('UPDATE biometric_shadow_runs SET lease_until_ms = ?, heartbeat_at_ms = ? WHERE id = ?').run(Math.min(run.plan.endMs, now + leaseMs), now, run.id)
+      this.db.prepare('UPDATE biometric_shadow_runs SET lease_until_ms = ?, heartbeat_at_ms = ? WHERE id = ?').run(Math.min(run.plan.endMs + (run.plan.joining?.drainGraceMs ?? 0), now + leaseMs), now, run.id)
     }).immediate()
   }
 

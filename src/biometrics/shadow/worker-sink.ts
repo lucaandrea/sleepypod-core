@@ -3,8 +3,8 @@ import type { ShadowStore } from './store'
 import { type ShadowLease } from './store'
 import { shadowWorkerOutputSchema } from './worker-protocol'
 
-const activeSchema = z.object({ side: z.enum(['left', 'right']), timestampMs: z.number().int().nonnegative(),
-  configHash: z.string().regex(/^[a-f0-9]{64}$/), readings: shadowWorkerOutputSchema.shape.readings,
+export const shadowActiveReadingSchema = z.object({ side: z.enum(['left', 'right']), timestampMs: z.number().int().nonnegative(),
+  configHash: z.string().regex(/^[a-f0-9]{64}$/), inputHash: z.string().regex(/^[a-f0-9]{64}$/).nullable().optional(), readings: shadowWorkerOutputSchema.shape.readings,
 }).strict().refine(value => new Set(value.readings.map(row => row.metric)).size === 3, 'All active metric identities required')
 
 /** Fenced candidate-output sink. The supervisor validates response batches with
@@ -24,7 +24,7 @@ export class ShadowWorkerSink {
 
   append(rawOutput: unknown, rawActive: unknown | null) {
     const output = shadowWorkerOutputSchema.parse(rawOutput)
-    const active = rawActive === null ? null : activeSchema.parse(rawActive)
+    const active = rawActive === null ? null : shadowActiveReadingSchema.parse(rawActive)
     if (output.sequence > this.nextOutput || output.side !== this.plan.side || output.configHash !== this.plan.candidateConfigHash) throw new Error('Shadow sink output identity mismatch')
     if (active && (active.side !== this.plan.side || active.configHash !== this.plan.activeConfigHash || active.timestampMs !== output.timestampMs)) throw new Error('Active reading is not contemporaneous with shadow output')
     const readings = this.plan.metrics.map((metric) => {

@@ -147,3 +147,40 @@ must also retain active-only observation times, manage bounded joining and late
 arrival, and identify missing candidate output. Admission, live source capture,
 OS process supervision and public API integration remain unfinished. Reports
 must not be used as complete prospective evidence until those paths are wired.
+
+## Bounded active/candidate stream union
+
+`ShadowStreamJoin` is the complete timestamp-union sink for a worker attempt.
+Plans using it must freeze `joining.maximumPendingPoints`, `maximumLatenessMs`,
+and `drainGraceMs`. The grace must exceed lateness; pending points are capped at
+10,000, lateness at two minutes and drain grace at five minutes. These are input
+ceilings, not recommended pod defaults. Host measurement/admission must choose
+appropriate smaller budgets.
+
+Feed both actual active observations and validated candidate outputs, then call
+`advance(nowMs)` after enqueuing arrivals. The join emits timestamps at or before
+`nowMs - maximumLatenessMs` in order, retaining points present in only one stream
+with nulls on the missing side. Nearby timestamps remain distinct. Exact pending
+duplicates are harmless; changed duplicates, arrivals after a timestamp has been
+sealed, clock regression and queue exhaustion fail the attempt explicitly. A
+lost lease cannot fail or write over its replacement.
+
+Storage acknowledgment is required before removing a buffered point or advancing
+its durable sequence, so an uncertain committed write can be retried exactly.
+Storage quota exhaustion closes the join. On restart, a new attempt begins after
+the last retained timestamp; discarded in-memory observations are not invented.
+The supervisor must collect both streams continuously and surface failures.
+
+Leases for joined runs may remain valid until the frozen end plus drain grace,
+allowing already-buffered samples to be stored after collection ends. Sample
+timestamps must still be inside the original window; new worker claims cannot
+start after its end. The supervisor stops feeding candidate input at the window
+end, drains both sources within grace, and then finishes the run. Grace is not
+permission to extend observation or processing indefinitely.
+
+Joined samples identify whether each stream was present and whether their input
+identity is a candidate prefix, active provenance, or unavailable. Active-only
+readings with unavailable signal provenance retain a null input hash rather than
+a fabricated one. Reports expose active-only/candidate-only counts and unknown
+input identity. Live source capture, OS supervision, admission and API/UI wiring
+remain required to turn this component into an enabled prospective service.

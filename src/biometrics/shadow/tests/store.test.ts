@@ -3,10 +3,11 @@ import Database from 'better-sqlite3'
 import { drizzle } from 'drizzle-orm/better-sqlite3'
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator'
 import { fileURLToPath } from 'node:url'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ShadowStore } from '../store'
 import { reportShadowRun } from '../report'
 import { ShadowWorkerSink } from '../worker-sink'
+import { ShadowStreamJoin } from '../stream-join'
 
 const databases: Database.Database[] = []
 afterEach(() => databases.splice(0).forEach(db => db.close()))
@@ -27,6 +28,16 @@ function setup(policy = { maximumRuns: 10, maximumPoints: 10, maximumBytes: 1000
 function sample(sequence = 0) {
   return { sequence, side: 'left', timestampMs: start + sequence, inputHash: hash, candidateConfigHash: hash, activeConfigHash: plan.activeConfigHash,
     readings: [{ metric: 'heart_rate', candidate: { value: null as number | null, quality: 0 }, active: { value: 60, quality: 1 } }] }
+}
+const joining = { maximumPendingPoints: 10, maximumLatenessMs: 1000, drainGraceMs: 2000 }
+function workerOutput(timestampMs: number, sequence = 0) {
+  return { sequence, inputHash: hash, side: 'left', sourceSide: 'left', timestampMs, configHash: hash,
+    readings: [{ metric: 'heart_rate', unit: 'bpm', windowMs: null, value: 60, quality: 1 },
+      { metric: 'breathing_rate', unit: 'breaths/min', windowMs: null, value: 15, quality: 1 },
+      { metric: 'window_ibi_variability_v1', unit: 'ms', windowMs: 300000, value: null, quality: 0 }], flags: null, limitations: [] }
+}
+function activeOutput(timestampMs: number) {
+  return { side: 'left', timestampMs, configHash: plan.activeConfigHash, readings: workerOutput(timestampMs).readings }
 }
 describe('separate prospective shadow storage', () => {
   it('uses the generated additive migration and never writes canonical observations', () => {
@@ -204,6 +215,77 @@ describe('separate prospective shadow storage', () => {
     expect(reportShadowRun(store, lease.runId, { maximumPoints: 10, maximumBytes: 10000 }).limitations).toContain('cold_start_without_serialized_state')
     advance(1000)
     expect(() => sink.append({ ...output, sequence: 1, timestampMs: start + 1000 }, null)).toThrow('Stale')
+  })
+  it('retains active-only times so dropped candidate readings reduce reported coverage', () => {
+    const { store, advance } = setup()
+    const lease = store.claim(store.create({ ...plan, joining }, 'joined').id, 10000, () => undefined)
+    const join = new ShadowStreamJoin(store, lease)
+    for (const offset of [2000, 0, 1000]) join.active(activeOutput(start + offset))
+    join.candidate(workerOutput(start + 1000))
+    advance(2999)
+    expect(join.advance(start + 2999)).toEqual({ emitted: 2, stopped: false })
+    advance(1)
+    expect(join.advance(start + 3000)).toEqual({ emitted: 1, stopped: false })
+    const report = reportShadowRun(store, lease.runId, { maximumPoints: 10, maximumBytes: 10000 })
+    expect(report).toMatchObject({ pairing: { activeOnly: 2, candidateOnly: 0, unknownInputIdentity: 2 },
+      metrics: [{ current: { usableCount: 3 }, candidate: { usableCount: 1 }, issues: expect.arrayContaining(['coverage_regression']) }] })
+    const points = store.snapshot(lease.runId, { maximumPoints: 10, maximumBytes: 10000 }).samples
+    expect(points.map(row => row.timestampMs)).toEqual([start, start + 1000, start + 2000])
+    expect(points[0]).toMatchObject({ inputHash: null, inputIdentityKind: 'unavailable', readings: [{ candidate: { value: null } }] })
+  })
+  it('does not match nearby timestamps and fails explicitly on late or conflicting arrivals', () => {
+    const { store, advance } = setup()
+    const lease = store.claim(store.create({ ...plan, joining }, 'joined').id, 10000, () => undefined)
+    const join = new ShadowStreamJoin(store, lease)
+    join.active(activeOutput(start))
+    join.active(activeOutput(start))
+    join.candidate(workerOutput(start + 1))
+    advance(1001)
+    expect(join.advance(start + 1001).emitted).toBe(2)
+    expect(reportShadowRun(store, lease.runId, { maximumPoints: 10, maximumBytes: 10000 }).pairing).toMatchObject({ activeOnly: 1, candidateOnly: 1 })
+    expect(() => join.candidate(workerOutput(start))).toThrow('join_late_arrival')
+    expect(store.get(lease.runId)).toMatchObject({ state: 'failed', reason: 'join_late_arrival' })
+    const nextPlan = { ...plan, startMs: start + 1001, joining }
+    const secondLease = store.claim(store.create(nextPlan, 'second').id, 10000, () => undefined)
+    const second = new ShadowStreamJoin(store, secondLease)
+    second.active(activeOutput(start + 1001))
+    const changed = activeOutput(start + 1001)
+    changed.readings[0].value = 80
+    expect(() => second.active(changed)).toThrow('join_conflicting_duplicate')
+  })
+  it('bounds pending points and preserves uncertain-write retry identity', () => {
+    const { store, advance } = setup()
+    const lease = store.claim(store.create({ ...plan, joining: { ...joining, maximumPendingPoints: 1 } }, 'joined').id, 10000, () => undefined)
+    const join = new ShadowStreamJoin(store, lease)
+    join.active(activeOutput(start))
+    join.candidate(workerOutput(start))
+    const append = store.append.bind(store)
+    vi.spyOn(store, 'append').mockImplementationOnce((lease, point) => {
+      append(lease, point)
+      throw new Error('lost acknowledgment')
+    })
+    advance(1000)
+    expect(() => join.advance(start + 1000)).toThrow('lost acknowledgment')
+    expect(store.get(lease.runId).point_count).toBe(1)
+    expect(join.advance(start + 1000).emitted).toBe(1)
+    expect(store.get(lease.runId).point_count).toBe(1)
+    join.active(activeOutput(start + 2000))
+    expect(() => join.active(activeOutput(start + 3000))).toThrow('join_queue_quota')
+  })
+  it('drains final buffered samples during explicit grace without extending the sampling window', () => {
+    const { store, advance } = setup()
+    const selected = { ...plan, endMs: start + 5000, joining }
+    const run = store.create(selected, 'joined')
+    const lease = store.claim(run.id, 10000, () => undefined)
+    const join = new ShadowStreamJoin(store, lease)
+    join.active(activeOutput(start + 4999))
+    advance(6000)
+    expect(join.advance(start + 6000)).toEqual({ emitted: 1, stopped: false })
+    expect(store.get(run.id).point_count).toBe(1)
+    store.renew(lease, 10000)
+    expect(store.get(run.id).lease_until_ms).toBe(start + 7000)
+    advance(1000)
+    expect(() => store.renew(lease, 10000)).toThrow('Stale')
   })
   it('enforces byte quotas and terminal states', () => {
     const { store } = setup()
