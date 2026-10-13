@@ -121,6 +121,13 @@ export async function runShadowChild(location: { pythonPath: string, modulesPath
     try {
       const rss = await bounded(Promise.race([sampleProcessGroupRss(child.pid ?? 0), exited.then(() => null)]), budgets.rssTimeoutMs, 'Shadow RSS observation timed out')
       if (closed || stopping || failure) return
+      // procfs can lose a finished worker before Node delivers pipe closure.
+      // Accept that disappearance only after a validated terminal response and
+      // a bounded, successful close; the close handler still rejects bad exits.
+      if (rss === null && terminal) {
+        await bounded(exited, budgets.acknowledgmentMs, 'Shadow worker exit deadline exceeded')
+        return
+      }
       if (rss === null || !Number.isSafeInteger(rss) || rss <= 0) return fail('Shadow RSS observation unavailable')
       const observedAt = performance.now()
       maximumObservationGapMs = Math.max(maximumObservationGapMs, observedAt - lastRssAt)

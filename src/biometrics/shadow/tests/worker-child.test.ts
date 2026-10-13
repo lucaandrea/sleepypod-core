@@ -10,7 +10,7 @@ import { configHash } from '../../algorithms/canonical'
 import { shadowPartialReceiptSchema } from '../receipt'
 import { runShadowChild } from '../worker-child'
 
-const state = vi.hoisted(() => ({ mode: 'normal', pid: 0, descendantPid: 0, rss: 1000 as number | null, hangRss: false, launches: [] as unknown[][] }))
+const state = vi.hoisted(() => ({ mode: 'normal', pid: 0, descendantPid: 0, rss: 1000 as number | null, hangRss: false, delayClose: false, missingAfterFinish: false, launches: [] as unknown[][] }))
 vi.mock('../../backtest/process-group-memory', () => ({ sampleProcessGroupRss: () => state.hangRss ? new Promise(() => {}) : Promise.resolve(state.rss) }))
 vi.mock('node:child_process', async (original) => {
   const actual = await original<typeof ChildProcess>()
@@ -59,6 +59,23 @@ else readline.createInterface({input:process.stdin}).on('line', line => {
       const match = /descendant:(\d+)/.exec(chunk.toString())
       if (match) state.descendantPid = Number(match[1])
     })
+    child.stdout?.on('data', (chunk: Buffer) => {
+      if (state.missingAfterFinish && chunk.toString().includes('"type":"finished"')) state.rss = null
+    })
+    if (state.delayClose) {
+      // procfs can lose the address space before Node drains/closes its pipes.
+      child.once('exit', () => {
+        state.rss = null
+      })
+      const emit = child.emit.bind(child)
+      child.emit = ((event: string, ...args: unknown[]) => {
+        if (event === 'close') {
+          setTimeout(() => emit(event, ...args), 150)
+          return true
+        }
+        return emit(event, ...args)
+      }) as typeof child.emit
+    }
     state.pid = child.pid ?? 0
     return child
   } }
@@ -84,6 +101,8 @@ beforeEach(() => {
   state.mode = 'normal'
   state.rss = 1000
   state.hangRss = false
+  state.delayClose = false
+  state.missingAfterFinish = false
   state.pid = 0
   state.descendantPid = 0
   state.launches = []
@@ -135,6 +154,25 @@ describe('shadow child supervision', () => {
     expect(receipt.peakObservedRssBytes).toBe(rss)
     expect(receipt.cleanupConfirmed).toBe(true)
     if (rss === null) expect(receipt.rssSamples).toBe(0)
+    reaped()
+  })
+  it('accepts disappearing RSS after completion only when clean pipe closure follows', async () => {
+    state.delayClose = true
+    const result = await run()
+    expect(result.health.state).toBe('completed')
+    expect(result.rssSamples).toBeGreaterThan(0)
+    reaped()
+  })
+  it('still rejects a failed exit after completion when RSS disappears', async () => {
+    state.delayClose = true
+    state.mode = 'badexit'
+    await expect(run()).rejects.toThrow(/failed or returned an incomplete result/)
+    reaped()
+  })
+  it('bounds missing RSS after a terminal response when the worker never exits', async () => {
+    state.mode = 'noexit'
+    state.missingAfterFinish = true
+    await expect(run()).rejects.toThrow(/exit deadline/)
     reaped()
   })
   it('bounds a stalled RSS observation', async () => {
