@@ -129,3 +129,14 @@ describe('dedicated package experiment ledger', () => {
     finally { other.close() }
   })
 })
+
+it('allows a failed attempt without a report while refusing success without evidence', () => {
+  const id = ledger.reserveTrial(trial(ledger.createStudy(study()).id), 'missing-report')
+  const lease = ledger.claim(id, 1000)
+  expect(() => ledger.finish(lease, 'succeeded', null)).toThrow()
+  expect(ledger.trial(id).state).toBe('running')
+  ledger.finish(lease, 'failed', null)
+  expect(ledger.trial(id)).toMatchObject({ state: 'failed', report_hash: null, lease_until: null })
+  expect(ledger.claim(id, 1000).unexposedHoldoutAtClaim).toBe(false)
+  expect(() => ledger.finish(lease, 'failed', null)).toThrow('Stale')
+})

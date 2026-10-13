@@ -336,6 +336,15 @@ A descriptor uses `biometric-managed-descriptor-v1` with:
 - `nights`: exactly the selected split's night IDs, each with `frames` (JSONL
   path) and `referenceImport` (raw reference-import JSON path).
 
+Failure finalization also runs when the failure report cannot be published (for
+example, a full report volume). If the ledger remains writable and the lease is
+current, the attempt becomes `failed` with a null report hash. No nonexistent
+artifact is claimed. Publication or ledger-finalization failures are returned
+alongside the original error in an `AggregateError`; its cause remains the original
+failure. Failed attempts retain their exposure history. A stale lease cannot end
+or annotate a replacement attempt. A failed ledger write leaves state unconfirmed
+and requires subsequent lease recovery; the CLI does not report successful cleanup.
+
 Relative source paths resolve from the descriptor's directory. The descriptor
 is operator-owned input, not candidate-provided instructions. Source files must
 pass the bounded regular-file reader. Study reference hashes use the shared

@@ -139,9 +139,21 @@ export async function runManagedTrial(options: {
     const report = { schema: 'biometric-managed-trial-failure-v1', trialId: lease.trialId, attemptId: lease.attemptId, ...(preflight ? { preflight } : {}), nights,
       error: error instanceof Error ? error.message.slice(0, 1000) : 'Managed trial failed' }
     const reportHash = dataHash(report)
-    await publishJson(join(options.reportDirectory, `${reportHash}.json`), report)
-    // A stale worker can leave an orphan artifact but cannot replace the winner.
-    options.ledger.finish(lease, 'failed', reportHash)
+    let published = false
+    const secondaryErrors: unknown[] = []
+    try {
+      await publishJson(join(options.reportDirectory, `${reportHash}.json`), report)
+      published = true
+    }
+    catch (publicationError) { secondaryErrors.push(publicationError) }
+    try {
+      // Publication failure must not leave a writable ledger's attempt running.
+      // A missing artifact has no report hash. The lease still fences replacement.
+      options.ledger.finish(lease, 'failed', published ? reportHash : null)
+    }
+    catch (ledgerError) { secondaryErrors.push(ledgerError) }
+    if (secondaryErrors.length) throw new AggregateError([error, ...secondaryErrors],
+      `${error instanceof Error ? error.message : 'Managed trial failed'}; failure evidence incomplete`, { cause: error })
     throw error
   }
   finally { clearInterval(heartbeat) }

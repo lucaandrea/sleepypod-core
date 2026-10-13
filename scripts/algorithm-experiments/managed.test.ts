@@ -4,7 +4,8 @@ import { createHash } from 'node:crypto'
 import { mkdtemp, readFile, rm, writeFile, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { beforeAll, describe, expect, it } from 'vitest'
+import * as reportFiles from './files'
+import { beforeAll, describe, expect, it, vi } from 'vitest'
 import { configHash, dataHash } from '../../src/biometrics/algorithms/canonical'
 import { previewReferenceImport } from '../../src/biometrics/references/normalize'
 import { packageFixture } from '../../src/biometrics/packages/tests/fixture'
@@ -34,7 +35,7 @@ for line in sys.stdin:
     print(json.dumps({'schema': 'biometric-metric-frame-v1', 'runHash': init['runHash'], 'frameHash': msg['frameHash'], 'sequence': frame['sequence'], 'state': {}, 'readings': [{'timestampMs': frame['timestampMs'], 'side': 'left', 'metric': 'heart_rate', 'value': 60 + init['request']['config']['offset'], 'quality': 1, 'flags': []}]}), flush=True)
 `
   files.set('engine.py', Buffer.from(code))
-  files.set(manifest.dependencyLock, environmentBytes)
+  if (environmentBytes) files.set(manifest.dependencyLock, environmentBytes)
   const declared = { ...manifest, metrics: manifest.metrics.map(metric => ({ ...metric, reference: { metric: 'heart_rate', windowMs: null } })),
     resources: { cpuMs: 5000, wallMs: 5000, memoryBytes: 64 * 1024 * 1024, processes: 1, outputBytes: 16384 },
     artifacts: [...files].map(([path, bytes]) => ({ path, bytes: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') })) }
@@ -56,7 +57,7 @@ for line in sys.stdin:
     nights: [{ id: 'night', startMs: start, endMs: start + 120000, inputHash: packageInputHash(frames), referenceHash: previewReferenceImport(referenceImport).summary.contentHash, split: 'holdout' }] })
   const variants = (['default', 'current', 'candidate'] as const).map((label, index) => ({ label, manifest: declared, files,
     config: { offset: 4 - index * 2 }, seed: 1,
-    policy: { image: image ?? '', maximumWallMs: 10000, maximumMemoryBytes: 128 * 1024 * 1024, maximumProcesses: 4, maximumOutputBytes: 32768, maximumInputBytes: 32768 } }))
+    policy: { image: image ?? 'sha256:' + 'f'.repeat(64), maximumWallMs: 10000, maximumMemoryBytes: 128 * 1024 * 1024, maximumProcesses: 4, maximumOutputBytes: 32768, maximumInputBytes: 32768 } }))
   const request = { studyId: study.id, split: 'holdout', variants: variants.map(variant => ({ label: variant.label, packageHash: configHash(declared),
     configHash: configHash({ config: variant.config, seed: variant.seed }), image: variant.policy.image })) }
   return { trialId: ledger.reserveTrial(request, 'first'), request, protocol, variants, referenceImport, frames, ...(withPreflight ? { preflightSuite } : {}) }
@@ -261,4 +262,36 @@ describe.skipIf(!image)('managed package trials through real Docker', () => {
       await rm(root, { recursive: true, force: true })
     }
   })
+})
+
+// These fail before any container or environment probe and run without Docker.
+it.each([false, true])('finalizes failed trials when report publication fails (stale lease: %s)', async (stale) => {
+  const db = new Database(':memory:'), root = await mkdtemp(join(tmpdir(), 'managed-publication-failure-'))
+  let now = 1000
+  const original = new Error('retained input unavailable')
+  const publication = new Error('report disk full')
+  const publish = vi.spyOn(reportFiles, 'publishJson').mockRejectedValue(publication)
+  try {
+    const ledger = new PackageExperimentLedger(db, () => now), input = fixture(ledger)
+    let replacement: ReturnType<PackageExperimentLedger['claim']> | undefined
+    const task = runManagedTrial({ ...input, ledger, reportDirectory: root, loadNight: async () => {
+      if (stale) {
+        now += 30000
+        replacement = ledger.claim(input.trialId, 30000)
+      }
+      throw original
+    } })
+    await expect(task).rejects.toMatchObject({ cause: original, errors: expect.arrayContaining([original, publication]), message: expect.stringContaining('failure evidence incomplete') })
+    const trial = ledger.trial(input.trialId)
+    expect(trial).toMatchObject(stale
+      ? { state: 'running', attempt_id: replacement?.attemptId, report_hash: null }
+      : { state: 'failed', report_hash: null, lease_until: null })
+    if (!stale) expect(ledger.claim(input.trialId, 30000).unexposedHoldoutAtClaim).toBe(false)
+    expect(publish).toHaveBeenCalledOnce()
+  }
+  finally {
+    publish.mockRestore()
+    db.close()
+    await rm(root, { recursive: true, force: true })
+  }
 })

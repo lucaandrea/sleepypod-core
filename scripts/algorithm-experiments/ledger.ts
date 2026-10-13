@@ -132,9 +132,9 @@ export class PackageExperimentLedger {
     if (this.db.prepare('UPDATE package_trials SET lease_until = ? WHERE id = ? AND attempt_id = ? AND state = \'running\' AND lease_until > ?').run(now + leaseMs, lease.trialId, lease.attemptId, now).changes !== 1) throw new Error('Stale trial lease')
   }
 
-  finish(lease: PackageTrialLease, status: 'succeeded' | 'failed', reportHash: string) {
+  finish(lease: PackageTrialLease, status: 'succeeded' | 'failed', reportHash: string | null) {
     z.enum(['succeeded', 'failed']).parse(status)
-    hash.parse(reportHash)
+    if (status === 'succeeded' || reportHash !== null) hash.parse(reportHash)
     if (this.db.prepare('UPDATE package_trials SET state = ?, report_hash = ?, lease_until = NULL WHERE id = ? AND attempt_id = ? AND state = \'running\' AND lease_until > ?').run(status, reportHash, lease.trialId, lease.attemptId, this.now()).changes !== 1) throw new Error('Stale trial lease')
   }
 }
