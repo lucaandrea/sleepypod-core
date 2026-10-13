@@ -973,3 +973,27 @@ as absence. No probe signals PID/group zero. These checks cover the original
 detached group; they cannot prove cleanup of descendants that deliberately escape
 into another group. Shipped numerical code must not create such descendants.
 The shared kernel lock remains required across hosts.
+
+
+### Browser demo
+
+The demo implements all eight observation procedures in browser memory. Its
+explicitly labeled synthetic heart-rate template supports preparation, scheduling,
+exact idempotent retries, side-specific paginated inspection, stopping, reporting
+and reference comparison. Plans are accepted only after preparation in this demo
+session, and changed profile generations invalidate an unsubmitted plan. Bounds
+are 100 prepared plans, 20 runs and 120 samples per run over at most ten minutes.
+
+Synthetic active readings repeat 60/61/62 bpm; candidate readings are one bpm
+lower and omit every fourth value. They do not execute the selected algorithm.
+The demo shares production report calculations, normalization and reference
+alignment, so missing coverage is penalized and incompatible records remain
+unscored. Reports include a visible simulation issue, no worker resource receipt,
+and no qualification or activation authorization. Synthetic plan identities are
+not installed in a production registry. No waveform, hardware, DB or network
+adapter is imported into the browser demo graph.
+
+A stop freezes saved synthetic samples. Repeated stop preserves terminal state;
+no local process settlement is claimed because the demo has no process. Reloading
+resets demo state. A scheduling retry from a previous browser session receives an
+explicit bad-request result instead of silently creating a replacement run.

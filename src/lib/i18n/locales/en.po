@@ -66,7 +66,7 @@ msgstr "Activation request saved. Processor acknowledgement is reported separate
 msgid "Activation timing"
 msgstr "Activation timing"
 
-#: src/components/biometrics/Calibration/ShadowReport.tsx:44
+#: src/components/biometrics/Calibration/ShadowReport.tsx:45
 msgid "Active"
 msgstr "Active"
 
@@ -114,7 +114,7 @@ msgstr "Also replay sleep stages"
 msgid "Ambiguous timestamps (baseline / comparison)"
 msgstr "Ambiguous timestamps (baseline / comparison)"
 
-#: src/components/biometrics/Calibration/ShadowReport.tsx:37
+#: src/components/biometrics/Calibration/ShadowReport.tsx:38
 msgid "An additional report issue needs review."
 msgstr "An additional report issue needs review."
 
@@ -206,7 +206,7 @@ msgid "Biometric calibration"
 msgstr "Biometric calibration"
 
 #: src/components/biometrics/Calibration/CalibrationOverview.tsx:18
-#: src/components/biometrics/Calibration/ShadowReport.tsx:29
+#: src/components/biometrics/Calibration/ShadowReport.tsx:30
 msgid "Breathing rate"
 msgstr "Breathing rate"
 
@@ -236,7 +236,7 @@ msgstr "Cancelled"
 #: src/components/biometrics/Calibration/BacktestReport.tsx:60
 #: src/components/biometrics/Calibration/NumericReport.tsx:26
 #: src/components/biometrics/Calibration/NumericTrace.tsx:147
-#: src/components/biometrics/Calibration/ShadowReport.tsx:45
+#: src/components/biometrics/Calibration/ShadowReport.tsx:46
 #: src/components/biometrics/Calibration/StageReport.tsx:76
 #: src/components/biometrics/Calibration/StageTrace.tsx:104
 msgid "Candidate"
@@ -250,7 +250,7 @@ msgstr "Candidate and active readings could not be paired reliably."
 msgid "Candidate changes"
 msgstr "Candidate changes"
 
-#: src/components/biometrics/Calibration/ShadowReport.tsx:19
+#: src/components/biometrics/Calibration/ShadowReport.tsx:20
 msgid "Candidate coverage fell below the planned limits."
 msgstr "Candidate coverage fell below the planned limits."
 
@@ -494,7 +494,7 @@ msgstr "Correcting import {0}. Supply the complete replacement export; the origi
 msgid "Coverage estimates use nominal recording cadence; they do not prove continuous signal support."
 msgstr "Coverage estimates use nominal recording cadence; they do not prove continuous signal support."
 
-#: src/components/biometrics/Calibration/ShadowReport.tsx:40
+#: src/components/biometrics/Calibration/ShadowReport.tsx:41
 msgid "Coverage of planned observation intervals"
 msgstr "Coverage of planned observation intervals"
 
@@ -854,7 +854,7 @@ msgid "Health was sampled at admission checks, normally five seconds apart. Unob
 msgstr "Health was sampled at admission checks, normally five seconds apart. Unobserved intervals are not continuous health measurements."
 
 #: src/components/biometrics/Calibration/CalibrationOverview.tsx:18
-#: src/components/biometrics/Calibration/ShadowReport.tsx:29
+#: src/components/biometrics/Calibration/ShadowReport.tsx:30
 msgid "Heart rate"
 msgstr "Heart rate"
 
@@ -1061,7 +1061,7 @@ msgid "Largest observation gap: {0} seconds"
 msgstr "Largest observation gap: {0} seconds"
 
 #. placeholder {0}: number.format(data.maximumGapMs / 1000)
-#: src/components/biometrics/Calibration/ShadowReport.tsx:36
+#: src/components/biometrics/Calibration/ShadowReport.tsx:37
 msgid "Largest observation gap: {0} seconds."
 msgstr "Largest observation gap: {0} seconds."
 
@@ -1154,7 +1154,7 @@ msgstr "Memory samples: {0} of {1}; largest gap: {2} seconds"
 #: src/components/biometrics/Calibration/NumericReport.tsx:103
 #: src/components/biometrics/Calibration/NumericReport.tsx:171
 #: src/components/biometrics/Calibration/ReferenceLibrary.tsx:94
-#: src/components/biometrics/Calibration/ShadowReport.tsx:43
+#: src/components/biometrics/Calibration/ShadowReport.tsx:44
 msgid "Metric"
 msgstr "Metric"
 
@@ -1185,7 +1185,7 @@ msgstr "Missing"
 msgid "Missing evidence: {reason}"
 msgstr "Missing evidence: {reason}"
 
-#: src/components/biometrics/Calibration/ShadowReport.tsx:59
+#: src/components/biometrics/Calibration/ShadowReport.tsx:60
 msgid "Missing observations remain missing. The IBI variability index is not clinical RMSSD."
 msgstr "Missing observations remain missing. The IBI variability index is not clinical RMSSD."
 
@@ -1296,7 +1296,7 @@ msgstr "No committed report is available yet."
 msgid "No compatible values on these pages."
 msgstr "No compatible values on these pages."
 
-#: src/components/biometrics/Calibration/ShadowReport.tsx:62
+#: src/components/biometrics/Calibration/ShadowReport.tsx:63
 msgid "No completed worker resource receipt is available."
 msgstr "No completed worker resource receipt is available."
 
@@ -1330,7 +1330,7 @@ msgstr "No material improvement under the evaluation policy"
 msgid "No nights in this report."
 msgstr "No nights in this report."
 
-#: src/components/biometrics/Calibration/ShadowReport.tsx:19
+#: src/components/biometrics/Calibration/ShadowReport.tsx:20
 msgid "No observations were saved."
 msgstr "No observations were saved."
 
@@ -1478,7 +1478,7 @@ msgstr "Observation clocks are inconsistent."
 msgid "Observation details"
 msgstr "Observation details"
 
-#: src/components/biometrics/Calibration/ShadowReport.tsx:32
+#: src/components/biometrics/Calibration/ShadowReport.tsx:33
 msgid "Observation report"
 msgstr "Observation report"
 
@@ -1498,7 +1498,7 @@ msgstr "Observation window (UTC)"
 msgid "Observations"
 msgstr "Observations"
 
-#: src/components/biometrics/Calibration/ShadowReport.tsx:33
+#: src/components/biometrics/Calibration/ShadowReport.tsx:34
 msgid "Observed issues need review."
 msgstr "Observed issues need review."
 
@@ -1717,7 +1717,7 @@ msgstr "Prepared window (UTC)"
 msgid "Prepared, not admitted. The pod checks current qualification and health again when scheduling and when execution starts."
 msgstr "Prepared, not admitted. The pod checks current qualification and health again when scheduling and when execution starts."
 
-#: src/components/biometrics/Calibration/ShadowReport.tsx:63
+#: src/components/biometrics/Calibration/ShadowReport.tsx:64
 msgid "Presence and pump context reflect host observations, not proof of the live processor’s cached state."
 msgstr "Presence and pump context reflect host observations, not proof of the live processor’s cached state."
 
@@ -1776,7 +1776,7 @@ msgstr "Profiles"
 msgid "Progress: {0} / {1} nights"
 msgstr "Progress: {0} / {1} nights"
 
-#: src/components/biometrics/Calibration/ShadowReport.tsx:31
+#: src/components/biometrics/Calibration/ShadowReport.tsx:32
 msgid "Prospective observation report"
 msgstr "Prospective observation report"
 
@@ -1960,7 +1960,7 @@ msgstr "Reference-defined subgroup comparisons"
 msgid "References"
 msgstr "References"
 
-#: src/components/biometrics/Calibration/ShadowReport.tsx:64
+#: src/components/biometrics/Calibration/ShadowReport.tsx:65
 msgid "Refresh report"
 msgstr "Refresh report"
 
@@ -2027,12 +2027,12 @@ msgstr "Replay sleep stages"
 msgid "Replay stage traces"
 msgstr "Replay stage traces"
 
-#: src/components/biometrics/Calibration/ShadowReport.tsx:67
+#: src/components/biometrics/Calibration/ShadowReport.tsx:68
 msgid "Report evidence"
 msgstr "Report evidence"
 
 #: src/components/biometrics/Calibration/BacktestReport.tsx:144
-#: src/components/biometrics/Calibration/ShadowReport.tsx:69
+#: src/components/biometrics/Calibration/ShadowReport.tsx:70
 msgid "Report hash"
 msgstr "Report hash"
 
@@ -2126,7 +2126,7 @@ msgstr "Retained waveform replay"
 msgid "Retry exact activation request"
 msgstr "Retry exact activation request"
 
-#: src/components/biometrics/Calibration/ShadowReport.tsx:24
+#: src/components/biometrics/Calibration/ShadowReport.tsx:25
 msgid "Retry report"
 msgstr "Retry report"
 
@@ -2191,7 +2191,7 @@ msgid "Running"
 msgstr "Running"
 
 #. placeholder {0}: number.format(data.workerReceipt.receipt.peakObservedRssBytes / (1024 * 1024))
-#: src/components/biometrics/Calibration/ShadowReport.tsx:61
+#: src/components/biometrics/Calibration/ShadowReport.tsx:62
 msgid "Sampled worker memory peak: {0} MiB. Short peaks between samples may be missed."
 msgstr "Sampled worker memory peak: {0} MiB. Short peaks between samples may be missed."
 
@@ -2238,7 +2238,7 @@ msgstr "Saved profile revisions"
 
 #. placeholder {0}: data.observedSamples
 #. placeholder {1}: data.expectedSlots
-#: src/components/biometrics/Calibration/ShadowReport.tsx:35
+#: src/components/biometrics/Calibration/ShadowReport.tsx:36
 msgid "Saved sample times: {0}. Planned observation intervals: {1}."
 msgstr "Saved sample times: {0}. Planned observation intervals: {1}."
 
@@ -2355,6 +2355,10 @@ msgstr "Signal replay unavailable: raw waveforms and processing context have not
 msgid "Signed bias"
 msgstr "Signed bias"
 
+#: src/components/biometrics/Calibration/ShadowReport.tsx:17
+msgid "Simulated demo: generated readings, no hardware execution or qualification."
+msgstr "Simulated demo: generated readings, no hardware execution or qualification."
+
 #: src/components/biometrics/Calibration/CalibrationReferences.tsx:59
 msgid "Sleeper identifier"
 msgstr "Sleeper identifier"
@@ -2376,7 +2380,7 @@ msgstr "Sleeper: {0}"
 msgid "Smooth isolated epochs"
 msgstr "Smooth isolated epochs"
 
-#: src/components/biometrics/Calibration/ShadowReport.tsx:71
+#: src/components/biometrics/Calibration/ShadowReport.tsx:72
 msgid "Snapshot hash"
 msgstr "Snapshot hash"
 
@@ -2515,7 +2519,7 @@ msgstr "The HRV index measures window IBI variability. It is not clinical beat-t
 msgid "The last archive was unavailable. Continue to inspect the next archive."
 msgstr "The last archive was unavailable. Continue to inspect the next archive."
 
-#: src/components/biometrics/Calibration/ShadowReport.tsx:18
+#: src/components/biometrics/Calibration/ShadowReport.tsx:19
 msgid "The observation gap exceeded the planned limit."
 msgstr "The observation gap exceeded the planned limit."
 
@@ -2577,7 +2581,7 @@ msgstr "The server pins default, current baseline, and candidate configurations,
 msgid "The stop request is recorded. Saved observations are preserved."
 msgstr "The stop request is recorded. Saved observations are preserved."
 
-#: src/components/biometrics/Calibration/ShadowReport.tsx:17
+#: src/components/biometrics/Calibration/ShadowReport.tsx:18
 msgid "The storage quota was reached."
 msgstr "The storage quota was reached."
 
@@ -2609,7 +2613,7 @@ msgstr "This chart shows only the current page of replay intervals. Gaps are lef
 msgid "This comparison captures a fresh snapshot. An ongoing run may have more observations than the earlier health report."
 msgstr "This comparison captures a fresh snapshot. An ongoing run may have more observations than the earlier health report."
 
-#: src/components/biometrics/Calibration/ShadowReport.tsx:34
+#: src/components/biometrics/Calibration/ShadowReport.tsx:35
 msgid "This is descriptive evidence, not validated improvement or permission to activate a profile."
 msgstr "This is descriptive evidence, not validated improvement or permission to activate a profile."
 
@@ -2806,7 +2810,7 @@ msgstr "Waiting for a worker and resource admission. No execution is implied by 
 msgid "Waiting for delivery"
 msgstr "Waiting for delivery"
 
-#: src/components/biometrics/Calibration/ShadowReport.tsx:33
+#: src/components/biometrics/Calibration/ShadowReport.tsx:34
 msgid "Waiting for the observation window."
 msgstr "Waiting for the observation window."
 
@@ -2828,7 +2832,7 @@ msgstr "What these metrics mean"
 msgid "Whole-night partitions assigned; biometric performance is not yet validated."
 msgstr "Whole-night partitions assigned; biometric performance is not yet validated."
 
-#: src/components/biometrics/Calibration/ShadowReport.tsx:29
+#: src/components/biometrics/Calibration/ShadowReport.tsx:30
 msgid "Window IBI variability index"
 msgstr "Window IBI variability index"
 
@@ -2838,7 +2842,7 @@ msgstr "Window IBI variability index"
 msgid "Window IBI variability index (ms)"
 msgstr "Window IBI variability index (ms)"
 
-#: src/components/biometrics/Calibration/ShadowReport.tsx:33
+#: src/components/biometrics/Calibration/ShadowReport.tsx:34
 msgid "Within the observed limits."
 msgstr "Within the observed limits."
 
@@ -2846,10 +2850,10 @@ msgstr "Within the observed limits."
 msgid "Work was deferred; your selection and retry key are preserved."
 msgstr "Work was deferred; your selection and retry key are preserved."
 
-#: src/components/biometrics/Calibration/ShadowReport.tsx:17
+#: src/components/biometrics/Calibration/ShadowReport.tsx:18
 msgid "Worker cleanup has not been confirmed."
 msgstr "Worker cleanup has not been confirmed."
 
-#: src/components/biometrics/Calibration/ShadowReport.tsx:18
+#: src/components/biometrics/Calibration/ShadowReport.tsx:19
 msgid "Worker health observations are stale."
 msgstr "Worker health observations are stale."

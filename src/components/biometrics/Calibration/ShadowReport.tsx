@@ -14,6 +14,7 @@ export function ShadowReport({ id, side, subjectId }: { id: string, side?: 'left
   const issues: Record<string, string> = {
     clock_skew: t`Observation clocks are inconsistent.`, join_failed: t`Candidate and active readings could not be paired reliably.`,
     observation_window_missed: t`The observation window was missed.`, processor_failed: t`Processing failed.`,
+    simulated_demo: t`Simulated demo: generated readings, no hardware execution or qualification.`,
     worker_cleanup_unconfirmed: t`Worker cleanup has not been confirmed.`, storage_quota: t`The storage quota was reached.`,
     worker_stale: t`Worker health observations are stale.`, observation_gap: t`The observation gap exceeded the planned limit.`,
     no_observations: t`No observations were saved.`, coverage_degraded: t`Candidate coverage fell below the planned limits.`,

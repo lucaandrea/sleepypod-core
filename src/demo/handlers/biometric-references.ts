@@ -7,7 +7,7 @@ type Descriptor = RouterOutputs['biometricTuning']['getImport']
 type Measurement = RouterOutputs['biometricTuning']['getImportMeasurements']['items'][number]
 const imports: Array<{ descriptor: Descriptor, measurements: Measurement[] }> = []
 let rowId = 0
-async function preview(input: ReferenceImportInput) {
+export async function previewDemoReference(input: ReferenceImportInput) {
   const result = normalizeReferenceImport(input)
   const uploadHash = await hashText(result.uploadJson)
   const measurementHashes = await Promise.all(result.measurements.map(hash))
@@ -21,9 +21,9 @@ function get(id: string) {
 }
 
 export const referenceHandlers: DemoHandlers<'biometricTuning'> = {
-  previewImport: async input => (await preview(input)).summary,
+  previewImport: async input => (await previewDemoReference(input)).summary,
   commitImport: async (input) => {
-    const result = await preview(input.import)
+    const result = await previewDemoReference(input.import)
     if (result.summary.contentHash !== input.previewHash) throw new Error('STALE_PREVIEW: preview the exact import again')
     if (result.summary.rejected && !input.acceptRejectedRows) throw new Error('REJECTED_ROWS: explicitly acknowledge rejected rows')
     if (!result.measurements.length) throw new Error('NO_ACCEPTED_ROWS: no measurements to import')
