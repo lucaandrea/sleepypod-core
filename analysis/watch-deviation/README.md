@@ -21,6 +21,7 @@ can move into the app, the API or MCP once it earns it.
 | `score_live.ts` | Scores what the pod stored each night (vitals table + stages re-run with the current ruleset) against the Watch. |
 | `build_bundle.ts` | Builds the same off-pod fitting bundle the pod's dataset export streams, from the pulled snapshot and archives. Stages only archives covering the chosen nights (127 of 2613 for 4 nights; 44 s), so a long pulled history stays fast. |
 | `score_readings.ts` | Scores replayed readings (`--save-readings`) per sleep session with the same pairing, including coverage. |
+| `report.ts` | Writes `out/report.html`: trend over nights with config-generation markers, Bland-Altman, night overlays, hypnograms, sweep heatmaps and the HR guard trade-off. Local file only; health data is never published. |
 | `candidates-*.json` | Profile candidates for `scripts/biometrics-local-fit` replays. |
 | `data/`, `out/` | Default pulled inputs, and all outputs (bundle, replays, scores); gitignored. |
 
@@ -103,12 +104,36 @@ Ranking (evaluator, per split): holdout HR MAE 3.39 → **1.78** with the guard;
 - `scripts/biometrics-local-fit/local_replay.py`: prints the Python traceback before the generic failure line.
 - Debugging needed the worker's stderr, which `src/biometrics/backtest/waveform-child.ts` discards; patched temporarily, reverted.
 
+### 2026-10-18: Breathing interval-ratio sweep. Raising the lower ratio removes most of the over-read
+
+Context: every Watch night so far ran the *default* breathing settings (0.5 / 1.5). The pod's applied profile (gen 2/4/6: 0.6 / 1.7, HR tolerance 10, peak score 0.4) only ran in short evening windows, because builds without profile support (gen 1/3/5) fell back to defaults. Gen 6 is `next_session` from 10-18 16:13 UTC.
+
+`candidates-br.json` (lower 0.5–0.8 × upper 1.3–1.7, plus the pod profile) and `candidates-br2.json` (lower 0.8–0.9 × upper 1.7–2.0), replayed in the container. HR is unaffected by these parameters, and coverage doesn't change.
+
+| session (split) | defaults 0.5/1.5 | pod profile 0.6/1.7 | 0.8/1.7 | 0.85/2.0 | **0.9/2.0** |
+|---|---|---|---|---|---|
+| 1139 (tuning) | 2.02 (+1.66) | 1.47 (+1.07) | 0.98 (+0.33) | **0.78 (−0.01)** | 0.82 (−0.20) |
+| 1160 (validation) | 3.21 (+2.70) | 2.70 (+2.15) | 1.79 (+0.87) | 1.62 (+0.55) | **1.59 (+0.29)** |
+| 1170 (holdout) | 1.89 (+1.67) | 1.56 (+1.14) | 1.12 (+0.48) | 1.01 (+0.23) | **1.00 (−0.02)** |
+| 1176 (holdout) | 1.93 (+1.90) | 1.48 (+1.28) | 1.05 (+0.44) | 0.97 (+0.19) | **0.92 (−0.11)** |
+
+Values are breathing MAE in breaths/min, with bias in brackets. Pooled over all pairs: defaults 2.22 (+1.95) → 0.9/2.0 **1.08 (−0.01)**.
+
+- **The bias is short intervals the filter keeps.** Rejecting intervals under 0.85–0.9× the median removes the over-read. This supports the theory that the 0.1–0.7 Hz envelope finds extra small peaks between real breaths.
+- **The best values sit at the top of both allowed ranges** (`intervalLowerRatio` ≤ 0.9, `intervalUpperRatio` ≤ 2.0). The cleaner fix is in the estimator: a peak-prominence floor, or a spectral rate. Until then, 0.9 / 2.0 is the best value the profile allows.
+- **Risk:** a 0.9 floor drops genuinely irregular short breaths. Coverage held on all four nights, but REM-heavy or irregular nights need watching after it's applied.
+- Exploratory (`not_activation_evidence`); applying it needs the owner's OK. Judge it by the next nights' `compare_vitals_to_watch`.
+
+### Container resources
+
+Docker has all 10 M4 cores (4P + 6E) and 8 GB of 24 GB. The 13-config breathing sweep peaked at **1.1 GiB** at ~1050% CPU, so it's CPU-bound with no need for more memory. Ten parallel replays are the ceiling.
+
 ## Where each metric stands against "near-zero deviation"
 
 | metric | now (dev defaults, 4 recent nights) | blocker | next experiment |
 |---|---|---|---|
 | HR | MAE 1.0–2.5 bpm, bias +0.7 to +2.5, coverage 67–93% | weak-signal windows pick a wrong single peak (#840); residual high bias | find the source of the high bias (harmonic choice vs Watch averaging window); fill withheld windows from neighbours instead of dropping them |
-| Breathing | MAE 1.9–3.2 /min, bias **+1.7 to +2.7** every night | systematic over-read; interval-ratio sweeps never moved it | fit a per-side linear correction against Watch RR, then look for the extra-breath source in the BR estimator |
+| Breathing | defaults: MAE 1.9–3.2 /min, bias **+1.7 to +2.7**; replayed at 0.9/2.0: MAE 0.8–1.6, bias −0.2 to +0.3 | extra short intervals from small envelope peaks | apply 0.9/2.0 (owner OK), then a prominence floor or spectral rate in `compute_breathing_rate` |
 | HRV | pod 7–32 ms above Watch SDNN, 1–4 Watch samples a night | **different metric**: pod emits an IBI-variability index, Watch reports SDNN; Watch HRV is never imported | emit SDNN (and RMSSD) from the pod's IBIs over Watch-sized windows; import Watch HRV |
 | Stages | kappa −0.07 to 0.09 (chance) | rules key on HR ratio and HRV that do not yet track the Watch | revisit after HR/HRV; with ~10 Watch nights, fit stage thresholds on features instead of hand rules |
 

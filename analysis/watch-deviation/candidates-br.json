@@ -1,0 +1,162 @@
+[
+ {
+  "id": "br0.5-1.3",
+  "overrides": [
+   {
+    "path": "breathing_rate.intervalLowerRatio",
+    "value": 0.5
+   },
+   {
+    "path": "breathing_rate.intervalUpperRatio",
+    "value": 1.3
+   }
+  ]
+ },
+ {
+  "id": "br0.5-1.7",
+  "overrides": [
+   {
+    "path": "breathing_rate.intervalLowerRatio",
+    "value": 0.5
+   },
+   {
+    "path": "breathing_rate.intervalUpperRatio",
+    "value": 1.7
+   }
+  ]
+ },
+ {
+  "id": "br0.6-1.3",
+  "overrides": [
+   {
+    "path": "breathing_rate.intervalLowerRatio",
+    "value": 0.6
+   },
+   {
+    "path": "breathing_rate.intervalUpperRatio",
+    "value": 1.3
+   }
+  ]
+ },
+ {
+  "id": "br0.6-1.5",
+  "overrides": [
+   {
+    "path": "breathing_rate.intervalLowerRatio",
+    "value": 0.6
+   },
+   {
+    "path": "breathing_rate.intervalUpperRatio",
+    "value": 1.5
+   }
+  ]
+ },
+ {
+  "id": "br0.6-1.7",
+  "overrides": [
+   {
+    "path": "breathing_rate.intervalLowerRatio",
+    "value": 0.6
+   },
+   {
+    "path": "breathing_rate.intervalUpperRatio",
+    "value": 1.7
+   }
+  ]
+ },
+ {
+  "id": "br0.7-1.3",
+  "overrides": [
+   {
+    "path": "breathing_rate.intervalLowerRatio",
+    "value": 0.7
+   },
+   {
+    "path": "breathing_rate.intervalUpperRatio",
+    "value": 1.3
+   }
+  ]
+ },
+ {
+  "id": "br0.7-1.5",
+  "overrides": [
+   {
+    "path": "breathing_rate.intervalLowerRatio",
+    "value": 0.7
+   },
+   {
+    "path": "breathing_rate.intervalUpperRatio",
+    "value": 1.5
+   }
+  ]
+ },
+ {
+  "id": "br0.7-1.7",
+  "overrides": [
+   {
+    "path": "breathing_rate.intervalLowerRatio",
+    "value": 0.7
+   },
+   {
+    "path": "breathing_rate.intervalUpperRatio",
+    "value": 1.7
+   }
+  ]
+ },
+ {
+  "id": "br0.8-1.3",
+  "overrides": [
+   {
+    "path": "breathing_rate.intervalLowerRatio",
+    "value": 0.8
+   },
+   {
+    "path": "breathing_rate.intervalUpperRatio",
+    "value": 1.3
+   }
+  ]
+ },
+ {
+  "id": "br0.8-1.5",
+  "overrides": [
+   {
+    "path": "breathing_rate.intervalLowerRatio",
+    "value": 0.8
+   },
+   {
+    "path": "breathing_rate.intervalUpperRatio",
+    "value": 1.5
+   }
+  ]
+ },
+ {
+  "id": "br0.8-1.7",
+  "overrides": [
+   {
+    "path": "breathing_rate.intervalLowerRatio",
+    "value": 0.8
+   },
+   {
+    "path": "breathing_rate.intervalUpperRatio",
+    "value": 1.7
+   }
+  ]
+ },
+ {
+  "id": "pod-profile",
+  "overrides": [
+   {
+    "path": "breathing_rate.intervalLowerRatio",
+    "value": 0.6
+   },
+   {
+    "path": "breathing_rate.intervalUpperRatio",
+    "value": 1.7
+   },
+   {
+    "path": "heart_rate.trackingToleranceBpm",
+    "value": 10
+   }
+  ]
+ }
+]
