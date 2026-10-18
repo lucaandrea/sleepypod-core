@@ -63,7 +63,7 @@ export function deviation(pairs: Pair[], watchCount: number): Deviation {
     coverage: watchCount ? pairs.length / watchCount : 0,
     mae: mean(abs),
     bias: mean(d),
-    p90: abs[Math.floor(abs.length * 0.9)],
+    p90: abs[Math.ceil(abs.length * 0.9) - 1],
     corr: sp && sw ? cov / (sp * sw) : null,
   }
 }
