@@ -22,6 +22,11 @@ if [ -n "${SP_BIOMETRICS_DIR:-}" ]; then
   [ "${SP_BIOMETRICS_RW:-}" = 1 ] && MODE=rw
   set -- "$@" -v "$(cd "$SP_BIOMETRICS_DIR" && pwd):/biometrics:$MODE" -e SP_ANALYSIS_DATA=/biometrics
 fi
+# Settings that change results travel into the container explicitly.
+for var in SP_SIDE SP_TIMEZONE; do
+  eval "val=\${$var:-}"
+  [ -n "$val" ] && set -- "$@" -e "$var=$val"
+done
 set -- "$@" sleepypod-analysis
 # Rotate the original command (first CMD_COUNT args) to the end.
 i=0

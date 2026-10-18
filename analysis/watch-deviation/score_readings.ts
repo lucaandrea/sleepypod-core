@@ -3,7 +3,7 @@
  * against the Watch, with the same pairing as score_live.ts, so candidates
  * can be compared night by night including coverage.
  *
- * usage (repo root): npx tsx analysis/watch-deviation/score_readings.ts <out/run-dir> <sessionId> [...]
+ * usage (repo root): [SP_SIDE=left|right] npx tsx analysis/watch-deviation/score_readings.ts <out/run-dir> <sessionId> [...]
  * outputs: <run-dir>/sessions.json and a markdown table on stdout
  *
  * coverage = Watch samples that found a pod reading / Watch samples in the
@@ -15,6 +15,7 @@ import { join } from 'node:path'
 import { deviation, fmt, meanWithin, nearest, pairSamples, WINDOWS, type Deviation, type Sample } from './pairing'
 import { DATA, openSnapshot } from './paths'
 
+const SIDE = process.env.SP_SIDE === 'right' ? 'right' : 'left'
 const [runDir, ...ids] = process.argv.slice(2)
 const sessionIds = ids.map(Number)
 const watch = JSON.parse(readFileSync(join(DATA, 'watch.json'), 'utf8')) as { hr: Sample[], hrv: Sample[], rr: Sample[] }
@@ -38,7 +39,7 @@ for (const file of readdirSync(readingsDir).filter(f => f.endsWith('.json'))) {
   const config = names.get(hash)?.join('=') ?? hash
   const raw = JSON.parse(readFileSync(join(readingsDir, file), 'utf8'))
   const rows = (Array.isArray(raw) ? raw : raw.readings) as Reading[]
-  byConfig.set(config, [...(byConfig.get(config) ?? []), ...rows.filter(r => r.side === 'left')])
+  byConfig.set(config, [...(byConfig.get(config) ?? []), ...rows.filter(r => r.side === SIDE)])
 }
 
 const out: Record<string, Record<number, { hr: Deviation, br: Deviation, hrv: Deviation }>> = {}

@@ -21,6 +21,10 @@ can move into the app, the API or MCP once it earns it.
 | `score_live.ts` | Scores what the pod stored each night (vitals table + stages re-run with the current ruleset) against the Watch. |
 | `build_bundle.ts` | Builds the same off-pod fitting bundle the pod's dataset export streams, from the pulled snapshot and archives. Stages only archives covering the chosen nights (127 of 2613 for 4 nights; 44 s), so a long pulled history stays fast. |
 | `score_readings.ts` | Scores replayed readings (`--save-readings`) per sleep session with the same pairing, including coverage. |
+| `protocol.json`, `protocol.ts` | The shared protocol (`deviation-protocol-v1`): side, 3–14 h nights, newest 14, pairing windows (checked against `pairing.ts`) and the 17-candidate grid every contributor replays. |
+| `run_protocol.sh` | One command for contributors: picks the Watch-covered nights, builds one bundle per night, replays the grid, scores it, writes `out/summary.json` (shareable) and `out/report.html` (local). |
+| `nights.ts` | Shared night loader and sweep reader for `report.ts` and `summary.ts`, so both describe the same numbers. |
+| `summary.ts` | Writes `out/summary.json` (`deviation-summary-v1`): per-night and pooled deviation, stage agreement, coarse Watch-value bins, per-candidate sweep results. A zod schema plus a check that refuses any timestamp or date. |
 | `report.ts` | Writes `out/report.html`: trend over nights with config-generation markers, Bland-Altman, night overlays, hypnograms, sweep heatmaps and the HR guard trade-off. Local file only; health data is never published. |
 | `candidates-*.json` | Profile candidates for `scripts/biometrics-local-fit` replays. |
 | `data/`, `out/` | Default pulled inputs, and all outputs (bundle, replays, scores); gitignored. |
@@ -127,6 +131,26 @@ Values are breathing MAE in breaths/min, with bias in brackets. Pooled over all 
 ### Container resources
 
 Docker has all 10 M4 cores (4P + 6E) and 8 GB of 24 GB. The 13-config breathing sweep peaked at **1.1 GiB** at ~1050% CPU, so it's CPU-bound with no need for more memory. Ten parallel replays are the ceiling.
+
+### 2026-10-18: Shared protocol and shareable summary
+
+Other people will run this container on their own pods, and raw pod data and Watch exports shouldn't travel. So the shareable output is `out/summary.json`, holding errors only: no timestamps, dates, record or pod ids, or readings. Nights are relative indexes. `run_protocol.sh` produces it in one command against `SP_BIOMETRICS_DIR`.
+
+Two limits shaped the runner:
+- **One bundle per night.** The dataset splitter joins nights that cross local noon into one cohort, and a cohort may reference at most 64 archives (about 16 h). Two late nights exceeded that.
+- **`maxHours: 14`** drops bed-presence drift records of 14 h and more. The report uses the same night set as the summary.
+- The runner runs under `set -o pipefail`; an earlier `| tail -1` had hidden a failed step.
+
+First full run on .88 (9 nights × defaults + 17 candidates, about 8 min per night):
+
+| | HR MAE | BR MAE | BR bias | BR coverage |
+|---|---|---|---|---|
+| live, as recorded | 3.91 | 2.12 | +1.84 | 93% |
+| replay, defaults | 2.06 | 2.10 | | 98% |
+| **replay, br0.9-2.0** | 2.06 | **1.17** | **−0.23** | 98% |
+
+- **0.9/2.0 holds across all 9 nights**, the setting applied to the pod as generation 7 on 10-18. HR is unchanged by breathing parameters, as expected. Live HR is worse than the replay because most live nights predate the #840 peak-score guard.
+- **Breathing over-read is largest at low rates** (Watch 12–14: +3.8, 14–16: +2.2, 16–18: +1.0, 18–20: +0.5). The pod is drawn toward about 16–17 breaths/min instead of tracking slow breathing. Binning on the Watch value adds some regression to the mean, but it fits the extra-peak explanation, and points the estimator fix at slow breathing.
 
 ## Where each metric stands against "near-zero deviation"
 

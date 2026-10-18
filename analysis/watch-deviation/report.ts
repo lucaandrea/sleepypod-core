@@ -14,117 +14,24 @@
  *
  * Health data stays local: the file is written to out/ and never published.
  */
-import { readFileSync, writeFileSync, existsSync } from 'node:fs'
+import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { DEFAULT_STAGE_RULESET } from '@/src/lib/sleep-stage-rules'
-import { runStageClassifier, scoreAgainstReference, type SleepStage, type SleepStageBlock } from '@/src/lib/sleep-stages'
-import { deviation, meanWithin, nearest, pairSamples, WINDOWS, type Pair, type Point, type Sample } from './pairing'
-import { DATA, OUT, openSnapshot } from './paths'
+import type { SleepStage, SleepStageBlock } from '@/src/lib/sleep-stages'
+import { deviation, type Pair, type Point } from './pairing'
+import { loadNights, loadSweep, type Night, type SweepCell } from './nights'
+import { OUT } from './paths'
+import { loadProtocol } from './protocol'
 
 const [sideArg, minHoursArg, ...sweepDirs] = process.argv.slice(2)
 const side = sideArg ?? 'left'
 const minHours = Number(minHoursArg ?? 3)
 
 // ---------------------------------------------------------------- data
-const watch = JSON.parse(readFileSync(join(DATA, 'watch.json'), 'utf8')) as {
-  hr: Sample[]
-  hrv: Sample[]
-  rr: Sample[]
-  stages: Array<[number, number, SleepStage]>
-}
-const db = openSnapshot(join(DATA, 'biometrics.db'))
-const records = db.prepare(`select id, entered_bed_at s, left_bed_at e from sleep_records
-  where side = ? and left_bed_at - entered_bed_at >= ? order by entered_bed_at`).all(side, minHours * 3600) as Array<{ id: number, s: number, e: number }>
-const configs = db.prepare(`select generation g, created_at_ms t from biometric_runtime_configs where side = ? order by generation`)
-  .all(side) as Array<{ g: number, t: number }>
-const latest = db.prepare(`select payload from biometric_runtime_configs where side = ? order by generation desc limit 1`).get(side) as { payload: string } | undefined
-const ruleset = latest ? JSON.parse(latest.payload).resolved.sleep_stages.ruleset : DEFAULT_STAGE_RULESET
-const quality = (db.prepare(`select quality_score q from calibration_profiles where side = ? and sensor_type = 'piezo' limit 1`).get(side) as { q: number | null } | undefined)?.q ?? 0
-
-interface Night {
-  id: number
-  s: number
-  e: number
-  label: string
-  gen: number | null
-  hr: Point[]
-  br: Point[]
-  hrPairs: Pair[]
-  brPairs: Pair[]
-  hrW: Sample[]
-  brW: Sample[]
-  dev: Record<'hr' | 'br' | 'hrv', ReturnType<typeof deviation>>
-  kappa: number | null
-  podStages: SleepStageBlock[]
-  watchStages: SleepStageBlock[]
-}
-
-const nights: Night[] = []
-for (const r of records) {
-  const s = r.s * 1000
-  const e = r.e * 1000
-  const inNight = (xs: Sample[]) => xs.filter(([t]) => t >= s && t <= e)
-  const hrW = inNight(watch.hr)
-  const brW = inNight(watch.rr)
-  const hrvW = inNight(watch.hrv)
-  const nightStages = watch.stages.filter(([a, b]) => b > s && a < e).map(([start, end, stage]) => ({ start: Math.max(start, s), end: Math.min(end, e), stage }))
-  if (hrW.length === 0 && nightStages.length === 0) continue
-  const rows = db.prepare(`select timestamp t, heart_rate hr, hrv, breathing_rate br from vitals where side = ? and timestamp between ? and ? order by timestamp`)
-    .all(side, r.s - 600, r.e + 600) as Array<{ t: number, hr: number | null, hrv: number | null, br: number | null }>
-  const mv = db.prepare(`select timestamp t, total_movement m from movement where side = ? and timestamp between ? and ? order by timestamp`)
-    .all(side, r.s, r.e) as Array<{ t: number, m: number }>
-  const series = (key: 'hr' | 'br' | 'hrv') => rows.map(x => ({ t: x.t * 1000, v: x[key] }))
-  const hr = series('hr')
-  const br = series('br')
-  const hrv = series('hrv')
-  const hrPairs = pairSamples(hrW, t => nearest(hr, t, WINDOWS.hr))
-  const brPairs = pairSamples(brW, t => nearest(br, t, WINDOWS.br))
-  const run = runStageClassifier(
-    rows.filter(x => x.t >= r.s && x.t <= r.e).map(x => ({ timestamp: new Date(x.t * 1000), heartRate: x.hr, hrv: x.hrv, breathingRate: x.br })),
-    mv.map(x => ({ timestamp: new Date(x.t * 1000), totalMovement: x.m })), quality, ruleset)
-  const podStages: SleepStageBlock[] = []
-  for (const ep of run.epochs) {
-    const last = podStages[podStages.length - 1]
-    if (last && last.stage === ep.stage && last.end === ep.start) last.end = ep.start + ep.duration
-    else podStages.push({ start: ep.start, end: ep.start + ep.duration, stage: ep.stage })
-  }
-  const kappa = scoreAgainstReference(run.epochs, nightStages)?.kappa ?? null
-  if (hrPairs.length === 0 && brPairs.length === 0 && kappa == null) continue
-  const gen = configs.filter(c => c.t <= s).at(-1)?.g ?? null
-  nights.push({
-    id: r.id, s, e, gen,
-    label: new Date(s - 12 * 3_600_000).toISOString().slice(5, 10),
-    hr: hr.filter(p => p.t >= s && p.t <= e), br: br.filter(p => p.t >= s && p.t <= e),
-    hrPairs, brPairs, hrW, brW,
-    dev: { hr: deviation(hrPairs, hrW.length), br: deviation(brPairs, brW.length), hrv: deviation(pairSamples(hrvW, t => meanWithin(hrv, t, WINDOWS.hrv)), hrvW.length) },
-    kappa,
-    podStages, watchStages: nightStages,
-  })
-}
-
-// Two records starting on the same local date get their record id appended.
-for (const n of nights) {
-  if (nights.filter(m => m.label.slice(0, 5) === n.label.slice(0, 5)).length > 1) n.label = `${n.label.slice(0, 5)} #${n.id}`
-}
-
-interface SweepCell { config: string, hr: Agg, br: Agg }
-interface Agg { n: number, watch: number, mae: number | null, bias: number | null }
-function loadSweep(dir: string): SweepCell[] {
-  const path = join(dir, 'sessions.json')
-  if (!existsSync(path)) return []
-  const raw = JSON.parse(readFileSync(path, 'utf8')) as Record<string, Record<string, Record<'hr' | 'br', { n: number, coverage: number, mae: number | null, bias: number | null }>>>
-  const pool = (cells: Array<{ n: number, coverage: number, mae: number | null, bias: number | null }>): Agg => {
-    const n = cells.reduce((a, c) => a + c.n, 0)
-    const w = cells.reduce((a, c) => a + (c.coverage ? c.n / c.coverage : 0), 0)
-    const sum = (k: 'mae' | 'bias') => cells.reduce((a, c) => a + (c[k] ?? 0) * c.n, 0)
-    return { n, watch: Math.round(w), mae: n ? sum('mae') / n : null, bias: n ? sum('bias') / n : null }
-  }
-  return Object.entries(raw).map(([config, sessions]) => ({
-    config,
-    hr: pool(Object.values(sessions).map(x => x.hr)),
-    br: pool(Object.values(sessions).map(x => x.br)),
-  }))
-}
+const loaded = loadNights(side, minHours)
+// Same night set as the protocol: longer records are bed-presence drift, not a night.
+const { maxHours } = loadProtocol()
+const nights = loaded.nights.filter(n => (n.e - n.s) / 3.6e6 <= maxHours)
+const { configs, calibrationQuality: quality } = loaded
 const sweeps = sweepDirs.map(d => ({ dir: d, cells: loadSweep(d) }))
 
 // ---------------------------------------------------------------- svg helpers
@@ -396,8 +303,8 @@ const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta n
 --series-1:#3987e5;--series-2:#d95926;--series-3:#199e70;--series-4:#c98500;--seq-lo:#184f95;--seq-hi:#cde2fb;--div-neg:#3987e5;--div-pos:#e66767;--div-mid:#383835}}
 :root[data-theme="dark"] .viz-root{color-scheme:dark;--surface-1:#1a1a19;--page:#0d0d0d;--ink:#fff;--ink-2:#c3c2b7;--grid:#2c2c2a;--axis:#383835;
 --series-1:#3987e5;--series-2:#d95926;--series-3:#199e70;--series-4:#c98500;--seq-lo:#184f95;--seq-hi:#cde2fb;--div-neg:#3987e5;--div-pos:#e66767;--div-mid:#383835}
-body{margin:0;background:var(--page)}
-.viz-root{font:14px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif;color:var(--ink);background:var(--page);padding:24px 16px;max-width:1000px;margin:0 auto}
+body.viz-root{margin:0;min-height:100vh;font:14px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif;color:var(--ink);background:var(--page)}
+.wrap{padding:24px 16px;max-width:1000px;margin:0 auto}
 h1{font-size:22px;margin:0 0 4px}h2{font-size:18px;margin:32px 0 8px}h3{font-size:15px;margin:20px 0 4px}
 .note,figcaption{color:var(--ink-2);font-size:13px;margin:2px 0 6px}
 section,figure{background:var(--surface-1);border:1px solid var(--grid);border-radius:10px;padding:12px;margin:10px 0}
@@ -425,9 +332,9 @@ th,td{border-bottom:1px solid var(--grid);padding:3px 8px;text-align:right}th{co
 .night{border-top:1px solid var(--grid);margin-top:18px;padding-top:6px}
 #tip{position:fixed;pointer-events:none;background:var(--surface-1);color:var(--ink);border:1px solid var(--grid);border-radius:6px;padding:5px 8px;font-size:12px;box-shadow:0 2px 8px rgba(0,0,0,.12);display:none;z-index:9;max-width:320px}
 #tip b{font-weight:650}#tip .k{display:inline-block;width:12px;height:2px;margin-right:6px;vertical-align:middle}
-</style></head><body><div class="viz-root">
+</style></head><body class="viz-root"><div class="wrap">
 <h1>Pod vs Apple Watch</h1>
-<p class="note">Side ${esc(side)} · ${nights.length} Watch-covered nights of at least ${minHours} h · stages re-run with ruleset gen ${configs.at(-1)?.g ?? 'default'} · piezo quality ${quality}. Deviation is pod − Watch; the goal is near-zero bias and error. Generated ${esc(new Date().toISOString().slice(0, 16))}Z.</p>
+<p class="note">Side ${esc(side)} · ${nights.length} Watch-covered nights of ${minHours}–${maxHours} h · stages re-run with ruleset gen ${configs.at(-1)?.g ?? 'default'} · piezo quality ${quality}. Deviation is pod − Watch; the goal is near-zero bias and error. Generated ${esc(new Date().toISOString().slice(0, 16))}Z.</p>
 
 <h2>4 · Trend over nights</h2>
 <p class="note">Vertical lines mark where the runtime-config generation in effect at bed entry changed. HRV compares the pod's IBI-variability index with Watch SDNN (not like-for-like yet).</p>

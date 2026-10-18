@@ -3,7 +3,7 @@
  * streams) from a pulled pod snapshot, without touching the pod.
  *
  * usage (in the container, repo root):
- *   npx tsx analysis/watch-deviation/build_bundle.ts <sessionId> [sessionId ...]
+ *   [SP_SIDE=left|right] [SP_TIMEZONE=Area/City] npx tsx analysis/watch-deviation/build_bundle.ts <sessionId> [sessionId ...]
  * inputs:  $SP_ANALYSIS_DATA or data/ (paths.ts): biometrics.db, watch.json, archive/*.RAW.gz
  * outputs: out/work/ (scratch DB + retained copies), out/bundle.tar
  *
@@ -45,25 +45,33 @@ const refs = JSON.parse(readFileSync(join(DATA, 'watch.json'), 'utf8')) as {
   stages: Array<[number, number, string]>
 }
 // One import holds at most 2000 rows, so keep only rows inside the chosen nights (±1 h).
-const beds = sqlite.prepare(`select entered_bed_at * 1000 a, left_bed_at * 1000 b from sleep_records where id in (${sessionIds.map(() => '?').join(',')})`).all(...sessionIds) as Array<{ a: number, b: number }>
+const beds = sqlite.prepare(`select id, entered_bed_at * 1000 a, left_bed_at * 1000 b from sleep_records where id in (${sessionIds.map(() => '?').join(',')})`).all(...sessionIds) as Array<{ id: number, a: number, b: number }>
 const inside = (t: number) => beds.some(w => t >= w.a - 3_600_000 && t <= w.b + 3_600_000)
 refs.hr = refs.hr.filter(([t]) => inside(t))
 refs.rr = refs.rr.filter(([t]) => inside(t))
 refs.stages = refs.stages.filter(([a, b]) => inside(a) || inside(b))
 console.log('reference rows', { hr: refs.hr.length, rr: refs.rr.length, stages: refs.stages.length })
-const key = `watch-deviation-${sessionIds.join('-')}`
-const subjectId = `${key}:left`
-const input = { side: 'left' as const, subjectId, source: 'apple_watch', rows: [
+const side = (process.env.SP_SIDE === 'right' ? 'right' : 'left') as 'left' | 'right'
+// Local-noon night grouping depends on the sleeper's timezone, not the container's (UTC).
+const timezone = process.env.SP_TIMEZONE || 'America/Los_Angeles'
+const key = `watch-deviation-${side}-${sessionIds.join('-')}`
+const subjectId = `${key}:${side}`
+const rows = [
   ...refs.hr.map(([t, v]) => ({ recordKey: `hr:${t}`, metric: 'heart_rate', value: v, unit: 'bpm', timestampMs: t })),
   ...refs.rr.map(([t, v]) => ({ recordKey: `rr:${t}`, metric: 'breathing_rate', value: v, unit: 'breaths/min', timestampMs: t })),
   ...refs.stages.map(([a, b, s]) => ({ recordKey: `stage:${a}`, metric: 'sleep_stages', value: s, unit: 'stage', startMs: a, endMs: b })),
-] }
-const preview = previewReferenceImport(input)
-const imported = new ReferenceStore(db).commit({ import: input, previewHash: preview.summary.contentHash })
-console.log('reference import', imported.id)
+]
+// One reference import holds at most 2000 rows; a dataset can pin several.
+const referenceImportIds: string[] = []
+for (let i = 0; i < rows.length; i += 2000) {
+  const input = { side, subjectId, source: 'apple_watch', rows: rows.slice(i, i + 2000) }
+  const preview = previewReferenceImport(input)
+  referenceImportIds.push(new ReferenceStore(db).commit({ import: input, previewHash: preview.summary.contentHash }).id)
+}
+console.log('reference imports', referenceImportIds.length)
 
-interface Assignment { cohortId: string, split: string, startMs: number, endMs: number }
-const parent = new DatasetStore(db).create({ side: 'left', subjectId, sessionIds, referenceImportIds: [imported.id], timezone: 'America/Los_Angeles', idempotencyKey: key })
+interface Assignment { cohortId: string, split: string, startMs: number, endMs: number, sessionIds: number[] }
+const parent = new DatasetStore(db).create({ side, subjectId, sessionIds, referenceImportIds, timezone, idempotencyKey: key })
 const assignments = (parent.manifest as { splitProtocol: { assignments: Assignment[] } }).splitProtocol.assignments
 console.log('parent', parent.id, assignments.map(a => `${a.cohortId}:${a.split}`).join(' '))
 
@@ -107,7 +115,12 @@ const cohorts = assignments.map((a) => {
   let afterId: string | undefined
   for (;;) {
     const page = catalog.page({ startMs: a.startMs - 300_000, endMs: a.endMs, ...(afterId ? { afterId } : {}) })
-    ids.push(...page.items.filter(i => i.inspection.inventory.ordered_waveform_available && existsSync(join(archive, i.inspection.source_name))).map(i => i.id))
+    // Only sources overlapping the cohort's own sessions: a cohort joining two
+    // records across a daytime gap would otherwise exceed the 64-source limit.
+    const sessions = beds.filter(b => a.sessionIds.includes(b.id))
+    const overlaps = (first: number | null, last: number | null) => first != null && last != null && sessions.some(b => last >= b.a - 300_000 && first <= b.b)
+    ids.push(...page.items.filter(i => i.inspection.inventory.ordered_waveform_available && existsSync(join(archive, i.inspection.source_name))
+      && overlaps(i.inspection.inventory.first_event_ms, i.inspection.inventory.last_event_ms)).map(i => i.id))
     if (!page.nextCursor) break
     afterId = page.nextCursor
   }
