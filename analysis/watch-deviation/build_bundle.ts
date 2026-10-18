@@ -14,7 +14,7 @@
 import Database from 'better-sqlite3'
 import { drizzle } from 'drizzle-orm/better-sqlite3'
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator'
-import { copyFileSync, createWriteStream, existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs'
+import { copyFileSync, createWriteStream, existsSync, linkSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs'
 import { once } from 'node:events'
 import { join } from 'node:path'
 import * as schema from '@/src/db/biometrics-schema'
@@ -45,8 +45,8 @@ const refs = JSON.parse(readFileSync(join(DATA, 'watch.json'), 'utf8')) as {
   stages: Array<[number, number, string]>
 }
 // One import holds at most 2000 rows, so keep only rows inside the chosen nights (±1 h).
-const windows = sqlite.prepare(`select entered_bed_at * 1000 - 3600000 a, left_bed_at * 1000 + 3600000 b from sleep_records where id in (${sessionIds.map(() => '?').join(',')})`).all(...sessionIds) as Array<{ a: number, b: number }>
-const inside = (t: number) => windows.some(w => t >= w.a && t <= w.b)
+const beds = sqlite.prepare(`select entered_bed_at * 1000 a, left_bed_at * 1000 b from sleep_records where id in (${sessionIds.map(() => '?').join(',')})`).all(...sessionIds) as Array<{ a: number, b: number }>
+const inside = (t: number) => beds.some(w => t >= w.a - 3_600_000 && t <= w.b + 3_600_000)
 refs.hr = refs.hr.filter(([t]) => inside(t))
 refs.rr = refs.rr.filter(([t]) => inside(t))
 refs.stages = refs.stages.filter(([a, b]) => inside(a) || inside(b))
@@ -68,7 +68,28 @@ const assignments = (parent.manifest as { splitProtocol: { assignments: Assignme
 console.log('parent', parent.id, assignments.map(a => `${a.cohortId}:${a.split}`).join(' '))
 
 const py = defaultPythonLocation()
-const archive = join(DATA, 'archive')
+// Inspecting every archive in a long pulled history is slow (one Python scan
+// each), so stage only the archives that can cover the chosen nights: a frame
+// is gzipped ~15 min after it closes, hence mtime in [entered − 20 min, left + 45 min],
+// the same rule as fetch_raw.sh and the pod's analysis export. Hard links when
+// the data folder shares a filesystem with out/, copies otherwise (e.g. a mount).
+const source = join(DATA, 'archive')
+const archive = join(WORK, 'archive')
+mkdirSync(archive)
+const staged = readdirSync(source).filter((name) => {
+  if (!name.endsWith('.RAW.gz')) return false
+  const mtime = statSync(join(source, name)).mtimeMs
+  return beds.some(w => mtime >= w.a - 1_200_000 && mtime <= w.b + 2_700_000)
+})
+for (const name of staged) {
+  try {
+    linkSync(join(source, name), join(archive, name))
+  }
+  catch {
+    copyFileSync(join(source, name), join(archive, name))
+  }
+}
+console.log('staged archives', staged.length, 'of', readdirSync(source).length)
 const options = { workerPath: '/nonexistent', rawLocation: { pythonPath: py.pythonPath, modulesPath: py.modulesPath, archiveDirectory: archive }, signal: new AbortController().signal, admit: async () => true }
 let cursor: string | null = null
 let scanned = 0

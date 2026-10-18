@@ -19,7 +19,7 @@ can move into the app, the API or MCP once it earns it.
 | `fetch_raw.sh` | Copies the pod's gzipped RAW archives for given UTC windows into `data/archive/`. Read-only on the pod. |
 | `pairing.ts` | Shared pairing windows and deviation stats (MAE, bias, p90, r, coverage). Deviation = pod − Watch. |
 | `score_live.ts` | Scores what the pod stored each night (vitals table + stages re-run with the current ruleset) against the Watch. |
-| `build_bundle.ts` | Builds the same off-pod fitting bundle the pod's dataset export streams, from the pulled snapshot and archives. |
+| `build_bundle.ts` | Builds the same off-pod fitting bundle the pod's dataset export streams, from the pulled snapshot and archives. Stages only archives covering the chosen nights (127 of 2613 for 4 nights; 44 s), so a long pulled history stays fast. |
 | `score_readings.ts` | Scores replayed readings (`--save-readings`) per sleep session with the same pairing, including coverage. |
 | `candidates-*.json` | Profile candidates for `scripts/biometrics-local-fit` replays. |
 | `data/`, `out/` | Default pulled inputs, and all outputs (bundle, replays, scores); gitignored. |
