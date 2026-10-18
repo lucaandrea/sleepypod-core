@@ -4,8 +4,8 @@
  *
  * usage (in the container, repo root):
  *   npx tsx analysis/watch-deviation/build_bundle.ts <sessionId> [sessionId ...]
- * inputs:  data/biometrics.db (pod snapshot), data/watch.json, data/archive/*.RAW.gz
- * outputs: data/work/ (scratch DB + retained copies), data/bundle.tar
+ * inputs:  $SP_ANALYSIS_DATA or data/ (paths.ts): biometrics.db, watch.json, archive/*.RAW.gz
+ * outputs: out/work/ (scratch DB + retained copies), out/bundle.tar
  *
  * Steps mirror the pod's coordinator: import the Watch references, freeze a
  * processed dataset over the chosen sleep sessions, inspect the archives,
@@ -16,7 +16,7 @@ import { drizzle } from 'drizzle-orm/better-sqlite3'
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator'
 import { copyFileSync, createWriteStream, existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs'
 import { once } from 'node:events'
-import { join, resolve } from 'node:path'
+import { join } from 'node:path'
 import * as schema from '@/src/db/biometrics-schema'
 import { previewReferenceImport } from '@/src/biometrics/references/normalize'
 import { ReferenceStore } from '@/src/biometrics/references/store'
@@ -25,21 +25,21 @@ import { performCoordinatorTask } from '@/src/biometrics/backtest/coordinator-ta
 import { RawSourceCatalog } from '@/src/biometrics/backtest/raw-catalog'
 import { datasetBundleChunks, prepareDatasetExport } from '@/src/biometrics/backtest/dataset-export'
 import { defaultPythonLocation } from '../../scripts/biometrics-local-fit/fit'
+import { DATA, OUT } from './paths'
 
-const DIR = resolve('analysis/watch-deviation/data')
 const sessionIds = process.argv.slice(2).map(Number)
 if (sessionIds.length === 0 || sessionIds.some(n => !Number.isInteger(n))) throw new Error('usage: build_bundle.ts <sessionId> [...]')
 
-const WORK = join(DIR, 'work')
+const WORK = join(OUT, 'work')
 rmSync(WORK, { recursive: true, force: true })
 mkdirSync(WORK, { recursive: true })
-copyFileSync(join(DIR, 'biometrics.db'), join(WORK, 'biometrics.db'))
+copyFileSync(join(DATA, 'biometrics.db'), join(WORK, 'biometrics.db'))
 const sqlite = new Database(join(WORK, 'biometrics.db'))
 sqlite.pragma('foreign_keys = ON')
 const db = drizzle(sqlite, { schema })
 migrate(db, { migrationsFolder: 'src/db/biometrics-migrations' })
 
-const refs = JSON.parse(readFileSync(join(DIR, 'watch.json'), 'utf8')) as {
+const refs = JSON.parse(readFileSync(join(DATA, 'watch.json'), 'utf8')) as {
   hr: Array<[number, number]>
   rr: Array<[number, number]>
   stages: Array<[number, number, string]>
@@ -68,7 +68,7 @@ const assignments = (parent.manifest as { splitProtocol: { assignments: Assignme
 console.log('parent', parent.id, assignments.map(a => `${a.cohortId}:${a.split}`).join(' '))
 
 const py = defaultPythonLocation()
-const archive = join(DIR, 'archive')
+const archive = join(DATA, 'archive')
 const options = { workerPath: '/nonexistent', rawLocation: { pythonPath: py.pythonPath, modulesPath: py.modulesPath, archiveDirectory: archive }, signal: new AbortController().signal, admit: async () => true }
 let cursor: string | null = null
 let scanned = 0
@@ -97,10 +97,10 @@ console.log('cohorts', cohorts.map(c => `${c.cohortId}:${c.sourceIds.length}`).j
 const published = await performCoordinatorTask(db, { type: 'createWaveformDataset', input: { parentDatasetId: parent.id, expectedContentHash: parent.contentHash, cohorts, idempotencyKey: `${key}-wave` } }, options) as { status: string, dataset?: { id: string } }
 if (!published.dataset) throw new Error(`waveform dataset not published: ${published.status}`)
 const prepared = await prepareDatasetExport(db, published.dataset.id)
-const out = createWriteStream(join(DIR, 'bundle.tar'))
+const out = createWriteStream(join(OUT, 'bundle.tar'))
 for await (const chunk of datasetBundleChunks(prepared.index, { manifest: prepared.manifestText, snapshot: prepared.snapshotText }, join(WORK, 'biometric-raw'))) {
   if (!out.write(chunk)) await once(out, 'drain')
 }
 out.end()
 await once(out, 'finish')
-console.log('bundle', join(DIR, 'bundle.tar'), prepared.index.files.length, 'files')
+console.log('bundle', join(OUT, 'bundle.tar'), prepared.index.files.length, 'files')

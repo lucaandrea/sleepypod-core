@@ -1,5 +1,5 @@
 """Extract Apple Watch HR, HRV (SDNN), respiratory rate and sleep stages from
-an Apple Health export.zip into data/watch.json.
+an Apple Health export.zip into watch.json in $SP_ANALYSIS_DATA (default: data/).
 
 usage: python3 parse_watch.py <export.zip> [since=2026-10-01]
 
@@ -35,6 +35,7 @@ for _, el in ET.iterparse(xml, events=('end',)):
                 elif el.get('value') in STAGE: out['stages'].append([a, ms(el.get('endDate')), STAGE[el.get('value')]])
     el.clear()
 for k in out: out[k].sort()
-json.dump(out, open('data/watch.json', 'w'))
+import os
+json.dump(out, open(os.path.join(os.environ.get('SP_ANALYSIS_DATA') or os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data'), 'watch.json'), 'w'))
 print({k: len(v) for k, v in out.items()})
 for (t, s), n in sorted(sources.items(), key=lambda x: -x[1])[:12]: print(n, t.replace('HKQuantityTypeIdentifier', '').replace('HKCategoryTypeIdentifier', ''), s)

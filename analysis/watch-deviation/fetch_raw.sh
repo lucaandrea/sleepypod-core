@@ -1,11 +1,12 @@
 #!/bin/sh
-# Copy the pod's gzipped RAW archives that cover the given UTC windows into data/archive/.
+# Copy the pod's gzipped RAW archives that cover the given UTC windows into
+# $SP_ANALYSIS_DATA/archive/ (default: data/archive/).
 # usage: fetch_raw.sh POD "2026-10-18 09:14|2026-10-18 16:22" ["start|end" ...]
 # A frame is gzipped ~15 min after it closes, so each window is widened by 20 min
 # before and 45 min after on the archive file's mtime.
 set -eu
 POD=$1; shift
-DIR=$(cd "$(dirname "$0")" && pwd)/data/archive
+DIR=${SP_ANALYSIS_DATA:-$(cd "$(dirname "$0")" && pwd)/data}/archive
 mkdir -p "$DIR"
 for w in "$@"; do
   a=${w%|*}; b=${w#*|}

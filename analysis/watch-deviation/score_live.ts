@@ -2,8 +2,8 @@
  * Score what the pod actually recorded each night against the Apple Watch.
  *
  * usage (repo root): npx tsx analysis/watch-deviation/score_live.ts [side=left] [minHours=3]
- * inputs:  analysis/watch-deviation/data/biometrics.db (pod snapshot)
- *          analysis/watch-deviation/data/watch.json    (parse_watch.py)
+ * inputs:  biometrics.db (pod snapshot) and watch.json (parse_watch.py) from
+ *          $SP_ANALYSIS_DATA or analysis/watch-deviation/data (paths.ts)
  * outputs: analysis/watch-deviation/out/live.json and a markdown table on stdout
  *
  * Pairing (pairing.ts): HR nearest pod row ±60 s, BR ±150 s, HRV = mean pod
@@ -11,24 +11,23 @@
  * Stages: the side's latest resolved ruleset re-run on the stored vitals,
  * scored per 5-min epoch against the Watch stage at its midpoint.
  */
-import Database from 'better-sqlite3'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { DEFAULT_STAGE_RULESET } from '@/src/lib/sleep-stage-rules'
 import { runStageClassifier, scoreAgainstReference, stageDurations, type SleepStageBlock } from '@/src/lib/sleep-stages'
 import { deviation, fmt, meanWithin, nearest, pairSamples, WINDOWS, type Sample } from './pairing'
+import { DATA, OUT, openSnapshot } from './paths'
 
-const DIR = 'analysis/watch-deviation'
 const side = process.argv[2] ?? 'left'
 const minHours = Number(process.argv[3] ?? 3)
 
-const watch = JSON.parse(readFileSync(join(DIR, 'data/watch.json'), 'utf8')) as {
+const watch = JSON.parse(readFileSync(join(DATA, 'watch.json'), 'utf8')) as {
   hr: Sample[]
   hrv: Sample[]
   rr: Sample[]
   stages: Array<[number, number, SleepStageBlock['stage']]>
 }
-const db = new Database(join(DIR, 'data/biometrics.db'), { readonly: true })
+const db = openSnapshot(join(DATA, 'biometrics.db'))
 
 const nights = db.prepare(`select id, entered_bed_at s, left_bed_at e from sleep_records
   where side = ? and left_bed_at - entered_bed_at >= ? order by entered_bed_at`).all(side, minHours * 3600) as Array<{ id: number, s: number, e: number }>
@@ -80,7 +79,7 @@ const results = nights.map((n) => {
   }
 }).filter(r => r.hr.watchSamples > 0 || r.stages)
 
-writeFileSync(join(DIR, 'out/live.json'), JSON.stringify({ side, rulesetGeneration: latestConfig?.generation ?? null, calibrationQuality: quality, results }, null, 2))
+writeFileSync(join(OUT, 'live.json'), JSON.stringify({ side, rulesetGeneration: latestConfig?.generation ?? null, calibrationQuality: quality, results }, null, 2))
 console.log(`side=${side} ruleset gen=${latestConfig?.generation ?? 'default'} piezo quality=${quality}\n`)
 console.log('| night | start (UTC) | h | HR n/watch | HR MAE | HR bias | HR r | BR n | BR MAE | BR bias | HRV n | HRV MAE | HRV bias | stage epochs | acc | kappa |')
 console.log('|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|')

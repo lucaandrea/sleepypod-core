@@ -10,16 +10,15 @@
  * session. A candidate that withholds readings lowers error and coverage
  * together, so both are reported.
  */
-import Database from 'better-sqlite3'
 import { readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { deviation, fmt, meanWithin, nearest, pairSamples, WINDOWS, type Deviation, type Sample } from './pairing'
+import { DATA, openSnapshot } from './paths'
 
-const DIR = 'analysis/watch-deviation'
 const [runDir, ...ids] = process.argv.slice(2)
 const sessionIds = ids.map(Number)
-const watch = JSON.parse(readFileSync(join(DIR, 'data/watch.json'), 'utf8')) as { hr: Sample[], hrv: Sample[], rr: Sample[] }
-const db = new Database(join(DIR, 'data/biometrics.db'), { readonly: true })
+const watch = JSON.parse(readFileSync(join(DATA, 'watch.json'), 'utf8')) as { hr: Sample[], hrv: Sample[], rr: Sample[] }
+const db = openSnapshot(join(DATA, 'biometrics.db'))
 const sessions = db.prepare(`select id, entered_bed_at * 1000 s, left_bed_at * 1000 e from sleep_records where id in (${sessionIds.map(() => '?').join(',')}) order by entered_bed_at`)
   .all(...sessionIds) as Array<{ id: number, s: number, e: number }>
 

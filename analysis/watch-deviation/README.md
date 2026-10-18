@@ -13,7 +13,8 @@ can move into the app, the API or MCP once it earns it.
 
 | File | What it does |
 |---|---|
-| `Dockerfile`, `setup.sh`, `run.sh` | Analysis container. Repo bind-mounted at `/work`; Linux `node_modules` and the piezo-processor venv live in named volumes. |
+| `Dockerfile`, `setup.sh`, `run.sh` | Analysis container. Repo bind-mounted at `/work`; Linux `node_modules` and the piezo-processor venv live in named volumes. `SP_BIOMETRICS_DIR=/path` mounts an off-repo biometrics folder at `/biometrics` (read-only unless `SP_BIOMETRICS_RW=1`). |
+| `paths.ts` | Where inputs come from (`$SP_ANALYSIS_DATA`, else `data/`) and where outputs go (`out/`); `openSnapshot()` opens a WAL snapshot even from a read-only mount. |
 | `parse_watch.py` | Apple Health `export.zip` → `data/watch.json` (Watch-sourced HR, HRV SDNN, respiratory rate, sleep stages). Drops rows sleepypod wrote back into Health. |
 | `fetch_raw.sh` | Copies the pod's gzipped RAW archives for given UTC windows into `data/archive/`. Read-only on the pod. |
 | `pairing.ts` | Shared pairing windows and deviation stats (MAE, bias, p90, r, coverage). Deviation = pod − Watch. |
@@ -21,7 +22,7 @@ can move into the app, the API or MCP once it earns it.
 | `build_bundle.ts` | Builds the same off-pod fitting bundle the pod's dataset export streams, from the pulled snapshot and archives. |
 | `score_readings.ts` | Scores replayed readings (`--save-readings`) per sleep session with the same pairing, including coverage. |
 | `candidates-*.json` | Profile candidates for `scripts/biometrics-local-fit` replays. |
-| `data/`, `out/` | Pulled inputs and results; gitignored. |
+| `data/`, `out/` | Default pulled inputs, and all outputs (bundle, replays, scores); gitignored. |
 
 ## Reproduce
 
@@ -31,10 +32,13 @@ ssh -p 8822 root@POD '/usr/local/bin/node -e "…backup(/tmp/bio-snap.db)"' && s
 python3 parse_watch.py ~/Downloads/export.zip 2026-10-01
 ./fetch_raw.sh POD "2026-10-15 09:16|2026-10-15 15:24" …
 
+# inputs can live anywhere (NAS, external disk): biometrics.db, watch.json, archive/
+export SP_BIOMETRICS_DIR=/Volumes/nas/sleepypod   # optional; default is data/ in the repo
+
 # analyse (container, repo root)
-npx tsx analysis/watch-deviation/score_live.ts left 3
+analysis/watch-deviation/run.sh npx tsx analysis/watch-deviation/score_live.ts left 3
 analysis/watch-deviation/run.sh npx tsx analysis/watch-deviation/build_bundle.ts 1139 1160 1170 1176
-analysis/watch-deviation/run.sh npx tsx scripts/biometrics-local-fit/cli.ts fit analysis/watch-deviation/data/bundle.tar analysis/watch-deviation/candidates-hr.json analysis/watch-deviation/out/hr --include-holdout --save-readings
+analysis/watch-deviation/run.sh npx tsx scripts/biometrics-local-fit/cli.ts fit analysis/watch-deviation/out/bundle.tar analysis/watch-deviation/candidates-hr.json analysis/watch-deviation/out/hr --include-holdout --save-readings
 npx tsx analysis/watch-deviation/score_readings.ts analysis/watch-deviation/out/hr 1139 1160 1170 1176
 ```
 
