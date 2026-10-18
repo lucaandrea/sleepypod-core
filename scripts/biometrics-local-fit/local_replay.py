@@ -26,6 +26,8 @@ def main():
             run(sys.stdin.buffer, sys.stdout.buffer, sys.argv[2])
         return 0
     except Exception:
+        import traceback
+        traceback.print_exc()
         sys.stderr.write('Retained waveform worker failed\n')
         return 1
 

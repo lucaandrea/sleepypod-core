@@ -1,0 +1,6 @@
+[
+  { "id": "gen5", "overrides": [{ "path": "heart_rate.trackingToleranceBpm", "value": 15 }, { "path": "heart_rate.minimumPeakScore", "value": 0.1 }] },
+  { "id": "mps0.1", "overrides": [{ "path": "heart_rate.minimumPeakScore", "value": 0.1 }] },
+  { "id": "mps0.5", "overrides": [{ "path": "heart_rate.minimumPeakScore", "value": 0.5 }] },
+  { "id": "mps0.6", "overrides": [{ "path": "heart_rate.minimumPeakScore", "value": 0.6 }] }
+]

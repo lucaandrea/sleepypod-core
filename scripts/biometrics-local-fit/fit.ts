@@ -54,7 +54,8 @@ export async function prepareWorkerSlots(rawDirectory: string, workDirectory: st
   const names = (await readdir(rawDirectory)).filter(name => /^[a-f0-9]{64}\.RAW\.gz$/.test(name))
   const slots: string[] = []
   for (let index = 0; index < count; index++) {
-    const slot = join(workDirectory, `slot-${index}`)
+    // Absolute: the worker runs from a temp cwd, so a relative slot would not resolve.
+    const slot = join(resolve(workDirectory), `slot-${index}`)
     await mkdir(slot, { recursive: true, mode: 0o700 })
     for (const name of names) {
       await link(join(rawDirectory, name), join(slot, name)).catch(async (error: NodeJS.ErrnoException) => {
