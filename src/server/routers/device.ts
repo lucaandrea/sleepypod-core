@@ -561,7 +561,7 @@ export const deviceRouter = router({
     )
     .output(z.object({ success: z.boolean(), snoozeUntil: z.number() }))
     .mutation(async ({ input }) => {
-      return withHardwareClient(async (client) => {
+      return withSideLock(input.side, () => withHardwareClient(async (client) => {
         await client.clearAlarm(input.side)
 
         const snoozeUntil = snoozeAlarm(input.side, input.duration, {
@@ -571,7 +571,7 @@ export const deviceRouter = router({
         })
         await markAlarmEnded(input.side)
         return { success: true, snoozeUntil: Math.floor(snoozeUntil.getTime() / 1000) }
-      }, 'Failed to snooze alarm')
+      }, 'Failed to snooze alarm'))
     }),
 
   /**

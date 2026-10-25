@@ -41,11 +41,20 @@ describes the production Preview service; it never issues actuator requests.
 Room context and music vibration also remain unavailable. MQTT
 connection alone does not imply that room inputs are connected or qualified.
 Clients should decode the compatibility prefix as a nullable string and receipt
-and expiry support as booleans; their current null/false values are not permanent
-schema constants. Only enable a feature when this controller reports it.
+and expiry support as booleans; these values are not permanent schema constants.
+Only enable a feature when this controller reports it.
 
-The contract explicitly reports that current controls lack durable command
-receipts and expiry envelopes. Do not retry uncertain actuator requests or
-replay saved requests after reconnect. A successful acknowledgment means the
-command was accepted, never that a physical outcome was verified. Versioned
-control/measurement envelopes are separate pending work.
+Durable command receipts and expiry are implemented **only** for the versioned
+control endpoint advertised by `endpoints.controls`, with
+`controlSemantics.receiptScope = "versioned_controls_only"`. Legacy actuator
+routes do not gain these guarantees. Query an uncertain request's existing ID;
+never replay it as a new request. A successful acknowledgment does not prove a
+physical outcome. See [control receipts](CONTROL_RECEIPTS.md). Versioned
+measurement envelopes remain separate work.
+
+`alarmSnooze` describes the implemented per-alarm length/taper contract, including
+complete bedtime routines. It is ready as a software settings capability without
+a live DAC connection; actual vibration still uses `wakeVibration` prerequisites
+and remains physically unqualified. `curveLibrary` explicitly reports the owned
+library integration as pending. Empty alarm or template collections must not be
+used to infer either capability. See [alarm snooze](ALARM_SNOOZE.md).

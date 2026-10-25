@@ -148,6 +148,27 @@ class ImportTests(unittest.TestCase):
         for item in [self.output, *self.output.rglob('*')]:
             self.assertEqual(item.stat().st_mode & 0o777, 0o700 if item.is_dir() else 0o600)
 
+    def test_snooze_settings_survive_import_in_rows_and_owned_routines(self):
+        self.settings['left']['taps']['tripleTap'] = {
+            'type': 'alarm', 'behavior': 'snooze', 'snoozeDuration': 420,
+            'inactiveAlarmBehavior': 'none',
+        }
+        report = self.stage()
+        with closing(sqlite3.connect(self.output / 'sleepypod.db')) as database:
+            for side, duration in [('left', 420), ('right', 300)]:
+                self.assertEqual(database.execute(
+                    'SELECT DISTINCT snooze_duration,snooze_taper FROM alarm_schedules WHERE side=?',
+                    (side,),
+                ).fetchall(), [(duration, 0)])
+                routines = database.execute(
+                    'SELECT configuration FROM bedtime_routines WHERE side=?', (side,),
+                ).fetchall()
+                self.assertEqual(len(routines), 7)
+                for (configuration,) in routines:
+                    alarm = json.loads(configuration)['alarm']
+                    self.assertEqual((alarm['snoozeDuration'], alarm['snoozeTaper']), (duration, 0))
+        self.assertIn('differing legacy tap durations require review', '\n'.join(report['reviewRequired']))
+
     def test_drizzle_resumes_both_generated_migration_ledgers_without_reapplying(self):
         self.stage()
         script = '''import Database from 'better-sqlite3';
@@ -193,6 +214,8 @@ class ImportTests(unittest.TestCase):
         assert.deepEqual(saturday.draft.temperatures.filter(row => row.enabled).map(row => row.time), ['23:00','01:00']);
         assert.equal(saturday.draft.alarm.duration, 10);
         assert.equal(saturday.draft.alarm.enabled, true);
+        assert.equal(saturday.draft.alarm.snoozeDuration, 300);
+        assert.equal(saturday.draft.alarm.snoozeTaper, 0);
         assert.equal(right.routines[0].draft.power.enabled, false);
         """
         environment = {**os.environ, 'DATABASE_URL': str(self.output / 'sleepypod.db'),

@@ -232,6 +232,20 @@
       "when": 1792963020201,
       "tag": "0032_control_receipts",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "6",
+      "when": 1792963766472,
+      "tag": "0033_alarm_snooze",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "6",
+      "when": 1792963766940,
+      "tag": "0034_alarm_snooze_from_gestures",
+      "breakpoints": true
     }
   ]
 }

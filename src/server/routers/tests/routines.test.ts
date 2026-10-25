@@ -24,12 +24,12 @@ import { alarmSchedules, powerSchedules, temperatureSchedules } from '@/src/db/s
 
 const caller = routinesRouter.createCaller({})
 const calendar = schedulesRouter.createCaller({})
-const draft: BedtimeDraft = {
+const draft = {
   power: { onTime: '22:00', offTime: '07:00', onTemperature: 75, enabled: false, endAction: 'turn_off' },
   temperatures: [{ time: '01:00', temperature: 72, enabled: true }],
-  alarm: { time: '06:30', vibrationPattern: 'rise', vibrationIntensity: 50, duration: 30, alarmTemperature: 80, wakeWindow: 0, enabled: true },
+  alarm: { time: '06:30', vibrationPattern: 'rise', vibrationIntensity: 50, duration: 30, alarmTemperature: 80, wakeWindow: 0, snoozeDuration: 300, snoozeTaper: 0, enabled: true },
   notes: 'Weekend',
-}
+} satisfies BedtimeDraft
 beforeAll(() => migrate(db, { migrationsFolder: './src/db/migrations' }))
 beforeEach(() => {
   sqlite.exec('DELETE FROM bedtime_routines; DELETE FROM temperature_schedules; DELETE FROM power_schedules; DELETE FROM alarm_schedules;')
@@ -38,6 +38,42 @@ beforeEach(() => {
 afterAll(() => sqlite.close())
 
 describe('bedtime routine contract', () => {
+  it('keeps custom snooze settings through an atomic overnight move', async () => {
+    const custom = { ...draft, alarm: { ...draft.alarm, snoozeDuration: 540, snoozeTaper: 40 as const } }
+    const saved = await caller.replace({ side: 'left', changes: [{ dayOfWeek: 'saturday', expectedRevision: null, replacement: custom }] })
+    const moved = await caller.replace({ side: 'left', changes: [
+      { dayOfWeek: 'saturday', expectedRevision: saved.routines[0].revision, replacement: null },
+      { dayOfWeek: 'monday', expectedRevision: null, replacement: custom },
+    ] })
+    expect(moved.routines[0].draft.alarm).toMatchObject({ snoozeDuration: 540, snoozeTaper: 40 })
+    expect(db.select().from(alarmSchedules).get()).toMatchObject({ dayOfWeek: 'tuesday', snoozeDuration: 540, snoozeTaper: 40 })
+    expect(jobs.upsertAlarmJob).toHaveBeenLastCalledWith(expect.objectContaining({ snoozeDuration: 540, snoozeTaper: 40 }))
+  })
+
+  it('rejects older-client edits and moves that would discard custom snooze settings', async () => {
+    const custom = { ...draft, alarm: { ...draft.alarm, snoozeDuration: 540, snoozeTaper: 30 as const } }
+    const saved = await caller.replace({ side: 'left', changes: [{ dayOfWeek: 'saturday', expectedRevision: null, replacement: custom }] })
+    const legacy = { ...draft, alarm: { ...draft.alarm, snoozeDuration: undefined, snoozeTaper: undefined } }
+    for (const changes of [
+      [{ dayOfWeek: 'saturday' as const, expectedRevision: saved.routines[0].revision, replacement: legacy }],
+      [{ dayOfWeek: 'saturday' as const, expectedRevision: saved.routines[0].revision, replacement: null }, { dayOfWeek: 'monday' as const, expectedRevision: null, replacement: legacy }],
+    ]) {
+      await expect(caller.replace({ side: 'left', changes })).rejects.toMatchObject({ code: 'PRECONDITION_FAILED' })
+      expect((await caller.get({ side: 'left' })).routines).toEqual(saved.routines)
+    }
+  })
+
+  it('accepts default-only older clients without silently changing snooze behavior', async () => {
+    const legacy = { ...draft, alarm: { ...draft.alarm, snoozeDuration: undefined, snoozeTaper: undefined } }
+    const created = await caller.replace({ side: 'left', changes: [{ dayOfWeek: 'saturday', expectedRevision: null, replacement: legacy }] })
+    const updated = await caller.replace({ side: 'left', changes: [{ dayOfWeek: 'saturday', expectedRevision: created.routines[0].revision, replacement: { ...legacy, notes: 'Older client edit' } }] })
+    expect(updated.routines[0].draft.alarm).toMatchObject({ snoozeDuration: 300, snoozeTaper: 0 })
+  })
+
+  it.each([{ snoozeDuration: 30 }, { snoozeDuration: 1801 }, { snoozeTaper: 20 }, { snoozeTaper: 70 }])('rejects invalid bedtime snooze settings %j', async (snooze) => {
+    await expect(caller.replace({ side: 'left', changes: [{ dayOfWeek: 'monday', expectedRevision: null, replacement: { ...draft, alarm: { ...draft.alarm, ...snooze } } }] })).rejects.toMatchObject({ code: 'BAD_REQUEST' })
+    expect(db.select().from(alarmSchedules).all()).toEqual([])
+  })
   it('round-trips a Saturday night with Sunday morning events and independent power times', async () => {
     const result = await caller.replace({ side: 'left', changes: [{ dayOfWeek: 'saturday', expectedRevision: null, replacement: draft }] })
     expect(result.schedulerApplied).toBe(true)
