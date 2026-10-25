@@ -108,7 +108,8 @@ enabled by this command. Keep both plans and immutable release directories.
 ## Bounded attended trial and rollback
 
 ```sh
-python3 handoff.py trial --plan /private/new-service-plan --seconds 120
+python3 handoff.py trial --plan /private/new-service-plan --seconds 120 \
+  --settle-seconds 30 --require-idle
 ```
 
 The trial requires both original services active/enabled and every Core service
@@ -118,7 +119,14 @@ processes exited, then starts Core. Conflicts and ordering also enforce ownershi
 inside systemd; stopping Core stops its related sensor services.
 
 The tool waits **up to** the deadline for authenticated capabilities to identify
-the exact staged build and a fresh device report. It then stops all Core units
+the exact staged build and a fresh device report. The optional settling period
+requires consecutive fresh observations; stale/failed reads reset that period.
+`--require-idle` checks the legacy API before stopping services, raw Core heating
+countdowns during the trial, and the restored legacy API afterward. Priming or
+nonzero/unavailable countdowns reject the trial; a post-restoration mismatch
+revokes success. These checks report drift and do not issue corrective actuator
+commands. They do not establish physical thermal or vibration behavior.
+The tool then stops all Core units
 and restores Free Sleep, including on startup failure, stale telemetry or an
 ordinary interruption. It never changes boot enablement. A machine power loss
 therefore still boots the original enabled services. A process kill that cannot
