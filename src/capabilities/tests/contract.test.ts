@@ -28,7 +28,7 @@ describe('capability evidence contract', () => {
     expect(result.features.wakeVibration.physicalVerification).toBe('unverified')
     expect(result.observations.device).toEqual({ freshness: 'fresh', observedAt: new Date(now - 1000).toISOString(), expiresAt: new Date(now - 1000 + DEVICE_FRESHNESS_MS).toISOString() })
     expect(result.baseScope).toBe('whole_bed')
-    expect(result.controlSemantics).toEqual({ acknowledgment: 'accepted_not_physically_verified', durableCommandReceipts: false, commandExpiry: false })
+    expect(result.controlSemantics).toEqual({ acknowledgment: 'accepted_not_physically_verified', durableCommandReceipts: true, commandExpiry: true, receiptScope: 'versioned_controls_only', maxLifetimeMs: 60000 })
   })
 
   it.each([null, Number.NaN, Number.POSITIVE_INFINITY, -1, 0, now + 1, now - 0.5])('rejects invalid or future observation time %s', (timestamp) => {

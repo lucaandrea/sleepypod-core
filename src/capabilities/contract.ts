@@ -31,6 +31,7 @@ export const capabilitiesSchema = z.object({
     trpc: z.literal('/api/trpc'),
     openapi: z.literal('/api/openapi.json'),
     nativeCompatibility: z.string().startsWith('/api/').nullable(),
+    controls: z.literal('/api/v1/controls'),
   }),
   authentication: z.object({ required: z.literal(true), bearer: z.literal(true), browserSession: z.literal(true) }),
   observations: z.object({ device: observationSchema, base: observationSchema }),
@@ -53,6 +54,8 @@ export const capabilitiesSchema = z.object({
     acknowledgment: z.literal('accepted_not_physically_verified'),
     durableCommandReceipts: z.boolean(),
     commandExpiry: z.boolean(),
+    receiptScope: z.literal('versioned_controls_only'),
+    maxLifetimeMs: z.literal(60000),
   }),
 })
 export type ControllerCapabilities = z.infer<typeof capabilitiesSchema>
@@ -96,7 +99,7 @@ export function buildCapabilities(snapshot: CapabilitySnapshot): ControllerCapab
     apiVersion: 1,
     generatedAt: new Date(now).toISOString(),
     controller: { id: 'sleepypod-core', upstreamBaseline: '3.4.0', revision: snapshot.revision },
-    endpoints: { rest: '/api', trpc: '/api/trpc', openapi: '/api/openapi.json', nativeCompatibility: null },
+    endpoints: { rest: '/api', trpc: '/api/trpc', openapi: '/api/openapi.json', nativeCompatibility: null, controls: '/api/v1/controls' },
     authentication: { required: true, bearer: true, browserSession: true },
     observations: { device: deviceObservation, base: baseObservation },
     features: {
@@ -115,6 +118,6 @@ export function buildCapabilities(snapshot: CapabilitySnapshot): ControllerCapab
       nativeCompatibility: feature('not_ready', 'compatibility_api_pending', false, false),
     },
     baseScope: 'whole_bed',
-    controlSemantics: { acknowledgment: 'accepted_not_physically_verified', durableCommandReceipts: false, commandExpiry: false },
+    controlSemantics: { acknowledgment: 'accepted_not_physically_verified', durableCommandReceipts: true, commandExpiry: true, receiptScope: 'versioned_controls_only', maxLifetimeMs: 60000 },
   }
 }

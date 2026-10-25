@@ -14,6 +14,8 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { Server, Socket } from 'net'
 import { once } from 'events'
 import { getStatusRevision } from '../statusRevision'
+import { ControlDeadlineError, withinControlRequest } from '@/src/controls/context'
+import { testScope } from '@/src/controls/tests/fixtures'
 import { promises as fs } from 'fs'
 import {
   connectDac,
@@ -126,6 +128,62 @@ describe('dacTransport', () => {
       '[DAC] connected',
     ]))
     log.mockRestore()
+  })
+
+  test('expires an actuator request behind a queued read without sending its bytes', async () => {
+    const connecting = connectDac(socketPath)
+    await vi.waitFor(async () => {
+      await fs.stat(socketPath)
+    })
+    mockFranken = await connectAsFrankenfirmware(socketPath)
+    await connecting
+    const received = Promise.withResolvers<undefined>()
+    const bytes: string[] = []
+    mockFranken.on('data', (chunk) => {
+      bytes.push(chunk.toString())
+      received.resolve(undefined)
+    })
+    const earlier = sendCommand('14')
+    await received.promise
+    const scope = testScope()
+    const pending = withinControlRequest(scope, () => sendCommand('11', '20'))
+    const rejected = expect(pending).rejects.toBeInstanceOf(ControlDeadlineError)
+    scope.now = () => 200
+    mockFranken.write('OK\n\n')
+    await earlier
+    await rejected
+    expect(bytes).toEqual(['14\n\n'])
+    expect(scope.beforeDispatch).not.toHaveBeenCalled()
+    expect(isDacConnected()).toBe(true)
+  })
+
+  test('persists each actuator dispatch before socket write and excludes read-only commands', async () => {
+    const connecting = connectDac(socketPath)
+    await vi.waitFor(async () => {
+      await fs.stat(socketPath)
+    })
+    mockFranken = await connectAsFrankenfirmware(socketPath)
+    handleCommands(mockFranken)
+    await connecting
+    const scope = testScope()
+    const writes: string[] = []
+    mockFranken.on('data', (chunk) => {
+      writes.push(chunk.toString())
+      if (chunk.toString().startsWith('11\n')) expect(scope.dispatchCount).toBe(1)
+    })
+    await withinControlRequest(scope, async () => {
+      await sendCommand('0')
+      await sendCommand('14')
+      await sendCommand('11', '20')
+    })
+    expect(writes).toEqual(['0\n\n', '14\n\n', '11\n20\n\n'])
+    expect(scope.beforeDispatch).toHaveBeenCalledOnce()
+    const failure = testScope()
+    failure.beforeDispatch = () => {
+      throw new Error('disk full')
+    }
+    await expect(withinControlRequest(failure, () => sendCommand('12', '30'))).rejects.toThrow('disk full')
+    expect(writes).toHaveLength(3)
   })
 
   test.each(['before', 'after'] as const)('recovers when replacement firmware connects %s the next command', async (when) => {

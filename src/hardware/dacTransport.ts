@@ -19,6 +19,7 @@ import { createServer, type Server, type Socket } from 'net'
 import split from 'binary-split'
 import type { Transform } from 'stream'
 import { beginStatusChange } from './statusRevision'
+import { beforeControlWrite } from '@/src/controls/context'
 
 // ─── Utilities ───────────────────────────────────────────────────────────────
 
@@ -273,6 +274,8 @@ class DacTransport {
       }
 
       const requestBytes = Buffer.concat([Buffer.from(message), SEPARATOR])
+      const command = message.split('\n', 1)[0]
+      if (command !== '0' && command !== '14') beforeControlWrite()
       await this.write(requestBytes)
 
       const timeoutMs = messageResponseTimeoutMs()
