@@ -93,6 +93,10 @@ test tooling cannot conceal a missing production import.
 
 ### Controller switch
 
+The [controlled handoff](CONTROLLER_HANDOFF.md) provides reviewed service
+templates and a bounded trial that restores Free Sleep without changing the
+boot default. Installing those units alone does not switch controllers.
+
 Do not launch `app/server.js` against the working Pod casually: app startup owns
 the DAC socket and can initialize hardware, scheduling and networking. Even
 `CI=1` is not an authorization boundary for arbitrary API calls.
