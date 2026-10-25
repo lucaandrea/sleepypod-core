@@ -88,6 +88,23 @@ installation leaves a journal and never silently overwrites or deletes files;
 inspect its recorded creations before recovery. Keep `handoff.py`,
 `service_plan.py` and `prepare_offline.py` together, from the reviewed commit.
 
+## Replace an inactive release plan
+
+For a newer verified release after a stopped trial, render a **new** plan with
+the same data, credential, socket and RAW paths, then replace only the managed
+unit files:
+
+```sh
+python3 scripts/deployment/replace_plan.py \
+  --previous-plan /private/previous-service-plan --plan /private/new-service-plan
+```
+
+Both plans are locked against concurrent handoffs. Core must be stopped and
+disabled and Free Sleep active and enabled. Original unit hashes and settings
+are checked before replacement. A partial write failure restores the previous
+unit files; unrelated edits require review. Neither installation is started or
+enabled by this command. Keep both plans and immutable release directories.
+
 ## Bounded attended trial and rollback
 
 ```sh
