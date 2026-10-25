@@ -35,6 +35,7 @@ import { STAGE, STAGE_SIDES, formatStageTemp, sideStatus, tempColor } from './st
 import type { StageSide } from './stageColors'
 import { useStageAutoReturn, useStageZones } from './stagePrefs'
 import { ViewSwitch } from './ViewSwitch'
+import { SettingsLink } from '@/src/components/AppShell/MobileToolbar'
 import type { StageLabelRefs, StageSceneState } from './stageScene'
 import { CAMERA } from './stageCamera'
 import { HOUR, clock, scheduledAt, sideActivity, stageCurves, stageWindow } from './stageTimelineLogic'
@@ -311,6 +312,7 @@ export function TempStage({ onExit }: { onExit: () => void }) {
   return (
     <div
       data-testid="temp-stage"
+      data-no-swipe
       className="fixed inset-0 z-30 select-none overflow-hidden bg-[#0b0b0c] font-sans text-[#ececec] min-[900px]:left-[224px] max-[899px]:bottom-[calc(60px+env(safe-area-inset-bottom,0px))]"
     >
       {mode !== '2d' && (
@@ -389,6 +391,7 @@ export function TempStage({ onExit }: { onExit: () => void }) {
                 </span>
               )}
           <ViewSwitch view="stage" onChange={v => v === 'cards' && onExit()} />
+          <SettingsLink />
           <button
             type="button"
             aria-pressed={isLinked}
@@ -417,9 +420,9 @@ export function TempStage({ onExit }: { onExit: () => void }) {
       </div>
 
       {mode === '2d' && (
-        <div className="absolute inset-x-7 top-[104px] bottom-[232px] flex flex-col items-center gap-4 overflow-y-auto" data-testid="stage-fallback">
-          <span className="font-mono text-[12px] uppercase tracking-[0.12em] text-[#5d5d63]">3D view could not load</span>
-          <div className="grid w-full max-w-[760px] gap-4 min-[700px]:grid-cols-2">
+        <div className="absolute inset-x-7 top-[132px] bottom-[232px] min-[700px]:top-[104px] flex flex-col items-center gap-4 overflow-y-auto" data-testid="stage-fallback">
+          <span className="font-mono text-[12px] uppercase tracking-[0.12em] text-[#8b8b92]">3D view could not load</span>
+          <div className="grid w-full max-w-[760px] gap-4 text-fg min-[700px]:grid-cols-2">
             {STAGE_SIDES.map((side) => {
               const c = controls[side]
               return (

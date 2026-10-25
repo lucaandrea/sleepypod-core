@@ -4,25 +4,23 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { useScheduleActive } from '@/src/hooks/useScheduleActive'
-import { primaryNavId, langFromPath, NAV_ITEMS } from './navItems'
-import { usePodHealth } from './usePodHealth'
+import { activeNavId, langFromPath, PHONE_NAV_ITEMS } from './navItems'
 
 /** Phone bottom tab bar (< 900px). Respects the safe-area inset. */
 export function TabBar({ className }: { className?: string }) {
-  const items = NAV_ITEMS
+  const items = PHONE_NAV_ITEMS
   const pathname = usePathname()
   const lang = langFromPath(pathname)
-  const active = primaryNavId(pathname)
+  const active = activeNavId(pathname)
   const { isActive: scheduleActive } = useScheduleActive()
-  const { footer } = usePodHealth()
 
   return (
     <nav
       aria-label="Main"
       style={{ gridTemplateColumns: `repeat(${items.length}, minmax(52px, 1fr))` }}
       className={cn(
-        'fixed inset-x-0 bottom-0 z-40 grid overflow-x-auto border-t border-line bg-app/90 backdrop-blur-xl px-2 pb-[calc(10px+env(safe-area-inset-bottom,0px))] pt-2.5 font-sans',
-        'text-[11px] tracking-normal',
+        'fixed inset-x-0 bottom-0 z-40 grid overflow-x-auto border-t border-line bg-app px-2 pb-[calc(10px+env(safe-area-inset-bottom,0px))] pt-2.5 font-mono',
+        'text-[11px] uppercase tracking-[0.06em]',
         className,
       )}
     >
@@ -40,20 +38,12 @@ export function TabBar({ className }: { className?: string }) {
           >
             <span className="relative">
               <n.icon size={19} />
-              {n.id === 'temp' && scheduleActive && (
+              {n.id === 'schedule' && scheduleActive && (
                 <span className="absolute -right-1 -top-0.5 size-1.5 rounded-full bg-ok" />
               )}
-              {/* Pod health, as the sidebar footer shows it on wider screens. */}
-              {n.id === 'more' && footer.tone !== 'muted' && (
-                <span
-                  className={cn('absolute -right-1 -top-0.5 size-1.5 rounded-full', footer.tone === 'warn' ? 'bg-warn' : 'bg-ok')}
-                  data-testid="system-health-dot"
-                  data-tone={footer.tone}
-                />
-              )}
+
             </span>
             {n.label}
-            {n.id === 'more' && footer.tone === 'warn' && <span className="sr-only">{`, ${footer.summary}`}</span>}
           </Link>
         )
       })}
