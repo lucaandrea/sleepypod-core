@@ -9,6 +9,7 @@
 
 import { act, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { powerOffDay } from '@/src/lib/scheduleTime'
 
 const sideMock = vi.hoisted(() => {
   const state: { primarySide: 'left' | 'right', activeSides: Array<'left' | 'right'>, singleScheduleSide: 'left' | 'right' | null }
@@ -341,6 +342,32 @@ describe('useSchedule — curves', () => {
 })
 
 describe('useSchedule — applyToOtherDays', () => {
+  it.each([
+    { offset: 1, expectedOffset: 1, shutdownDay: 'sunday' },
+    { offset: 0, expectedOffset: 0, shutdownDay: 'saturday' },
+    { offset: undefined, expectedOffset: 0, shutdownDay: 'saturday' },
+  ])('preserves shutdown weekday when copying offset $offset across the week boundary', async ({ offset, expectedOffset, shutdownDay }) => {
+    trpcMock.overrides.allLeft = { temperature: [], power: [], alarm: [] }
+    trpcMock.overrides.day = {
+      temperature: [{ id: 1, side: 'left', dayOfWeek: 'monday', time: '01:00', temperature: 71, enabled: false }],
+      power: [{ id: 2, side: 'left', dayOfWeek: 'monday', onTime: '22:00', offTime: '07:00', offDayOffset: offset, onTemperature: 74, enabled: false, endAction: 'turn_off' }],
+      alarm: [{ id: 3, side: 'left', dayOfWeek: 'monday', time: '06:30', vibrationIntensity: 50, vibrationPattern: 'rise', duration: 30, alarmTemperature: 78, wakeWindow: 0, enabled: false }],
+    }
+    const { result } = renderHook(() => useSchedule())
+    await act(async () => {
+      await result.current.applyToOtherDays(['saturday'])
+    })
+    const { creates } = trpcMock.batchMutate.mock.calls[0][0]
+    expect(creates.power).toEqual([expect.objectContaining({
+      dayOfWeek: 'saturday', offDayOffset: expectedOffset,
+      onTime: '22:00', offTime: '07:00', enabled: false,
+    })])
+    expect(powerOffDay(creates.power[0])).toBe(shutdownDay)
+    // Morning rows retain their calendar weekday; this is not a bedtime-routine copy.
+    expect(creates.temperature).toEqual([expect.objectContaining({ dayOfWeek: 'saturday', time: '01:00', enabled: false })])
+    expect(creates.alarm).toEqual([expect.objectContaining({ dayOfWeek: 'saturday', time: '06:30', enabled: false })])
+  })
+
   it('deletes target-day rows and recreates from source day', async () => {
     trpcMock.overrides.allLeft = {
       temperature: [

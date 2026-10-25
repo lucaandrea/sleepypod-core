@@ -68,12 +68,19 @@ Output contains:
 
 ## Gates that still prevent cutover
 
-1. Preserve and rehearse restoration of the full working installation and
-   service/SSH/network configuration, not just these data files.
+1. Qualify attended operational rollback while retaining the working
+   installation and service/SSH/network configuration. The companion Free Sleep
+   recovery tool now has an off-host file-restoration rehearsal for 45,126
+   installation entries and 70 Bluetooth-state entries, with unchanged running
+   service process IDs. That is not proof of runtime recovery or a boot image.
+   See the [recovery runbook](https://github.com/lucaandrea/free-sleep/blob/b46582a/scripts/migration/RECOVERY.md).
 2. Qualify overnight editing in web/native clients. Core rows are calendar
    events; Free Sleep groups phases and alarms under the evening's routine.
-   APIs now round-trip an explicit OFF offset, but the existing curve editor's
-   delete/recreate workflow is not yet a complete migrated-routine editor.
+   APIs and the web hook's calendar-day copy round-trip an explicit OFF offset,
+   including the Saturday/Sunday boundary and disabled rows. Missing offsets
+   retain the legacy calendar-day default; morning temperature/alarm rows stay
+   on their stored calendar weekday. The curve editor's separate delete/recreate
+   workflow is not yet a complete migrated-routine editor.
 3. Review enabled alarm behavior: Core adds temperature warm-up and a
    post-alarm hold that Free Sleep's alarm executor does not provide. The
    importer reports this difference; it does not claim behavioral equivalence.
