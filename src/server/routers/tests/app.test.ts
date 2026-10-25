@@ -27,6 +27,7 @@ describe('appRouter public surface', () => {
       'biometrics',
       'health',
       'system',
+      'capabilities',
       'environment',
       'raw',
       'calibration',
