@@ -1031,6 +1031,29 @@ exports[`complete Drizzle schema contracts > pins every main-database table, col
   {
     "checks": 0,
     "columns": [
+      "request_id | sql:text | logical:string/SQLiteText | not-null | default:none | primary-key | not-unique | not-autoincrement | enum:none",
+      "fingerprint | sql:text | logical:string/SQLiteText | not-null | default:none | not-primary-key | not-unique | not-autoincrement | enum:none",
+      "request | sql:text | logical:string/SQLiteText | not-null | default:none | not-primary-key | not-unique | not-autoincrement | enum:none",
+      "state | sql:text | logical:string/SQLiteText | not-null | default:none | not-primary-key | not-unique | not-autoincrement | enum:executing,acknowledged,not_dispatched,rejected,expired,unknown",
+      "reason | sql:text | logical:string/SQLiteText | nullable | default:none | not-primary-key | not-unique | not-autoincrement | enum:none",
+      "received_at | sql:integer | logical:number/SQLiteInteger | not-null | default:none | not-primary-key | not-unique | not-autoincrement | enum:none",
+      "finished_at | sql:integer | logical:number/SQLiteInteger | nullable | default:none | not-primary-key | not-unique | not-autoincrement | enum:none",
+      "dispatch_count | sql:integer | logical:number/SQLiteInteger | not-null | default:0 | not-primary-key | not-unique | not-autoincrement | enum:none",
+      "last_dispatch_at | sql:integer | logical:number/SQLiteInteger | nullable | default:none | not-primary-key | not-unique | not-autoincrement | enum:none",
+      "run_id | sql:text | logical:string/SQLiteText | not-null | default:none | not-primary-key | not-unique | not-autoincrement | enum:none",
+    ],
+    "exportName": "controlReceipts",
+    "foreignKeys": [],
+    "indexes": [
+      "control_receipts_received_idx | non-unique | columns:received_at | where:none",
+    ],
+    "name": "control_receipts",
+    "primaryKeys": [],
+    "uniqueConstraints": [],
+  },
+  {
+    "checks": 0,
+    "columns": [
       "id | sql:integer | logical:number/SQLiteInteger | not-null | default:auto | primary-key | not-unique | autoincrement | enum:none",
       "name | sql:text | logical:string/SQLiteText | not-null | default:none | not-primary-key | not-unique | not-autoincrement | enum:none",
       "bedtime | sql:text | logical:string/SQLiteText | not-null | default:none | not-primary-key | not-unique | not-autoincrement | enum:none",

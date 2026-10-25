@@ -111,7 +111,9 @@ class DacHardwareClient {
   }
 
   async clearAlarm(side: Side): Promise<void> {
-    await sendCommand(HardwareCommand.ALARM_CLEAR, side === 'left' ? '0' : '1')
+    const response = await sendCommand(HardwareCommand.ALARM_CLEAR, side === 'left' ? '0' : '1')
+    const parsed = parseSimpleResponse(response)
+    if (!parsed.success) throw new HardwareError(`Failed to clear alarm: ${parsed.message}`)
   }
 
   async startPriming(): Promise<void> {

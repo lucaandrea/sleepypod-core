@@ -201,7 +201,7 @@ export const deviceRouter = router({
 
       if (!status) {
         status = await withHardwareClient(
-          client => client.getDeviceStatus(), 'Failed to get device status',
+          client => client.getDeviceStatus(), 'Failed to get device status', { retryReadOnly: true },
         )
         // The monitor already persists cached observations. Preserve the fallback
         // sync only when a hardware read was necessary. Like the monitor's
@@ -499,7 +499,7 @@ export const deviceRouter = router({
     .output(z.object({ success: z.boolean() }))
     .mutation(async ({ input }) => {
       markSideMutated(input.side)
-      return withHardwareClient(async (client) => {
+      return withSideLock(input.side, () => withHardwareClient(async (client) => {
         cancelSnooze(input.side)
         const alarm = {
           vibrationIntensity: input.vibrationIntensity,
@@ -511,7 +511,7 @@ export const deviceRouter = router({
         // vibration's duration runs out.
         await markAlarmStarted(input.side, alarm)
         return { success: true }
-      }, 'Failed to set alarm')
+      }, 'Failed to set alarm'))
     }),
 
   /**
@@ -537,12 +537,12 @@ export const deviceRouter = router({
     .output(z.object({ success: z.boolean() }))
     .mutation(async ({ input }) => {
       markSideMutated(input.side)
-      return withHardwareClient(async (client) => {
+      return withSideLock(input.side, () => withHardwareClient(async (client) => {
         await client.clearAlarm(input.side)
         cancelSnooze(input.side)
         await markAlarmEnded(input.side)
         return { success: true }
-      }, 'Failed to clear alarm')
+      }, 'Failed to clear alarm'))
     }),
 
   /**

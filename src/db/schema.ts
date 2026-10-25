@@ -1,6 +1,20 @@
 import { sql } from 'drizzle-orm'
 import { index, integer, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
 
+// Kept across restarts: an interrupted actuator request must never be replayed.
+export const controlReceipts = sqliteTable('control_receipts', {
+  requestId: text('request_id').primaryKey(),
+  fingerprint: text('fingerprint').notNull(),
+  request: text('request').notNull(),
+  state: text('state', { enum: ['executing', 'acknowledged', 'not_dispatched', 'rejected', 'expired', 'unknown'] }).notNull(),
+  reason: text('reason'),
+  receivedAt: integer('received_at').notNull(),
+  finishedAt: integer('finished_at'),
+  dispatchCount: integer('dispatch_count').notNull().default(0),
+  lastDispatchAt: integer('last_dispatch_at'),
+  runId: text('run_id').notNull(),
+}, table => [index('control_receipts_received_idx').on(table.receivedAt)])
+
 // ============================================================================
 // Device Settings & Configuration
 // ============================================================================
