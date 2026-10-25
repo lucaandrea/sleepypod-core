@@ -33,6 +33,12 @@ export interface TemperatureControlStatus {
   blocked: 'safety' | 'off' | null
 }
 
+interface PolicyLease {
+  request: TemperatureRequest
+  /** Synchronous current-input check, repeated after transport recovery. */
+  isEligible: () => boolean
+}
+
 export interface TemperatureControllerDeps {
   now: () => number
   withSideLock: <T>(side: Side, fn: () => Promise<T>) => Promise<T>
@@ -86,6 +92,10 @@ export class TemperatureController {
     left: new Map(), right: new Map(),
   }
 
+  private policies: Record<Side, Map<string, PolicyLease[]>> = {
+    left: new Map(), right: new Map(),
+  }
+
   private poweredOff: Record<Side, boolean> = { left: false, right: false }
 
   private applied: Record<Side, number | null> = { left: null, right: null }
@@ -127,7 +137,59 @@ export class TemperatureController {
       ...(hold ? [hold] : []),
       ...this.deps.readBaseline(side, now),
       ...this.requests[side].values(),
+      ...this.livePolicyRequests(side, now),
     ], now)
+  }
+
+  /** Invalid input revokes a lease permanently; fresh data needs a new evaluation. */
+  private livePolicyRequests(side: Side, now: number): TemperatureRequest[] {
+    const requests: TemperatureRequest[] = []
+    for (const [producer, leases] of this.policies[side]) {
+      const live = leases.filter((lease) => {
+        try {
+          return isLiveRequest(lease.request, now) && lease.isEligible()
+        }
+        catch { return false }
+      })
+      if (live.length) this.policies[side].set(producer, live)
+      else this.policies[side].delete(producer)
+      requests.push(...live.map(lease => lease.request))
+    }
+    return requests
+  }
+
+  /**
+   * Replace one producer's passive proposals without erasing rules or another
+   * policy. Only the shared authority writes hardware; these leases never carry
+   * a power-on request or a hardware duration. The producer must include consent,
+   * fresh inputs and manual-pause checks in isEligible, not just at evaluation.
+   */
+  async replacePolicy(
+    side: Side,
+    producer: string,
+    requests: TemperatureRequest[],
+    isEligible: () => boolean,
+    isCurrent: () => boolean = () => true,
+  ): Promise<TemperatureControlStatus> {
+    if (!/^[a-z][a-z0-9-]{0,63}$/.test(producer)) throw new Error('Invalid policy producer')
+    return this.deps.withSideLock(side, async () => {
+      if (!isCurrent()) return this.status(side)
+      const now = this.deps.now()
+      const identities = new Set<string>()
+      const leases = requests.map((request) => {
+        if (request.source !== 'autopilot' || !isLiveRequest(request, now)
+          || request.durationSec !== undefined || !request.id || identities.has(request.id)
+          || !Number.isFinite(request.createdAt) || request.createdAt > now
+          || !Number.isFinite(request.priority)) {
+          throw new Error('Invalid policy lease')
+        }
+        identities.add(request.id)
+        return { request: { ...request, id: `policy:${producer}:${request.id}` }, isEligible: () => isCurrent() && isEligible() }
+      })
+      if (leases.length) this.policies[side].set(producer, leases)
+      else this.policies[side].delete(producer)
+      return this.reconcileLocked(side, false, isCurrent)
+    })
   }
 
   async setManual(side: Side, temperature: number, holdMs = DEFAULT_HOLD_MS, durationSec?: number): Promise<TemperatureControlStatus> {
@@ -263,7 +325,8 @@ export class TemperatureController {
       const live = requests.filter(r => r.source === 'autopilot' && isLiveRequest(r, this.deps.now()))
       this.requests[side] = new Map(live.map(r => [r.id, { ...r }]))
       const selected = this.select(side, this.deps.now())
-      if (selected && powerOnIds.includes(selected.id) && !this.deps.isBlocked(side)) {
+      if (selected && this.requests[side].get(selected.id) === selected
+        && powerOnIds.includes(selected.id) && !this.deps.isBlocked(side)) {
         return this.powerOnLocked(side, 75, isCurrent)
       }
       return this.reconcileLocked(side, false, isCurrent)
