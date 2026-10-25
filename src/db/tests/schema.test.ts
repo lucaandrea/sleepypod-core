@@ -464,11 +464,12 @@ describe('db schema definitions', () => {
       })
       .map(([k]) => k)
       .sort()
-    // New biometric tables are pinned by the exhaustive snapshot below and
-    // exercised against real migrations by the profile repository tests.
+    // New biometric/comfort tables are pinned by the exhaustive snapshot below
+    // and exercised against real migrations by their repository tests.
     expect(actualTableExports).toEqual([...Object.keys(expectedTables),
       'biometricProfileRevisions', 'biometricProfileBindings',
       'biometricActivationEvents', 'biometricConfigOutbox',
+      'comfortEvents', 'comfortFeedback', 'comfortStates',
     ].sort())
   })
 })

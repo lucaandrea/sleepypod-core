@@ -119,7 +119,8 @@ export function AutopilotConsole() {
     .map(e => ({ ruleId: e.ruleId, at: e.start, outcome: e.outcome, sides: e.sides }))
 
   const lang = pathname?.split('/')[1] || 'en'
-  const killed = statusQ.data ? !statusQ.data.globalEnabled : false
+  const statusKnown = Boolean(statusQ.data) && !statusQ.error
+  const killed = !statusKnown || !statusQ.data?.globalEnabled
   const fmt = (f: number) => formatSetpointF(f, unit, { includeUnit: false })
 
   const openTemplate = (id: TemplateId) => router.push(`/${lang}/autopilot/new?template=${id}`)
@@ -140,8 +141,8 @@ export function AutopilotConsole() {
         right={(
           <>
             <label className="flex cursor-pointer items-center gap-2.5 rounded-ctl border border-line px-3 py-1.5 text-[13px]">
-              <Toggle size="md" label="Autopilot enabled" on={!killed} onChange={on => killM.mutate({ enabled: on })} />
-              {killed ? 'Autopilot off' : 'Autopilot on'}
+              <Toggle size="md" label="Autopilot enabled" on={!killed} disabled={!statusKnown || killM.isPending} onChange={on => killM.mutate({ enabled: on })} />
+              {!statusKnown ? statusQ.error ? 'Autopilot status unavailable' : 'Checking Autopilot…' : killed ? 'Autopilot off' : 'Autopilot on'}
             </label>
             {onAutomations && (
               <Button variant="primary" size="md" icon={Plus} onClick={() => router.push(`/${lang}/autopilot/new`)} className="max-[899px]:hidden">
@@ -168,7 +169,7 @@ export function AutopilotConsole() {
         )}
       />
 
-      {killed && (
+      {statusKnown && killed && (
         <div className="rounded-ctl border border-line-2 bg-active px-4 py-2.5 text-[13px] text-fg-2" role="status">
           Autopilot is off. No rules are evaluated.
         </div>
