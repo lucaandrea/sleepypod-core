@@ -29,7 +29,7 @@ describe('capability evidence contract', () => {
     expect(result.observations.device).toEqual({ freshness: 'fresh', observedAt: new Date(now - 1000).toISOString(), expiresAt: new Date(now - 1000 + DEVICE_FRESHNESS_MS).toISOString() })
     expect(result.baseScope).toBe('whole_bed')
     expect(result.features.alarmSnooze).toMatchObject({ implemented: true, runtime: 'ready', physicalVerification: 'not_applicable' })
-    expect(result.features.curveLibrary).toMatchObject({ implemented: false, runtime: 'not_ready' })
+    expect(result.features.curveLibrary).toMatchObject({ implemented: true, runtime: 'ready', reason: 'calendar_curves_with_bedtime_ownership_guard' })
     expect(result.controlSemantics).toEqual({ acknowledgment: 'accepted_not_physically_verified', durableCommandReceipts: true, commandExpiry: true, receiptScope: 'versioned_controls_only', maxLifetimeMs: 60000 })
   })
 

@@ -246,6 +246,20 @@
       "when": 1792963766940,
       "tag": "0034_alarm_snooze_from_gestures",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "6",
+      "when": 1792964726860,
+      "tag": "0035_schedule_library",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "6",
+      "when": 1792964727320,
+      "tag": "0036_schedule_library_adoption",
+      "breakpoints": true
     }
   ]
 }

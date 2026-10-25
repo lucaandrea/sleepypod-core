@@ -55,6 +55,9 @@ measurement envelopes remain separate work.
 `alarmSnooze` describes the implemented per-alarm length/taper contract, including
 complete bedtime routines. It is ready as a software settings capability without
 a live DAC connection; actual vibration still uses `wakeVibration` prerequisites
-and remains physically unqualified. `curveLibrary` explicitly reports the owned
-library integration as pending. Empty alarm or template collections must not be
-used to infer either capability. See [alarm snooze](ALARM_SNOOZE.md).
+and remains physically unqualified. `curveLibrary` reports the calendar curve
+library as ready, with the reason `calendar_curves_with_bedtime_ownership_guard`.
+An imported bedtime side must still use the complete-routine API: attempts to
+apply calendar curves to it return HTTP 412 without writes. Empty alarm or
+template collections must not be used to infer either capability. See
+[alarm snooze](ALARM_SNOOZE.md) and [schedule library](SCHEDULE_LIBRARY.md).

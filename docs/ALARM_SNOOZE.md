@@ -46,8 +46,9 @@ cancellation on the physical Pod 4 still require attended qualification.
   possible.
 - Complete routines retain revision checks, transaction boundaries and parent
   enablement. Changing snooze preferences does not enable a paused parent.
-- `features.curveLibrary.implemented` remains false. The owned curve library is
-  a separate integration, not implied by snooze support.
+- Discover `features.curveLibrary` separately. The [calendar curve library](SCHEDULE_LIBRARY.md)
+  preserves alarms and refuses to rewrite an imported bedtime side. Snooze
+  support alone does not imply library support on an older controller.
 
 ## Upgrade and import
 
