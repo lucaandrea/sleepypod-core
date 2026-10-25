@@ -42,6 +42,8 @@ export const capabilitiesSchema = z.object({
     baseMovement: featureSchema,
     baseStop: featureSchema,
     wakeVibration: featureSchema,
+    alarmSnooze: featureSchema,
+    curveLibrary: featureSchema,
     personalComfort: featureSchema,
     personalComfortPreview: featureSchema,
     musicVibration: featureSchema,
@@ -110,6 +112,8 @@ export function buildCapabilities(snapshot: CapabilitySnapshot): ControllerCapab
       // Stop must remain visible and callable even when position is stale or motion is unknown.
       baseStop: feature(base?.state === 'connected' ? 'ready' : 'not_ready', base?.state === 'connected' ? 'base_connected' : 'base_disconnected', true),
       wakeVibration: feature(deviceFresh && !device.status?.isPriming ? 'ready' : 'not_ready', !deviceFresh ? 'device_report_unavailable' : device.status?.isPriming ? 'priming' : 'fresh_device_report', true),
+      alarmSnooze: feature('ready', 'per_alarm_snooze_length_and_taper'),
+      curveLibrary: feature('not_ready', 'owned_curve_library_pending', false, false),
       personalComfort: feature('not_ready', 'personal_comfort_activation_unqualified', false, false),
       personalComfortPreview: feature(snapshot.comfortPreviewRunning ? 'ready' : 'not_ready', snapshot.comfortPreviewRunning ? 'preview_only' : 'preview_runtime_stopped'),
       musicVibration: feature('not_ready', 'hardware_protocol_unqualified', true, false),

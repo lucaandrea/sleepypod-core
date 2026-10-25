@@ -226,6 +226,12 @@ def map_schedules(schedules, database, report):
     """Translate routine-relative weekdays into the actual Core calendar events."""
     require(set(schedules) == set(SIDES), 'Incomplete schedule sides')
     for side in SIDES:
+        snooze_rows = database.execute("""SELECT alarm_snooze_duration FROM tap_gestures
+            WHERE side=? AND action_type='alarm' AND alarm_behavior='snooze' AND alarm_snooze_duration IS NOT NULL
+            ORDER BY CASE tap_type WHEN 'doubleTap' THEN 0 WHEN 'tripleTap' THEN 1 ELSE 2 END""", (side,)).fetchall()
+        snooze_duration = snooze_rows[0][0] if snooze_rows else 300
+        if len({row[0] for row in snooze_rows}) > 1:
+            report['reviewRequired'].append(f'{side}: alarms use the first snoozing tap duration; differing legacy tap durations require review')
         require(set(schedules[side]) == set(DAYS), 'Incomplete schedule week')
         for day in DAYS:
             routine = schedules[side][day]
@@ -260,13 +266,13 @@ def map_schedules(schedules, database, report):
             require(alarm['vibrationPattern'] in ('rise', 'double'), 'Invalid alarm pattern')
             alarm_temperature = number(alarm['alarmTemperature'], 55, 110, 'alarm temperature', integer=True)
             alarm_id = database.execute('''INSERT INTO alarm_schedules(side,day_of_week,time,vibration_intensity,
-                vibration_pattern,duration,alarm_temperature,wake_window,enabled) VALUES (?,?,?,?,?,?,?,0,?)''',
-                (side, event_day(day, at, start), at, intensity, alarm['vibrationPattern'], max(10, length), alarm_temperature, alarm_enabled)).lastrowid
+                vibration_pattern,duration,alarm_temperature,wake_window,snooze_duration,snooze_taper,enabled) VALUES (?,?,?,?,?,?,?,0,?,0,?)''',
+                (side, event_day(day, at, start), at, intensity, alarm['vibrationPattern'], max(10, length), alarm_temperature, snooze_duration, alarm_enabled)).lastrowid
             draft = {
                 'power': {'onTime': start, 'offTime': end, 'onTemperature': temperature, 'enabled': enabled, 'endAction': 'turn_off'},
                 'temperatures': phases,
                 'alarm': {'time': at, 'vibrationIntensity': intensity, 'vibrationPattern': alarm['vibrationPattern'],
-                          'duration': max(10, length), 'alarmTemperature': alarm_temperature, 'wakeWindow': 0, 'enabled': alarm['enabled']},
+                          'duration': max(10, length), 'alarmTemperature': alarm_temperature, 'wakeWindow': 0, 'snoozeDuration': snooze_duration, 'snoozeTaper': 0, 'enabled': alarm['enabled']},
                 'notes': '',
             }
             database.execute('INSERT INTO bedtime_routines(side,day_of_week,configuration,schedule_ids) VALUES (?,?,?,?)',

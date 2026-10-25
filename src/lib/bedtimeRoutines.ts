@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { DAYS_OF_WEEK, hhmmToMinutes, type DayOfWeek } from './scheduleTime'
+import { snoozeDurationSchema, snoozeTaperSchema } from '@/src/server/validation-schemas'
 
 const clock = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/)
 const target = z.number().int().min(55).max(110)
@@ -17,6 +18,7 @@ export const bedtimeDraftSchema = z.object({
     time: clock, vibrationIntensity: z.number().int().min(1).max(100),
     vibrationPattern: z.enum(['rise', 'double']), duration: z.number().int().min(10).max(180),
     alarmTemperature: target, wakeWindow: z.union([z.literal(0), z.literal(10), z.literal(15), z.literal(20), z.literal(30)]), enabled: z.boolean(),
+    snoozeDuration: snoozeDurationSchema.optional(), snoozeTaper: snoozeTaperSchema.optional(),
   }).strict().nullable(),
   notes: z.string().max(1000),
 }).strict().superRefine((draft, context) => {
@@ -70,6 +72,7 @@ export function normalizeBedtimeDraft(input: BedtimeDraft): BedtimeDraft {
   const draft = bedtimeDraftSchema.parse(input)
   return {
     ...draft,
+    alarm: draft.alarm ? { ...draft.alarm, snoozeDuration: draft.alarm.snoozeDuration ?? 300, snoozeTaper: draft.alarm.snoozeTaper ?? 0 } : null,
     temperatures: [...draft.temperatures].sort((first, second) => relativeMinute(first.time, draft.power.onTime) - relativeMinute(second.time, draft.power.onTime)),
     notes: draft.notes.trim(),
   }

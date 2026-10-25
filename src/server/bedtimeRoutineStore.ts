@@ -78,6 +78,13 @@ export async function replaceBedtimeRoutines(input: z.infer<typeof routineChange
       }
     }
     const changedDays = new Set(parsed.changes.map(change => change.dayOfWeek))
+    // Older clients omit these fields. Never let an edit or move erase custom
+    // snooze settings they cannot represent; default-only legacy writes still work.
+    const hasCustomSnooze = current.records.some(({ snapshot }) => changedDays.has(snapshot.dayOfWeek)
+      && snapshot.draft.alarm && ((snapshot.draft.alarm.snoozeDuration ?? 300) !== 300 || (snapshot.draft.alarm.snoozeTaper ?? 0) !== 0))
+    const omitsSnooze = parsed.changes.some(({ replacement }) => replacement?.alarm
+      && (replacement.alarm.snoozeDuration === undefined || replacement.alarm.snoozeTaper === undefined))
+    if (hasCustomSnooze && omitsSnooze) throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'This routine has custom snooze settings. Update the client to preserve both snooze fields before editing or moving it.' })
     const prospective = [
       ...current.records.filter(record => !changedDays.has(record.snapshot.dayOfWeek)).map(record => record.snapshot),
       ...parsed.changes.flatMap(change => change.replacement ? [{ dayOfWeek: change.dayOfWeek, draft: change.replacement }] : []),

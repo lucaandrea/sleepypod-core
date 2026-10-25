@@ -30,6 +30,18 @@ beforeEach(() => {
 afterEach(cleanup)
 
 describe('bedtime routine editor', () => {
+  it('edits snooze duration and taper while preserving the disabled parent routine', async () => {
+    const view = render(<BedtimeRoutineEditor {...props()} />)
+    fireEvent.click(view.getByRole('switch', { name: 'Wake alarm enabled' }))
+    fireEvent.click(view.getByRole('button', { name: 'Increase Snooze duration' }))
+    fireEvent.change(view.getByLabelText('Snooze taper'), { target: { value: '40' } })
+    fireEvent.click(view.getByRole('button', { name: 'Save routine' }))
+    await waitFor(() => expect(mocks.close).toHaveBeenCalled())
+    expect(mocks.mutate.mock.calls[0][0].changes[0].replacement).toMatchObject({
+      power: { enabled: false }, alarm: { enabled: true, snoozeDuration: 360, snoozeTaper: 40 },
+    })
+  })
+
   it('shows and edits power-only routines without inventing temperature phases', () => {
     mocks.query.data.routines = [saturday]
     const view = render(<BedtimeSchedule side="left" name="Luca" />)

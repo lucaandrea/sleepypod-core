@@ -17,7 +17,7 @@ const defaultDraft: BedtimeDraft = {
   power: { onTime: '22:00', offTime: '07:00', onTemperature: 75, enabled: false, endAction: 'turn_off' },
   temperatures: [], alarm: null, notes: '',
 }
-const defaultAlarm: NonNullable<BedtimeDraft['alarm']> = { time: '06:30', vibrationPattern: 'rise', vibrationIntensity: 50, duration: 30, alarmTemperature: 80, wakeWindow: 0, enabled: false }
+const defaultAlarm: NonNullable<BedtimeDraft['alarm']> = { time: '06:30', vibrationPattern: 'rise', vibrationIntensity: 50, duration: 30, alarmTemperature: 80, wakeWindow: 0, snoozeDuration: 300, snoozeTaper: 0, enabled: false }
 
 /** Imported routines retain explicit power times even when no temperature phases exist. */
 export function BedtimeSchedule({ side, name, onBack }: { side: RoutineSide, name: string, onBack?: () => void }) {
@@ -191,6 +191,14 @@ export function BedtimeRoutineEditor({ side, name, days: originalDays, draft: in
                 . The alarm follows the routine’s enabled switch. Wake temperature includes warm-up and a post-alarm hold.
               </p>
               <SegmentedControl ariaLabel="Vibration pattern" value={draft.alarm.vibrationPattern} onChange={vibrationPattern => patchAlarm({ vibrationPattern })} options={[{ value: 'rise', label: 'Rise' }, { value: 'double', label: 'Double' }]} />
+              <div className="flex flex-col gap-2">
+                <span className="text-xs text-fg-2">Snooze for</span>
+                <Stepper label="Snooze duration" value={(draft.alarm.snoozeDuration ?? 300) / 60} min={1} max={30} format={value => `${value} min`} onChange={minutes => patchAlarm({ snoozeDuration: minutes * 60 })} />
+                <label className="flex flex-col gap-2 text-sm">
+                  Snooze taper
+                  <select className="rounded-ctl border border-line-2 bg-field p-2" value={draft.alarm.snoozeTaper ?? 0} onChange={event => patchAlarm({ snoozeTaper: Number(event.target.value) as NonNullable<BedtimeDraft['alarm']>['snoozeTaper'] })}>{[0, 30, 40, 50, 60].map(value => <option key={value} value={value}>{value === 0 ? 'Off' : `${value}% shorter each time`}</option>)}</select>
+                </label>
+              </div>
               <div className="flex flex-wrap gap-3">
                 <div className="flex flex-col gap-2">
                   <span className="text-xs text-fg-2">Vibration intensity</span>

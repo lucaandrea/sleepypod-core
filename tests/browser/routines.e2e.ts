@@ -32,12 +32,27 @@ test('authenticated overnight routine editing persists and protects concurrent c
   await page.reload()
   await page.getByRole('button', { name: 'Edit Mon', exact: true }).click()
   await expect(page.getByLabel('End time', { exact: true })).toHaveValue('07:00')
+  await page.getByRole('switch', { name: 'Wake alarm enabled', exact: true }).click()
+  await page.getByRole('button', { name: 'Increase Snooze duration', exact: true }).click()
+  await page.getByRole('combobox', { name: 'Snooze taper', exact: true }).selectOption('40')
+  await page.getByRole('button', { name: 'Save routine', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Edit Mon', exact: true })).toBeVisible()
+  await page.reload()
+  await page.getByRole('button', { name: 'Edit Mon', exact: true }).click()
+  await expect(page.getByRole('combobox', { name: 'Snooze taper', exact: true })).toHaveValue('40')
   await page.getByRole('textbox', { name: 'Notes', exact: true }).fill('Retain this unsaved draft')
 
   const current = await request.get('/api/v1/routines?side=left', { headers: headers() })
   const monday = (await current.json()).routines[0] as RoutineSnapshot
   expect(monday.dayOfWeek).toBe('monday')
-  const external = await request.post('/api/v1/routines', { headers: headers(), data: { side: 'left', changes: [{ dayOfWeek: 'monday', expectedRevision: monday.revision, replacement: { ...draft, notes: 'Other client saved' } }] } })
+  expect(monday.draft.power.enabled).toBe(false)
+  expect(monday.draft.alarm).toMatchObject({ enabled: true, snoozeDuration: 360, snoozeTaper: 40 })
+  const legacyAlarm = { ...monday.draft.alarm }
+  delete legacyAlarm.snoozeDuration
+  delete legacyAlarm.snoozeTaper
+  const incompatible = await request.post('/api/v1/routines', { headers: headers(), data: { side: 'left', changes: [{ dayOfWeek: 'monday', expectedRevision: monday.revision, replacement: { ...monday.draft, alarm: legacyAlarm } }] } })
+  expect(incompatible.status()).toBe(412)
+  const external = await request.post('/api/v1/routines', { headers: headers(), data: { side: 'left', changes: [{ dayOfWeek: 'monday', expectedRevision: monday.revision, replacement: { ...monday.draft, notes: 'Other client saved' } }] } })
   expect(external.status()).toBe(200)
   await page.getByRole('button', { name: 'Save routine', exact: true }).click()
   await expect(page.getByText(/The monday routine changed/)).toBeVisible()
@@ -48,6 +63,7 @@ test('authenticated overnight routine editing persists and protects concurrent c
   await page.reload()
   await page.getByRole('button', { name: 'Edit Mon', exact: true }).click()
   await expect(page.getByRole('textbox', { name: 'Notes', exact: true })).toHaveValue('Other client saved')
+  await expect(page.getByRole('combobox', { name: 'Snooze taper', exact: true })).toHaveValue('40')
   const width = await page.evaluate(() => ({ scroll: document.documentElement.scrollWidth, viewport: window.innerWidth }))
   expect(width.scroll).toBeLessThanOrEqual(width.viewport)
   await page.screenshot({ path: testInfo.outputPath('routine-mobile.png'), fullPage: true })

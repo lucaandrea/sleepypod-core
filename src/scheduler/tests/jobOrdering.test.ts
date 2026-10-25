@@ -262,6 +262,8 @@ const alarmSched = (side: 'left' | 'right') => ({
   ...alarmNow(),
   alarmTemperature: 88,
   wakeWindow: 0,
+  snoozeDuration: 300,
+  snoozeTaper: 0,
   vibrationIntensity: 100,
   vibrationPattern: 'rise' as const,
   duration: 10,
@@ -356,6 +358,9 @@ describe('JobManager — job ordering and gating', () => {
         vibrationIntensity: 100,
         vibrationPattern: 'rise',
         duration: 10,
+        // Carried so a snooze of this alarm uses its length and taper.
+        snoozeDuration: 300,
+        snoozeTaper: 0,
       })
     })
 
@@ -1856,6 +1861,8 @@ describe('JobManager — streaming + downstream side-effects', () => {
       ...alarmNow(),
       alarmTemperature: 88,
       wakeWindow: 0,
+      snoozeDuration: 300,
+      snoozeTaper: 0,
       vibrationIntensity: 90,
       vibrationPattern: 'rise' as const,
       duration: 30,
@@ -1869,11 +1876,13 @@ describe('JobManager — streaming + downstream side-effects', () => {
       targetLevel: fahrenheitToLevel(88),
     })
     expect(broadcastMutationStatus).toHaveBeenCalledWith('right', { isAlarmVibrating: true })
-    // setAlarm forwarded the exact vibration parameters from the schedule
+    // setAlarm forwarded the exact vibration parameters (and snooze settings) from the schedule
     expect(setAlarm).toHaveBeenCalledWith('right', {
       vibrationIntensity: 90,
       vibrationPattern: 'rise',
       duration: 30,
+      snoozeDuration: 300,
+      snoozeTaper: 0,
     })
   })
 
