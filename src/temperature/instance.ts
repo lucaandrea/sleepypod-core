@@ -4,7 +4,7 @@ import { db, sqlite } from '@/src/db'
 import { deviceState, temperatureHolds } from '@/src/db/schema'
 import { getSharedHardwareClient } from '@/src/hardware/dacMonitor.instance'
 import { markSideMutated } from '@/src/hardware/deviceStateSync'
-import { hasFirmwareSynced } from '@/src/hardware/sideMutations'
+import { hasFirmwareSynced, hasHeatingSessionEvidence } from '@/src/hardware/sideMutations'
 import { shouldBlock } from '@/src/hardware/pumpStallGuard'
 import { withSideLock } from '@/src/hardware/sideLock'
 import { fahrenheitToLevel, MAX_TEMP, MIN_TEMP, type Side } from '@/src/hardware/types'
@@ -147,8 +147,11 @@ export function getTemperatureController(): TemperatureController {
       // temperature jobs, resume/submit/withdraw), not just the passive loop:
       // on Pod 88 the engine's first tick read a stale is_powered=1 row and
       // energized a side the moment frank connected. Explicit power-on and
-      // manual commands do not consult this.
+      // manual commands do not consult this. A fresh report with a retained
+      // non-neutral target and zero countdown is still ambiguous; require
+      // heating-session evidence as well, not pump movement or a saved target.
       isPowered: side => hasFirmwareSynced()
+        && hasHeatingSessionEvidence(side)
         && Boolean((statement('select is_powered as isPowered from device_state where side = ?').get(side) as { isPowered: number } | undefined)?.isPowered),
       readCurrentTarget: side => db.select().from(deviceState).where(eq(deviceState.side, side)).get()?.targetTemperature ?? null,
       readHardwareDeadline: side => db.select({ deadline: deviceState.hardwareDeadline }).from(deviceState).where(eq(deviceState.side, side)).get()?.deadline ?? null,
