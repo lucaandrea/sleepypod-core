@@ -43,7 +43,7 @@ import * as databaseModule from '@/src/db'
 import { alarmSchedules, deviceSettings, deviceState, runOnceSessions, sideSettings, temperatureHolds, temperatureSchedules } from '@/src/db/schema'
 import { getTemperatureController, getTemperatureControlStatus, startTemperatureController, stopTemperatureController } from '../instance'
 import { withSideLock } from '@/src/hardware/sideLock'
-import { _resetFirmwareSynced, markFirmwareSynced } from '@/src/hardware/sideMutations'
+import { _resetFirmwareSynced, markFirmwareSynced, _resetHeatingSessionEvidence, recordHeatingSession } from '@/src/hardware/sideMutations'
 
 const fileDatabase = databaseModule as typeof databaseModule & { reopenForTest: () => void, cleanupForTest: () => void }
 afterAll(() => fileDatabase.cleanupForTest())
@@ -54,6 +54,8 @@ beforeEach(() => {
   safety.blocked = false
   vi.clearAllMocks()
   markFirmwareSynced() // the firmware has reported in, as it has on a running pod
+  recordHeatingSession('left', true)
+  recordHeatingSession('right', true)
   resetControlDatabase(sqlite)
   db.insert(deviceSettings).values({ id: 1, timezone: 'UTC', unusedZoneMode: 'follow' }).run()
   db.insert(sideSettings).values([{ side: 'left', name: 'Left' }, { side: 'right', name: 'Right' }]).run()
@@ -279,6 +281,33 @@ describe('production controller with migrated SQLite', () => {
       expect(hardware.setTemperature).toHaveBeenCalledWith('left', 72)
     }
     finally { markFirmwareSynced() }
+  })
+
+  it('withholds passive writes after a fresh but ambiguous zero-countdown startup report', async () => {
+    _resetHeatingSessionEvidence()
+    const controller = getTemperatureController()
+    await startTemperatureController()
+    await vi.advanceTimersByTimeAsync(10_000)
+    await controller.replaceAutopilot('left', [])
+    await controller.resume('left')
+    expect(hardware.setTemperature).not.toHaveBeenCalled()
+    expect(controller.status('left').blocked).toBe('off')
+
+    // Confirming the other side cannot authorize the left's saved target.
+    recordHeatingSession('right', true)
+    await controller.reconcile('left')
+    expect(hardware.setTemperature).not.toHaveBeenCalled()
+    recordHeatingSession('left', true)
+    await controller.reconcile('left')
+    expect(hardware.setTemperature).toHaveBeenLastCalledWith('left', 72)
+    hardware.setTemperature.mockClear()
+    recordHeatingSession('left', false)
+    await controller.reconcile('left')
+    expect(hardware.setTemperature).not.toHaveBeenCalled()
+
+    // Explicit owner control still works while passive reconciliation waits.
+    await controller.setManual('left', 75)
+    expect(hardware.setTemperature).toHaveBeenLastCalledWith('left', 75)
   })
 
   it('expires the right hold while the left side lock is occupied', async () => {

@@ -250,6 +250,62 @@ class HandoffTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 handoff.read_owner_key(path)
 
+    def test_settling_requires_consecutive_fresh_observations(self):
+        self.prepare_trial()
+        current = [0]
+        observations = []
+
+        def observe(*_args):
+            observations.append(current[0])
+            return {'device': {'freshness': 'stale' if current[0] == 2 else 'fresh'}}
+
+        result = handoff.trial(self.directory, 10, observe=observe, settle_seconds=3,
+                               monotonic=lambda: current[0], sleep=lambda seconds: current.__setitem__(0, current[0] + seconds))
+        self.assertEqual(observations, [0, 2, 4, 6, 8])
+        self.assertTrue(result['trialSucceeded'])
+
+    def test_idle_trial_rejects_active_legacy_before_stopping_it(self):
+        self.prepare_trial()
+        with patch.object(handoff, 'local_json', return_value={'isPriming': True}):
+            with self.assertRaisesRegex(RuntimeError, 'priming'):
+                handoff.trial(self.directory, 10, require_idle=True)
+        self.assertEqual(self.calls, [('daemon-reload',)])
+
+    def test_idle_trial_rejects_heating_drift_and_checks_restored_api(self):
+        self.prepare_trial()
+        idle = {'isPriming': False, **{side: {'isOn': False, 'isAlarmVibrating': False, 'secondsRemaining': 0}
+                                      for side in ('left', 'right')}}
+        drift = {'isPriming': False, 'leftSide': {'heatingDuration': 28800}, 'rightSide': {'heatingDuration': 0}}
+        with patch.object(handoff, 'local_json', side_effect=[idle, drift, idle]):
+            with self.assertRaisesRegex(RuntimeError, 'countdown'):
+                handoff.trial(self.directory, 10, require_idle=True, observe=lambda *_: {'device': {'freshness': 'fresh'}})
+        journal = json.loads((self.directory / 'handoff.json').read_text())
+        self.assertFalse(journal['trialSucceeded'])
+        self.assertTrue(journal['restoredIdleVerified'])
+        self.assertEqual(journal['phase'], 'trial_restored')
+
+    def test_post_restoration_power_change_revokes_trial_success(self):
+        self.prepare_trial()
+        idle = {'isPriming': False, **{side: {'isOn': False, 'isAlarmVibrating': False, 'secondsRemaining': 0}
+                                      for side in ('left', 'right')}}
+        core = {'isPriming': False, 'leftSide': {'heatingDuration': 0}, 'rightSide': {'heatingDuration': 0}}
+        changed = {**idle, 'left': {**idle['left'], 'secondsRemaining': 60}}
+        with patch.object(handoff, 'local_json', side_effect=[idle, core, changed]):
+            with self.assertRaisesRegex(RuntimeError, 'countdown'):
+                handoff.trial(self.directory, 10, require_idle=True, observe=lambda *_: {'device': {'freshness': 'fresh'}})
+        journal = json.loads((self.directory / 'handoff.json').read_text())
+        self.assertFalse(journal['trialSucceeded'])
+        self.assertFalse(journal['restoredIdleVerified'])
+
+    def test_idle_check_accepts_retained_targets_but_rejects_missing_or_boolean_duration(self):
+        value = {'isPriming': False, 'leftSide': {'targetLevel': 5, 'heatingDuration': 0},
+                 'rightSide': {'targetLevel': -20, 'heatingDuration': 0}}
+        handoff.require_thermal_idle(value, core=True)
+        for duration in (None, False, -1, float('nan'), 1):
+            value['leftSide']['heatingDuration'] = duration
+            with self.assertRaises(RuntimeError):
+                handoff.require_thermal_idle(value, core=True)
+
 
 if __name__ == '__main__':
     unittest.main()

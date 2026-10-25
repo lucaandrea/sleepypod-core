@@ -88,10 +88,28 @@ installation leaves a journal and never silently overwrites or deletes files;
 inspect its recorded creations before recovery. Keep `handoff.py`,
 `service_plan.py` and `prepare_offline.py` together, from the reviewed commit.
 
+## Replace an inactive release plan
+
+For a newer verified release after a stopped trial, render a **new** plan with
+the same data, credential, socket and RAW paths, then replace only the managed
+unit files:
+
+```sh
+python3 scripts/deployment/replace_plan.py \
+  --previous-plan /private/previous-service-plan --plan /private/new-service-plan
+```
+
+Both plans are locked against concurrent handoffs. Core must be stopped and
+disabled and Free Sleep active and enabled. Original unit hashes and settings
+are checked before replacement. A partial write failure restores the previous
+unit files; unrelated edits require review. Neither installation is started or
+enabled by this command. Keep both plans and immutable release directories.
+
 ## Bounded attended trial and rollback
 
 ```sh
-python3 handoff.py trial --plan /private/new-service-plan --seconds 120
+python3 handoff.py trial --plan /private/new-service-plan --seconds 120 \
+  --settle-seconds 30 --require-idle
 ```
 
 The trial requires both original services active/enabled and every Core service
@@ -101,7 +119,14 @@ processes exited, then starts Core. Conflicts and ordering also enforce ownershi
 inside systemd; stopping Core stops its related sensor services.
 
 The tool waits **up to** the deadline for authenticated capabilities to identify
-the exact staged build and a fresh device report. It then stops all Core units
+the exact staged build and a fresh device report. The optional settling period
+requires consecutive fresh observations; stale/failed reads reset that period.
+`--require-idle` checks the legacy API before stopping services, raw Core heating
+countdowns during the trial, and the restored legacy API afterward. Priming or
+nonzero/unavailable countdowns reject the trial; a post-restoration mismatch
+revokes success. These checks report drift and do not issue corrective actuator
+commands. They do not establish physical thermal or vibration behavior.
+The tool then stops all Core units
 and restores Free Sleep, including on startup failure, stale telemetry or an
 ordinary interruption. It never changes boot enablement. A machine power loss
 therefore still boots the original enabled services. A process kill that cannot

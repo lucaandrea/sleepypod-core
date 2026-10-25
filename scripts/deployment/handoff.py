@@ -96,12 +96,43 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
         raise ValueError('Unexpected redirect from local controller')
 
 
-def core_observation(token, expected_revision):
-    request = urllib.request.Request('http://127.0.0.1:3000/api/v1/capabilities',
-                                     headers={'Authorization': 'Bearer ' + token})
+def local_json(path, token=None):
+    headers = {'Authorization': 'Bearer ' + token} if token else {}
+    request = urllib.request.Request('http://127.0.0.1:3000' + path, headers=headers)
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
     with opener.open(request, timeout=5) as response:
-        value = json.loads(response.read(1024 * 1024))
+        return json.loads(response.read(1024 * 1024))
+
+
+def require_thermal_idle(status, core=False):
+    """A retained target is allowed; a live countdown or priming is not idle."""
+    if status.get('isPriming') is not False:
+        raise RuntimeError('Idle trial requires priming to remain off')
+    for side in ('left', 'right'):
+        state = status.get(side + 'Side' if core else side, {})
+        duration = state.get('heatingDuration' if core else 'secondsRemaining')
+        if type(duration) not in (int, float) or duration != 0:
+            raise RuntimeError('Idle trial detected a nonzero or unavailable heating countdown')
+        if not core and (state.get('isOn') is not False or state.get('isAlarmVibrating') is not False):
+            raise RuntimeError('Retained controller is not idle')
+
+
+def restored_idle(sleep=time.sleep, monotonic=time.monotonic):
+    deadline = monotonic() + 45
+    while True:
+        try:
+            value = local_json('/api/deviceStatus')
+        except (OSError, ValueError):
+            if monotonic() >= deadline:
+                raise RuntimeError('Retained controller API did not recover')
+            sleep(2)
+            continue
+        require_thermal_idle(value)
+        return True
+
+
+def core_observation(token, expected_revision):
+    value = local_json('/api/v1/capabilities', token)
     if value.get('controller', {}).get('id') != 'sleepypod-core':
         raise ValueError('Unexpected controller response')
     revision = value['controller'].get('revision')
@@ -187,9 +218,12 @@ def restore(plan, journal):
             'physicalOperationVerified': False}
 
 
-def trial(directory, seconds, observe=core_observation, sleep=time.sleep, monotonic=time.monotonic):
+def trial(directory, seconds, observe=core_observation, sleep=time.sleep, monotonic=time.monotonic,
+          settle_seconds=0, require_idle=False):
     if not 10 <= seconds <= 300:
         raise ValueError('Trial duration must be 10–300 seconds')
+    if not 0 <= settle_seconds <= min(60, seconds):
+        raise ValueError('Settling period must be 0–60 seconds within the trial deadline')
     plan = read_plan(directory)
     journal_path = directory / 'handoff.json'
     journal = json.loads(journal_path.read_text())
@@ -201,7 +235,10 @@ def trial(directory, seconds, observe=core_observation, sleep=time.sleep, monoto
     validate_legacy(journal)
     revision = prerequisites(plan)
     token = read_owner_key(Path(plan['config']['environment']))
-    journal.update(phase='trial_starting', trialStartedAt=time.time(), observation=None, trialSucceeded=False)
+    if require_idle:
+        require_thermal_idle(local_json('/api/deviceStatus'))
+    journal.update(phase='trial_starting', trialStartedAt=time.time(), observation=None, trialSucceeded=False,
+                   settleSeconds=settle_seconds, requireIdle=require_idle, restoredIdleVerified=False)
     private_json(journal_path, journal)
     try:
         stop_units(LEGACY_UNITS)
@@ -211,15 +248,24 @@ def trial(directory, seconds, observe=core_observation, sleep=time.sleep, monoto
         journal['phase'] = 'core_trial'
         private_json(journal_path, journal)
         deadline = monotonic() + seconds
+        fresh_since = None
         while monotonic() < deadline:
             try:
                 observation = observe(token, revision)
                 journal['observation'] = observation
                 if observation['device']['freshness'] == 'fresh':
-                    journal['trialSucceeded'] = True
-                    break
+                    if require_idle:
+                        require_thermal_idle(local_json('/api/device/status', token), core=True)
+                    observed_at = monotonic()
+                    if fresh_since is None:
+                        fresh_since = observed_at
+                    if observed_at - fresh_since >= settle_seconds:
+                        journal['trialSucceeded'] = True
+                        break
+                else:
+                    fresh_since = None
             except (OSError, ValueError, KeyError):
-                pass  # Startup may not yet have its first firmware report.
+                fresh_since = None  # Interrupted observations cannot satisfy a stable window.
             sleep(min(2, max(0, deadline - monotonic())))
     finally:
         journal['phase'] = 'restoring_legacy'
@@ -227,7 +273,14 @@ def trial(directory, seconds, observe=core_observation, sleep=time.sleep, monoto
         journal['restoration'] = restore(plan, journal)
         journal['phase'] = 'trial_restored'
         journal['trialEndedAt'] = time.time()
-        private_json(journal_path, journal)
+        try:
+            if require_idle:
+                journal['restoredIdleVerified'] = restored_idle(sleep, monotonic)
+        except BaseException:
+            journal['trialSucceeded'] = False
+            raise
+        finally:
+            private_json(journal_path, journal)
     if not journal['trialSucceeded']:
         raise RuntimeError('Core did not produce a fresh device report; Free Sleep was restored')
     return journal
@@ -245,6 +298,8 @@ def main():
     parser.add_argument('action', choices=('install', 'trial', 'rollback', 'status'))
     parser.add_argument('--plan', type=Path, required=True)
     parser.add_argument('--seconds', type=int, default=120)
+    parser.add_argument('--settle-seconds', type=int, default=0)
+    parser.add_argument('--require-idle', action='store_true', help='Require zero heating countdowns before, during and after the trial')
     args = parser.parse_args()
     if os.geteuid() != 0:
         raise ValueError('Run the reviewed handoff on the Pod as root')
@@ -261,7 +316,7 @@ def main():
         if args.action == 'install':
             result = install(args.plan)
         elif args.action == 'trial':
-            result = trial(args.plan, args.seconds)
+            result = trial(args.plan, args.seconds, settle_seconds=args.settle_seconds, require_idle=args.require_idle)
         else:
             path = args.plan / 'handoff.json'
             result = json.loads(path.read_text())
