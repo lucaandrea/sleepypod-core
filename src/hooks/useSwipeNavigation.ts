@@ -4,8 +4,7 @@ import { useCallback, useRef } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 
 /** Ordered screen routes for swipe navigation. */
-const SCREEN_ORDER = ['/', '/schedule', '/sleep', '/system', '/settings']
-const BASE_SCREEN_ORDER = ['/', '/base', '/schedule', '/sleep', '/system', '/settings']
+const SCREEN_ORDER = ['/', '/sleep', '/autopilot', '/home', '/more']
 
 /** Minimum horizontal swipe distance in px to trigger navigation. */
 const SWIPE_THRESHOLD = 60
@@ -26,8 +25,8 @@ interface SwipeState {
  * Swipe right → previous screen, swipe left → next screen.
  * Only triggers if the swipe is predominantly horizontal and exceeds threshold.
  */
-export function useSwipeNavigation(hasBase = false) {
-  const screenOrder = hasBase ? BASE_SCREEN_ORDER : SCREEN_ORDER
+export function useSwipeNavigation() {
+  const screenOrder = SCREEN_ORDER
   const router = useRouter()
   const pathname = usePathname()
   const swipeRef = useRef<SwipeState | null>(null)
@@ -82,7 +81,7 @@ export function useSwipeNavigation(hasBase = false) {
 
     const basePath = getBasePath()
     const currentIndex = screenOrder.findIndex(
-      p => basePath === p || (p !== '/' && basePath.startsWith(p))
+      path => basePath === path || (path !== '/' && basePath.startsWith(`${path}/`)),
     )
     if (currentIndex === -1) return
 

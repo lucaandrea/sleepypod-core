@@ -90,7 +90,11 @@ class Rejected(Exception):
 
 def post_json(url, payload, timeout=30):
     data = json.dumps(payload).encode('utf-8')
-    req = urllib.request.Request(url, data=data, headers={'Content-Type': 'application/json'}, method='POST')
+    headers = {'Content-Type': 'application/json'}
+    token = os.environ.get('SLEEPYPOD_AUTH_TOKEN')
+    if token:
+        headers['Authorization'] = 'Bearer ' + token
+    req = urllib.request.Request(url, data=data, headers=headers, method='POST')
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             return json.loads(resp.read().decode('utf-8') or '{}')

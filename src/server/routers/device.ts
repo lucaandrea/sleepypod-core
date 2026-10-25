@@ -673,6 +673,9 @@ export const deviceRouter = router({
       disclaimer: z.string(),
     }))
     .mutation(async ({ input }) => {
+      if (process.env.SLEEPYPOD_ENABLE_RAW_COMMANDS !== '1') {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'General-purpose hardware commands are disabled' })
+      }
       const opcode = Object.hasOwn(COMMAND_MAP, input.command)
         ? COMMAND_MAP[input.command]
         : input.command

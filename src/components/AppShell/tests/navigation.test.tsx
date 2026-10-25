@@ -51,22 +51,22 @@ describe('responsive navigation', () => {
     expect(link.getAttribute('aria-current')).toBe('page')
     expect(screen.getByRole('link', { name: 'Docs' }).getAttribute('rel')).toBe('noopener noreferrer')
   })
-  it.each([Sidebar, TabBar])('only includes Base after a configured base is detected', (Navigation) => {
+  it.each([Sidebar, TabBar])('keeps the five primary destinations stable as base availability changes', (Navigation) => {
     state.path = '/fr/base'
     const { rerender } = render(<Navigation />)
-    expect(screen.queryByRole('link', { name: /^base$/i })).toBeNull()
-    expect(screen.getByRole('link', { name: /^temp$/i }).getAttribute('aria-current')).toBeNull()
-    state.base = { configured: false }
-    rerender(<Navigation />)
-    expect(screen.queryByRole('link', { name: /^base$/i })).toBeNull()
+    for (const name of ['Tonight', 'Sleep', 'Autopilot', 'Home', 'More']) expect(screen.getByRole('link', { name })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Tonight' }).getAttribute('aria-current')).toBe('page')
     state.base = { configured: true }
     rerender(<Navigation />)
-    const link = screen.getByRole('link', { name: /^base$/i })
-    expect(link.getAttribute('href')).toBe('/fr/base')
-    expect(link.getAttribute('aria-current')).toBe('page')
-    state.base = { configured: false }
-    rerender(<Navigation />)
     expect(screen.queryByRole('link', { name: /^base$/i })).toBeNull()
+    expect(screen.getByRole('link', { name: 'Tonight' }).getAttribute('aria-current')).toBe('page')
+  })
+  it('keeps the qualified base and routine routes accessible under More', () => {
+    state.path = '/en/more'
+    state.base = { configured: true }
+    render(<Sidebar />)
+    expect(screen.getByRole('link', { name: 'Base' }).getAttribute('href')).toBe('/en/base')
+    expect(screen.getByRole('link', { name: 'Schedule' }).getAttribute('href')).toBe('/en/schedule')
   })
   it('shows pod model and every issue in full, with build info behind the DEV chip', () => {
     Object.assign(state, { path: '/en/system', status: { podVersion: 'J00' }, water: { level: 'low' }, version: { commitHash: 'abcdef1234', branch: 'feat/ui-redesign' } })
@@ -104,11 +104,11 @@ describe('responsive navigation', () => {
   it('links phone tabs in the current language and highlights legacy routes', () => {
     state.path = '/fr/data'
     const { rerender } = render(<TabBar />)
-    expect(screen.getByRole('link', { name: 'SLEEP' }).getAttribute('aria-current')).toBe('page')
-    expect(screen.getByRole('link', { name: 'TEMP' }).getAttribute('href')).toBe('/fr')
+    expect(screen.getByRole('link', { name: 'Sleep' }).getAttribute('aria-current')).toBe('page')
+    expect(screen.getByRole('link', { name: 'Tonight' }).getAttribute('href')).toBe('/fr')
     state.active = false
     rerender(<TabBar />)
-    expect(screen.getAllByRole('link')).toHaveLength(6)
+    expect(screen.getAllByRole('link')).toHaveLength(5)
   })
   it('puts the pod health dot on the phone System tab', () => {
     const { rerender } = render(<TabBar />)
@@ -120,7 +120,7 @@ describe('responsive navigation', () => {
     state.water = { level: 'low' }
     rerender(<TabBar />)
     expect(screen.getByTestId('system-health-dot').getAttribute('data-tone')).toBe('warn')
-    expect(screen.getByRole('link', { name: /SYSTEM, 1 issue/ })).toBeTruthy()
+    expect(screen.getByRole('link', { name: /More, 1 issue/ })).toBeTruthy()
   })
   it('renders page content and forwards swipe gestures', () => {
     render(<AppShell><h1>Temperature</h1></AppShell>)

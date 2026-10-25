@@ -77,7 +77,7 @@ export const deviceSettings = sqliteTable('device_settings', {
   // so the kill-switch survives reboot.
   autopilotEnabled: integer('autopilot_enabled', { mode: 'boolean' })
     .notNull()
-    .default(true),
+    .default(false),
   createdAt: integer('created_at', { mode: 'timestamp' })
     .notNull()
     .default(sql`(unixepoch())`),

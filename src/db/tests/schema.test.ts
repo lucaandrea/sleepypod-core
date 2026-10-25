@@ -220,7 +220,7 @@ const expectedTables: Record<string, TableSpec> = {
       { name: 'pump_stall_auto_recovery_enabled', notNull: true, default: false },
       { name: 'pump_stall_recovery_rpm', notNull: true, default: 1500 },
       { name: 'pump_stall_recovery_samples', notNull: true, default: 3 },
-      { name: 'autopilot_enabled', notNull: true, default: true },
+      { name: 'autopilot_enabled', notNull: true, default: false },
       { name: 'created_at', notNull: true, default: 'sql' },
       { name: 'updated_at', notNull: true, default: 'sql' },
     ],

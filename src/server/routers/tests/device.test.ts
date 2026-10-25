@@ -794,6 +794,16 @@ describe('device.startPriming / dismissPrimeNotification', () => {
 })
 
 describe('device.execute (raw command)', () => {
+  beforeEach(() => {
+    vi.stubEnv('SLEEPYPOD_ENABLE_RAW_COMMANDS', '1')
+  })
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+  it('refuses hardware passthrough without explicit enablement', async () => {
+    vi.stubEnv('SLEEPYPOD_ENABLE_RAW_COMMANDS', '')
+    await expect(caller.execute({ command: 'DEVICE_STATUS' })).rejects.toThrow('General-purpose hardware commands are disabled')
+  })
   it('maps an allowlisted name to its opcode and returns disclaimer', async () => {
     sharedClientMock.sendRaw.mockResolvedValue('{ "ok": true }')
 

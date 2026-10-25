@@ -9,6 +9,36 @@ import * as biometricsSchema from '../biometrics-schema'
 import * as schema from '../schema'
 
 describe('migrations smoke test', () => {
+  it('preserves existing device settings while new controllers require Autopilot opt-in', () => {
+    const migrationsDir = path.resolve(process.cwd(), 'src/db/migrations')
+    const temporaryDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'autopilot-upgrade-'))
+    const raw = new Database(':memory:')
+    try {
+      fs.cpSync(migrationsDir, temporaryDirectory, { recursive: true })
+      const journalPath = path.join(temporaryDirectory, 'meta/_journal.json')
+      const journal = JSON.parse(fs.readFileSync(journalPath, 'utf-8')) as {
+        entries: Array<{ idx: number, when: number, tag: string }>
+      }
+      journal.entries = journal.entries.filter(entry => entry.idx <= 27)
+      fs.writeFileSync(journalPath, JSON.stringify(journal))
+      const database = drizzle(raw, { schema })
+      migrate(database, { migrationsFolder: temporaryDirectory })
+      raw.prepare('INSERT INTO device_settings (id, timezone, autopilot_enabled, mqtt_topic_prefix) VALUES (?, ?, ?, ?)')
+        .run(1, 'Europe/Rome', 1, 'existing-bedroom')
+      const before = raw.prepare('SELECT * FROM device_settings WHERE id = 1').get()
+      migrate(database, { migrationsFolder: migrationsDir })
+      expect(raw.prepare('SELECT * FROM device_settings WHERE id = 1').get()).toEqual(before)
+      raw.prepare('INSERT INTO device_settings (id) VALUES (2)').run()
+      expect(raw.prepare('SELECT autopilot_enabled FROM device_settings WHERE id = 2').get())
+        .toEqual({ autopilot_enabled: 0 })
+      expect(raw.pragma('foreign_key_check')).toEqual([])
+    }
+    finally {
+      raw.close()
+      fs.rmSync(temporaryDirectory, { recursive: true, force: true })
+    }
+  })
+
   it('main DB migrations apply cleanly from empty', () => {
     const raw = new Database(':memory:')
     try {

@@ -1,3 +1,4 @@
+import { requireAccess } from '@/src/auth/access'
 import { spawn } from 'node:child_process'
 import { mkdir, mkdtemp, open, rm } from 'node:fs/promises'
 import path from 'node:path'
@@ -28,6 +29,8 @@ function isSameOrigin(request: Request): boolean {
 
 /** Raw export.zip/export.xml body, streamed to flash. Uses the same importer as the CLI. */
 export async function POST(request: Request): Promise<Response> {
+  const denied = requireAccess(request)
+  if (denied) return denied
   if (!isSameOrigin(request)) return Response.json({ error: 'Cross-origin upload is not allowed' }, { status: 403 })
   const parsed = options.safeParse(Object.fromEntries(new URL(request.url).searchParams))
   if (!parsed.success) return Response.json({ error: 'Specify side=left|right and days=1..90' }, { status: 400 })
