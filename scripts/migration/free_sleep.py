@@ -14,7 +14,7 @@ import shutil
 import sqlite3
 import tarfile
 import tempfile
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 ROOT = Path(__file__).resolve().parents[2]
 DAYS = ('sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday')
@@ -46,6 +46,17 @@ def read_json(filename):
 def require(condition, message):
     if not condition:
         raise ValueError(message)
+
+
+def validate_timezone(zone):
+    """Check the source timezone before creating databases or stopping writers."""
+    require(isinstance(zone, str) and bool(zone), 'Missing device timezone')
+    try:
+        ZoneInfo(zone)
+    except (ZoneInfoNotFoundError, ValueError) as error:
+        raise ValueError('Device timezone is unavailable or invalid; run the importer '
+                         'in its locked scripts/migration environment and verify the source timezone') from error
+    return zone
 
 
 def number(value, minimum, maximum, label, integer=False):
@@ -170,9 +181,7 @@ def create_database(filename, migrations):
 
 def map_settings(settings, database, report, now):
     require(isinstance(settings, dict), 'Invalid settings document')
-    zone = settings.get('timeZone')
-    require(isinstance(zone, str), 'Missing device timezone')
-    ZoneInfo(zone)
+    zone = validate_timezone(settings.get('timeZone'))
     unit = {'fahrenheit': 'F', 'celsius': 'C'}.get(settings.get('temperatureFormat'))
     require(unit is not None, 'Invalid temperature preference')
     prime = settings['primePodDaily']
@@ -406,9 +415,11 @@ def stage_backup(backup, output, now=None):
         manifest = verify_backup(backup, staging)
         report['sourceArchives'] = manifest['archives']
         legacy = staging / 'legacy'
+        settings = read_json(legacy / 'lowdb/settingsDB.json')
+        require(isinstance(settings, dict), 'Invalid settings document')
+        validate_timezone(settings.get('timeZone'))
         with closing(create_database(staging / 'sleepypod.db', ROOT / 'src/db/migrations')) as database:
             with closing(create_database(staging / 'biometrics.db', ROOT / 'src/db/biometrics-migrations')) as biometrics:
-                settings = read_json(legacy / 'lowdb/settingsDB.json')
                 map_settings(settings, database, report, now)
                 map_schedules(read_json(legacy / 'lowdb/schedulesDB.json'), database, report)
                 map_comfort(legacy, database, report, now)
@@ -435,9 +446,21 @@ def stage_backup(backup, output, now=None):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--backup', type=Path, required=True)
-    parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--backup', type=Path)
+    parser.add_argument('--output', type=Path)
+    parser.add_argument('--check-timezone', help='Validate the source timezone without reading a backup or writing files')
     arguments = parser.parse_args()
+    if arguments.check_timezone is not None:
+        if arguments.backup is not None or arguments.output is not None:
+            parser.error('--check-timezone cannot be combined with --backup or --output')
+        try:
+            validate_timezone(arguments.check_timezone)
+        except ValueError as error:
+            parser.error(str(error))
+        print(json.dumps({'status': 'timezone_available', 'timezone': arguments.check_timezone}))
+        raise SystemExit(0)
+    if arguments.backup is None or arguments.output is None:
+        parser.error('--backup and --output are required for an import')
     os.umask(0o077)
     result = stage_backup(arguments.backup, arguments.output)
     print(json.dumps({'status': 'staged_for_review', 'readyForCutover': False,
