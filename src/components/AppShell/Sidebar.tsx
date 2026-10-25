@@ -14,7 +14,7 @@ import { trpc } from '@/src/utils/trpc'
 import { buildLine } from './footerStatus'
 import { useBaseAvailable } from './useBaseAvailable'
 import { usePodHealth } from './usePodHealth'
-import { activeNavId, primaryNavId, DETAIL_NAV_ITEMS, DOCS_URL, langFromPath, NAV_ITEMS, type NavId } from './navItems'
+import { activeNavId, DOCS_URL, langFromPath, NAV_ITEMS, type NavId } from './navItems'
 
 const noopSubscribe = () => () => {}
 
@@ -23,11 +23,10 @@ const POD_NAMES: Record<string, string> = { H00: 'Pod 3', I00: 'Pod 4', J00: 'Po
 /** Desktop navigation rail (≥ 900px). */
 export function Sidebar({ className }: { className?: string }) {
   const hasBase = useBaseAvailable()
-  const items = NAV_ITEMS
+  const items = NAV_ITEMS.filter(item => item.id !== 'base' || hasBase)
   const pathname = usePathname()
   const lang = langFromPath(pathname)
-  const active = primaryNavId(pathname)
-  const detail = activeNavId(pathname)
+  const active = activeNavId(pathname)
 
   const version = trpc.system.getVersion.useQuery({}, { staleTime: 60_000 })
   const { footer, podVersion } = usePodHealth()
@@ -46,14 +45,14 @@ export function Sidebar({ className }: { className?: string }) {
         <Link href={`/${lang}`} className="flex min-w-0 items-center gap-2 font-mono text-sm text-fg no-underline hover:no-underline">
           {/* eslint-disable-next-line @next/next/no-img-element -- static 128px asset, no optimizer needed on the pod */}
           <img src="/logo.png" alt="" width={22} height={22} className="size-[22px] rounded-[6px]" />
-          free sleep
+          sleepypod
         </Link>
         <BuildTag version={version.data?.version ?? null} host={host} branch={build?.branch ?? null} commit={build?.commit ?? null} />
       </div>
       <div className="flex min-h-0 flex-col gap-0.5 overflow-y-auto">
         {items.map((n) => {
           const on = n.id === active
-          const group = n.id === 'autopilot' || n.id === 'sleep' || n.id === 'more'
+          const group = n.id === 'autopilot' || n.id === 'sleep' || n.id === 'settings' || n.id === 'system'
           const Chevron = on ? ChevronDown : ChevronRight
           return (
             <div key={n.id} className="flex flex-col gap-0.5">
@@ -72,16 +71,7 @@ export function Sidebar({ className }: { className?: string }) {
               </Link>
               {group && on && (
                 <Suspense fallback={null}>
-                  {n.id === 'more'
-                    ? (
-                        <div className="ml-5 flex flex-col gap-1">
-                          {DETAIL_NAV_ITEMS.filter(item => item.id !== 'base' || hasBase).map(item => (
-                            <Link key={item.id} href={`/${lang}${item.href}`} className="rounded-ctl px-3 py-2 text-sm text-fg-2" aria-current={item.id === detail ? 'page' : undefined}>{item.label}</Link>
-                          ))}
-                          {(detail === 'settings' || detail === 'system') && <SubTree group={detail} lang={lang} statusDot={statusDot} />}
-                        </div>
-                      )
-                    : <SubTree group={n.id as 'autopilot' | 'sleep'} lang={lang} statusDot={statusDot} />}
+                  <SubTree group={n.id as 'autopilot' | 'sleep' | 'settings' | 'system'} lang={lang} statusDot={statusDot} />
                 </Suspense>
               )}
             </div>

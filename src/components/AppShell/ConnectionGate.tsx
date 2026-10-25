@@ -57,8 +57,8 @@ export function ConnectionGate({ children }: { children: ReactNode }) {
   return (
     <main className="grid min-h-dvh place-items-center bg-app px-6 text-fg">
       <form onSubmit={connect} className="flex w-full max-w-sm flex-col gap-5 rounded-card border border-line bg-surface p-7">
-        <p className="text-xs font-medium uppercase tracking-widest text-cool">Sleep · Home · You</p>
-        <h1 className="text-3xl font-medium">Your night, connected.</h1>
+        <p className="font-mono text-sm text-fg-2">sleepypod</p>
+        <h1 className="text-3xl font-medium">Connect to your Pod</h1>
         {state === 'checking'
           ? <p role="status" className="text-fg-2">Checking your connection…</p>
           : state === 'unconfigured'

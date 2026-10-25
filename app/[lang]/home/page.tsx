@@ -1,18 +1,15 @@
 import Link from 'next/link'
 import { House, MoonStar, Sunrise, Wind } from 'lucide-react'
+import { PageHeader } from '@/src/components/ds'
 
 export default async function HomePage({ params }: { params: Promise<{ lang: string }> }) {
   const { lang } = await params
   return (
     <>
-      <header>
-        <p className="text-sm text-fg-2">YOUR BEDROOM</p>
-        <h1 className="mt-2 text-3xl font-medium">A home ready for rest.</h1>
-        <p className="mt-2 text-fg-2">Bring your bed, room and existing Home scenes together.</p>
-      </header>
-      <section className="rounded-card border border-line bg-surface p-7">
+      <PageHeader title="Home" />
+      <section className="rounded-card border border-line bg-surface p-4">
         <House className="mb-5 text-cool" size={36} aria-hidden />
-        <h2 className="text-xl font-medium">Connect your room</h2>
+        <h2 className="text-base font-medium">Connect your room</h2>
         <p className="mt-3 max-w-xl text-fg-2">Home Assistant has not been connected to this controller. Room measurements and accessory controls will appear once the home server is configured.</p>
         <div className="mt-6 flex flex-wrap gap-3">
           <Link href={`/${lang}/settings?section=mqtt`} className="rounded-ctl border border-line-2 px-4 py-3 text-fg">MQTT connection</Link>
@@ -21,7 +18,7 @@ export default async function HomePage({ params }: { params: Promise<{ lang: str
       </section>
       <div className="grid gap-4 sm:grid-cols-3">
         {[{ icon: MoonStar, title: 'Wind down', text: 'Lighting and shades follow your evening.' }, { icon: Sunrise, title: 'Wake together', text: 'Coordinate your alarm with a Home scene.' }, { icon: Wind, title: 'Room comfort', text: 'Understand humidity, temperature and air quality.' }].map(item => (
-          <section key={item.title} className="rounded-card border border-line bg-surface p-6">
+          <section key={item.title} className="rounded-card border border-line bg-surface p-4">
             <item.icon size={22} className="mb-4 text-warm" aria-hidden />
             <h2 className="font-medium">{item.title}</h2>
             <p className="mt-2 text-sm text-fg-2">{item.text}</p>

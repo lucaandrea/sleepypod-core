@@ -1,0 +1,53 @@
+import { expect, test } from '@playwright/test'
+
+test('SleepyPod phone navigation reaches secondary controls and owner sign-out', async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(window, 'WebGLRenderingContext', { value: undefined })
+  })
+  await page.emulateMedia({ colorScheme: 'light', reducedMotion: 'reduce' })
+  await page.goto('/en/schedule')
+  const navigation = page.getByRole('navigation', { name: 'Main', exact: true })
+  await expect(navigation.getByRole('link', { name: 'Schedule', exact: true })).toBeVisible()
+  await expect(navigation.getByRole('link', { name: 'Autopilot', exact: true })).toBeVisible()
+  await page.screenshot({ path: test.info().outputPath('desktop-schedule.png'), fullPage: true })
+
+  await page.setViewportSize({ width: 390, height: 844 })
+  const tabs = page.locator('nav[aria-label="Main"]:visible')
+  await expect(tabs.getByRole('link')).toHaveText(['Temp', 'Schedule', 'Sleep'])
+  await expect(tabs.getByRole('link', { name: 'Schedule', exact: true })).toHaveAttribute('aria-current', 'page')
+  await page.getByRole('link', { name: /^Settings/ }).filter({ visible: true }).click()
+  await expect(page.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible()
+  for (const name of ['Autopilot', 'Home', 'System']) await expect(page.getByRole('main').getByRole('link', { name, exact: true })).toBeVisible()
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390)
+  await page.screenshot({ path: test.info().outputPath('phone-settings-light.png'), fullPage: true })
+
+  await page.getByRole('main').getByRole('link', { name: 'Home', exact: true }).click()
+  await expect(page.getByText('Home Assistant has not been connected', { exact: false })).toBeVisible()
+  await page.goto('/en/more')
+  await expect(page).toHaveURL(/\/en\/settings$/)
+
+  await tabs.getByRole('link', { name: 'Temp', exact: true }).click()
+  const stage = page.getByTestId('temp-stage')
+  await expect(stage).toBeVisible()
+  await expect(page.getByTestId('stage-fallback').locator(':scope > .text-fg')).toHaveCSS('color', 'rgb(17, 17, 19)')
+  await expect(stage.getByRole('link', { name: 'Settings', exact: true })).toBeVisible()
+  await page.screenshot({ path: test.info().outputPath('phone-temp-stage.png') })
+  await stage.getByRole('link', { name: 'Settings', exact: true }).click()
+  await page.emulateMedia({ colorScheme: 'dark', reducedMotion: 'reduce' })
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
+  await page.screenshot({ path: test.info().outputPath('phone-settings-dark.png'), fullPage: true })
+  await page.getByRole('button', { name: 'Browser connection', exact: true }).click()
+  await page.getByRole('button', { name: 'Disconnect this browser', exact: true }).click()
+  await expect(page.getByLabel('Connection key', { exact: true })).toBeVisible()
+  await expect(page.getByRole('navigation', { name: 'Main', exact: true })).toHaveCount(0)
+})
+
+test('3D bed renders without an internet dependency', async ({ page }) => {
+  await page.route(/^https?:\/\/(?!127\.0\.0\.1(?::|\/))/, route => route.abort())
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await page.goto('/en')
+  await expect(page.getByTestId('stage-canvas').locator('canvas')).toBeVisible()
+  await expect(page.getByTestId('stage-fallback')).toHaveCount(0)
+  await page.screenshot({ path: test.info().outputPath('phone-bed-offline.png') })
+})
