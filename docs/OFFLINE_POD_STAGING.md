@@ -61,6 +61,38 @@ result proves runtime dependency compatibility only.
 
 ## Separate cutover gates
 
+### Sensor dependency probe
+
+Prepare the Python modules in a separate staging tree using each committed
+`uv.lock`: `uv sync --frozen --no-dev --no-install-project --no-build`. Keep the
+environment, cache and interpreter outside the working Free Sleep installation.
+Probe the selected interpreter's standard library before choosing system Python;
+do not silently upgrade the numerical Python/dependency contract.
+
+```sh
+python3 scripts/deployment/probe_modules.py \
+  --modules-root /absolute/staged/modules \
+  --output /absolute/new-private-receipt.json
+```
+
+The probe imports real installed dependencies in isolated subprocesses and
+checks a small NumPy/SciPy calculation. It never imports a daemon, connects to
+NATS/DAC, starts a service or opens a database. It records package versions and
+the exact project/lock hashes, continues across failing modules, and exits
+nonzero if any environment fails. This is dependency compatibility evidence,
+not evidence that a running sensor pipeline produces accurate vitals.
+
+The initial Pod 4 probe found that HeartPy 1.2.7 imports `pkg_resources` without
+declaring its provider. The piezo module now explicitly requires
+`setuptools>=70,<82`, locked to 81.0.0. Numerical dependencies remain unchanged.
+Setuptools removed that API in 82.0.0; remove this compatibility dependency when
+HeartPy migrates to `importlib.resources`, after reviewing its numerical changes.
+See [setuptools' removal notice](https://setuptools.pypa.io/en/stable/deprecated/pkg_resources.html).
+CI runs the real dependency probe before adding test-only packages so mocks and
+test tooling cannot conceal a missing production import.
+
+### Controller switch
+
 Do not launch `app/server.js` against the working Pod casually: app startup owns
 the DAC socket and can initialize hardware, scheduling and networking. Even
 `CI=1` is not an authorization boundary for arbitrary API calls.

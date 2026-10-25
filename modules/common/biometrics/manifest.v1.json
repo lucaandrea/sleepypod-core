@@ -636,7 +636,7 @@
     "modules/common/biometrics/replay.py": "50c70408dca033dcf17d5bf6a1aa7afc9ed531d09aa3151eb61941f7c504639f"
   },
   "dependencyHashes": {
-    "modules/piezo-processor/uv.lock": "2803397e553a32588071d6be84c2bce5326552da03076261f48afce0ba919869",
+    "modules/piezo-processor/uv.lock": "ceb7356c660093dc79c3116884caa1c57f1ebaf3e544bd490476a9862e601c35",
     "pnpm-lock.yaml": "fbb69a2ff032363959518ea0b1fb442383411e846db0f06431d6dc4503909fd7"
   },
   "legacySourceHashes": {
