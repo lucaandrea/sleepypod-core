@@ -122,6 +122,7 @@ vi.mock('@/src/db', () => ({
 }))
 
 vi.mock('@/src/server/routers/raw', () => rawMock)
+vi.mock('@/src/biometrics/stage-model-store', () => ({ loadActiveStageModel: () => null }))
 vi.mock('@/src/lib/sleep-stages', () => sleepStagesMock)
 // Runtime profile adoption is integration-tested with real SQLite separately.
 vi.mock('@/src/biometrics/profiles/stage-view', async (importOriginal) => {
@@ -1637,6 +1638,7 @@ describe('biometrics.getSleepStages query window', () => {
 
     const out = await caller.getSleepStages({ side: 'left', sleepRecordId: 3 })
     expect(out).toEqual({
+      stagedBy: { engine: 'rules', version: null, modelHash: null, reason: 'rules_selected' },
       stageView: expect.objectContaining({ provenance: expect.objectContaining({ interpretation: 'current_classifier_view' }) }),
       epochs: [],
       blocks: [],

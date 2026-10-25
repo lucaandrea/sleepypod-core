@@ -564,3 +564,24 @@ export const biometricConfigOutbox = sqliteTable('biometric_config_outbox', {
   uniqueIndex('uq_biometric_outbox_generation').on(t.side, t.generation),
   index('idx_biometric_outbox_pending').on(t.state, t.nextAttemptAtMs),
 ])
+
+export const sideStageModels = sqliteTable('side_stage_models', {
+  side: text('side', { enum: ['left', 'right'] }).primaryKey(),
+  model: text('model', { mode: 'json' }).notNull(),
+  version: text('version').notNull(),
+  modelHash: text('model_hash').notNull(),
+  uploadedAt: integer('uploaded_at', { mode: 'timestamp' }).notNull(),
+  // When set, the side's stages are classified by this model instead of the profile's rules; the rules
+  // remain the fallback whenever the model cannot stage a night.
+  active: integer('active', { mode: 'boolean' }).notNull().default(false),
+})
+
+/** Saved candidates; the legacy per-side row remains the selected model for existing clients. */
+export const stageModelLibrary = sqliteTable('stage_model_library', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  side: text('side', { enum: ['left', 'right'] }).notNull(),
+  model: text('model', { mode: 'json' }).notNull(),
+  version: text('version').notNull(),
+  modelHash: text('model_hash').notNull(),
+  uploadedAt: integer('uploaded_at', { mode: 'timestamp' }).notNull(),
+}, table => [index('stage_model_library_side_idx').on(table.side), uniqueIndex('stage_model_library_side_hash').on(table.side, table.modelHash)])
