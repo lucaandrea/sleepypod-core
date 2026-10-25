@@ -30,7 +30,7 @@ export const capabilitiesSchema = z.object({
     rest: z.literal('/api'),
     trpc: z.literal('/api/trpc'),
     openapi: z.literal('/api/openapi.json'),
-    nativeCompatibility: z.null(),
+    nativeCompatibility: z.string().startsWith('/api/').nullable(),
   }),
   authentication: z.object({ required: z.literal(true), bearer: z.literal(true), browserSession: z.literal(true) }),
   observations: z.object({ device: observationSchema, base: observationSchema }),
@@ -50,8 +50,8 @@ export const capabilitiesSchema = z.object({
   baseScope: z.literal('whole_bed'),
   controlSemantics: z.object({
     acknowledgment: z.literal('accepted_not_physically_verified'),
-    durableCommandReceipts: z.literal(false),
-    commandExpiry: z.literal(false),
+    durableCommandReceipts: z.boolean(),
+    commandExpiry: z.boolean(),
   }),
 })
 export type ControllerCapabilities = z.infer<typeof capabilitiesSchema>

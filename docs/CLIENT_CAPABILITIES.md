@@ -37,6 +37,9 @@ on this Core fork, even when their technical prerequisites are ready.
 legacy `/api/native/v1/` adapter has not shipped. Personal comfort production
 integration, room context and music vibration also remain unavailable. MQTT
 connection alone does not imply that room inputs are connected or qualified.
+Clients should decode the compatibility prefix as a nullable string and receipt
+and expiry support as booleans; their current null/false values are not permanent
+schema constants. Only enable a feature when this controller reports it.
 
 The contract explicitly reports that current controls lack durable command
 receipts and expiry envelopes. Do not retry uncertain actuator requests or
