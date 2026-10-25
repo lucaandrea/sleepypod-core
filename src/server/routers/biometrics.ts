@@ -1,6 +1,8 @@
 import { summaryProvenanceFields, summaryProvenanceSchema, summarizeVitalProvenance } from '@/src/biometrics/profiles/vital-summary-provenance'
 import { vitalProvenance, vitalProvenanceSchema } from '@/src/biometrics/profiles/vital-provenance'
 import { z } from 'zod'
+import { stageNight, stagedBySchema, type StagedBy } from '@/src/biometrics/stage-night'
+import { loadActiveStageModel } from '@/src/biometrics/stage-model-store'
 import { TRPCError } from '@trpc/server'
 import { publicProcedure, router } from '@/src/server/trpc'
 import { biometricsDb, db } from '@/src/db'
@@ -12,7 +14,6 @@ import { listRawFiles } from './raw'
 import { loadStageView, loadStageInputs } from './sleepStages'
 import { stageViewSchema, type StageView } from '@/src/biometrics/profiles/stage-view'
 import {
-  classifySleepStages,
   mergeIntoBlocks,
   calculateDistribution,
   calculateQualityScore,
@@ -1468,11 +1469,12 @@ export const biometricsRouter = router({
       qualityScore: z.number(),
       totalSleepMs: z.number(),
       stageView: stageViewSchema.optional(),
+      stagedBy: stagedBySchema.optional(),
       sleepRecordId: z.number().nullable(),
       enteredBedAt: z.number().nullable(),
       leftBedAt: z.number().nullable(),
     }))
-    .query(async ({ input }): Promise<SleepStagesResult & { stageView?: StageView }> => {
+    .query(async ({ input }): Promise<SleepStagesResult & { stageView?: StageView, stagedBy?: StagedBy }> => {
       try {
         // Reject ambiguous requests: if sleepRecordId is provided alongside date range, error out
         if (input.sleepRecordId && (input.startDate || input.endDate)) {
@@ -1611,12 +1613,14 @@ export const biometricsRouter = router({
         const stageView = loadStageView(input.side)
         const classifier = stageView.classifier
 
-        // Classify stages
-        const epochs = classifySleepStages(vitalsData, movementData, calibrationQuality, classifier.ruleset)
+        // Model features and fallback rules use only the profile delivered to the consumer.
+        const { epochs, stagedBy } = stageNight(vitalsData, movementData, calibrationQuality, classifier.ruleset,
+          loadActiveStageModel(input.side), { start: windowStart, end: windowEnd })
 
         if (epochs.length === 0) {
           return {
             stageView,
+            stagedBy,
             epochs: [],
             blocks: [],
             distribution: { wake: 0, light: 0, deep: 0, rem: 0 },
@@ -1635,6 +1639,7 @@ export const biometricsRouter = router({
 
         return {
           stageView,
+          stagedBy,
           epochs,
           blocks,
           distribution,

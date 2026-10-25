@@ -30,6 +30,7 @@ describe('capability evidence contract', () => {
     expect(result.baseScope).toBe('whole_bed')
     expect(result.features.alarmSnooze).toMatchObject({ implemented: true, runtime: 'ready', physicalVerification: 'not_applicable' })
     expect(result.features.curveLibrary).toMatchObject({ implemented: true, runtime: 'ready', reason: 'calendar_curves_with_bedtime_ownership_guard' })
+    expect(result.features.personalStageModels).toMatchObject({ implemented: true, runtime: 'ready', physicalVerification: 'not_applicable' })
     expect(result.controlSemantics).toEqual({ acknowledgment: 'accepted_not_physically_verified', durableCommandReceipts: true, commandExpiry: true, receiptScope: 'versioned_controls_only', maxLifetimeMs: 60000 })
   })
 
