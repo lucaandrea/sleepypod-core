@@ -113,7 +113,7 @@ export function buildCapabilities(snapshot: CapabilitySnapshot): ControllerCapab
       baseStop: feature(base?.state === 'connected' ? 'ready' : 'not_ready', base?.state === 'connected' ? 'base_connected' : 'base_disconnected', true),
       wakeVibration: feature(deviceFresh && !device.status?.isPriming ? 'ready' : 'not_ready', !deviceFresh ? 'device_report_unavailable' : device.status?.isPriming ? 'priming' : 'fresh_device_report', true),
       alarmSnooze: feature('ready', 'per_alarm_snooze_length_and_taper'),
-      curveLibrary: feature('not_ready', 'owned_curve_library_pending', false, false),
+      curveLibrary: feature('ready', 'calendar_curves_with_bedtime_ownership_guard'),
       personalComfort: feature('not_ready', 'personal_comfort_activation_unqualified', false, false),
       personalComfortPreview: feature(snapshot.comfortPreviewRunning ? 'ready' : 'not_ready', snapshot.comfortPreviewRunning ? 'preview_only' : 'preview_runtime_stopped'),
       musicVibration: feature('not_ready', 'hardware_protocol_unqualified', true, false),
