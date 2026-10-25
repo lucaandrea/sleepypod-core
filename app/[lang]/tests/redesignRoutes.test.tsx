@@ -69,7 +69,9 @@ it('sets fonts, locale and pre-paint theme initialization in the app layout', as
   const html = renderToStaticMarkup(await Layout({ params: Promise.resolve({ lang: 'en' }), children: <h1>Pod</h1> }))
   expect(html).toContain('class="dark sans mono"')
   expect(html).toContain('sleepypod-pref-theme')
-  expect(html).toContain('<main><h1>Pod</h1></main>')
+  // Server markup must not mount device queries or expose children before authentication.
+  expect(html).toContain('Checking your connection')
+  expect(html).not.toContain('<h1>Pod</h1>')
 })
 
 it('retries a failed System page and includes an optional error digest', async () => {
