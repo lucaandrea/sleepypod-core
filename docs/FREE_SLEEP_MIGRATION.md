@@ -16,14 +16,32 @@ flowchart LR
 
 ## Run
 
-Requires Python 3.10+ with IANA timezone data. No Python packages are required.
+Requires Python 3.10+ and the locked `scripts/migration` uv environment. Its
+`tzdata` dependency supplies IANA timezone data on Pods whose operating system
+omits it. This is a separate tooling environment; sensor dependency locks and
+the Pod's global Python installation are unchanged.
+
+Before stopping any service, check the **actual source settings timezone** with
+the same interpreter/environment that will perform the import. For example:
+
+```sh
+uv run --project scripts/migration --frozen python scripts/migration/free_sleep.py \
+  --check-timezone America/Los_Angeles
+```
+
 Run from this repository with its checked-in control and biometric migrations:
 
 ```sh
-python3 scripts/migration/free_sleep.py \
+uv run --project scripts/migration --frozen python scripts/migration/free_sleep.py \
   --backup /absolute/path/to/free-sleep-backup \
   --output /absolute/path/to/new-review-directory
 ```
+
+For an offline Pod, prefetch the hash-verified `tzdata` wheel identified by
+`scripts/migration/uv.lock`, install it into a separate uv-created environment
+with `--no-index --no-deps`, and run that environment's Python for both commands.
+Do not change the source timezone or replace it with UTC to hide missing data.
+Timezone validation also runs before either candidate database is created.
 
 The backup must use `free-sleep-migration/1` from the companion Free Sleep
 `scripts/migration/backup.py`, including `manifest.json`, `data.tar.gz` and
@@ -141,7 +159,7 @@ and seven Preview nights remain separate gates.
 ## Verification
 
 ```sh
-python3 -m unittest discover -s scripts/migration -p 'test_*.py' -v
+uv run --project scripts/migration --frozen python -m unittest discover -s scripts/migration -p 'test_*.py' -v
 ```
 
 The suite uses synthetic temporary backups and the installed Node/Drizzle

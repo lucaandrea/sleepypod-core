@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import sqlite3
 import subprocess
+import sys
 import tarfile
 import tempfile
 import unittest
@@ -289,6 +290,41 @@ class ImportTests(unittest.TestCase):
         self.build_backup()
         with self.assertRaises(Exception):
             migration.stage_backup(self.backup, self.output, NOW)
+        self.assert_clean_failure()
+
+    def test_missing_timezone_fails_before_database_creation_and_preserves_source(self):
+        self.build_backup()
+        before = {item.name: item.read_bytes() for item in self.backup.iterdir()}
+        with patch.object(migration, 'ZoneInfo', side_effect=migration.ZoneInfoNotFoundError('missing')):
+            with patch.object(migration, 'create_database') as create_database:
+                with self.assertRaisesRegex(ValueError, 'locked scripts/migration environment'):
+                    migration.stage_backup(self.backup, self.output, NOW)
+                create_database.assert_not_called()
+        self.assertEqual(before, {item.name: item.read_bytes() for item in self.backup.iterdir()})
+        self.assert_clean_failure()
+
+    def test_packaged_timezone_handles_dst_without_system_zoneinfo(self):
+        # Empty PYTHONTZPATH reproduces the Pod's missing operating-system data.
+        script = '''from datetime import datetime
+from zoneinfo import ZoneInfo
+zone = ZoneInfo('America/Los_Angeles')
+assert datetime(2026, 1, 15, tzinfo=zone).utcoffset().total_seconds() == -28800
+assert datetime(2026, 7, 15, tzinfo=zone).utcoffset().total_seconds() == -25200
+'''
+        subprocess.run([sys.executable, '-c', script], check=True, capture_output=True,
+                       env={**os.environ, 'PYTHONTZPATH': ''})
+
+    def test_timezone_preflight_cli_needs_no_backup_and_rejects_invalid_usage(self):
+        command = [sys.executable, str(migration.ROOT / 'scripts/migration/free_sleep.py')]
+        result = subprocess.run([*command, '--check-timezone', 'America/Los_Angeles'],
+                                check=True, capture_output=True, text=True,
+                                env={**os.environ, 'PYTHONTZPATH': ''})
+        self.assertEqual(json.loads(result.stdout)['status'], 'timezone_available')
+        for arguments in ([], ['--check-timezone', 'not-a-timezone'],
+                          ['--check-timezone', 'UTC', '--output', str(self.output)]):
+            with self.subTest(arguments=arguments):
+                result = subprocess.run([*command, *arguments], capture_output=True, text=True)
+                self.assertEqual(result.returncode, 2)
         self.assert_clean_failure()
 
     def test_rejects_a_phase_count_the_bedtime_contract_cannot_read(self):
