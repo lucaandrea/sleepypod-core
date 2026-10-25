@@ -940,7 +940,7 @@ describe('JobManager incremental upsert/cancel', () => {
     side: 'left' as const,
     dayOfWeek: 'monday' as const,
     onTime: '22:00',
-    offTime: '07:00', endAction: 'turn_off' as const,
+    offTime: '07:00', offDayOffset: 0, endAction: 'turn_off' as const,
     onTemperature: 75,
     enabled: true,
     createdAt: new Date(0),
@@ -1013,6 +1013,16 @@ describe('JobManager incremental upsert/cancel', () => {
 
     expect(manager.getScheduler().getJob('daily-prime')?.schedule).toBe('5 14 * * *')
     expect(manager.getScheduler().getJob('daily-reboot')?.schedule).toBe('7 3 * * *')
+  })
+
+  it('keeps legacy calendar OFFs and schedules explicit overnight OFFs on the next weekday', () => {
+    manager.upsertPowerJob({ ...basePower, dayOfWeek: 'saturday' })
+    const scheduler = manager.getScheduler()
+    expect(scheduler.getJob('power-on-1')?.schedule).toBe('0 22 * * 6')
+    expect(scheduler.getJob('power-off-1')?.schedule).toBe('0 7 * * 6')
+    manager.upsertPowerJob({ ...basePower, dayOfWeek: 'saturday', offDayOffset: 1 })
+    expect(scheduler.getJob('power-on-1')?.schedule).toBe('0 22 * * 6')
+    expect(scheduler.getJob('power-off-1')?.schedule).toBe('0 7 * * 0')
   })
 
   it('maintain replaces shutdown jobs with power-on only and turn-off restores them', () => {
@@ -1510,8 +1520,8 @@ describe('JobManager.loadSchedules event-loop yielding', () => {
     let elapsedMs = 0
     vi.spyOn(performance, 'now').mockImplementation(() => elapsedMs)
     const rows = Array.from({ length: 12 }, (_, i) => ({
-      id: i + 1, enabled: true, side: 'left', dayOfWeek: 1, time: '22:00', temperature: 75,
-      onTime: '22:00', offTime: '07:00', endAction: 'turn_off' as const, onTemperature: 75,
+      id: i + 1, enabled: true, side: 'left', dayOfWeek: 'monday', time: '22:00', temperature: 75,
+      onTime: '22:00', offTime: '07:00', offDayOffset: 0, endAction: 'turn_off' as const, onTemperature: 75,
     }))
     vi.spyOn(db, 'select').mockImplementation((() => ({
       from: (table: any) => {
@@ -1631,7 +1641,7 @@ describe('JobManager residual mutation contracts', () => {
       for (const rows of results) spy.mockReturnValueOnce({ from: () => queryRows(rows) } as any)
       return spy
     }
-    const power = { ...row, id: 21, side: 'left' as const, dayOfWeek: 'monday' as const, onTime: '22:00', offTime: '07:00', endAction: 'turn_off' as const, onTemperature: 79 }
+    const power = { ...row, id: 21, side: 'left' as const, dayOfWeek: 'monday' as const, onTime: '22:00', offTime: '07:00', offDayOffset: 0, endAction: 'turn_off' as const, onTemperature: 79 }
 
     beforeEach(() => {
       vi.spyOn(manager, 'hasActiveRunOnceSession').mockResolvedValue(false)
@@ -1915,7 +1925,7 @@ describe('JobManager residual mutation contracts', () => {
   })
 
   describe('power-off during an alarm warm-up', () => {
-    const power = { ...row, id: 31, side: 'left' as const, dayOfWeek: 'monday' as const, onTime: '22:00', offTime: '07:30', endAction: 'turn_off' as const, onTemperature: 80 }
+    const power = { ...row, id: 31, side: 'left' as const, dayOfWeek: 'monday' as const, onTime: '22:00', offTime: '07:30', offDayOffset: 0, endAction: 'turn_off' as const, onTemperature: 80 }
     const alarmRow = { id: 5, side: 'left', enabled: true, duration: 120, wakeWindow: 0 }
 
     beforeEach(() => {
@@ -2121,7 +2131,7 @@ describe('JobManager residual mutation contracts', () => {
       side: 'right',
       dayOfWeek: 'monday',
       onTime: '22:00',
-      offTime: '07:00', endAction: 'turn_off' as const,
+      offTime: '07:00', offDayOffset: 0, endAction: 'turn_off' as const,
       onTemperature: 80,
     })
     await manager.runPowerOffJob({
@@ -2130,7 +2140,7 @@ describe('JobManager residual mutation contracts', () => {
       side: 'left',
       dayOfWeek: 'monday',
       onTime: '22:00',
-      offTime: '07:00', endAction: 'turn_off' as const,
+      offTime: '07:00', offDayOffset: 0, endAction: 'turn_off' as const,
       onTemperature: 80,
     })
     await manager.runTemperatureJob({
@@ -2187,7 +2197,7 @@ describe('JobManager residual mutation contracts', () => {
       side: 'right',
       dayOfWeek: 'monday',
       onTime: '22:00',
-      offTime: '07:00', endAction: 'turn_off' as const,
+      offTime: '07:00', offDayOffset: 0, endAction: 'turn_off' as const,
       onTemperature: 80,
     })
 
@@ -2401,7 +2411,7 @@ describe('JobManager residual mutation contracts', () => {
       side: 'right',
       dayOfWeek: 'monday',
       onTime: '22:00',
-      offTime: '07:00', endAction: 'turn_off' as const,
+      offTime: '07:00', offDayOffset: 0, endAction: 'turn_off' as const,
       onTemperature: 80,
     })
     // Let the job pass its gates and queue on the held lock while the guard

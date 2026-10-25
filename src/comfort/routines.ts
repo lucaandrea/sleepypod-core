@@ -1,8 +1,8 @@
-import { DAYS_OF_WEEK, type DayOfWeek } from '@/src/lib/scheduleTime'
+import { DAYS_OF_WEEK, powerOffDay, type DayOfWeek } from '@/src/lib/scheduleTime'
 import { expandOccurrences, type OccurrenceSource } from '@/src/scheduler/occurrences'
 import type { RoutineWindow } from './policy'
 
-interface PowerRow { id: number, dayOfWeek: DayOfWeek, onTime: string, offTime: string, onTemperature: number }
+interface PowerRow { id: number, dayOfWeek: DayOfWeek, onTime: string, offTime: string, offDayOffset?: number, onTemperature: number }
 interface TargetRow { id: number, dayOfWeek: DayOfWeek, time: string, temperature: number }
 interface AlarmRow { id: number, dayOfWeek: DayOfWeek, time: string }
 export interface ComfortSchedules { powers: PowerRow[], targets: TargetRow[], alarms: AlarmRow[], timezone: string }
@@ -23,7 +23,7 @@ export function comfortRoutineAt(schedules: ComfortSchedules, now: number): Rout
     for (const row of schedules.powers) {
       if (row.onTime === row.offTime || !Number.isFinite(row.onTemperature)) return null
       jobs.push(job(`power:${row.id}`, 'start', row.dayOfWeek, row.onTime, row.onTemperature))
-      jobs.push(job(`end:${row.id}`, 'end', row.dayOfWeek, row.offTime))
+      jobs.push(job(`end:${row.id}`, 'end', powerOffDay(row), row.offTime))
     }
     for (const row of schedules.targets) {
       if (!Number.isFinite(row.temperature)) return null

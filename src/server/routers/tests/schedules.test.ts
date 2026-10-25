@@ -56,6 +56,7 @@ const SCHEMA_SQL = `
       day_of_week TEXT NOT NULL,
       on_time TEXT NOT NULL,
       off_time TEXT NOT NULL,
+      off_day_offset INTEGER NOT NULL DEFAULT 0,
       end_action TEXT NOT NULL DEFAULT 'turn_off',
       on_temperature REAL NOT NULL,
       enabled INTEGER NOT NULL DEFAULT 1,
@@ -1467,7 +1468,7 @@ describe('schedules openapi meta + input schema contract', () => {
     expect(Object.keys(temperature).sort()).toEqual(
       ['createdAt', 'dayOfWeek', 'enabled', 'id', 'side', 'temperature', 'time', 'updatedAt'])
     expect(Object.keys(power).sort()).toEqual(
-      ['createdAt', 'dayOfWeek', 'enabled', 'endAction', 'id', 'offTime', 'onTemperature', 'onTime', 'side', 'updatedAt'])
+      ['createdAt', 'dayOfWeek', 'enabled', 'endAction', 'id', 'offDayOffset', 'offTime', 'onTemperature', 'onTime', 'side', 'updatedAt'])
     expect(Object.keys(alarm).sort()).toEqual(
       ['alarmTemperature', 'createdAt', 'dayOfWeek', 'duration', 'enabled', 'id', 'side', 'time', 'updatedAt', 'vibrationIntensity', 'vibrationPattern', 'wakeWindow'])
 
@@ -1504,6 +1505,18 @@ describe('schedule end actions', () => {
   beforeEach(() => {
     clearTables()
     resetSchedulerMocks()
+  })
+  it('preserves explicit overnight offsets through reads and partial updates', async () => {
+    const row = await caller.createPowerSchedule({ side: 'left', dayOfWeek: 'saturday', onTime: '22:00', offTime: '07:00', onTemperature: 75 })
+    expect(row.offDayOffset).toBe(0)
+    expect((await caller.updatePowerSchedule({ id: row.id, offDayOffset: 1 })).offDayOffset).toBe(1)
+    await caller.batchUpdate({ updates: { power: [{ id: row.id, onTemperature: 76 }] } })
+    expect((await caller.getAll({ side: 'left' })).power[0]).toMatchObject({ offDayOffset: 1, onTemperature: 76 })
+    await caller.batchUpdate({ creates: { power: [{ side: 'right', dayOfWeek: 'saturday', onTime: '22:00', offTime: '07:00', onTemperature: 72, offDayOffset: 1 }] } })
+    expect((await caller.getByDay({ side: 'right', dayOfWeek: 'saturday' })).power[0].offDayOffset).toBe(1)
+    for (const offDayOffset of [-1, 2, 0.5]) {
+      await expect(caller.updatePowerSchedule({ id: row.id, offDayOffset })).rejects.toThrow()
+    }
   })
   it('defaults legacy creates to turn off and round-trips maintain through individual and batch APIs', async () => {
     const row = await caller.createPowerSchedule({ side: 'left', dayOfWeek: 'monday', onTime: '22:00', offTime: '07:00', onTemperature: 75 })

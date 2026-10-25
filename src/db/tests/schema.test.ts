@@ -319,6 +319,7 @@ const expectedTables: Record<string, TableSpec> = {
       { name: 'day_of_week', notNull: true, default: undefined },
       { name: 'on_time', notNull: true, default: undefined },
       { name: 'off_time', notNull: true, default: undefined },
+      { name: 'off_day_offset', notNull: true, default: 0 },
       { name: 'end_action', notNull: true, default: 'turn_off' },
       { name: 'on_temperature', notNull: true, default: undefined },
       { name: 'enabled', notNull: true, default: true },

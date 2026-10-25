@@ -44,7 +44,7 @@ function seed() {
           id: nextId++, side, dayOfWeek,
           onTime: weekend ? '22:45' : '21:45',
           offTime: weekend ? '08:30' : '07:00',
-          endAction: 'turn_off',
+          endAction: 'turn_off', offDayOffset: 0,
           onTemperature: curve[0][1],
           ...meta,
         })
@@ -106,7 +106,7 @@ export const schedules: DemoHandlers<'schedules'> = {
   },
 
   createPowerSchedule: (input) => {
-    const row: PowerRow = { ...input, endAction: input.endAction ?? 'turn_off', enabled: input.enabled ?? true, ...stamp() }
+    const row: PowerRow = { ...input, offDayOffset: input.offDayOffset ?? 0, endAction: input.endAction ?? 'turn_off', enabled: input.enabled ?? true, ...stamp() }
     power.push(row)
     return { ...row }
   },
@@ -140,7 +140,7 @@ export const schedules: DemoHandlers<'schedules'> = {
     for (const id of input.deletes?.alarm ?? []) alarm = remove(alarm, 'Alarm', id)
 
     for (const c of input.creates?.temperature ?? []) temperature.push({ ...c, enabled: c.enabled ?? true, ...stamp() })
-    for (const c of input.creates?.power ?? []) power.push({ ...c, endAction: c.endAction ?? 'turn_off', enabled: c.enabled ?? true, ...stamp() })
+    for (const c of input.creates?.power ?? []) power.push({ ...c, offDayOffset: c.offDayOffset ?? 0, endAction: c.endAction ?? 'turn_off', enabled: c.enabled ?? true, ...stamp() })
     for (const c of input.creates?.alarm ?? []) alarm.push({ ...c, vibrationPattern: c.vibrationPattern ?? 'rise', wakeWindow: c.wakeWindow ?? 0, enabled: c.enabled ?? true, ...stamp() })
 
     for (const { id, ...changes } of input.updates?.temperature ?? []) update(temperature, 'Temperature', id, changes)
