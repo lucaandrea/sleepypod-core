@@ -29,6 +29,17 @@ describe('personal comfort schedule adapter', () => {
     expect(comfortRoutineAt(input, Date.parse('2026-10-25T06:00:00Z'))).toBeNull()
   })
 
+  it.each([
+    ['2026-10-25T09:00:00Z', '2026-10-25T05:00:00Z', '2026-10-25T14:00:00Z'],
+    ['2026-03-08T09:30:00Z', '2026-03-08T06:00:00Z', '2026-03-08T14:00:00Z'],
+    ['2026-11-01T10:30:00Z', '2026-11-01T05:00:00Z', '2026-11-01T15:00:00Z'],
+  ])('uses an explicitly imported Saturday overnight window through week-wrap/DST at %s', (now, start, end) => {
+    const input = schedules()
+    input.powers = input.powers.filter(row => row.dayOfWeek === 'saturday').map(row => ({ ...row, offDayOffset: 1 }))
+    expect(comfortRoutineAt(input, Date.parse(now))).toMatchObject({ start: Date.parse(start), end: Date.parse(end), baselineF: 73 })
+    expect(comfortRoutineAt(input, Date.parse(end))).toBeNull()
+  })
+
   it('withholds overlapping starts, duplicate starts, equal boundaries and malformed clocks', () => {
     for (const onTime of ['21:30', '22:00', '07:00', '99:00']) {
       const input = schedules()

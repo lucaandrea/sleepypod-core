@@ -230,6 +230,8 @@ export const powerSchedules = sqliteTable('power_schedules', {
   }).notNull(),
   onTime: text('on_time').notNull(), // HH:mm format
   offTime: text('off_time').notNull(), // Curve end time; retained when maintaining temperature
+  // Existing Core rows are calendar-day events. Imports can explicitly end the next day.
+  offDayOffset: integer('off_day_offset').notNull().default(0),
   endAction: text('end_action', { enum: ['turn_off', 'maintain'] }).notNull().default('turn_off'),
   onTemperature: real('on_temperature').notNull(), // Temperature when powered on
   enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),

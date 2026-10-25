@@ -24,6 +24,7 @@ export interface PowerSchedule {
   dayOfWeek: DayOfWeek
   onTime: string
   offTime: string
+  offDayOffset?: number
   endAction?: 'turn_off' | 'maintain'
   onTemperature: number
   enabled: boolean
@@ -318,12 +319,8 @@ export function useSchedule() {
   }, [allSchedulesQuery.data, isGlobalEnabled, batchUpdate])
 
   /**
-   * Apply the source day's schedule to target days.
-   * Uses the iOS pattern: delete all existing schedules for target days,
-   * then recreate from source day's data.
-   *
-   * Each mutation triggers reloadScheduler() on the backend,
-   * so the scheduler is updated after each change.
+   * Copy calendar-day rows in one batch, retaining explicit next-day power-off.
+   * This does not regroup morning temperature/alarm events into bedtime routines.
    */
   const applyToOtherDays = useCallback(
     async (targetDays: DayOfWeek[]) => {
@@ -345,7 +342,7 @@ export function useSchedule() {
         const powerDeletes: number[] = []
         const alarmDeletes: number[] = []
         const tempCreates: Array<{ side: Side, dayOfWeek: DayOfWeek, time: string, temperature: number, enabled: boolean }> = []
-        const powerCreates: Array<{ side: Side, dayOfWeek: DayOfWeek, onTime: string, offTime: string, endAction?: 'turn_off' | 'maintain', onTemperature: number, enabled: boolean }> = []
+        const powerCreates: Array<{ side: Side, dayOfWeek: DayOfWeek, onTime: string, offTime: string, offDayOffset: number, endAction?: 'turn_off' | 'maintain', onTemperature: number, enabled: boolean }> = []
         const alarmCreates: Array<{ side: Side, dayOfWeek: DayOfWeek, time: string, vibrationIntensity: number, vibrationPattern: 'double' | 'rise', duration: number, alarmTemperature: number, wakeWindow: number, enabled: boolean }> = []
 
         const sourceTemp = daySchedule.temperature || []
@@ -374,15 +371,16 @@ export function useSchedule() {
               enabled: t.enabled,
             })
           }
-          for (const p of sourcePower) {
+          for (const powerSchedule of sourcePower) {
             powerCreates.push({
               side,
               dayOfWeek: targetDay,
-              onTime: p.onTime,
-              offTime: p.offTime,
-              endAction: p.endAction,
-              onTemperature: Math.round(p.onTemperature),
-              enabled: p.enabled,
+              onTime: powerSchedule.onTime,
+              offTime: powerSchedule.offTime,
+              offDayOffset: powerSchedule.offDayOffset ?? 0,
+              endAction: powerSchedule.endAction,
+              onTemperature: Math.round(powerSchedule.onTemperature),
+              enabled: powerSchedule.enabled,
             })
           }
           for (const a of sourceAlarm) {

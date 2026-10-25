@@ -1,3 +1,4 @@
+import { powerOffDay } from '@/src/lib/scheduleTime'
 import { baseDayNumbers, scopeSides } from '@/src/hardware/base/types'
 import { getBaseController } from '@/src/hardware/base/instance'
 import { getTemperatureController } from '@/src/temperature/instance'
@@ -540,7 +541,7 @@ export class JobManager {
   private schedulePowerOff(sched: typeof powerSchedules.$inferSelect): void {
     if (sched.endAction === 'maintain') return
     const [hour, minute] = this.parseTime(sched.offTime)
-    const cron = this.buildWeeklyCron(sched.dayOfWeek, hour, minute)
+    const cron = this.buildWeeklyCron(powerOffDay(sched), hour, minute)
 
     this.scheduler.scheduleJob(
       `power-off-${sched.id}`,

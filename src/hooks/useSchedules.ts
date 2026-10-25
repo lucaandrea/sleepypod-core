@@ -22,6 +22,7 @@ export interface PowerSchedule {
   dayOfWeek: DayOfWeek
   onTime: string
   offTime: string
+  offDayOffset: number
   endAction: 'turn_off' | 'maintain'
   onTemperature: number
   enabled: boolean

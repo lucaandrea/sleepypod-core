@@ -1105,6 +1105,7 @@ exports[`complete Drizzle schema contracts > pins every main-database table, col
       "day_of_week | sql:text | logical:string/SQLiteText | not-null | default:none | not-primary-key | not-unique | not-autoincrement | enum:sunday,monday,tuesday,wednesday,thursday,friday,saturday",
       "on_time | sql:text | logical:string/SQLiteText | not-null | default:none | not-primary-key | not-unique | not-autoincrement | enum:none",
       "off_time | sql:text | logical:string/SQLiteText | not-null | default:none | not-primary-key | not-unique | not-autoincrement | enum:none",
+      "off_day_offset | sql:integer | logical:number/SQLiteInteger | not-null | default:0 | not-primary-key | not-unique | not-autoincrement | enum:none",
       "end_action | sql:text | logical:string/SQLiteText | not-null | default:turn_off | not-primary-key | not-unique | not-autoincrement | enum:turn_off,maintain",
       "on_temperature | sql:real | logical:number/SQLiteReal | not-null | default:none | not-primary-key | not-unique | not-autoincrement | enum:none",
       "enabled | sql:integer | logical:boolean/SQLiteBoolean | not-null | default:true | not-primary-key | not-unique | not-autoincrement | enum:none",

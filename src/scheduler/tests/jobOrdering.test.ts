@@ -112,14 +112,15 @@ function insertPowerSchedule(opts: {
   dayOfWeek: string
   onTime: string
   offTime: string
+  offDayOffset?: number
   endAction?: 'turn_off' | 'maintain'
   onTemperature: number
   enabled?: boolean
 }): number {
   const info = (sqlite as any)
     .prepare(
-      `INSERT INTO power_schedules (side, day_of_week, on_time, off_time, on_temperature, enabled, end_action)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO power_schedules (side, day_of_week, on_time, off_time, on_temperature, enabled, end_action, off_day_offset)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       opts.side,
@@ -129,6 +130,7 @@ function insertPowerSchedule(opts: {
       opts.onTemperature,
       opts.enabled === false ? 0 : 1,
       opts.endAction ?? 'turn_off',
+      opts.offDayOffset ?? 0,
     )
   return Number(info.lastInsertRowid)
 }
@@ -273,7 +275,7 @@ const powerSched = (side: 'left' | 'right') => ({
   side,
   dayOfWeek: 'saturday' as const,
   onTime: '22:00',
-  offTime: '10:00', endAction: 'turn_off' as const,
+  offTime: '10:00', offDayOffset: 0, endAction: 'turn_off' as const,
   onTemperature: 89,
   enabled: true,
   createdAt: new Date(),
@@ -650,14 +652,14 @@ describe('JobManager.loadSchedules', () => {
       side: 'left',
       dayOfWeek: 'friday',
       onTime: '22:00',
-      offTime: '07:00', endAction: 'turn_off' as const,
+      offTime: '07:00', offDayOffset: 0, endAction: 'turn_off' as const,
       onTemperature: 80,
     })
     insertPowerSchedule({
       side: 'right',
       dayOfWeek: 'saturday',
       onTime: '23:00',
-      offTime: '06:00', endAction: 'turn_off' as const,
+      offTime: '06:00', offDayOffset: 0, endAction: 'turn_off' as const,
       onTemperature: 78,
       enabled: false,
     })
@@ -844,7 +846,7 @@ describe('JobManager run-once sessions', () => {
       side: 'left',
       dayOfWeek: 'monday' as const,
       onTime: '22:00',
-      offTime: '06:00', endAction: 'turn_off' as const,
+      offTime: '06:00', offDayOffset: 0, endAction: 'turn_off' as const,
       onTemperature: 82,
       enabled: true,
       createdAt: new Date(),
@@ -860,7 +862,7 @@ describe('JobManager run-once sessions', () => {
       side: 'right',
       dayOfWeek: 'monday' as const,
       onTime: '22:00',
-      offTime: '06:00', endAction: 'turn_off' as const,
+      offTime: '06:00', offDayOffset: 0, endAction: 'turn_off' as const,
       onTemperature: null as unknown as number, // exercise the ?? 75 branch
       enabled: true,
       createdAt: new Date(),
@@ -884,7 +886,7 @@ describe('JobManager run-once sessions', () => {
       side: 'left',
       dayOfWeek: 'monday' as const,
       onTime: '22:00',
-      offTime: '06:00', endAction: 'turn_off' as const,
+      offTime: '06:00', offDayOffset: 0, endAction: 'turn_off' as const,
       onTemperature: 80,
       enabled: true,
       createdAt: new Date(),
@@ -909,7 +911,7 @@ describe('JobManager run-once sessions', () => {
       side: 'right',
       dayOfWeek: 'monday' as const,
       onTime: '22:00',
-      offTime: '06:00', endAction: 'turn_off' as const,
+      offTime: '06:00', offDayOffset: 0, endAction: 'turn_off' as const,
       onTemperature: 80,
       enabled: true,
       createdAt: new Date(),
@@ -1422,7 +1424,7 @@ describe('JobManager handler closures', () => {
       side: 'right',
       dayOfWeek: 'monday',
       onTime: '22:00',
-      offTime: '07:00', endAction: 'turn_off' as const,
+      offTime: '07:00', offDayOffset: 0, endAction: 'turn_off' as const,
       onTemperature: 80,
     })
     await manager.loadSchedules()
@@ -1438,7 +1440,7 @@ describe('JobManager handler closures', () => {
       side: 'left',
       dayOfWeek: 'monday',
       onTime: '22:00',
-      offTime: '07:00', endAction: 'turn_off' as const,
+      offTime: '07:00', offDayOffset: 0, endAction: 'turn_off' as const,
       onTemperature: 80,
     })
     seedSidePowered('left', true)
@@ -1681,7 +1683,7 @@ describe('JobManager handler closures', () => {
         side: 'left',
         dayOfWeek: 'monday' as const,
         onTime: '22:00',
-        offTime: '07:00', endAction: 'turn_off' as const,
+        offTime: '07:00', offDayOffset: 0, endAction: 'turn_off' as const,
         onTemperature: 80,
         enabled: true,
         createdAt: new Date(),
@@ -1790,7 +1792,7 @@ describe('JobManager — streaming + downstream side-effects', () => {
       side: 'right',
       dayOfWeek: 'monday' as const,
       onTime: '22:00',
-      offTime: '07:00', endAction: 'turn_off' as const,
+      offTime: '07:00', offDayOffset: 0, endAction: 'turn_off' as const,
       onTemperature: 84,
       enabled: true,
       createdAt: new Date(),
@@ -1813,7 +1815,7 @@ describe('JobManager — streaming + downstream side-effects', () => {
       side: 'left',
       dayOfWeek: 'monday' as const,
       onTime: '22:00',
-      offTime: '07:00', endAction: 'turn_off' as const,
+      offTime: '07:00', offDayOffset: 0, endAction: 'turn_off' as const,
       onTemperature: null as unknown as number,
       enabled: true,
       createdAt: new Date(),
@@ -1834,7 +1836,7 @@ describe('JobManager — streaming + downstream side-effects', () => {
       side: 'left',
       dayOfWeek: 'monday' as const,
       onTime: '22:00',
-      offTime: '07:00', endAction: 'turn_off' as const,
+      offTime: '07:00', offDayOffset: 0, endAction: 'turn_off' as const,
       onTemperature: 80,
       enabled: true,
       createdAt: new Date(),
@@ -1890,7 +1892,7 @@ describe('JobManager — streaming + downstream side-effects', () => {
       side: 'left',
       dayOfWeek: 'monday' as const,
       onTime: '22:00',
-      offTime: '07:00', endAction: 'turn_off' as const,
+      offTime: '07:00', offDayOffset: 0, endAction: 'turn_off' as const,
       onTemperature: 80,
       enabled: true,
       createdAt: new Date(),
