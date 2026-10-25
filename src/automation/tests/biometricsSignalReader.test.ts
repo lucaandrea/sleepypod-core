@@ -136,9 +136,21 @@ describe('BiometricsSignalReader', () => {
     expect(reader.read()).toEqual({ 'right.heartRate': 70, 'left.movement': 3 })
   })
 
+  it('rejects future stored observations rather than resurrecting an older reading', () => {
+    seedEnvironment(NOW)
+    const future = new Date(NOW.getTime() + 1000)
+    seedEnvironment(future)
+    db.insert(schema.vitals).values([
+      { side: 'left', timestamp: NOW, heartRate: 65 },
+      { side: 'left', timestamp: future, heartRate: 90 },
+    ]).run()
+    db.insert(schema.movement).values({ side: 'right', timestamp: future, totalMovement: 10 }).run()
+    expect(reader.read()).toEqual({})
+  })
+
   it('reduces capSense2 body channels without including the two reference channels', () => {
     state.cap = {
-      type: 'capSense2', ts: 0, receivedAtMs: NOW.getTime(),
+      type: 'capSense2', ts: NOW.getTime() / 1000, receivedAtMs: NOW.getTime(),
       left: [1, 2, 3, 4, 5, 6, 999, -999], right: [10, 20, 30, 40, 50, 60, 9999, -9999],
     }
     expect(reader.read()).toEqual({
@@ -147,8 +159,8 @@ describe('BiometricsSignalReader', () => {
     })
   })
 
-  it.each([0, 1])('expires scalar capSense %i ms past receipt freshness, ignoring firmware time', (extra) => {
-    state.cap = { type: 'capSense', ts: 0, receivedAtMs: NOW.getTime() - 30_000, left: 0, right: 12 }
+  it.each([0, 1])('expires scalar capSense %i ms past receipt freshness with a current firmware timestamp', (extra) => {
+    state.cap = { type: 'capSense', ts: NOW.getTime() / 1000, receivedAtMs: NOW.getTime() - 30_000, left: 0, right: 12 }
     vi.setSystemTime(NOW.getTime() + extra)
     expect(reader.read()).toEqual(extra
       ? {}
@@ -159,7 +171,7 @@ describe('BiometricsSignalReader', () => {
   })
 
   it('omits empty capacitive arrays independently by side', () => {
-    state.cap = { type: 'capSense2', ts: 0, receivedAtMs: NOW.getTime(), left: [], right: [4, 6] }
+    state.cap = { type: 'capSense2', ts: NOW.getTime() / 1000, receivedAtMs: NOW.getTime(), left: [], right: [4, 6] }
     expect(reader.read()).toEqual({ 'right.cap.max': 6, 'right.cap.mean': 5, 'right.cap.spread': 2 })
   })
 

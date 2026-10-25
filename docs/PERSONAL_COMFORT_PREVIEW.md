@@ -107,3 +107,9 @@ width. The local server deliberately used CI mode: the UI correctly showed a
 stopped Preview service and no evaluated night. No real sleep record or owner
 connection key was used. Browser review prompted a small spacing fix and an
 additional regression for decisions invalidated by a persisted manual pause.
+
+The final Preview push gate passed 3,124 related tests in 123 files, TypeScript,
+full ESLint and both Drizzle checks. One preceding full run had an intermittent
+WebSocket authentication failure; its 127-test file and the complete retry
+passed without changing authentication behavior. The separate general rules
+engine now also enforces [signal validity](AUTOMATION_SIGNAL_VALIDITY.md).

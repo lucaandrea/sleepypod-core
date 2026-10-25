@@ -41,6 +41,7 @@ import {
   type Side,
 } from './types'
 import { WindowStore } from './windows'
+import { finiteSignal } from './signalValidity'
 
 /** How many minutes after a timeOfDay slot a late tick may still fire it. */
 const TIME_OF_DAY_GRACE_MIN = 10
@@ -219,7 +220,8 @@ export class AutomationEngine {
           if (lease.expiresAt <= now) this.leases[side].delete(id)
         }
       }
-      const snapshot = this.deps.signals.read()
+      const snapshot = Object.fromEntries(Object.entries(this.deps.signals.read())
+        .map(([key, value]) => [key, finiteSignal(value)]))
       const { nowMinutes, dayOfWeek, dateKey } = this.deps.clock()
 
       // Feed windowed-aggregate buffers, then prune to the largest window asked.
@@ -383,12 +385,11 @@ export class AutomationEngine {
       return
     }
 
-    // Policies remain valid between triggers, but a stopped engine cannot keep
-    // owning a side forever. Conditions are checked on every evaluator tick.
-    for (const side of ['left', 'right'] as const) {
-      for (const [id, lease] of this.leases[side]) {
-        if (id.startsWith(`rule:${rule.id}:`) && lease.policy) lease.expiresAt = now + 2 * AUTOMATION_TICK_MS
-      }
+    // Recheck action inputs between triggers as well as the IF condition.
+    const withdrawn = this.refreshPolicies(rule, ctx, now)
+    if (withdrawn.length > 0) {
+      await this.deps.recordRun(rule.id, 'skipped', { reason: 'policy-input-unavailable', requests: withdrawn })
+      if (generation !== this.generation) return
     }
     if (!triggered && !unownedPolicies.size) return
 
@@ -434,6 +435,41 @@ export class AutomationEngine {
     }
   }
 
+  /** Relative actions use the routine baseline, never their own previous output. */
+  private actionContext(ctx: EvalContext): EvalContext {
+    return {
+      ...ctx,
+      windows: this.actionWindows,
+      signal: (key) => {
+        const target = /^(left|right)\.(targetTemperature|currentTemperature)$/.exec(key)
+        return target ? this.deps.control.automationBaseline(target[1] as Side) : ctx.signal(key)
+      },
+    }
+  }
+
+  /** Withdraw live policies with missing inputs; leave explicit one-shot holds intact. */
+  private refreshPolicies(rule: AutomationRule, ctx: EvalContext, now: number): string[] {
+    const withdrawn: string[] = []
+    const actionContext = this.actionContext(ctx)
+    const triggerAvailable = rule.trigger.kind !== 'signalChange' || ctx.signal(rule.trigger.signal) !== undefined
+    for (const [index, action] of rule.actions.entries()) {
+      if (action.kind === 'notify') continue
+      const requestId = `rule:${rule.id}:${index}`
+      for (const side of ['left', 'right'] as const) {
+        const lease = this.leases[side].get(requestId)
+        if (!lease?.policy) continue
+        if (!triggerAvailable || (action.temp && evaluateExpr(action.temp, actionContext) === undefined)) {
+          this.leases[side].delete(requestId)
+          withdrawn.push(`${side}:${requestId}`)
+        }
+        else {
+          lease.expiresAt = now + 2 * AUTOMATION_TICK_MS
+        }
+      }
+    }
+    return withdrawn
+  }
+
   private async runAction(
     rule: AutomationRule,
     action: Action,
@@ -463,14 +499,7 @@ export class AutomationEngine {
         results.push({ kind: action.kind, side, requestId: id, temp: previous.temperature, antiThrash: true })
         continue
       }
-      const actionContext: EvalContext = {
-        ...ctx,
-        windows: this.actionWindows,
-        signal: (key) => {
-          const target = /^(left|right)\.(targetTemperature|currentTemperature)$/.exec(key)
-          return target ? this.deps.control.automationBaseline(target[1] as Side) : ctx.signal(key)
-        },
-      }
+      const actionContext = this.actionContext(ctx)
       const raw = expr ? evaluateExpr(expr, actionContext) : 75
       if (raw === undefined) {
         this.leases[side].delete(id)
