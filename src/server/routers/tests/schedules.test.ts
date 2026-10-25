@@ -40,6 +40,8 @@ import { sqlite } from '@/src/db'
 const caller = schedulesRouter.createCaller({})
 
 const SCHEMA_SQL = `
+    CREATE TABLE IF NOT EXISTS bedtime_routines (id INTEGER PRIMARY KEY AUTOINCREMENT, side TEXT NOT NULL, day_of_week TEXT NOT NULL, configuration TEXT NOT NULL, schedule_ids TEXT NOT NULL);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_bedtime_routines_side_day ON bedtime_routines(side,day_of_week);
     CREATE TABLE IF NOT EXISTS temperature_schedules (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       side TEXT NOT NULL,
@@ -93,6 +95,7 @@ function createTables() {
 
 function clearTables() {
   (sqlite as any).exec(`
+    DELETE FROM bedtime_routines;
     DELETE FROM temperature_schedules;
     DELETE FROM power_schedules;
     DELETE FROM alarm_schedules;
@@ -121,6 +124,7 @@ function resetSchedulerMocks() {
 function restoreDynamicModuleMocks() {
   vi.doUnmock('@/src/db')
   vi.doUnmock('@/src/scheduler')
+  vi.doUnmock('@/src/server/bedtimeRoutineStore')
   vi.resetModules()
 }
 
@@ -937,6 +941,10 @@ describe('schedules incremental scheduler API', () => {
 })
 
 describe('schedules query error paths', () => {
+  beforeEach(() => {
+    // These injected DB doubles isolate error translation; ownership uses real SQLite in routines.test.
+    vi.doMock('@/src/server/bedtimeRoutineStore', () => ({ assertCalendarScheduleWrite: vi.fn() }))
+  })
   afterEach(restoreDynamicModuleMocks)
 
   it('getAll wraps DB errors as INTERNAL_SERVER_ERROR', async () => {
@@ -1058,6 +1066,7 @@ describe('schedules query error paths', () => {
       }
       finally {
         restoreDynamicModuleMocks()
+        vi.doMock('@/src/server/bedtimeRoutineStore', () => ({ assertCalendarScheduleWrite: vi.fn() }))
       }
     }
   })
@@ -1138,6 +1147,7 @@ async function rejection(thunk: () => Promise<unknown>): Promise<any> {
 
 describe('schedules error passthrough', () => {
   beforeEach(() => {
+    vi.doMock('@/src/server/bedtimeRoutineStore', () => ({ assertCalendarScheduleWrite: vi.fn() }))
     clearTables()
     resetSchedulerMocks()
   })

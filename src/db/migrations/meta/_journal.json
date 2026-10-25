@@ -218,6 +218,13 @@
       "when": 1792958874105,
       "tag": "0030_explicit_power_off_day",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "6",
+      "when": 1792961339864,
+      "tag": "0031_bedtime_routines",
+      "breakpoints": true
     }
   ]
 }

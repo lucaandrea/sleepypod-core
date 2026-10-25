@@ -36,6 +36,7 @@ vi.mock('@/src/hooks/useSideNames', () => ({ useSideNames: () => ({ leftName: 'J
 vi.mock('@/src/hooks/useTemperatureUnit', () => ({ useTemperatureUnit: () => ({ unit: 'F' }) }))
 vi.mock('@/src/utils/trpc', () => ({
   trpc: {
+    routines: { get: { useQuery: () => ({ data: { canCreate: false, routines: [] }, isLoading: false, error: null }) } },
     settings: { getAll: { useQuery: () => ({ data: { device: { defaultScheduleEndAction: m.defaultAction } } }) } },
     schedules: { getAll: { useQuery: () => m.query }, getNotes: { useQuery: () => ({ data: m.notesLoading ? undefined : m.notes, isLoading: m.notesLoading }) } },
     health: {

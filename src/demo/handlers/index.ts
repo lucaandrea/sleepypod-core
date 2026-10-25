@@ -16,6 +16,7 @@ import { mqtt } from './mqtt'
 import { pumpAlerts } from './pumpAlerts'
 import { raw } from './raw'
 import { runOnce } from './runOnce'
+import { routines } from './routines'
 import { schedules } from './schedules'
 import { settings } from './settings'
 import { sleepStages } from './sleepStages'
@@ -41,6 +42,7 @@ export const demoRouters = {
   pumpAlerts,
   raw,
   runOnce,
+  routines,
   schedules,
   settings,
   sleepStages,

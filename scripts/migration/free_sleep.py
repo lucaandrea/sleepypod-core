@@ -229,22 +229,27 @@ def map_schedules(schedules, database, report):
         require(set(schedules[side]) == set(DAYS), 'Incomplete schedule week')
         for day in DAYS:
             routine = schedules[side][day]
+            require(isinstance(routine['temperatures'], dict) and len(routine['temperatures']) <= 96,
+                    'A bedtime routine supports at most 96 temperature phases; review the original before migration')
             power = routine['power']
             start, end = clock(power['on']), clock(power['off'])
             enabled = boolean(power['enabled'], 'power enabled')
             require(start != end or not enabled, 'Enabled routine has equal start and end times')
             temperature = number(power['onTemperature'], 55, 110, 'power temperature', integer=True)
-            database.execute('''INSERT INTO power_schedules(side,day_of_week,on_time,off_time,off_day_offset,
+            power_id = database.execute('''INSERT INTO power_schedules(side,day_of_week,on_time,off_time,off_day_offset,
                 end_action,on_temperature,enabled) VALUES (?,?,?,?,?,'turn_off',?,?)''',
-                (side, day, start, end, int(end < start), temperature, enabled))
+                (side, day, start, end, int(end < start), temperature, enabled)).lastrowid
             duration = (minutes(end) - minutes(start)) % 1440
-            for at, target in routine['temperatures'].items():
+            phase_ids, phases = [], []
+            for at, target in sorted(routine['temperatures'].items(), key=lambda item: (minutes(clock(item[0])) - minutes(start)) % 1440):
                 clock(at)
                 target = number(target, 55, 110, 'routine target', integer=True)
                 offset = (minutes(at) - minutes(start)) % 1440
                 active = enabled and 0 < offset < duration
-                database.execute('''INSERT INTO temperature_schedules(side,day_of_week,time,temperature,enabled)
-                    VALUES (?,?,?,?,?)''', (side, event_day(day, at, start), at, target, active))
+                phase_id = database.execute('''INSERT INTO temperature_schedules(side,day_of_week,time,temperature,enabled)
+                    VALUES (?,?,?,?,?)''', (side, event_day(day, at, start), at, target, active)).lastrowid
+                phase_ids.append(phase_id)
+                phases.append({'time': at, 'temperature': target, 'enabled': 0 < offset < duration})
                 if not 0 < offset < duration:
                     report['reviewRequired'].append(f'{side}/{day}: inactive out-of-window target retained disabled')
             alarm = routine['alarm']
@@ -254,12 +259,21 @@ def map_schedules(schedules, database, report):
             length = number(alarm['duration'], 0, 180, 'alarm duration', integer=True)
             require(alarm['vibrationPattern'] in ('rise', 'double'), 'Invalid alarm pattern')
             alarm_temperature = number(alarm['alarmTemperature'], 55, 110, 'alarm temperature', integer=True)
-            database.execute('''INSERT INTO alarm_schedules(side,day_of_week,time,vibration_intensity,
+            alarm_id = database.execute('''INSERT INTO alarm_schedules(side,day_of_week,time,vibration_intensity,
                 vibration_pattern,duration,alarm_temperature,wake_window,enabled) VALUES (?,?,?,?,?,?,?,0,?)''',
-                (side, event_day(day, at, start), at, intensity, alarm['vibrationPattern'], max(10, length), alarm_temperature, alarm_enabled))
+                (side, event_day(day, at, start), at, intensity, alarm['vibrationPattern'], max(10, length), alarm_temperature, alarm_enabled)).lastrowid
+            draft = {
+                'power': {'onTime': start, 'offTime': end, 'onTemperature': temperature, 'enabled': enabled, 'endAction': 'turn_off'},
+                'temperatures': phases,
+                'alarm': {'time': at, 'vibrationIntensity': intensity, 'vibrationPattern': alarm['vibrationPattern'],
+                          'duration': max(10, length), 'alarmTemperature': alarm_temperature, 'wakeWindow': 0, 'enabled': alarm['enabled']},
+                'notes': '',
+            }
+            database.execute('INSERT INTO bedtime_routines(side,day_of_week,configuration,schedule_ids) VALUES (?,?,?,?)',
+                             (side, day, json.dumps(draft), json.dumps({'power': [power_id], 'temperature': phase_ids, 'alarm': [alarm_id]})))
             if alarm_enabled:
                 report['reviewRequired'].append(f'{side}/{day}: Core alarm warm-up and post-alarm hold require review before enabling this candidate')
-    report['scheduleSemantics'] = 'Calendar events; explicit next-day power-off; original routines retained under legacy/lowdb'
+    report['scheduleSemantics'] = 'Calendar events with explicit bedtime ownership and next-day power-off; original routines retained under legacy/lowdb'
 
 
 def minutes(value):

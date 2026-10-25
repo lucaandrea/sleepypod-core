@@ -4,6 +4,7 @@ import { publicProcedure, router } from '@/src/server/trpc'
 import { deviceRouter } from './device'
 import { settingsRouter } from './settings'
 import { schedulesRouter } from './schedules'
+import { routinesRouter } from './routines'
 import { biometricsRouter } from './biometrics'
 import { healthRouter } from './health'
 import { systemRouter } from './system'
@@ -36,6 +37,7 @@ export const appRouter = router({
   base: baseRouter,
   settings: settingsRouter,
   schedules: schedulesRouter,
+  routines: routinesRouter,
   biometrics: biometricsRouter,
   health: healthRouter,
   // REST and tRPC entry points authenticate owner requests before dispatch.

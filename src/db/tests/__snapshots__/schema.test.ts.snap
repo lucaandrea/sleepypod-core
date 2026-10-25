@@ -862,6 +862,24 @@ exports[`complete Drizzle schema contracts > pins every main-database table, col
   {
     "checks": 0,
     "columns": [
+      "id | sql:integer | logical:number/SQLiteInteger | not-null | default:auto | primary-key | not-unique | autoincrement | enum:none",
+      "side | sql:text | logical:string/SQLiteText | not-null | default:none | not-primary-key | not-unique | not-autoincrement | enum:left,right",
+      "day_of_week | sql:text | logical:string/SQLiteText | not-null | default:none | not-primary-key | not-unique | not-autoincrement | enum:sunday,monday,tuesday,wednesday,thursday,friday,saturday",
+      "configuration | sql:text | logical:string/SQLiteText | not-null | default:none | not-primary-key | not-unique | not-autoincrement | enum:none",
+      "schedule_ids | sql:text | logical:string/SQLiteText | not-null | default:none | not-primary-key | not-unique | not-autoincrement | enum:none",
+    ],
+    "exportName": "bedtimeRoutines",
+    "foreignKeys": [],
+    "indexes": [
+      "idx_bedtime_routines_side_day | unique | columns:side,day_of_week | where:none",
+    ],
+    "name": "bedtime_routines",
+    "primaryKeys": [],
+    "uniqueConstraints": [],
+  },
+  {
+    "checks": 0,
+    "columns": [
       "id | sql:text | logical:string/SQLiteText | not-null | default:none | primary-key | not-unique | not-autoincrement | enum:none",
       "side | sql:text | logical:string/SQLiteText | not-null | default:none | not-primary-key | not-unique | not-autoincrement | enum:left,right",
       "generation | sql:integer | logical:number/SQLiteInteger | not-null | default:none | not-primary-key | not-unique | not-autoincrement | enum:none",

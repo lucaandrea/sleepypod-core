@@ -1,4 +1,5 @@
 import { defineConfig } from '@playwright/test'
+import { issueSession, SESSION_COOKIE, SESSION_SECONDS } from '../../src/auth/access'
 
 if (!process.env.SLEEPYPOD_BROWSER_FIXTURE) throw new Error('Use node tests/browser/run.mjs to create isolated databases')
 
@@ -16,6 +17,11 @@ export default defineConfig({
     actionTimeout: 15_000,
     viewport: { width: 1440, height: 1000 },
     screenshot: 'only-on-failure',
+    storageState: {
+      cookies: [{ name: SESSION_COOKIE, value: issueSession(), domain: '127.0.0.1', path: '/', httpOnly: true,
+        secure: false, sameSite: 'Strict', expires: Math.floor(Date.now() / 1000) + SESSION_SECONDS }],
+      origins: [],
+    },
   },
   webServer: {
     command: 'node .next/standalone/server.js',
