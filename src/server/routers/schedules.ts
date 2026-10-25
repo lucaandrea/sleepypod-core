@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { TRPCError } from '@trpc/server'
 import { publicProcedure, router } from '@/src/server/trpc'
 import { db } from '@/src/db'
+import { assertCalendarScheduleWrite } from '@/src/server/bedtimeRoutineStore'
 import {
   temperatureSchedules,
   powerSchedules,
@@ -173,9 +174,10 @@ export const schedulesRouter = router({
         .strict()
     )
     .output(temperatureScheduleOutput)
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, path }) => {
       try {
         const created = db.transaction((tx) => {
+          assertCalendarScheduleWrite(tx, input, path)
           const [result] = tx.insert(temperatureSchedules).values(input).returning().all()
           if (!result) {
             throw new TRPCError({
@@ -218,11 +220,12 @@ export const schedulesRouter = router({
         .strict()
     )
     .output(temperatureScheduleOutput)
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, path }) => {
       try {
         const { id, ...updates } = input
 
         const updated = db.transaction((tx) => {
+          assertCalendarScheduleWrite(tx, input, path)
           const [result] = tx
             .update(temperatureSchedules)
             .set({ ...updates, updatedAt: new Date() })
@@ -267,9 +270,10 @@ export const schedulesRouter = router({
         .strict()
     )
     .output(z.object({ success: z.boolean() }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, path }) => {
       try {
         void db.transaction((tx) => {
+          assertCalendarScheduleWrite(tx, input, path)
           const [deleted] = tx
             .delete(temperatureSchedules)
             .where(eq(temperatureSchedules.id, input.id))
@@ -318,9 +322,10 @@ export const schedulesRouter = router({
         .strict()
     )
     .output(powerScheduleOutput)
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, path }) => {
       try {
         const created = db.transaction((tx) => {
+          assertCalendarScheduleWrite(tx, input, path)
           const [result] = tx.insert(powerSchedules).values(input).returning().all()
           if (!result) {
             throw new TRPCError({
@@ -366,11 +371,12 @@ export const schedulesRouter = router({
         .strict()
     )
     .output(powerScheduleOutput)
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, path }) => {
       try {
         const { id, ...updates } = input
 
         const updated = db.transaction((tx) => {
+          assertCalendarScheduleWrite(tx, input, path)
           const [result] = tx
             .update(powerSchedules)
             .set({ ...updates, updatedAt: new Date() })
@@ -415,9 +421,10 @@ export const schedulesRouter = router({
         .strict()
     )
     .output(z.object({ success: z.boolean() }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, path }) => {
       try {
         void db.transaction((tx) => {
+          assertCalendarScheduleWrite(tx, input, path)
           const [deleted] = tx
             .delete(powerSchedules)
             .where(eq(powerSchedules.id, input.id))
@@ -467,9 +474,10 @@ export const schedulesRouter = router({
         .strict()
     )
     .output(alarmScheduleOutput)
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, path }) => {
       try {
         const created = db.transaction((tx) => {
+          assertCalendarScheduleWrite(tx, input, path)
           const [result] = tx.insert(alarmSchedules).values(input).returning().all()
           if (!result) {
             throw new TRPCError({
@@ -516,11 +524,12 @@ export const schedulesRouter = router({
         .strict()
     )
     .output(alarmScheduleOutput)
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, path }) => {
       try {
         const { id, ...updates } = input
 
         const updated = db.transaction((tx) => {
+          assertCalendarScheduleWrite(tx, input, path)
           const [result] = tx
             .update(alarmSchedules)
             .set({ ...updates, updatedAt: new Date() })
@@ -565,9 +574,10 @@ export const schedulesRouter = router({
         .strict()
     )
     .output(z.object({ success: z.boolean() }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, path }) => {
       try {
         void db.transaction((tx) => {
+          assertCalendarScheduleWrite(tx, input, path)
           const [deleted] = tx
             .delete(alarmSchedules)
             .where(eq(alarmSchedules.id, input.id))
@@ -698,13 +708,14 @@ export const schedulesRouter = router({
       })
     )
     .output(z.object({ success: z.boolean() }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, path }) => {
       try {
         const upsertTemp: TemperatureRow[] = []
         const upsertPower: PowerRow[] = []
         const upsertAlarm: AlarmRow[] = []
 
         db.transaction((tx) => {
+          assertCalendarScheduleWrite(tx, input, path)
           // Deletes first
           for (const id of input.deletes.temperature) {
             const [deleted] = tx.delete(temperatureSchedules).where(eq(temperatureSchedules.id, id)).returning().all()

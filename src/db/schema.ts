@@ -168,6 +168,15 @@ export const tapGestures = sqliteTable('tap_gestures', {
 // Schedules
 // ============================================================================
 
+/** Bedtime ownership keeps a night's phases together while scheduler rows remain calendar events. */
+export const bedtimeRoutines = sqliteTable('bedtime_routines', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  side: text('side', { enum: ['left', 'right'] }).notNull(),
+  dayOfWeek: text('day_of_week', { enum: ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] }).notNull(),
+  configuration: text('configuration').notNull(),
+  scheduleIds: text('schedule_ids').notNull(),
+}, table => [uniqueIndex('idx_bedtime_routines_side_day').on(table.side, table.dayOfWeek)])
+
 export const temperatureSchedules = sqliteTable('temperature_schedules', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   side: text('side', { enum: ['left', 'right'] }).notNull(),

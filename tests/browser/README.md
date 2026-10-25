@@ -17,9 +17,16 @@ starts the standalone production server on loopback port 3218 with `CI=1`, which
 disables hardware/service instrumentation. It refuses to reuse a server already
 running on that port. Fixture databases are removed after the suite exits.
 No request interception, demo transport, or mocked router is used.
+Each run also creates a temporary owner token and a signed browser session;
+the token is not printed or written to source. The routine workflow separately
+checks anonymous rejection and authenticated REST requests.
 
 Coverage:
 
+- Keep power-only bedtime routines visible, move a complete overnight routine,
+  reload its persisted state, reject an edit with a stale revision, preserve the
+  unsaved browser draft, and check the 390-pixel layout. These use disabled
+  synthetic routines and do not qualify physical Pod behavior.
 - Review and save a numerical candidate through the UI and real tRPC API, assert the
   exact new SQLite revision, and reload to verify the persisted revision is displayed.
 - Submit an out-of-range parameter, observe the server's validation error in the UI,

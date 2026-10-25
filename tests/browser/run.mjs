@@ -2,6 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
+import { randomBytes } from 'node:crypto'
 
 // Never accept caller database paths: each invocation owns fresh fixture databases.
 const root = mkdtempSync(join(tmpdir(), 'sleepypod-browser-'))
@@ -12,6 +13,7 @@ const env = {
   DATABASE_URL: join(root, 'configuration.db'),
   BIOMETRICS_DATABASE_URL: join(root, 'biometrics.db'),
   SLEEPYPOD_BROWSER_FIXTURE: root,
+  SLEEPYPOD_AUTH_TOKEN: randomBytes(32).toString('hex'),
 }
 try {
   for (const args of [

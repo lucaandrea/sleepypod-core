@@ -24,6 +24,7 @@ describe('appRouter public surface', () => {
       'base',
       'settings',
       'schedules',
+      'routines',
       'biometrics',
       'health',
       'system',

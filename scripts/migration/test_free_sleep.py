@@ -4,6 +4,7 @@ from contextlib import closing
 import hashlib
 import io
 import json
+import os
 from pathlib import Path
 import sqlite3
 import subprocess
@@ -168,11 +169,37 @@ class ImportTests(unittest.TestCase):
     def test_existing_core_power_rows_keep_calendar_default_after_upgrade(self):
         with closing(sqlite3.connect(':memory:')) as database:
             entries = migration.read_json(migration.ROOT / 'src/db/migrations/meta/_journal.json')['entries']
-            for entry in entries[:-1]:
+            offset_index = next(index for index, entry in enumerate(entries) if entry['tag'].startswith('0030_'))
+            for entry in entries[:offset_index]:
                 database.executescript((migration.ROOT / 'src/db/migrations' / (entry['tag'] + '.sql')).read_text())
             database.execute("INSERT INTO power_schedules(side,day_of_week,on_time,off_time,on_temperature) VALUES ('left','saturday','22:00','07:00',75)")
-            database.executescript((migration.ROOT / 'src/db/migrations' / (entries[-1]['tag'] + '.sql')).read_text())
+            for entry in entries[offset_index:]:
+                database.executescript((migration.ROOT / 'src/db/migrations' / (entry['tag'] + '.sql')).read_text())
+            self.assertEqual(database.execute('SELECT COUNT(*) FROM bedtime_routines').fetchone()[0], 0)
             self.assertEqual(database.execute('SELECT off_day_offset FROM power_schedules').fetchone()[0], 0)
+
+    def test_imported_ownership_is_readable_by_the_typescript_routine_contract(self):
+        self.stage()
+        script = """import assert from 'node:assert/strict';
+        import {getBedtimeRoutines} from './src/server/bedtimeRoutineStore.ts';
+        const left = getBedtimeRoutines('left');
+        const right = getBedtimeRoutines('right');
+        assert.equal(left.canCreate, true);
+        assert.equal(left.routines.length, 7);
+        assert.equal(right.routines.length, 7);
+        assert(left.routines.every(row => /^[a-f0-9]{64}$/.test(row.revision)));
+        const saturday = left.routines.find(row => row.dayOfWeek === 'saturday');
+        assert.deepEqual(saturday.draft.power, {onTime:'22:00',offTime:'07:00',onTemperature:75,enabled:true,endAction:'turn_off'});
+        assert.deepEqual(saturday.draft.temperatures.filter(row => row.enabled).map(row => row.time), ['23:00','01:00']);
+        assert.equal(saturday.draft.alarm.duration, 10);
+        assert.equal(saturday.draft.alarm.enabled, true);
+        assert.equal(right.routines[0].draft.power.enabled, false);
+        """
+        environment = {**os.environ, 'DATABASE_URL': str(self.output / 'sleepypod.db'),
+                       'BIOMETRICS_DATABASE_URL': str(self.output / 'biometrics.db')}
+        result = subprocess.run(['node', '--import', 'tsx', '--input-type=module', '-e', script],
+                                cwd=migration.ROOT, env=environment, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_reboot_runs_only_when_prime_and_reboot_are_enabled(self):
         self.settings['primePodDaily']['enabled'] = True
@@ -238,6 +265,15 @@ class ImportTests(unittest.TestCase):
         self.settings['timeZone'] = 'not-a-timezone'
         self.build_backup()
         with self.assertRaises(Exception):
+            migration.stage_backup(self.backup, self.output, NOW)
+        self.assert_clean_failure()
+
+    def test_rejects_a_phase_count_the_bedtime_contract_cannot_read(self):
+        self.schedules['left']['saturday']['temperatures'] = {
+            f'{minute // 60:02d}:{minute % 60:02d}': 75 for minute in range(97)
+        }
+        self.build_backup()
+        with self.assertRaisesRegex(ValueError, '96 temperature phases'):
             migration.stage_backup(self.backup, self.output, NOW)
         self.assert_clean_failure()
 

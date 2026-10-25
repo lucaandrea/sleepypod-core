@@ -29,6 +29,7 @@ import { ConfirmDialog } from './ConfirmDialog'
 import { ScheduleToggle } from './ScheduleToggle'
 import { SchedulerConfirmation } from './SchedulerConfirmation'
 import { AlarmSection } from './AlarmSection'
+import { BedtimeSchedule } from './BedtimeSchedule'
 import { curveSlug, formatDayRange, parseCurveSlug, sameDays } from './scheduleFormat'
 
 interface EditingCurve {
@@ -56,7 +57,48 @@ interface SchedulePageProps {
  * at its own URL (/schedule/new, /schedule/mon-tue-wed?side=left), so a
  * curve can be linked to directly.
  */
-export function SchedulePage({ curve, curveSide, fromBoth = false, savedCurve }: SchedulePageProps = {}) {
+export function SchedulePage(props: SchedulePageProps = {}) {
+  const { primarySide, selectedSide, singleScheduleSide, selectSide } = useSide()
+  const side = singleScheduleSide ?? primarySide
+  const otherSide = side === 'left' ? 'right' : 'left'
+  const both = !singleScheduleSide && selectedSide === 'both'
+  const primary = trpc.routines.get.useQuery({ side })
+  const other = trpc.routines.get.useQuery({ side: otherSide }, { enabled: both })
+  const { leftName, rightName } = useSideNames()
+  if (primary.isLoading || (both && other.isLoading)) return <Skeleton className="h-[380px]" />
+  if (primary.error || (both && other.error)) return <Card><InlineError>{primary.error?.message ?? other.error?.message}</InlineError></Card>
+  const usesBedtime = primary.data?.canCreate || (both && other.data?.canCreate)
+  if (!usesBedtime) return <CalendarSchedulePage {...props} />
+  const sides = both ? [side, otherSide] as const : [side]
+  const names = { left: leftName, right: rightName }
+  return (
+    <>
+      <PageHeader title="Schedule" />
+      {!singleScheduleSide && <SegmentedControl ariaLabel="Side" options={[{ value: 'left', label: leftName }, { value: 'right', label: rightName }, { value: 'both', label: 'Both' }]} value={selectedSide} onChange={selectSide} />}
+      <div className="mt-4 flex flex-col gap-6">
+        {sides.map((selected) => {
+          const state = selected === side ? primary.data : other.data
+          return state?.canCreate
+            ? <BedtimeSchedule key={selected} side={selected} name={names[selected]} />
+            : (
+                <Card key={selected}>
+                  <span>
+                    {names[selected]}
+                    {' '}
+                    uses calendar schedules.
+                  </span>
+                  <Button onClick={() => selectSide(selected)}>
+                    {`Open ${names[selected]}'s schedules`}
+                  </Button>
+                </Card>
+              )
+        })}
+      </div>
+    </>
+  )
+}
+
+function CalendarSchedulePage({ curve, curveSide, fromBoth = false, savedCurve }: SchedulePageProps = {}) {
   // Focus one source only when the unused zone has no independent schedule.
   const { primarySide, selectedSide: chosenSide, selectSide, singleScheduleSide } = useSide()
   const side = singleScheduleSide ?? primarySide
