@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+export const COMFORT_ACTIVATION_REASON = 'Hardware qualification and reviewed Preview nights are pending.' as const
+
 const timestamp = z.number().int().nonnegative().max(8_640_000_000_000_000)
 const localDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(value =>
   Number.isFinite(Date.parse(value)) && new Date(value).toISOString().slice(0, 10) === value,
@@ -66,7 +68,7 @@ export const comfortStatusSchema = z.object({
   runtime: z.enum(['running', 'stopped']),
   activation: z.object({
     available: z.literal(false),
-    reason: z.literal('Hardware qualification and reviewed Preview nights are pending.'),
+    reason: z.literal(COMFORT_ACTIVATION_REASON),
   }),
   features: z.object({ sensorAware: z.literal(false), followBedtime: z.literal(false) }),
 })

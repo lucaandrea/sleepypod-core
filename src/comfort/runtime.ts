@@ -1,9 +1,8 @@
 import type { Side } from '@/src/hardware/types'
-import { comfortConfigSchema, comfortFeedbackSchema, type ComfortStatus } from './contract'
+import { COMFORT_ACTIVATION_REASON, comfortConfigSchema, comfortFeedbackSchema, type ComfortStatus } from './contract'
 import { comfortLocalDate, decideComfort, learnComfort, MANUAL_PAUSE_MS, type ComfortConfig, type ComfortContext, type ComfortDecision, type ComfortFeedback, type ComfortState } from './policy'
 import { comfortEvent, type ComfortStore } from './store'
 
-export const COMFORT_ACTIVATION_REASON = 'Hardware qualification and reviewed Preview nights are pending.' as const
 const STORAGE_FAULT = 'Personal comfort is withheld because its current inputs, settings or observation journal are unavailable.'
 interface Observation { at: number, decision: ComfortDecision, stateKey: string }
 export class ComfortInputError extends Error {}
