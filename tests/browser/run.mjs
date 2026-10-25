@@ -12,6 +12,7 @@ const env = {
   NEXT_PUBLIC_DEMO: '',
   DATABASE_URL: join(root, 'configuration.db'),
   BIOMETRICS_DATABASE_URL: join(root, 'biometrics.db'),
+  WATCH_UPLOAD_DIR: join(root, 'watch-upload'),
   SLEEPYPOD_BROWSER_FIXTURE: root,
   SLEEPYPOD_AUTH_TOKEN: randomBytes(32).toString('hex'),
 }
