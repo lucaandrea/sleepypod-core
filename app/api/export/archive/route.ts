@@ -1,3 +1,4 @@
+import { requireAccess } from '@/src/auth/access'
 import { spawn } from 'node:child_process'
 import { mkdir, mkdtemp, readdir, rm, stat, symlink } from 'node:fs/promises'
 import path from 'node:path'
@@ -97,6 +98,8 @@ async function backupSqlite(dbPath: string, outPath: string): Promise<void> {
 }
 
 export async function GET(request: Request) {
+  const denied = requireAccess(request)
+  if (denied) return denied
   const url = new URL(request.url)
 
   if (inflight) {

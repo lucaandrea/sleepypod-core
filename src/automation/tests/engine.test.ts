@@ -938,6 +938,86 @@ describe('AutomationEngine — shared control requests', () => {
     expect(h.control.status('left').source).toBeNull()
   })
 
+  it('withdraws a window-conditioned policy when its source disappears, despite retained history', async () => {
+    const harness = makeHarness([rule({
+      conditions: { kind: 'compare', op: '>', left: { kind: 'window', fn: 'avg', signal: 'room', lastMin: 10 }, right: lit(70) },
+      actions: [{ kind: 'setTemperature', mode: 'policy', temp: lit(68) }, { kind: 'notify', message: 'warm room' }],
+    })])
+    harness.setSignal('room', 80)
+    await harness.engine.reload()
+    await harness.engine.tick()
+    expect(harness.control.status('left').source).toBe('autopilot')
+    harness.setSignal('room', undefined)
+    harness.advance(60_000)
+    await harness.engine.tick()
+    expect(harness.control.status('left').source).toBeNull()
+    expect(harness.notifies).toHaveLength(1)
+    expect(harness.runs.at(-1)?.detail.reason).toBe('condition-unknown')
+    harness.setSignal('room', 80)
+    harness.advance(60_000)
+    await harness.engine.tick()
+    expect(harness.control.status('left').source).toBe('autopilot')
+    expect(harness.notifies).toHaveLength(2)
+  })
+
+  it.each([undefined, NaN, Infinity])('withdraws a policy with unavailable action input (%s) before its next trigger', async (value) => {
+    const harness = makeHarness([rule({
+      trigger: tickEvery(10),
+      actions: [{ kind: 'setTemperature', mode: 'policy', temp: { kind: 'window', fn: 'avg', signal: 'room', lastMin: 10 } }],
+    })])
+    harness.setSignal('room', 72)
+    await harness.engine.reload()
+    await harness.engine.tick()
+    expect(harness.control.status('left').targetTemperature).toBe(72)
+    harness.setSignal('room', value)
+    harness.advance(60_000)
+    await harness.engine.tick()
+    expect(harness.control.status('left').source).toBeNull()
+    expect(harness.runs.at(-1)?.detail.reason).toBe('policy-input-unavailable')
+    harness.setSignal('room', 74)
+    harness.advance(10 * 60_000)
+    await harness.engine.tick()
+    expect(harness.control.status('left').targetTemperature).toBe(74)
+    expect(harness.hwCalls.every(call => Number.isFinite(call.temp))).toBe(true)
+  })
+
+  it('withdraws a policy when its trigger source disappears and recovers without replaying notifications', async () => {
+    const harness = makeHarness([rule({
+      trigger: { kind: 'signalChange', signal: 'room' },
+      actions: [{ kind: 'setTemperature', mode: 'policy', temp: lit(68) }, { kind: 'notify', message: 'change' }],
+    })])
+    harness.setSignal('room', 70)
+    await harness.engine.reload()
+    await harness.engine.tick()
+    expect(harness.control.status('left').source).toBe('autopilot')
+    harness.setSignal('room', undefined)
+    harness.advance(60_000)
+    await harness.engine.tick()
+    expect(harness.control.status('left').source).toBeNull()
+    harness.setSignal('room', 70)
+    harness.advance(60_000)
+    await harness.engine.tick()
+    expect(harness.control.status('left').source).toBe('autopilot')
+    expect(harness.notifies).toHaveLength(0)
+  })
+
+  it('retains an explicitly bounded one-shot after its original input disappears', async () => {
+    const harness = makeHarness([rule({
+      trigger: tickEvery(10),
+      actions: [{ kind: 'setTemperature', mode: 'one-shot', temp: sig('room'), holdMinutes: 3 }],
+    })])
+    harness.setSignal('room', 72)
+    await harness.engine.reload()
+    await harness.engine.tick()
+    harness.setSignal('room', undefined)
+    harness.advance(60_000)
+    await harness.engine.tick()
+    expect(harness.control.status('left').source).toBe('autopilot')
+    harness.advance(3 * 60_000)
+    await harness.engine.tick()
+    expect(harness.control.status('left').source).toBeNull()
+  })
+
   it('revokes disabled and edited rules immediately on reload', async () => {
     const rules = [rule({ actions: [{ kind: 'setTemperature', temp: lit(70) }] })]
     const h = makeHarness(rules)

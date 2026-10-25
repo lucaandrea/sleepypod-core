@@ -190,7 +190,7 @@ export class GestureActionHandler {
           try {
             await client.connect()
             if (nextPowered) await getTemperatureController().setManualLocked(event.side, target)
-            else await getTemperatureController().powerOffLocked(event.side)
+            else await getTemperatureController().powerOffLocked(event.side, true)
           }
           finally {
             client.disconnect()

@@ -7,7 +7,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 import { TRPCError } from '@trpc/server'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const callerMock = vi.hoisted(() => {
   const fn = () => vi.fn()
@@ -1215,6 +1215,9 @@ describe('sleep stage tuning tools', () => {
   const record = { id: 42, side: 'left', enteredBedAt, leftBedAt, sleepDurationSeconds: 28800, timesExitedBed: 0, presentIntervals: [], notPresentIntervals: [], createdAt: leftBedAt }
 
   beforeEach(() => {
+    // Keep the fixed reference recordings inside the rolling coverage window.
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-13T15:00:00Z'))
     vi.clearAllMocks()
     callerMock.sleepStages.getClassifier.mockResolvedValue(classifierState())
     callerMock.biometrics.getReferenceStages.mockResolvedValue([])
@@ -1222,6 +1225,8 @@ describe('sleep stage tuning tools', () => {
     callerMock.biometrics.getReferenceVitals.mockResolvedValue([])
     callerMock.biometrics.getVitals.mockResolvedValue([])
   })
+
+  afterEach(() => vi.useRealTimers())
 
   async function call(name: string, args: Record<string, unknown>) {
     const client = await connect()

@@ -110,15 +110,18 @@ export async function getAutomationEngine(): Promise<AutomationEngine> {
         notify: (id, message) => console.log(`[automation notify] rule ${id}: ${message}`),
         log: msg => console.log(`[automation] ${msg}`),
       })
-      await engine.start()
-      // Restore the global kill-switch from persisted settings (default on).
+      // Resolve persisted consent before any timer can evaluate a rule.
+      // Missing or unreadable settings must never enable actuators by default.
+      let enabled = false
       try {
         const [settings] = await db.select({ on: deviceSettings.autopilotEnabled }).from(deviceSettings).limit(1)
-        if (settings && settings.on === false) await engine.setGlobalEnabled(false)
+        enabled = settings?.on === true
       }
       catch {
-        // Settings unreadable (e.g. fresh DB) — leave autopilot enabled.
+        console.warn('[automation] settings unreadable; automatic control remains disabled')
       }
+      await engine.setGlobalEnabled(enabled)
+      await engine.start()
       await engine.tick()
       state.engineInstance = engine
       console.log('AutomationEngine initialized with timezone:', timezone)

@@ -1,3 +1,4 @@
+import { requireAccess } from '@/src/auth/access'
 import linguiConfig from 'lingui.config'
 import Negotiator from 'negotiator'
 import { type NextRequest, NextResponse } from 'next/server'
@@ -48,6 +49,8 @@ export const proxy = (request: NextRequest) => {
   const { pathname } = request.nextUrl
 
   if (NO_LOCALE_PATH.test(pathname)) {
+    if (pathname === '/api/auth/session') return
+    if (pathname.startsWith('/api/') || pathname.startsWith('/panel')) return requireAccess(request) ?? undefined
     return
   }
 

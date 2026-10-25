@@ -47,6 +47,8 @@ const mocks = vi.hoisted(() => ({
   recordStartupPhase: vi.fn(),
   startTemperatureController: vi.fn(async () => undefined),
   stopTemperatureController: vi.fn(),
+  startComfortPreview: vi.fn(async () => undefined),
+  stopComfortPreview: vi.fn(async () => undefined),
   getAutomationEngine: vi.fn(async () => ({})),
   shutdownAutomationEngine: vi.fn(async () => undefined),
   stopShadowService: vi.fn(async () => undefined),
@@ -88,6 +90,10 @@ vi.mock('@/src/lib/serverPerformance', () => ({
 vi.mock('@/src/temperature/instance', () => ({
   startTemperatureController: mocks.startTemperatureController,
   stopTemperatureController: mocks.stopTemperatureController,
+}))
+vi.mock('@/src/comfort/instance', () => ({
+  startComfortPreview: mocks.startComfortPreview,
+  stopComfortPreview: mocks.stopComfortPreview,
 }))
 
 vi.mock('@/src/automation', () => ({
@@ -421,6 +427,7 @@ describe('register()', () => {
     release(jobManager)
     await initializeScheduler()
     expect(mocks.initializeKeepalives).toHaveBeenCalledOnce()
+    await vi.waitFor(() => expect(mocks.startComfortPreview).toHaveBeenCalledOnce())
   })
 
   it('does not start background writers when shutdown occurs during scheduler initialization', async () => {

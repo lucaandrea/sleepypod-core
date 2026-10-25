@@ -1,0 +1,62 @@
+import type Database from 'better-sqlite3'
+import type { Side } from '@/src/hardware/types'
+import { comfortEventSchema, comfortFeedbackSchema, comfortStateSchema, type ComfortEvent } from './contract'
+import { defaultComfortState, type ComfortFeedback, type ComfortState } from './policy'
+
+export interface ComfortStore {
+  read(side: Side): ComfortState
+  commit(side: Side, state: ComfortState, event?: ComfortEvent): void
+  history(side: Side): ComfortEvent[]
+  feedback(side: Side): ComfortFeedback[]
+  saveFeedback(side: Side, feedback: ComfortFeedback, event: ComfortEvent): void
+  prune(now: number): void
+}
+
+/** Missing rows default OFF; malformed persisted data must fail closed, never reset silently. */
+export function createComfortStore(database: Database.Database): ComfortStore {
+  return {
+    read(side) {
+      const row = database.prepare('SELECT state FROM comfort_states WHERE side = ?').get(side) as { state: string } | undefined
+      return row ? comfortStateSchema.parse(JSON.parse(row.state)) : defaultComfortState()
+    },
+    commit(side, state, event) {
+      const encoded = JSON.stringify(comfortStateSchema.parse(state))
+      const eventJson = event ? JSON.stringify(comfortEventSchema.parse(event)) : null
+      database.transaction(() => {
+        database.prepare('INSERT INTO comfort_states (side, state) VALUES (?, ?) ON CONFLICT(side) DO UPDATE SET state = excluded.state').run(side, encoded)
+        if (event && eventJson) database.prepare('INSERT INTO comfort_events (side, observed_at, event) VALUES (?, ?, ?)').run(side, event.at, eventJson)
+      })()
+    },
+    history(side) {
+      const rows = database.prepare('SELECT event FROM comfort_events WHERE side = ? ORDER BY observed_at DESC, id DESC LIMIT 60').all(side) as { event: string }[]
+      return rows.map(row => comfortEventSchema.parse(JSON.parse(row.event)))
+    },
+    feedback(side) {
+      const rows = database.prepare('SELECT local_date AS date, comfort FROM comfort_feedback WHERE side = ? ORDER BY local_date DESC LIMIT 60').all(side)
+      return rows.map(row => comfortFeedbackSchema.parse(row))
+    },
+    saveFeedback(side, feedback, event) {
+      const report = comfortFeedbackSchema.parse(feedback)
+      const encoded = JSON.stringify(comfortEventSchema.parse(event))
+      database.transaction(() => {
+        database.prepare(`INSERT INTO comfort_feedback (side, local_date, comfort, recorded_at) VALUES (?, ?, ?, ?)
+          ON CONFLICT(side, local_date) DO UPDATE SET comfort = excluded.comfort, recorded_at = excluded.recorded_at`).run(side, report.date, report.comfort, event.at)
+        database.prepare('INSERT INTO comfort_events (side, observed_at, event) VALUES (?, ?, ?)').run(side, event.at, encoded)
+      })()
+    },
+    prune(now) {
+      database.transaction(() => {
+        database.prepare('DELETE FROM comfort_events WHERE observed_at < ?').run(now - 30 * 86_400_000)
+        for (const side of ['left', 'right']) {
+          database.prepare(`DELETE FROM comfort_events WHERE side = ? AND id NOT IN
+            (SELECT id FROM comfort_events WHERE side = ? ORDER BY observed_at DESC, id DESC LIMIT 50000)`).run(side, side)
+        }
+      })()
+    },
+  }
+}
+
+export function comfortEvent(at: number, kind: ComfortEvent['kind'], message: string): ComfortEvent {
+  return { at, kind, message, session: null, proposedF: null, reportedF: null, eligible: false,
+    deviceObservedAt: null, presenceObservedAt: null, owner: null }
+}

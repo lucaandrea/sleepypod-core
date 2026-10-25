@@ -1,4 +1,5 @@
 // @vitest-environment node
+import { TEST_OWNER_TOKEN } from '@/src/auth/tests/support'
 /**
  * Tests for the WebSocket streaming resource-management surfaces:
  *   - Bounded frame index (issue #324 — was unbounded, ~70MB at 24h)
@@ -26,6 +27,7 @@ const tmpRawDir = vi.hoisted(() => {
   const pth = require('node:path') as typeof import('node:path')
   const dir = fsh.mkdtempSync(pth.join(osh.tmpdir(), 'piezo-stream-test-'))
   process.env.RAW_DATA_DIR = dir
+  process.env.SLEEPYPOD_AUTH_TOKEN = 'test-only-sleepypod-owner-key-not-for-production'
   process.env.PIEZO_WS_PORT = '0'
   // This suite exercises the legacy `.RAW` tailer. Disable NATS source selection
   // so startPiezoStreamServer starts file tailing immediately instead of probing
@@ -610,7 +612,7 @@ interface ConnectedClient {
 }
 
 async function connectClient(port: number): Promise<ConnectedClient> {
-  const ws = new WsClient(`ws://127.0.0.1:${port}`)
+  const ws = new WsClient(`ws://127.0.0.1:${port}`, { headers: { Authorization: `Bearer ${TEST_OWNER_TOKEN}` } })
   const messages: any[] = []
   ws.on('message', (data: Buffer) => {
     try {
@@ -1958,7 +1960,7 @@ describe('piezoStream — server lifecycle and protocol', () => {
 
     // The port must refuse new connections after shutdown.
     await expect(new Promise((resolve, reject) => {
-      const probe = new WsClient(`ws://127.0.0.1:${port}`)
+      const probe = new WsClient(`ws://127.0.0.1:${port}`, { headers: { Authorization: `Bearer ${TEST_OWNER_TOKEN}` } })
       probe.once('open', () => resolve('open'))
       probe.once('error', reject)
     })).rejects.toThrow()
@@ -2273,7 +2275,7 @@ describe('piezoStream — handshake Host/Origin gate', () => {
   })
 
   async function expectConnects(headers: Record<string, string>): Promise<void> {
-    const result = await attemptHandshake(port, headers)
+    const result = await attemptHandshake(port, { Authorization: `Bearer ${TEST_OWNER_TOKEN}`, ...headers })
     expect(result.status).toBe(101)
     const messages: any[] = []
     result.client.on('message', (data: Buffer) => messages.push(JSON.parse(data.toString('utf-8'))))
@@ -2291,11 +2293,17 @@ describe('piezoStream — handshake Host/Origin gate', () => {
 
   it('accepts .local and localhost origins', async () => {
     await expectConnects({ Origin: 'http://eight-pod.local:3000', Host: 'eight-pod.local:3001' })
-    await expectConnects({ Origin: 'http://localhost:3000' })
+    await expectConnects({ Origin: 'http://localhost:3000', Host: 'localhost:3001' })
   })
 
   it('accepts a native client that sends no Origin', async () => {
     await expectConnects({})
+  })
+
+  it('rejects missing or wrong credentials before releasing sensor data', async () => {
+    expect((await attemptHandshake(port, {})).status).toBe(401)
+    expect((await attemptHandshake(port, { Authorization: 'Bearer wrong' })).status).toBe(401)
+    expect(startPiezoStreamServer().clients.size).toBe(0)
   })
 
   it('rejects a cross-site Origin with 403 before the upgrade', async () => {

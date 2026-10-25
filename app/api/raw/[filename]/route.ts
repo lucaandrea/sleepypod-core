@@ -1,3 +1,4 @@
+import { requireAccess } from '@/src/auth/access'
 import { NextResponse } from 'next/server'
 import { createReadStream } from 'node:fs'
 import { lstat, realpath, stat } from 'node:fs/promises'
@@ -13,6 +14,8 @@ export async function GET(
   _request: Request,
   { params }: { params: Promise<{ filename: string }> },
 ) {
+  const denied = requireAccess(_request)
+  if (denied) return denied
   const { filename } = await params
 
   if (!SAFE_FILENAME.test(filename)) {

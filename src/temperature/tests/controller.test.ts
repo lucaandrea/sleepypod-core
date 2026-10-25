@@ -43,6 +43,133 @@ function harness() {
   }
 }
 
+describe('shared passive policy arbitration', () => {
+  it('records explicit manual intent before a write but leaves scheduled reconciliation alone', async () => {
+    const context = harness()
+    const paused = vi.fn()
+    context.deps.onManualControl = paused
+    await context.controller.reconcile('left')
+    await withSideLock('left', () => context.controller.powerOnLocked('left'))
+    expect(paused).not.toHaveBeenCalled()
+    await context.controller.setManual('left', 74)
+    expect(paused.mock.invocationCallOrder[0]).toBeLessThan(context.apply.mock.invocationCallOrder.at(-1) ?? 0)
+    await context.controller.resume('left')
+    await withSideLock('left', () => context.controller.powerOffLocked('left', true))
+    await withSideLock('left', () => context.controller.powerOnLocked('left', 75, () => true, true))
+    expect(paused).toHaveBeenCalledTimes(4)
+    context.blocked.left = true
+    await expect(context.controller.setManual('left', 74)).rejects.toThrow('Pump stall')
+    expect(paused).toHaveBeenCalledTimes(4)
+  })
+  it('keeps a comfort lease when the rules engine replaces its own evaluation', async () => {
+    const context = harness()
+    await context.controller.replacePolicy('left', 'comfort', [request('autopilot', 71)], () => true)
+    await context.controller.replaceAutopilot('left', [])
+    expect(context.controller.status('left')).toMatchObject({ requestId: 'policy:comfort:autopilot', targetTemperature: 71 })
+    expect(context.apply).toHaveBeenCalledTimes(1)
+  })
+
+  it('arbitrates both producers and returns to comfort when the higher-priority rule withdraws', async () => {
+    const context = harness()
+    await context.controller.replacePolicy('left', 'comfort', [request('autopilot', 71)], () => true)
+    await context.controller.replaceAutopilot('left', [request('autopilot', 74, { priority: 10 })])
+    expect(context.controller.status('left')).toMatchObject({ requestId: 'autopilot', targetTemperature: 74 })
+    await context.controller.replaceAutopilot('left', [])
+    expect(context.apply).toHaveBeenLastCalledWith('left', 71)
+    await context.controller.replacePolicy('left', 'comfort', [], () => true)
+    expect(context.apply).toHaveBeenLastCalledWith('left', 72)
+  })
+
+  it('isolates each producer and each bed side', async () => {
+    const context = harness()
+    await context.controller.replacePolicy('left', 'comfort', [request('autopilot', 71)], () => true)
+    await context.controller.replacePolicy('left', 'room', [request('autopilot', 70, { priority: 1 })], () => true)
+    await context.controller.replacePolicy('right', 'comfort', [request('autopilot', 67)], () => true)
+    await context.controller.replacePolicy('left', 'room', [], () => true)
+    expect(context.controller.status('left').targetTemperature).toBe(71)
+    expect(context.controller.status('right').targetTemperature).toBe(67)
+  })
+
+  it('keeps manual and run-once ownership above passive policies', async () => {
+    const context = harness()
+    context.baselines.left.push(request('run-once', 73))
+    await context.controller.replacePolicy('left', 'comfort', [request('autopilot', 71, { priority: 1_000 })], () => true)
+    expect(context.apply).toHaveBeenLastCalledWith('left', 73)
+    await context.controller.setManual('left', 76)
+    await context.controller.replacePolicy('left', 'comfort', [request('autopilot', 70, { priority: 2_000 })], () => true)
+    expect(context.apply).toHaveBeenLastCalledWith('left', 76, undefined)
+  })
+
+  it('never powers an off side on even when a rule names the same request ID', async () => {
+    const context = harness()
+    context.powered.left = false
+    await context.controller.replacePolicy('left', 'comfort', [request('autopilot', 71, { priority: 10 })], () => true)
+    await context.controller.replaceAutopilot('left', [request('autopilot', 70, { id: 'policy:comfort:autopilot' })], ['policy:comfort:autopilot'])
+    expect(context.apply).not.toHaveBeenCalled()
+    expect(context.controller.status('left').blocked).toBe('off')
+  })
+
+  it('revokes stale leases and never resurrects them when a signal recovers', async () => {
+    const context = harness()
+    let fresh = true
+    await context.controller.replacePolicy('left', 'comfort', [request('autopilot', 71)], () => fresh)
+    fresh = false
+    await context.controller.reconcile('left')
+    expect(context.apply).toHaveBeenLastCalledWith('left', 72)
+    fresh = true
+    await context.controller.reconcile('left')
+    expect(context.controller.status('left').source).toBe('schedule')
+  })
+
+  it('rechecks the guard after a delayed connection and does not replay the old proposal', async () => {
+    const context = harness()
+    let fresh = true
+    vi.mocked(context.deps.connect).mockImplementation(async () => {
+      fresh = false
+    })
+    await context.controller.replacePolicy('left', 'comfort', [request('autopilot', 71)], () => fresh)
+    expect(context.apply).toHaveBeenCalledExactlyOnceWith('left', 72)
+  })
+
+  it('treats failed guards as unavailable and expires leases without extending them', async () => {
+    const context = harness()
+    await context.controller.replacePolicy('left', 'comfort', [request('autopilot', 71)], () => {
+      throw new Error('sensor unavailable')
+    })
+    expect(context.controller.status('left').source).toBe('schedule')
+    await context.controller.replacePolicy('left', 'comfort', [request('autopilot', 71, { expiresAt: 2_000 })], () => true)
+    context.advance(1_000)
+    await context.controller.reconcile('left')
+    expect(context.apply).toHaveBeenLastCalledWith('left', 72)
+  })
+
+  it.each([
+    { durationSec: 0 }, { durationSec: 600 }, { temperature: NaN }, { createdAt: NaN },
+    { createdAt: 1_001 }, { priority: Infinity }, { expiresAt: 999 }, { id: '' },
+  ])('rejects a malformed passive lease atomically: %j', async (changes) => {
+    const context = harness()
+    await context.controller.replacePolicy('left', 'comfort', [request('autopilot', 71)], () => true)
+    await expect(context.controller.replacePolicy('left', 'comfort', [request('autopilot', 70, changes)], () => true)).rejects.toThrow('Invalid policy lease')
+    expect(context.controller.status('left').targetTemperature).toBe(71)
+  })
+
+  it('drops an obsolete producer evaluation after waiting for the side lock', async () => {
+    const context = harness()
+    await context.controller.replacePolicy('left', 'comfort', [request('autopilot', 71)], () => true, () => false)
+    expect(context.apply).not.toHaveBeenCalled()
+    expect(context.controller.status('left').source).toBe('schedule')
+  })
+
+  it('revokes a producer generation that becomes obsolete after publication', async () => {
+    const context = harness()
+    let current = true
+    await context.controller.replacePolicy('left', 'comfort', [request('autopilot', 71)], () => true, () => current)
+    current = false
+    await context.controller.reconcile('left')
+    expect(context.controller.status('left').source).toBe('schedule')
+  })
+})
+
 describe('temperature arbitration', () => {
   it('selects source priority independently of producer order', () => {
     const requests = [request('manual', 75), request('schedule', 72), request('run-once', 71), request('autopilot', 70)]

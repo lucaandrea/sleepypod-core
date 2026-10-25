@@ -22,6 +22,8 @@ import { sleepStagesRouter } from './sleepStages'
 import { curveTemplatesRouter } from './curveTemplates'
 import { biometricTuningRouter } from './biometricTuning'
 import { biometricShadowRouter } from './biometricShadow'
+import { capabilitiesRouter } from './capabilities'
+import { comfortRouter } from './comfort'
 
 export const appRouter = router({
   healthcheck: publicProcedure
@@ -36,10 +38,10 @@ export const appRouter = router({
   schedules: schedulesRouter,
   biometrics: biometricsRouter,
   health: healthRouter,
-  // NOTE: systemRouter uses publicProcedure — acceptable because the pod runs on an
-  // isolated LAN with WAN blocked by iptables. If internet access is ever opened,
-  // add auth middleware before exposing these endpoints. See GitHub issue.
+  // REST and tRPC entry points authenticate owner requests before dispatch.
   system: systemRouter,
+  capabilities: capabilitiesRouter,
+  comfort: comfortRouter,
   environment: environmentRouter,
   raw: rawRouter,
   calibration: calibrationRouter,

@@ -1,12 +1,16 @@
+import { requireAccess } from '@/src/auth/access'
 import { appRouter } from '@/src/server/routers/app'
 import { createOpenApiFetchHandler } from 'trpc-to-openapi'
 
-const handler = (req: Request) =>
-  createOpenApiFetchHandler({
+const handler = (req: Request) => {
+  const denied = requireAccess(req)
+  if (denied) return denied
+  return createOpenApiFetchHandler({
     endpoint: '/api',
     req,
     router: appRouter,
     createContext: () => ({}),
   })
+}
 
 export { handler as GET, handler as POST, handler as PUT, handler as PATCH, handler as DELETE }

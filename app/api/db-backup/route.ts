@@ -1,3 +1,4 @@
+import { requireAccess } from '@/src/auth/access'
 import { spawn } from 'node:child_process'
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
@@ -29,6 +30,8 @@ async function backupSqlite(dbPath: string, outPath: string): Promise<void> {
  * copy of each .db with sleepypod stopped.
  */
 export async function GET(request: Request) {
+  const denied = requireAccess(request)
+  if (denied) return denied
   if (inflight) {
     return Response.json({ error: 'A backup is already in progress, retry shortly' }, { status: 429, headers: { 'Retry-After': '30' } })
   }

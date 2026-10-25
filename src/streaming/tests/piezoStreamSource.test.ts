@@ -1,4 +1,5 @@
 // @vitest-environment node
+import { TEST_OWNER_TOKEN } from '@/src/auth/tests/support'
 /**
  * Source-selection tests for startPiezoStreamServer: the reachability probe
  * picks NATS when a server is present and falls back to the `.RAW` file tailer
@@ -22,6 +23,7 @@ const tmpRawDir = vi.hoisted(() => {
   const pth = require('node:path') as typeof import('node:path')
   const dir = fsh.mkdtempSync(pth.join(osh.tmpdir(), 'piezo-nats-sel-'))
   process.env.RAW_DATA_DIR = dir
+  process.env.SLEEPYPOD_AUTH_TOKEN = 'test-only-sleepypod-owner-key-not-for-production'
   process.env.PIEZO_WS_PORT = '0'
   // Short grace/probe so the RAW-fallback path resolves in well under a second.
   process.env.PIEZO_NATS_GRACE_MS = '120'
@@ -147,7 +149,7 @@ describe('startPiezoStreamServer — source selection', () => {
     natsMock.captured.onFrame({ type: 'capSense', ts: now - 1, left: 1, right: 2 })
     const address = server.address()
     if (!address || typeof address === 'string') throw new Error('Missing WS address')
-    const client = new WebSocket(`ws://127.0.0.1:${address.port}`, 'sensor-snapshot-v1')
+    const client = new WebSocket(`ws://127.0.0.1:${address.port}`, 'sensor-snapshot-v1', { headers: { Authorization: `Bearer ${TEST_OWNER_TOKEN}` } })
     const messages: any[] = []
     client.on('message', data => messages.push(JSON.parse(String(data))))
     await new Promise<void>((resolve, reject) => {

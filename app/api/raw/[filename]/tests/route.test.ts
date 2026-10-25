@@ -1,11 +1,12 @@
 // @vitest-environment node
+import { ownerRequest } from '@/src/auth/tests/support'
 import { Readable } from 'node:stream'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { GET } from '../route'
 const fs = vi.hoisted(() => ({ lstat: vi.fn(), realpath: vi.fn(), stat: vi.fn(), createReadStream: vi.fn() }))
 vi.mock('node:fs/promises', () => ({ lstat: fs.lstat, realpath: fs.realpath, stat: fs.stat }))
 vi.mock('node:fs', () => ({ createReadStream: fs.createReadStream }))
-const request = (filename = 'capture.RAW') => GET(new Request('http://localhost/api/raw/' + filename), { params: Promise.resolve({ filename }) })
+const request = (filename = 'capture.RAW') => GET(ownerRequest('http://localhost/api/raw/' + filename), { params: Promise.resolve({ filename }) })
 beforeEach(() => {
   vi.resetAllMocks()
   fs.lstat.mockResolvedValue({ isSymbolicLink: () => false })

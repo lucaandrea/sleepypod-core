@@ -1,3 +1,5 @@
+import type { IncomingHttpHeaders } from 'node:http'
+import { authorized } from '@/src/auth/access'
 /**
  * WebSocket server for streaming raw sensor data to iOS clients.
  *
@@ -150,10 +152,12 @@ export interface LatestCapSenseSnapshot {
   ts: number
   /** Wall-clock epoch ms when the snapshot was written. Used for staleness. */
   receivedAtMs: number
-  /** Per-side channels — capSense (Pod 3) carries a scalar; capSense2 carries the
+  /** Per-side channels — legacy capSense is projected to paired out/cen/in; capSense2 carries the
    *  raw `[A1,A2,B1,B2,C1,C2,ref1,ref2]` array. */
   left: number | number[]
   right: number | number[]
+  leftStatus?: string | null
+  rightStatus?: string | null
 }
 
 /**
@@ -853,9 +857,23 @@ function handshakeRejection(host: string | undefined, origin: string | undefined
 
 // The Vercel demo never starts this server (no listening sockets there), so
 // unlike proxy.ts there is no NEXT_PUBLIC_DEMO bypass.
+function streamAuthHeaders(input: IncomingHttpHeaders): Headers {
+  const headers = new Headers()
+  for (const [name, value] of Object.entries(input)) {
+    if (typeof value === 'string') headers.set(name, value)
+    else if (value) headers.set(name, value.join(', '))
+  }
+  return headers
+}
+
 const verifyClient: VerifyClientCallbackAsync = ({ req, origin }, callback) => {
   const rejection = handshakeRejection(req.headers.host, origin || undefined)
   if (rejection === null) {
+    const headers = streamAuthHeaders(req.headers)
+    if (!authorized(headers, 'GET', true)) {
+      callback(false, 401, 'Authentication required', { 'Content-Type': 'text/plain' })
+      return
+    }
     callback(true)
     return
   }
@@ -883,7 +901,13 @@ export function startPiezoStreamServer(): WebSocketServer {
   streamState.wss = new WebSocketServer({ port: WS_PORT, maxPayload: WS_MAX_PAYLOAD_BYTES, verifyClient })
   console.log(`[sensorStream] WebSocket server listening on port ${WS_PORT}`)
 
-  streamState.wss.on('connection', (ws) => {
+  streamState.wss.on('connection', (ws, request) => {
+    const headers = streamAuthHeaders(request.headers)
+    const accessCheck = setInterval(() => {
+      if (!authorized(headers, 'GET', true)) ws.close(1008, 'Session expired')
+    }, 30_000)
+    accessCheck.unref()
+    ws.once('close', () => clearInterval(accessCheck))
     // Negotiate before the first subscription message can race a RAW tick.
     if (ws.protocol === 'sensor-snapshot-v1') streamState.snapshotClients.add(ws)
     console.log('[sensorStream] Client connected')
@@ -1048,16 +1072,21 @@ function dispatchSensorFrame(frame: Record<string, unknown>, backlog = false): v
     const rawRight = (frame as { right: unknown }).right
     const left = capSideChannels(rawLeft)
     const right = capSideChannels(rawRight)
-    if (typeof ts === 'number' && left && right) {
+    if (typeof ts === 'number' && Number.isFinite(ts)) {
       streamState.latestCapSenseSnapshot = {
         type: frameType,
         ts,
         receivedAtMs: Date.now(),
-        left,
-        right,
+        left: left ?? [],
+        right: right ?? [],
+        leftStatus: capSideStatus(rawLeft),
+        rightStatus: capSideStatus(rawRight),
       }
-      recordCapFrame('left', left, ts, capSideStatus(rawLeft))
-      recordCapFrame('right', right, ts, capSideStatus(rawRight))
+      if (left) recordCapFrame('left', left, ts, capSideStatus(rawLeft))
+      if (right) recordCapFrame('right', right, ts, capSideStatus(rawRight))
+    }
+    else {
+      streamState.latestCapSenseSnapshot = null
     }
   }
 }

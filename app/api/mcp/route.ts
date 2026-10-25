@@ -1,9 +1,10 @@
+import { requireAccess } from '@/src/auth/access'
 /**
  * MCP endpoint (Streamable HTTP, stateless).
  *
  * Each request builds a fresh McpServer + transport pair, so no session state
  * lives in the Next.js process and horizontal scaling or restarts are safe.
- * Like the rest of the API this trusts the LAN: do not expose it to the WAN.
+ * Requires owner authentication and an explicit SLEEPYPOD_ENABLE_MCP opt-in.
  *
  * Client setup:
  *   claude mcp add --transport http sleepypod http://<pod-ip>:3000/api/mcp
@@ -30,6 +31,9 @@ export function isOriginAllowed(req: Request): boolean {
 }
 
 async function handler(req: Request): Promise<Response> {
+  const denied = requireAccess(req)
+  if (denied) return denied
+  if (process.env.SLEEPYPOD_ENABLE_MCP !== '1') return new Response(null, { status: 404 })
   if (!isOriginAllowed(req)) {
     return Response.json(
       { jsonrpc: '2.0', error: { code: -32000, message: 'Forbidden: cross-origin request' }, id: null },

@@ -3,7 +3,6 @@
 import type { ReactNode } from 'react'
 import { ToastProvider } from '@/src/components/ds'
 import { useSwipeNavigation } from '@/src/hooks/useSwipeNavigation'
-import { useBaseAvailable } from './useBaseAvailable'
 import { Sidebar } from './Sidebar'
 import { TabBar } from './TabBar'
 
@@ -15,8 +14,7 @@ import { TabBar } from './TabBar'
  * overlay the content column.
  */
 export function AppShell({ children }: { children: ReactNode }) {
-  const hasBase = useBaseAvailable()
-  const { onTouchStart, onTouchEnd } = useSwipeNavigation(hasBase)
+  const { onTouchStart, onTouchEnd } = useSwipeNavigation()
   return (
     <ToastProvider>
       <div className="flex min-h-dvh bg-app text-fg">
@@ -26,6 +24,11 @@ export function AppShell({ children }: { children: ReactNode }) {
           onTouchEnd={onTouchEnd}
           className="@container flex min-w-0 flex-1 flex-col gap-3.5 px-5 pb-[calc(96px+env(safe-area-inset-bottom,0px))] pt-[calc(env(safe-area-inset-top,0px)+20px)] min-[900px]:gap-[18px] min-[900px]:px-8 min-[900px]:py-7"
         >
+          {process.env.NEXT_PUBLIC_DEMO === '1' && (
+            <p role="status" className="relative z-10 rounded-ctl border border-cool/30 bg-surface px-4 py-2 text-sm text-fg-2">
+              Demo · Sample data. Controls do not operate your Pod.
+            </p>
+          )}
           {children}
         </main>
         <TabBar className="min-[900px]:hidden" />

@@ -1,0 +1,90 @@
+{
+  "colors": {
+    "accent": {
+      "light": "#2563eb",
+      "dark": "#75b0ff"
+    },
+    "canvas": {
+      "light": "#f4f6f8",
+      "dark": "#0d1420"
+    },
+    "surface": {
+      "light": "#ffffff",
+      "dark": "#172132"
+    },
+    "border": {
+      "light": "#dce2eb",
+      "dark": "#2b3a50"
+    },
+    "text": {
+      "light": "#172132",
+      "dark": "#eff4fc"
+    },
+    "secondary": {
+      "light": "#536277",
+      "dark": "#a5b5cc"
+    },
+    "success": {
+      "light": "#27835e",
+      "dark": "#77cba5"
+    },
+    "info": {
+      "light": "#446dc2",
+      "dark": "#8baef4"
+    },
+    "warning": {
+      "light": "#997021",
+      "dark": "#d8b477"
+    },
+    "error": {
+      "light": "#bd2940",
+      "dark": "#ed929b"
+    },
+    "primaryButton": {
+      "light": "#2563eb",
+      "dark": "#75b0ff"
+    },
+    "primaryButtonText": {
+      "light": "#ffffff",
+      "dark": "#0d1420"
+    },
+    "bedLine": {
+      "light": "#3979d6",
+      "dark": "#75b0ff"
+    }
+  },
+  "layout": {
+    "pageWidth": 1000,
+    "narrowPageWidth": 800,
+    "desktopBreakpoint": 900,
+    "sidebarWidth": 224,
+    "navigationHeight": 68,
+    "pageInset": 20,
+    "pageTop": 24,
+    "widePageInset": 40,
+    "gap": 20,
+    "cardInset": 20,
+    "cardRadius": 20,
+    "controlHeight": 44,
+    "controlRadius": 8,
+    "selectorInset": 4,
+    "selectorRadius": 10,
+    "badgeHeight": 26,
+    "badgeRadius": 6
+  },
+  "type": {
+    "pageTitle": 27,
+    "widePageTitle": 30,
+    "cardTitle": 20,
+    "body": 14,
+    "small": 13,
+    "caption": 12,
+    "eyebrow": 10,
+    "metric": 30,
+    "smallMetric": 22,
+    "temperature": 76,
+    "temperatureUnit": 30,
+    "button": 13,
+    "badge": 11
+  }
+}
