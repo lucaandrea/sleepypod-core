@@ -51,7 +51,7 @@ export interface ComfortContext {
     waterAdequate: boolean | null
     priming: boolean
     vibrating: boolean
-    baseMoving: boolean
+    baseMoving: boolean | null
     targetF: number | null
   }
   presence: { observedAt: number | null, available: boolean, occupied: boolean }
@@ -123,6 +123,7 @@ export function decideComfort(state: ComfortState, context: ComfortContext): Com
     return stop('Leaving the alarm window to your routine.')
   }
   if (!fresh(device.observedAt, now, DEVICE_MAX_AGE_MS)) return stop('Waiting for fresh Pod status.')
+  if (device.baseMoving === null) return stop('Waiting for confirmed idle base telemetry or a confirmed unconfigured base.')
   if (device.priming !== false || device.vibrating !== false || device.baseMoving !== false) {
     return stop('Paused during priming, vibration or base movement.')
   }
@@ -155,7 +156,7 @@ export function decideComfort(state: ComfortState, context: ComfortContext): Com
   return {
     eligible: true, baselineF, proposedF, retainPreviousLease: false, pauseRequired: false,
     reason: state.config.mode === 'preview'
-      ? 'Preview only. No temperatures will change.'
+      ? 'Preview only. Personal comfort will not change temperatures.'
       : 'Following your routine with the learned comfort adjustment.',
   }
 }
@@ -165,7 +166,7 @@ function validDate(value: string): boolean {
     && Number.isFinite(Date.parse(value)) && new Date(value).toISOString().slice(0, 10) === value
 }
 
-function localDate(now: number, timezone: string): string {
+export function comfortLocalDate(now: number, timezone: string): string {
   const parts = new Intl.DateTimeFormat('en-US', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(now)
   const values = Object.fromEntries(parts.map(part => [part.type, part.value]))
   return `${values.year}-${values.month}-${values.day}`
@@ -179,7 +180,7 @@ export function learnComfort(state: ComfortState, feedback: ComfortFeedback[], s
   }
   let today: string
   try {
-    today = localDate(now, timezone)
+    today = comfortLocalDate(now, timezone)
   }
   catch { return { state, message: null } }
   const since = new Date(Date.parse(today) - 14 * 86_400_000).toISOString().slice(0, 10)

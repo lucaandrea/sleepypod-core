@@ -5,6 +5,7 @@ vi.mock('node:fs/promises', () => ({ readFile: runtime.readFile, default: { read
 vi.mock('@/src/hardware/dacMonitor.instance', () => ({ getDacMonitorIfRunning: runtime.monitor }))
 vi.mock('@/src/hardware/base/instance', () => ({ getBaseControllerIfRunning: runtime.base }))
 vi.mock('@/src/streaming/mqttBridge', () => ({ getBridgeStatus: runtime.mqtt }))
+vi.mock('@/src/comfort/instance', () => ({ getComfortRuntimeIfRunning: () => undefined }))
 const { readCapabilities } = await import('../read')
 
 beforeEach(() => {

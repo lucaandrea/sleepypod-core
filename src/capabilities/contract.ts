@@ -42,6 +42,7 @@ export const capabilitiesSchema = z.object({
     baseStop: featureSchema,
     wakeVibration: featureSchema,
     personalComfort: featureSchema,
+    personalComfortPreview: featureSchema,
     musicVibration: featureSchema,
     mqtt: featureSchema,
     homeContext: featureSchema,
@@ -62,6 +63,7 @@ export interface CapabilitySnapshot {
   device: { status: DeviceStatus | null, observedAt: number | null, current: boolean }
   base: BaseStatus | null
   mqttConnected: boolean
+  comfortPreviewRunning?: boolean
 }
 
 /** Preserve a valid old timestamp, but never label malformed or future data fresh. */
@@ -105,7 +107,8 @@ export function buildCapabilities(snapshot: CapabilitySnapshot): ControllerCapab
       // Stop must remain visible and callable even when position is stale or motion is unknown.
       baseStop: feature(base?.state === 'connected' ? 'ready' : 'not_ready', base?.state === 'connected' ? 'base_connected' : 'base_disconnected', true),
       wakeVibration: feature(deviceFresh && !device.status?.isPriming ? 'ready' : 'not_ready', !deviceFresh ? 'device_report_unavailable' : device.status?.isPriming ? 'priming' : 'fresh_device_report', true),
-      personalComfort: feature('not_ready', 'runtime_integration_pending', false, false),
+      personalComfort: feature('not_ready', 'personal_comfort_activation_unqualified', false, false),
+      personalComfortPreview: feature(snapshot.comfortPreviewRunning ? 'ready' : 'not_ready', snapshot.comfortPreviewRunning ? 'preview_only' : 'preview_runtime_stopped'),
       musicVibration: feature('not_ready', 'hardware_protocol_unqualified', true, false),
       mqtt: feature(snapshot.mqttConnected ? 'ready' : 'not_ready', snapshot.mqttConnected ? 'broker_connected' : 'broker_disconnected'),
       homeContext: feature('not_ready', 'room_context_integration_pending', false, false),

@@ -34,8 +34,11 @@ from HTTP success. Temperature, base and vibration remain physically unverified
 on this Core fork, even when their technical prerequisites are ready.
 
 `nativeCompatibility` remains null and its feature remains unimplemented: the
-legacy `/api/native/v1/` adapter has not shipped. Personal comfort production
-integration, room context and music vibration also remain unavailable. MQTT
+legacy `/api/native/v1/` adapter has not shipped. `personalComfortPreview` now
+describes the production Preview service; it never issues actuator requests.
+`personalComfort` still reports active control unavailable. See
+[Personal comfort Preview](PERSONAL_COMFORT_PREVIEW.md) for its versioned API.
+Room context and music vibration also remain unavailable. MQTT
 connection alone does not imply that room inputs are connected or qualified.
 Clients should decode the compatibility prefix as a nullable string and receipt
 and expiry support as booleans; their current null/false values are not permanent

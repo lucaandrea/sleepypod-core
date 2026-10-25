@@ -289,6 +289,27 @@ export const temperatureHolds = sqliteTable('temperature_holds', {
   expiresAt: integer('expires_at').notNull(),
 })
 
+/** Personal comfort records are separate from the shared controller's holds. */
+export const comfortStates = sqliteTable('comfort_states', {
+  side: text('side', { enum: ['left', 'right'] }).primaryKey(),
+  state: text('state', { mode: 'json' }).notNull(),
+})
+
+export const comfortFeedback = sqliteTable('comfort_feedback', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  side: text('side', { enum: ['left', 'right'] }).notNull(),
+  localDate: text('local_date').notNull(),
+  comfort: text('comfort', { enum: ['warm', 'cold', 'comfortable'] }).notNull(),
+  recordedAt: integer('recorded_at').notNull(), // Epoch milliseconds
+}, table => [uniqueIndex('uq_comfort_feedback_side_date').on(table.side, table.localDate)])
+
+export const comfortEvents = sqliteTable('comfort_events', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  side: text('side', { enum: ['left', 'right'] }).notNull(),
+  observedAt: integer('observed_at').notNull(), // Epoch milliseconds
+  event: text('event', { mode: 'json' }).notNull(),
+}, table => [index('idx_comfort_events_side_time').on(table.side, table.observedAt)])
+
 export const deviceState = sqliteTable('device_state', {
   // Explicit manual hardware cutoff, independent of temperature ownership (epoch ms).
   hardwareDeadline: integer('hardware_deadline'),

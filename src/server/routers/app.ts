@@ -23,6 +23,7 @@ import { curveTemplatesRouter } from './curveTemplates'
 import { biometricTuningRouter } from './biometricTuning'
 import { biometricShadowRouter } from './biometricShadow'
 import { capabilitiesRouter } from './capabilities'
+import { comfortRouter } from './comfort'
 
 export const appRouter = router({
   healthcheck: publicProcedure
@@ -40,6 +41,7 @@ export const appRouter = router({
   // REST and tRPC entry points authenticate owner requests before dispatch.
   system: systemRouter,
   capabilities: capabilitiesRouter,
+  comfort: comfortRouter,
   environment: environmentRouter,
   raw: rawRouter,
   calibration: calibrationRouter,

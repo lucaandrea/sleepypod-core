@@ -5,6 +5,7 @@ import { db } from '@/src/db'
 import { deviceState } from '@/src/db/schema'
 import { assertPumpStallNotBlocked, withHardwareClient } from '@/src/server/helpers'
 import { getPrimeCompletedAt, dismissPrimeNotification } from '@/src/hardware/primeNotification'
+import { pauseComfortAfterManual } from '@/src/comfort/manual'
 import { getAllPumpStallNotices } from '@/src/hardware/pumpStallNotification'
 import { snoozeAlarm, cancelSnooze, getSnoozeStatus } from '@/src/hardware/snoozeManager'
 import { markAlarmEnded, markAlarmStarted } from '@/src/hardware/alarmState'
@@ -441,11 +442,11 @@ export const deviceRouter = router({
           // not switch it off once the alarm is over.
           const jobManager = await getJobManager()
           jobManager.releaseHeldPowerOff(input.side)
-          if (input.temperature === undefined) await getTemperatureController().powerOnLocked(input.side)
+          if (input.temperature === undefined) await getTemperatureController().powerOnLocked(input.side, 75, () => true, true)
           else await getTemperatureController().setManualLocked(input.side, input.temperature)
         }
         else {
-          await getTemperatureController().powerOffLocked(input.side)
+          await getTemperatureController().powerOffLocked(input.side, true)
         }
 
         return { success: true }
@@ -611,6 +612,11 @@ export const deviceRouter = router({
     .output(z.object({ success: z.boolean() }))
     .mutation(async () => {
       return withHardwareClient(async (client) => {
+        for (const side of ['left', 'right'] as const) {
+          await withSideLock(side, async () => {
+            pauseComfortAfterManual(side)
+          })
+        }
         await client.startPriming()
         return { success: true }
       }, 'Failed to start priming')

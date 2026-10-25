@@ -11,6 +11,7 @@ const mock = vi.hoisted(() => ({
   activity: vi.fn(), globalEnabled: true, diag: undefined as unknown,
 }))
 vi.mock('next/navigation', () => ({ usePathname: () => mock.path, useRouter: () => ({ push: mock.push, replace: mock.replace }), useSearchParams: () => new URLSearchParams(mock.query) }))
+vi.mock('../PersonalComfortCard', () => ({ PersonalComfortCard: () => null }))
 vi.mock('@/src/hooks/useTemperatureUnit', () => ({ useTemperatureUnit: () => ({ unit: 'F' }) }))
 vi.mock('@/src/components/Schedule/CurveChart', async importOriginal => ({ ...await importOriginal<typeof CurveChartModule>(), useNowMinute: () => 29800000 }))
 vi.mock('@/src/hooks/useSideNames', () => ({ useSideNames: () => ({ sideName: (s: string) => s }) }))

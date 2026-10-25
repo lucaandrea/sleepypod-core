@@ -20,6 +20,7 @@ import { formatSetpointF } from '@/src/lib/tempUtils'
 import type { Condition } from '@/src/automation/types'
 import { AutomationsList, type ListItem } from './AutomationsList'
 import { ActivityCard } from './ActivityCard'
+import { PersonalComfortCard } from './PersonalComfortCard'
 import { TonightCard, type FireMark, type TimelineRule } from './TonightCard'
 import { StatusPanel, STRIP_HOURS, type RuleMode as DiagMode } from './StatusPanel'
 import { fromAST, missingLiveSignals, type TemplateId } from './builderModel'
@@ -179,6 +180,7 @@ export function AutopilotConsole() {
             New automation
           </Button>
           <TonightCard rules={timelineRules} tonight={tonightQ.data} fires={fires} unit={unit} />
+          <PersonalComfortCard />
           <AutomationsList
             items={items}
             loading={listQ.isLoading}

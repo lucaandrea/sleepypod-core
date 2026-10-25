@@ -256,7 +256,7 @@ export async function setSidePowerOff(monitor: DacMonitor, side: Side): Promise<
     await withSideLock(side, () => logged(
       `setPower(${side}, false)`,
       () => {
-        return getTemperatureController().powerOffLocked(side)
+        return getTemperatureController().powerOffLocked(side, true)
       },
     ))
   }

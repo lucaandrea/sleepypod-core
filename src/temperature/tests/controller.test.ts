@@ -44,6 +44,23 @@ function harness() {
 }
 
 describe('shared passive policy arbitration', () => {
+  it('records explicit manual intent before a write but leaves scheduled reconciliation alone', async () => {
+    const context = harness()
+    const paused = vi.fn()
+    context.deps.onManualControl = paused
+    await context.controller.reconcile('left')
+    await withSideLock('left', () => context.controller.powerOnLocked('left'))
+    expect(paused).not.toHaveBeenCalled()
+    await context.controller.setManual('left', 74)
+    expect(paused.mock.invocationCallOrder[0]).toBeLessThan(context.apply.mock.invocationCallOrder.at(-1) ?? 0)
+    await context.controller.resume('left')
+    await withSideLock('left', () => context.controller.powerOffLocked('left', true))
+    await withSideLock('left', () => context.controller.powerOnLocked('left', 75, () => true, true))
+    expect(paused).toHaveBeenCalledTimes(4)
+    context.blocked.left = true
+    await expect(context.controller.setManual('left', 74)).rejects.toThrow('Pump stall')
+    expect(paused).toHaveBeenCalledTimes(4)
+  })
   it('keeps a comfort lease when the rules engine replaces its own evaluation', async () => {
     const context = harness()
     await context.controller.replacePolicy('left', 'comfort', [request('autopilot', 71)], () => true)

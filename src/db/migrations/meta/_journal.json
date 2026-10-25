@@ -204,6 +204,13 @@
       "when": 1792952006284,
       "tag": "0028_autopilot_opt_in",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "6",
+      "when": 1792957057474,
+      "tag": "0029_useful_tana_nile",
+      "breakpoints": true
     }
   ]
 }

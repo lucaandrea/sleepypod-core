@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises'
 import { getDacMonitorIfRunning } from '@/src/hardware/dacMonitor.instance'
 import { getBaseControllerIfRunning } from '@/src/hardware/base/instance'
 import { getBridgeStatus } from '@/src/streaming/mqttBridge'
+import { getComfortRuntimeIfRunning } from '@/src/comfort/instance'
 import { buildCapabilities, DEVICE_FRESHNESS_MS } from './contract'
 
 async function readRevision(): Promise<string | null> {
@@ -28,5 +29,6 @@ export async function readCapabilities() {
     },
     base: base?.status() ?? null,
     mqttConnected: getBridgeStatus().connected,
+    comfortPreviewRunning: getComfortRuntimeIfRunning()?.isRunning() ?? false,
   })
 }

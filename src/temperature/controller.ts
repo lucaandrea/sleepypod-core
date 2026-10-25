@@ -58,6 +58,8 @@ export interface TemperatureControllerDeps {
   apply: (side: Side, temperature: number, durationSec?: number) => Promise<void>
   powerOff: (side: Side) => Promise<void>
   publish: (side: Side, status: TemperatureControlStatus) => void
+  /** Persist the personal-policy pause. Must not throw or block manual shutdown on storage failure. */
+  onManualControl?: (side: Side) => void
 }
 
 const rank: Record<TemperatureSource, number> = {
@@ -207,11 +209,12 @@ export class TemperatureController {
       throw new Error('Hardware duration must be a nonnegative integer')
     }
     if (durationSec === 0) {
-      await this.powerOffLocked(side)
+      await this.powerOffLocked(side, true)
       return this.status(side)
     }
     await this.deps.connect()
     if (this.deps.isBlocked(side)) throw new TemperatureBlockedError()
+    this.deps.onManualControl?.(side)
     const now = this.deps.now()
     const previous = this.deps.readHold(side)
     const previousDeadline = this.deps.readHardwareDeadline(side)
@@ -240,6 +243,7 @@ export class TemperatureController {
 
   async resume(side: Side): Promise<TemperatureControlStatus> {
     return this.deps.withSideLock(side, async () => {
+      this.deps.onManualControl?.(side)
       this.deps.writeHold(side, null)
       return this.reconcileLocked(side)
     })
@@ -252,10 +256,11 @@ export class TemperatureController {
   }
 
   /** An explicit power event may energize the selected target, but creates no manual hold. */
-  async powerOnLocked(side: Side, fallback = 75, isCurrent: () => boolean = () => true): Promise<TemperatureControlStatus> {
+  async powerOnLocked(side: Side, fallback = 75, isCurrent: () => boolean = () => true, manual = false): Promise<TemperatureControlStatus> {
     await this.deps.connect()
     if (this.deps.isBlocked(side)) throw new TemperatureBlockedError()
     if (!isCurrent()) return this.status(side)
+    if (manual) this.deps.onManualControl?.(side)
     const selected = this.select(side, this.deps.now())
     const temperature = selected?.temperature ?? fallback
     if (!Number.isFinite(temperature) || temperature < MIN_TEMP || temperature > MAX_TEMP) {
@@ -287,7 +292,8 @@ export class TemperatureController {
     return status
   }
 
-  async powerOffLocked(side: Side): Promise<void> {
+  async powerOffLocked(side: Side, manual = false): Promise<void> {
+    if (manual) this.deps.onManualControl?.(side)
     this.poweredOff[side] = true
     this.invalidate(side)
     await this.deps.powerOff(side)

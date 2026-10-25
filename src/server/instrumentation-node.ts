@@ -19,6 +19,7 @@ import { shutdownBaseController } from '@/src/hardware/base/instance'
 import { getJobManager, shutdownJobManager } from '@/src/scheduler'
 import { getAutomationEngine, shutdownAutomationEngine } from '@/src/automation'
 import { startTemperatureController, stopTemperatureController } from '@/src/temperature/instance'
+import { startComfortPreview, stopComfortPreview } from '@/src/comfort/instance'
 import { closeDatabase, closeBiometricsDatabase } from '@/src/db'
 import { startBiometricsRetention, stopBiometricsRetention } from '@/src/db/retention'
 import { startAutomationRunsRetention, stopAutomationRunsRetention } from '@/src/db/automationRunsRetention'
@@ -66,6 +67,7 @@ async function gracefulShutdown(signal: string): Promise<void> {
 
   // Step 0: Stop keepalive timers
   try {
+    await stopComfortPreview()
     await stopTemperatureController()
     shutdownBaseController()
     shutdownKeepalives()
@@ -441,6 +443,8 @@ async function initializeBackgroundServices(): Promise<void> {
         return
       }
       initializeKeepalives()
+      await startComfortPreview()
+      if (isShuttingDown) await stopComfortPreview()
     }).catch((error) => {
       console.warn(
         '[temperature] controller failed to start:',

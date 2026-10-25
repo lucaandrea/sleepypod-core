@@ -12,6 +12,7 @@ import { activeSleeperSides, scheduleSourceSide, type BedConfiguration } from '@
 import { broadcastMutationStatus } from '@/src/streaming/broadcastMutationStatus'
 import { alarmTemperatureTargets, recurringTarget, sessionTarget, type AlarmOccurrenceCache, type RecurringOccurrenceCache, type WeeklyTarget } from './baseline'
 import { TemperatureController, type TemperatureRequest } from './controller'
+import { pauseComfortAfterManual } from '@/src/comfort/manual'
 
 const invalidSessions: Record<Side, Map<number, string>> = { left: new Map(), right: new Map() }
 
@@ -120,6 +121,7 @@ export function getTemperatureController(): TemperatureController {
   if (!globalState.__sp_temperatureController) {
     globalState.__sp_temperatureController = new TemperatureController({
       now: Date.now,
+      onManualControl: pauseComfortAfterManual,
       withSideLock,
       readHold: (side) => {
         const row = statement('select temperature, started_at as startedAt, expires_at as expiresAt from temperature_holds where side = ?').get(side) as { temperature: number, startedAt: number, expiresAt: number } | undefined
