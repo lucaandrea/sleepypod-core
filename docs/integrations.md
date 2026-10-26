@@ -31,17 +31,18 @@ pod ship once.
 
 | Accessory | Type | Reads from | Writes to |
 |---|---|---|---|
-| `Bed <side>` | Thermostat (single setpoint) | `deviceStatus.<side>` | `setTemperature` / `setPower` |
-| `Bed <side> power` | Switch | `deviceStatus.<side>.powered` | `setPower` (preserves last setpoint) |
-| `Bed <side> occupancy` | OccupancySensor | `sleep_records` (latest with `leftBedAt IS NULL`) | — |
+| `Bed <side>` | Thermostat (single setpoint) | Fresh reported DAC state; explicit staged target while off | Shared temperature/power controller |
+| `Bed <side> occupancy` | OccupancySensor | Fresh calibrated capacitance and movement | — |
 | `Snooze <side>` | Switch | `snoozeManager` | `snoozeAlarm` / `cancelSnooze` |
 | `Prime` | Switch | `primeNotification` (auto-off on completion) | `startPriming` |
-| `Pod ambient` | TemperatureSensor | `bed_temp.ambient_temp` (centidegrees → °C) | — |
+| `Pod ambient` | TemperatureSensor | Live `bedTemp` / `bedTemp2` ambient cache | — |
 
 Thermostat is HomeKit's single-setpoint primitive (the pod hardware exposes
 one setpoint, not a heat/cool deadband). Mode `off` cuts power; `auto` powers
 on at the last requested temperature. HomeKit Celsius is converted at the
-boundary; the in-app unit preference is unaffected.
+boundary; the in-app unit preference is unaffected. Missing or stale reports
+return HAP unavailable, with a fault combined with any pump-stall notice.
+See [reported-state semantics and qualification limits](HOMEKIT_REPORTED_STATE.md).
 
 ### Identity durability
 

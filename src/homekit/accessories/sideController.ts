@@ -66,6 +66,11 @@ function assertNotGuardBlocked(side: Side, label: string): void {
 
 const lastTargetF: Record<Side, number | null> = { left: null, right: null }
 
+/** Explicitly requested target only; never substitute a power-on default for a report. */
+export function getRequestedTargetF(side: Side): number | null {
+  return lastTargetF[side]
+}
+
 // Match the web and shared-hardware power-on default. TEMP_NEUTRAL (82.5°F)
 // is hardware level 0 — the pod's OFF state — so it must never be used as
 // the fallback for an explicit HomeKit AUTO/ON request.

@@ -115,3 +115,14 @@ and hardware qualification required for activation. Active comfort, bedtime
 phase shifts, snoring elevation and unattended motion remain unavailable. The
 working Pod still runs Free Sleep; this source change does not deploy Core or
 change live control.
+
+
+## HomeKit reported-state availability
+
+Thermostat reads now require fresh post-write DAC observations; absent values
+are unavailable rather than fabricated neutral temperatures or OFF modes.
+Current mode derives from the reported current level, while explicitly staged
+targets remain requests. Telemetry and pump-warning faults combine without
+clearing each other. Stable identities and existing command sequencing remain.
+See [HomeKit reported state](HOMEKIT_REPORTED_STATE.md) for source semantics and
+the remaining actual Apple Home qualification boundary.
