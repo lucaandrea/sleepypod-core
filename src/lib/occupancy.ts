@@ -135,13 +135,13 @@ function readVitalsSignal(side: Side): VitalsSignal {
   const absent: VitalsSignal = { heartRate: null, breathingRate: null, humanRange: null }
   try {
     const [row] = biometricsDb
-      .select({ timestamp: vitals.timestamp, heartRate: vitals.heartRate, breathingRate: vitals.breathingRate })
+      .select({ id: vitals.id, timestamp: vitals.timestamp, heartRate: vitals.heartRate, breathingRate: vitals.breathingRate })
       .from(vitals)
       .where(eq(vitals.side, side))
       .orderBy(desc(vitals.timestamp))
       .limit(1)
       .all()
-    if (!row) return absent
+    if (!row || !isMechanicallyQualifiedVital(biometricsDb.$client, row.id, Date.now())) return absent
     const ts = row.timestamp instanceof Date ? row.timestamp.getTime() : Number(row.timestamp) * 1000
     if (!Number.isFinite(ts) || ts > Date.now() || Date.now() - ts > VITALS_WINDOW_MS) return absent
     const heartRate = Number.isFinite(row.heartRate) ? row.heartRate : null
@@ -212,3 +212,4 @@ function readCapSenseCalibration(side: Side, format: 'capSense' | 'capSense2') {
     return null
   }
 }
+import { isMechanicallyQualifiedVital } from '@/src/biometrics/mechanical/eligibility'

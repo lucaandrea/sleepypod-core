@@ -71,3 +71,10 @@ WebGL rendering with external HTTP blocked and the forced 2D fallback passed.
 Light/dark 390px screenshots and desktop navigation were inspected. The initial
 focused suite passed 271 tests; 37 renderer/bed tests passed after the fallback
 fix. These checks use isolated synthetic databases and no physical Pod commands.
+
+## Mechanical signal qualification
+
+See [Mechanical data quality](MECHANICAL_DATA_QUALITY.md) for the new observed
+quiet-span journal, pre-dispatch exclusions, bounded vital-output quarantine and
+automation eligibility. This is software validation; the working Free Sleep
+controller remains the rollback owner until the attended migration gates pass.

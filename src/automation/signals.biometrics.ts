@@ -36,6 +36,7 @@ import { getOccupancy } from '@/src/lib/occupancy'
 import { getLatestCapSenseSnapshot } from '@/src/streaming/piezoStream'
 import { mean, reduceCap } from './capReduce'
 import { finiteSignal } from './signalValidity'
+import { isMechanicallyQualifiedVital } from '@/src/biometrics/mechanical/eligibility'
 import type { SignalReader, SignalSnapshot } from './signals'
 
 // Freshness windows (ms). A latest row older than its window is treated as
@@ -67,7 +68,8 @@ export class BiometricsSignalReader implements SignalReader {
       for (const side of SIDES) {
         const [vitalReading] = biometricsDb.select().from(vitals)
           .where(eq(vitals.side, side)).orderBy(desc(vitals.timestamp)).limit(1).all()
-        if (vitalReading && fresh(vitalReading.timestamp, VITALS_FRESH_MS)) {
+        if (vitalReading && fresh(vitalReading.timestamp, VITALS_FRESH_MS)
+          && isMechanicallyQualifiedVital(biometricsDb.$client, vitalReading.id, now)) {
           publish(`${side}.heartRate`, vitalReading.heartRate)
           publish(`${side}.hrv`, vitalReading.hrv)
           publish(`${side}.breathingRate`, vitalReading.breathingRate)

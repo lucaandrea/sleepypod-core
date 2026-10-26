@@ -20,7 +20,7 @@ function fixture() {
       { metric: 'window_ibi_variability_v1', unit: 'ms', windowMs: 300000, value: null, quality: 0 }], flags: null, limitations: ['cold_start_without_serialized_state'] }
   const frame = { type: 'frame_result', runId: expected.runId, attemptId: expected.attemptId, sequence: 0, outputs: [output],
     health: { timestampBasis: 'firmware_event_time_v1', state: 'running', reason: null, records: 1, outputs: 1, cpu_ms: 1, input_hash: hash, limitations: [],
-      counts: { timestamp_rejected_frames: 0, records: 1, accepted_frames: 1, empty_channel_frames: 0, pump_gated_frames: 0, preroll_outputs: 0, scored_outputs: 1 } } }
+      counts: { mechanical_gated_frames: 0, timestamp_rejected_frames: 0, records: 1, accepted_frames: 1, empty_channel_frames: 0, pump_gated_frames: 0, preroll_outputs: 0, scored_outputs: 1 } } }
   return { protocol, ready, frame }
 }
 describe('shadow worker response validation', () => {
@@ -69,7 +69,8 @@ it.skipIf(!existsSync(python))('validates actual locked-Python worker output acr
     for (let index = 0; index < 500; index++) left.writeInt32LE(Math.trunc(Math.sin((second * 500 + index) / 500 * 2 * Math.PI * 1.2) * 1000000), index * 4)
     messages.push({ type: 'frame', sequence: second, observedAtMs: start + second * 1000,
       record: { type: 'piezo-dual', ts: start / 1000 + second, left1: left.toString('base64'), right1: Buffer.alloc(2000).toString('base64') },
-      context: { activeSides: ['left'], leftOccupied: true, rightOccupied: false, pumpContextKnown: true } })
+      context: { activeSides: ['left'], leftOccupied: true, rightOccupied: false, pumpContextKnown: true,
+        mechanical: quietMechanicalSnapshot(start + second * 1000) } })
   }
   messages.push({ type: 'finish' })
   const result = spawnSync(python, ['-m', 'common.biometrics.shadow_worker'], { env: { ...process.env, PYTHONPATH: resolve('modules') },
@@ -85,3 +86,4 @@ it.skipIf(!existsSync(python))('validates actual locked-Python worker output acr
   expect(replies).toHaveLength(152)
   expect(outputs).toBeGreaterThan(0)
 }, 30000)
+import { quietMechanicalSnapshot } from '../../mechanical/tests/fixtures'

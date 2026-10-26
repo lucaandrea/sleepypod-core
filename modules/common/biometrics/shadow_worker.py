@@ -100,12 +100,13 @@ def run(source, destination):
             exact(message, 'type sequence observedAtMs record context')
             if message['type'] != 'frame' or type(message['sequence']) is not int or message['sequence'] != expected_sequence:
                 raise ValueError('Out-of-order shadow protocol frame')
-            exact(message['context'], 'activeSides leftOccupied rightOccupied pumpContextKnown')
+            exact(message['context'], 'activeSides leftOccupied rightOccupied pumpContextKnown'
+                  + (' mechanical' if 'mechanical' in message['context'] else ''))
             context = message['context']
             if context['activeSides'] is not None and not isinstance(context['activeSides'], list):
                 raise ValueError('Invalid shadow active sides')
             recorded = RecordedContext(tuple(context['activeSides']) if context['activeSides'] is not None else None,
-                context['leftOccupied'], context['rightOccupied'], context['pumpContextKnown'])
+                context['leftOccupied'], context['rightOccupied'], context['pumpContextKnown'], context.get('mechanical'))
             if not isinstance(message['record'], dict):
                 raise ValueError('Invalid shadow record')
             record = dict(message['record'])

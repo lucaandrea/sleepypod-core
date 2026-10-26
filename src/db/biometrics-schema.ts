@@ -576,3 +576,17 @@ export const biometricShadowSamples = sqliteTable('biometric_shadow_samples', {
   byteLength: integer('byte_length').notNull(),
 }, t => [uniqueIndex('uq_biometric_shadow_sample').on(t.runId, t.sequence),
   index('idx_biometric_shadow_sample_time').on(t.runId, t.timestampMs)])
+
+/** Observed quiet spans, used to qualify entire vital windows across processes. */
+export const biometricMechanicalSpans = sqliteTable('biometric_mechanical_spans', {
+  id: text('id').primaryKey(),
+  epoch: text('epoch').notNull(),
+  startMs: integer('start_ms').notNull(),
+  endMs: integer('end_ms').notNull(),
+}, table => [index('idx_mechanical_span_window').on(table.endMs, table.startMs)])
+
+/** One bounded controller heartbeat; missing/stale state is never clean evidence. */
+export const biometricMechanicalState = sqliteTable('biometric_mechanical_state', {
+  id: integer('id').primaryKey(),
+  payload: text('payload', { mode: 'json' }).notNull(),
+})

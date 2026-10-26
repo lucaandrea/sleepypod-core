@@ -114,7 +114,8 @@ class ProspectiveShadow:
             encoded = canonical_json({'observedAtMs': observed_at_ms, 'record': identity,
                 'context': {'activeSides': list(context.active_sides) if context.active_sides is not None else None,
                             'leftOccupied': context.left_occupied, 'rightOccupied': context.right_occupied,
-                            'pumpContextKnown': context.pump_context_known}}).encode()
+                            'pumpContextKnown': context.pump_context_known,
+                            'mechanical': context.mechanical}}).encode()
             self._digest = hashlib.sha256(self._digest + encoded).digest()
             self._processor.feed(observed_at_ms, frozen, context)
             self._records += 1

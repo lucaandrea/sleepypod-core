@@ -225,6 +225,13 @@
       "when": 1792965508917,
       "tag": "0031_watch_reference_samples",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "6",
+      "when": 1792980482799,
+      "tag": "0032_mechanical_signal_context",
+      "breakpoints": true
     }
   ]
 }
