@@ -207,3 +207,16 @@ weekly schedule editing. The authenticated native-ready contract, persistent
 compare-and-swap semantics, temperature spans, durable attempt records and
 migration limits are documented in [Next alarms](NEXT_ALARMS.md). Existing
 weekly schedules are preserved; actual Pod vibration remains unqualified.
+
+## Disabled house templates
+
+Six optional [Home Assistant blueprints](../integrations/home-assistant/README.md)
+cover selected wind-down, night-path, morning bed-exit and empty-bed scenes, plus
+humidity/PM2.5 review notifications. All start disabled and require an explicit
+Allow input inside their action sequences. The scene templates do not command
+the Pod; room review uses source timestamps and withdraws expired proposals.
+Morning bed exit is not synchronized to a Pod alarm, and automatic appliance
+control remains unavailable until device capability and behavior qualification.
+Real Home Assistant schemas and script execution are validated locally with
+synthetic states and stub services. Actual home import, broker provisioning,
+device selection and physical acceptance remain separate gates.
