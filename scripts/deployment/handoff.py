@@ -220,6 +220,7 @@ def restore(plan, journal):
 
 def trial(directory, seconds, observe=core_observation, sleep=time.sleep, monotonic=time.monotonic,
           settle_seconds=0, require_idle=False):
+    require_no_activation(directory)
     if not 10 <= seconds <= 300:
         raise ValueError('Trial duration must be 10–300 seconds')
     if not 0 <= settle_seconds <= min(60, seconds):
@@ -293,6 +294,11 @@ def interrupt_trial(_number, _frame):
     raise KeyboardInterrupt('Restoring the retained controller before exiting')
 
 
+def require_no_activation(directory):
+    if (directory / 'activation.json').exists() or (directory / 'activation.json').is_symlink():
+        raise ValueError('Use activate.py rollback for an activation journal; then prepare a new trial plan')
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('action', choices=('install', 'trial', 'rollback', 'status'))
@@ -323,6 +329,7 @@ def main():
             if result.get('format') != 'sleepypod-handoff/1' or result.get('unitHashes') != plan['units']:
                 raise ValueError('Journal does not belong to this plan')
             if args.action == 'rollback':
+                require_no_activation(args.plan)
                 result['restoration'] = restore(plan, result)
                 result['phase'] = 'trial_restored'
                 private_json(path, result)

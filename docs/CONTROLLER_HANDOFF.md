@@ -147,9 +147,93 @@ physical checks; an active process alone does not prove restored thermal control
 
 `handoff.json` distinguishes trial success, restoration and physical verification.
 It contains no owner key or health measurements. A trial establishes neither
-permanent migration nor seven Preview nights. Final activation, private proxy,
+permanent migration nor seven Preview nights. Permanent activation, private proxy,
 sensor calibration, base/Stop, vibration/cancellation and overnight acceptance
 remain separate work.
+
+## Permanent activation after a successful idle trial
+
+`activate.py` is a separate, explicit step. It requires a successful
+`--settle-seconds 30 --require-idle` trial of the exact release within the last
+24 hours, including verified idle Free Sleep restoration. Repeat the trial if
+the receipt is missing, stale, from another release, or only checked API startup.
+
+Before activation, review imported routines and alarm semantics, source archive
+and release checksums, current water/cover connections, and the next scheduled
+events. Keep a second SSH session available. Run during an attended idle period
+with no impending routine or alarm. Both temperature-control countdowns and
+priming must be inactive. This tool never cancels an active user session to
+make the bed pass its checks.
+
+```sh
+python3 activate.py activate --plan /private/new-service-plan \
+  --legacy-data /persistent/free-sleep-data --seconds 120
+```
+
+The read-only gates compare the retained settings, routines, calibration,
+comfort history and feedback files with the import's `legacy/` copies. They run
+again after stopping the legacy writers. Changed files or additions require a
+fresh reviewed import; activation does not overwrite them. Live metric databases
+are retained in Free Sleep's directory and are not compared byte-for-byte while
+its stream is writing. Take an updated quiesced archive if metrics accumulated
+since the original backup must also be included in the migration archive.
+
+Both Core databases must pass integrity and foreign-key checks. Initial
+activation requires Off/Preview personal comfort, disabled general automation,
+base schedules, HomeKit/MQTT, presence-based power, always-on behavior, active
+run-once sessions, automatic priming/reboot and unqualified pump stall protection
+and recovery. Review and
+enable qualified integrations separately after activation. Imported ordinary
+temperature/power/alarm routines remain intact and will run at their scheduled
+times; activation does not qualify their physical behavior.
+
+```mermaid
+flowchart LR
+  Gates[Recent idle trial and unchanged import] --> Stop[Stop legacy writers]
+  Stop --> Core[Start Core and four sensor services]
+  Core --> Observe[30 continuous seconds of fresh idle telemetry]
+  Observe --> Boot[Select Core for boot]
+  Core -->|Failure or interruption| Restore[Restore retained Free Sleep]
+  Observe -->|Failure| Restore
+  Boot -->|Partial failure| Restore
+```
+
+Core's five processes must be active and both Free Sleep processes stopped
+throughout settling. Failed/stale telemetry resets the window; a nonzero heating
+countdown or priming fails immediately. Only after that window does activation
+disable the two original boot entries and enable `sleepypod.service`. Sensor
+services remain individually disabled and start through Core's `Wants=` links.
+Exact service definitions and final boot/process ownership are checked again.
+
+`activation.json` is a private, durable phase journal, without the bearer key.
+Ordinary startup failures, partial boot-selection failures and interruptions
+restore the original services and enablement. Unexpected heat during a failed
+idle activation is reported as `recovery_required`; the tool does not issue
+actuator commands or claim physical recovery. Inspect authenticated firmware
+status and the bed before resuming use.
+
+```sh
+python3 activate.py status --plan /private/new-service-plan
+python3 activate.py rollback --plan /private/new-service-plan
+```
+
+After activation, use **this rollback command**, not `handoff.py rollback`.
+The trial tool refuses plans with an activation journal. Rollback stops verified
+Core services, restores Free Sleep boot entries, and restarts its writers.
+Neither controller's databases are overwritten. An ordinary rollback after
+successful activation permits an existing heating session and does not cancel
+it. Changed unit definitions require review before starting any replacement.
+Reusing an activation journal for another activation is refused; keep it as
+evidence, render a new plan, and use the stopped-plan replacement workflow.
+
+Boot-selection changes are **not atomic across machine power loss**. A hard
+kill, power loss, or service-manager failure between writes can require SSH
+recovery with the journal and this rollback command. A completed activation
+does not establish restart recovery, physical control, sensor accuracy, private
+remote access or seven actual Preview nights; verify those gates independently.
+Keep `activate.py`, `activation_checks.py` and the handoff modules together from
+the reviewed commit. These activation checks have software-test coverage; no
+live activation is asserted by this document.
 
 ## Validation
 
