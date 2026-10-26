@@ -58,7 +58,9 @@ updates do not erase a pause, learned offset or consumed-feedback cursor.
 
 Capabilities distinguish `personalComfortPreview` from `personalComfort`.
 Preview is implemented; active control remains unavailable. An `active` request
-or an unsupported `sensorAware`/`followBedtime` option returns HTTP 412. Existing
+or an unsupported `followBedtime` option returns HTTP 412. The explicit
+`sensorAware` option is now available in Off/Preview; see [personal baseline
+evidence](PERSONAL_BASELINE_PREVIEW.md). Existing
 saved active settings remain inert and display the qualification gate.
 
 ## Input and storage behavior
@@ -72,10 +74,9 @@ saved active settings remain inert and display the qualification gate.
   Unknown base telemetry withholds proposals. An alarm's longer wake window is
   protected as well as the usual thirty-minute warm-up.
 - Does not assume the old Free Sleep five-minute vital-window format matches
-  Core's processing. Sensor-aware and bedtime-phase adapters remain explicitly
-  unavailable until implemented and validated. The live processor now has an
-  [explicit firmware-time boundary](LIVE_VITAL_FRESHNESS.md); this does not yet
-  qualify vital windows for comfort learning. Snoring remains unavailable.
+  Core's processing. The [sensor-aware Preview adapter](PERSONAL_BASELINE_PREVIEW.md)
+  now qualifies Core minute estimates and recorded mechanical receipts explicitly.
+  Bedtime-phase shifts and snoring remain unavailable.
 - SQLite migration 0029 adds separate state, feedback and observation tables.
   State and its observation are committed together. Malformed state fails
   closed; it is never silently replaced with defaults.
@@ -91,7 +92,7 @@ saved active settings remain inert and display the qualification gate.
 This is not deployment or qualification. The physical Pod still runs customized
 Free Sleep. The offline importer, compatibility API and corrected idle handoff
 trial are implemented separately; see [controller handoff](CONTROLLER_HANDOFF.md).
-Remaining work includes Core vital/phase adapters and artifact handling, actual shared-authority
+Remaining work includes bedtime-phase mapping and actual shared-authority
 application receipts for active comfort, hardware qualification, seven real
 Preview nights with owner review, and bounded activation. A Preview proposal
 alone is not evidence of improved sleep or a completed night.

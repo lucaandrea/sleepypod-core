@@ -1,3 +1,5 @@
+import type { ComfortSignals } from './signals'
+
 /** Personal comfort policy ported from the owner's Free Sleep thermal/policy.ts.
  * Pure decisions only: persistence and hardware belong to the shared controller.
  */
@@ -61,7 +63,7 @@ export interface ComfortContext {
   owner: 'manual' | 'run-once' | 'autopilot' | 'schedule' | null
   /** True only after comparing reported target with the routine or our own recorded acknowledgment. */
   targetKnown: boolean
-  signals?: { state: 'learning' | 'ready' | 'stale' | 'review', sampleAt: number | null, reason: string }
+  signals?: ComfortSignals
 }
 
 export interface ComfortDecision {
@@ -123,7 +125,7 @@ export function decideComfort(state: ComfortState, context: ComfortContext): Com
     return stop('Leaving the alarm window to your routine.')
   }
   if (!fresh(device.observedAt, now, DEVICE_MAX_AGE_MS)) return stop('Waiting for fresh Pod status.')
-  if (device.baseMoving === null) return stop('Waiting for confirmed idle base telemetry or a confirmed unconfigured base.')
+  if (device.baseMoving === null) return stop('Waiting for confirmed idle base telemetry. Unconfigured does not mean absent.')
   if (device.priming !== false || device.vibrating !== false || device.baseMoving !== false) {
     return stop('Paused during priming, vibration or base movement.')
   }
@@ -135,7 +137,7 @@ export function decideComfort(state: ComfortState, context: ComfortContext): Com
   if (context.targetKnown !== true) return stop('An unexpected target change requires a six-hour adaptive pause.', true)
   if (state.config.sensorAware) {
     const signals = context.signals
-    if (!signals || signals.state !== 'ready' || !fresh(signals.sampleAt, now, VITAL_MAX_AGE_MS)) {
+    if (!signals || signals.state !== 'ready' || !fresh(signals.sampleAt, now, VITAL_MAX_AGE_MS) || signals.expiresAt === null || !Number.isSafeInteger(signals.expiresAt) || now >= signals.expiresAt) {
       return stop(signals?.state === 'ready'
         ? 'Pod vital estimates expired before this check.'
         : signals?.reason ?? 'Waiting for Pod vital estimates and a personal baseline.')

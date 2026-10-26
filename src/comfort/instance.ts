@@ -1,5 +1,5 @@
 import { and, eq } from 'drizzle-orm'
-import { db, sqlite } from '@/src/db'
+import { biometricsDb, db, sqlite } from '@/src/db'
 import { alarmSchedules, deviceSettings, deviceState, powerSchedules, sideSettings, temperatureSchedules } from '@/src/db/schema'
 import { getDacMonitorIfRunning } from '@/src/hardware/dacMonitor.instance'
 import { getBaseControllerIfRunning } from '@/src/hardware/base/instance'
@@ -15,8 +15,13 @@ import { acknowledgeManualPause, pendingManualPause } from './manual'
 import { comfortRoutineAt } from './routines'
 import { ComfortRuntime } from './runtime'
 import { createComfortStore } from './store'
+import { ComfortSignalReader } from './signal-reader'
 
-const globals = globalThis as typeof globalThis & { __sp_comfortRuntime?: ComfortRuntime }
+const globals = globalThis as typeof globalThis & { __sp_comfortRuntime?: ComfortRuntime, __sp_comfortSignals?: ComfortSignalReader }
+function signalsReader() {
+  return globals.__sp_comfortSignals ??= new ComfortSignalReader(biometricsDb.$client)
+}
+
 const routineCache: Partial<Record<Side, { key: string, window: RoutineWindow | null }>> = {}
 
 function observedTimestamp(value: number | null | undefined, now: number): number | null {
@@ -64,7 +69,7 @@ export function readComfortContext(side: Side, state: ComfortState, now: number)
         waterAdequate: status?.waterLevel === 'ok' ? true : status?.waterLevel === 'low' ? false : null,
         priming: status?.isPriming !== false,
         vibrating: states.length !== 2 || states.some(row => row.isAlarmVibrating),
-        baseMoving: base?.state === 'unconfigured' ? false : baseFresh && typeof base?.moving === 'boolean' ? base.moving || base.busy : null,
+        baseMoving: baseFresh && typeof base?.moving === 'boolean' ? base.moving || base.busy : null,
         targetF,
       },
       presence: { observedAt: presenceObservedAt, available: occupancy.available, occupied: occupancy.classification === 'person' },
@@ -74,7 +79,7 @@ export function readComfortContext(side: Side, state: ComfortState, now: number)
       owner: control?.source ?? null,
       targetKnown: targetF !== null && (targetF === window?.baselineF || targetF === control?.targetTemperature
         || (state.lastSegment === window?.segment && state.lastTargetF === targetF && state.lastAppliedAt > 0 && state.lastAppliedAt <= now)),
-      signals: { state: 'learning', sampleAt: null, reason: 'Sensor-aware guard awaits validated Core vital-window mapping.' },
+      signals: state.config.sensorAware ? signalsReader().read(side, timezone, now) : undefined,
     },
   }
 }
@@ -87,6 +92,7 @@ export function getComfortRuntime(): ComfortRuntime {
       if (!settings) throw new Error('Device timezone unavailable')
       return settings.timezone
     },
+    prepareSignals: (side, now) => signalsReader().prepare(side, db.select().from(deviceSettings).get()?.timezone ?? 'UTC', now),
     pendingPause: pendingManualPause, acknowledgePause: acknowledgeManualPause,
   })
 }

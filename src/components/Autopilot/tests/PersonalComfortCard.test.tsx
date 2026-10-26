@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { PersonalComfortDetails } from '../PersonalComfortCard'
+import { missingComfortSignals } from '@/src/comfort/signals'
 import { defaultComfortState } from '@/src/comfort/policy'
 import type { ComfortStatus } from '@/src/comfort/contract'
 
@@ -14,6 +15,23 @@ function status(): ComfortStatus {
 }
 
 describe('personal comfort controls', () => {
+  it('keeps sensor consent through starting Preview and shows actual baseline coverage', () => {
+    const data = status()
+    data.features.sensorAware = true
+    if (!data.state) throw new Error('Fixture requires state')
+    data.state.config.sensorAware = true
+    data.signals = { ...missingComfortSignals(), state: 'learning', reason: 'Needs more qualified days.', baselineDays: 3 }
+    const configure = vi.fn()
+    render(<PersonalComfortDetails data={data} pending={false} onConfigure={configure} onFeedback={vi.fn()} />)
+    expect(screen.getByText('3 / 7 minimum')).toBeTruthy()
+    expect(screen.getByText('Building your baseline')).toBeTruthy()
+    expect(screen.getByText('Incomplete')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Start Preview' }))
+    expect(configure).toHaveBeenLastCalledWith(expect.objectContaining({ mode: 'preview', sensorAware: true }))
+    fireEvent.click(screen.getByRole('checkbox', { name: /Use Pod sensor guard/ }))
+    expect(configure).toHaveBeenLastCalledWith(expect.objectContaining({ mode: 'off', sensorAware: false }))
+  })
+
   it('offers only explicit Preview, keeps an empty report honest and submits feedback in the Pod timezone', () => {
     const configure = vi.fn()
     const feedback = vi.fn()

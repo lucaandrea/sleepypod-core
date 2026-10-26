@@ -43,7 +43,7 @@ beforeEach(() => {
   database.insert(schema.powerSchedules).values(DAYS_OF_WEEK.map(dayOfWeek => ({ side: 'left' as const, dayOfWeek, onTime: '22:00', offTime: '07:00', onTemperature: 75 }))).run()
   const side = { targetTemperature: 75, heatingDuration: 3600 }
   fixture.monitor.mockReturnValue({ getFreshStatus: () => ({ leftSide: side, rightSide: side, waterLevel: 'ok', isPriming: false }), getLastPollAt: () => now - 1000 })
-  fixture.base.mockReturnValue({ status: () => ({ state: 'unconfigured' }) })
+  fixture.base.mockReturnValue({ status: () => ({ state: 'connected', stale: false, lastUpdate: now - 500, moving: false, busy: false }) })
   fixture.occupancy.mockReturnValue({ level: { ageMs: 200 }, available: true, classification: 'person' })
   fixture.controller.mockReturnValue({ status: () => ({ source: 'schedule', targetTemperature: 75 }) })
 })
@@ -53,6 +53,11 @@ afterEach(() => {
 })
 
 describe('live comfort input adapter', () => {
+  it('does not treat an unconfigured base as confirmed absent', () => {
+    fixture.base.mockReturnValue({ status: () => ({ state: 'unconfigured' }) })
+    expect(readComfortContext('left', defaultComfortState(), now).context.device.baseMoving).toBeNull()
+  })
+
   it('reads current reported targets, sensor age, routine and shared ownership without creating hardware', () => {
     expect(readComfortContext('left', defaultComfortState(), now)).toMatchObject({
       timezone: 'America/Los_Angeles', context: {

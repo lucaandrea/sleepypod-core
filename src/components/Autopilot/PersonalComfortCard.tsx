@@ -8,6 +8,7 @@ import type { Side } from '@/src/hardware/types'
 import type { ComfortStatus } from '@/src/comfort/contract'
 import type { ComfortConfig, ComfortFeedback } from '@/src/comfort/policy'
 import { Card } from './primitives'
+import { ComfortSignals } from './ComfortSignals'
 
 const fieldClass = 'rounded-ctl border border-line bg-surface px-3 py-2 text-sm text-fg'
 
@@ -93,7 +94,7 @@ export function PersonalComfortDetails({ data, pending, onConfigure, onFeedback 
       {state && (
         <>
           <div className="flex flex-wrap items-center gap-3">
-            <Button disabled={pending || (Boolean(data.fault) && state.config.mode !== 'preview')} variant="primary" onClick={() => onConfigure({ ...state.config, mode: state.config.mode === 'preview' ? 'off' : 'preview', sensorAware: false, followBedtime: false })}>
+            <Button disabled={pending || (Boolean(data.fault) && state.config.mode !== 'preview')} variant="primary" onClick={() => onConfigure({ ...state.config, mode: state.config.mode === 'preview' ? 'off' : 'preview', followBedtime: false })}>
               {state.config.mode === 'preview' ? 'Stop Preview' : 'Start Preview'}
             </Button>
             <span className="text-sm text-fg-2">
@@ -115,6 +116,24 @@ export function PersonalComfortDetails({ data, pending, onConfigure, onFeedback 
               </strong>
               . This is a proposal, not a hardware action.
             </p>
+          )}
+          {data.features.sensorAware && (
+            <div className="space-y-3">
+              <label className="flex items-start gap-3 text-sm">
+                <input
+                  type="checkbox"
+                  className="mt-1 size-4 accent-primary"
+                  checked={state.config.sensorAware === true}
+                  disabled={pending || Boolean(data.fault)}
+                  onChange={event => onConfigure({ ...state.config, mode: state.config.mode === 'preview' ? 'preview' : 'off', sensorAware: event.target.checked, followBedtime: false })}
+                />
+                <span>
+                  Use Pod sensor guard in Preview
+                  <span className="mt-1 block text-xs text-fg-2">Hold proposals when qualified readings are missing or both recent summaries differ substantially from your baseline.</span>
+                </span>
+              </label>
+              {state.config.sensorAware && <ComfortSignals signals={data.signals} />}
+            </div>
           )}
           <form onSubmit={saveRange} className="flex flex-wrap items-end gap-3">
             <label className="grid gap-1 text-xs text-fg-2">
@@ -149,7 +168,7 @@ export function PersonalComfortDetails({ data, pending, onConfigure, onFeedback 
       <p className="text-xs text-fg-2">
         {data.activation.reason}
         {' '}
-        Sensor-aware adjustments and bedtime phase changes are not available yet.
+        Active adjustments and bedtime phase changes remain unavailable.
       </p>
       <details className="border-t border-line pt-3 text-sm">
         <summary className="cursor-pointer text-fg-2">Recent observations</summary>
