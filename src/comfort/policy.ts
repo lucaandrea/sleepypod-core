@@ -1,3 +1,4 @@
+import type { BedEntrySample, BedtimeSelection, BedtimeStatus } from './bedtime'
 import type { ComfortSignals } from './signals'
 
 /** Personal comfort policy ported from the owner's Free Sleep thermal/policy.ts.
@@ -27,6 +28,7 @@ export interface ComfortState {
   lastAppliedAt: number
   lastTargetF: number | null
   lastSegment: string
+  bedtime?: BedtimeSelection
 }
 
 /** The schedule adapter must resolve one unambiguous, timezone-aware power window. */
@@ -37,6 +39,8 @@ export interface RoutineWindow {
   end: number
   baselineF: number
   alarmAt: number | null
+  scheduledBaselineF?: number
+  phases?: { revision: string, startF: number, changes: { id: string, at: number, temperatureF: number }[] }
 }
 
 export interface ComfortFeedback {
@@ -56,7 +60,7 @@ export interface ComfortContext {
     baseMoving: boolean | null
     targetF: number | null
   }
-  presence: { observedAt: number | null, available: boolean, occupied: boolean }
+  presence: { observedAt: number | null, available: boolean, occupied: boolean, entry?: BedEntrySample }
   eitherAway: boolean
   routinesPaused: boolean
   alarmOverride: boolean
@@ -64,6 +68,7 @@ export interface ComfortContext {
   /** True only after comparing reported target with the routine or our own recorded acknowledgment. */
   targetKnown: boolean
   signals?: ComfortSignals
+  timing?: BedtimeStatus
 }
 
 export interface ComfortDecision {
@@ -143,9 +148,14 @@ export function decideComfort(state: ComfortState, context: ComfortContext): Com
         : signals?.reason ?? 'Waiting for Pod vital estimates and a personal baseline.')
     }
   }
+  if (state.config.followBedtime && (!state.config.sensorAware || context.timing?.state !== 'ready')) {
+    return stop(context.timing?.reason ?? 'Waiting for qualified bed-entry timing.')
+  }
+  const scheduledBaselineF = window.scheduledBaselineF ?? baselineF
+  if (!Number.isFinite(scheduledBaselineF) || scheduledBaselineF < state.config.minimumF || scheduledBaselineF > state.config.maximumF) return stop('Original routine target is outside your comfort limits.')
   const desiredF = Math.max(state.config.minimumF, Math.min(state.config.maximumF, baselineF + state.offsetF))
   const proposedF = Math.max(device.targetF - 1, Math.min(device.targetF + 1, desiredF))
-  if (proposedF < state.config.minimumF || proposedF > state.config.maximumF || Math.abs(proposedF - baselineF) > 3) {
+  if (proposedF < state.config.minimumF || proposedF > state.config.maximumF || Math.abs(proposedF - scheduledBaselineF) > 3) {
     return stop('Waiting for the routine target to enter your Autopilot limits.')
   }
   if (state.lastAppliedAt && (state.lastAppliedAt > now || now - state.lastAppliedAt < ADJUSTMENT_INTERVAL_MS)) {

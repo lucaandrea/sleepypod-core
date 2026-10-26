@@ -94,7 +94,7 @@ export function PersonalComfortDetails({ data, pending, onConfigure, onFeedback 
       {state && (
         <>
           <div className="flex flex-wrap items-center gap-3">
-            <Button disabled={pending || (Boolean(data.fault) && state.config.mode !== 'preview')} variant="primary" onClick={() => onConfigure({ ...state.config, mode: state.config.mode === 'preview' ? 'off' : 'preview', followBedtime: false })}>
+            <Button disabled={pending || (Boolean(data.fault) && state.config.mode !== 'preview')} variant="primary" onClick={() => onConfigure({ ...state.config, mode: state.config.mode === 'preview' ? 'off' : 'preview' })}>
               {state.config.mode === 'preview' ? 'Stop Preview' : 'Start Preview'}
             </Button>
             <span className="text-sm text-fg-2">
@@ -125,7 +125,7 @@ export function PersonalComfortDetails({ data, pending, onConfigure, onFeedback 
                   className="mt-1 size-4 accent-primary"
                   checked={state.config.sensorAware === true}
                   disabled={pending || Boolean(data.fault)}
-                  onChange={event => onConfigure({ ...state.config, mode: state.config.mode === 'preview' ? 'preview' : 'off', sensorAware: event.target.checked, followBedtime: false })}
+                  onChange={event => onConfigure({ ...state.config, mode: state.config.mode === 'preview' ? 'preview' : 'off', sensorAware: event.target.checked, followBedtime: event.target.checked && state.config.followBedtime === true })}
                 />
                 <span>
                   Use Pod sensor guard in Preview
@@ -133,6 +133,36 @@ export function PersonalComfortDetails({ data, pending, onConfigure, onFeedback 
                 </span>
               </label>
               {state.config.sensorAware && <ComfortSignals signals={data.signals} />}
+            </div>
+          )}
+          {data.features.followBedtime && (
+            <div className="space-y-2 text-sm">
+              <label className="flex items-start gap-3">
+                <input
+                  type="checkbox"
+                  className="mt-1 size-4 accent-primary"
+                  checked={state.config.followBedtime === true}
+                  disabled={pending || Boolean(data.fault) || !state.config.sensorAware}
+                  onChange={event => onConfigure({ ...state.config, mode: state.config.mode === 'preview' ? 'preview' : 'off', followBedtime: event.target.checked })}
+                />
+                <span>
+                  Follow earlier or later bed entry in Preview
+                  <span className="mt-1 block text-xs text-fg-2">Requires the Pod sensor guard and ten minutes of observed presence. Temperature phases shift by at most 30 minutes; power and alarms stay fixed. Bed entry is not measured sleep onset.</span>
+                </span>
+              </label>
+              {state.config.followBedtime && (
+                <div className="rounded-ctl border border-line p-3" aria-label="Bed-entry timing observation">
+                  <p>{data.timing?.reason ?? 'Waiting for a current bed-entry evaluation.'}</p>
+                  {data.timing?.selection && (
+                    <p className="mt-1 text-xs text-fg-2">
+                      {`Observed entry ${clock(data.timing.selection.entryAt)} · selected shift ${data.timing.selection.shiftMinutes > 0 ? '+' : ''}${data.timing.selection.shiftMinutes} min.`}
+                    </p>
+                  )}
+                  {data.timing?.state === 'ready' && (
+                    <p className="mt-1 text-xs text-fg-2">{`Scheduled baseline ${data.timing.scheduledBaselineF}°F · timing Preview baseline ${data.timing.phaseBaselineF}°F.`}</p>
+                  )}
+                </div>
+              )}
             </div>
           )}
           <form onSubmit={saveRange} className="flex flex-wrap items-end gap-3">
@@ -168,7 +198,7 @@ export function PersonalComfortDetails({ data, pending, onConfigure, onFeedback 
       <p className="text-xs text-fg-2">
         {data.activation.reason}
         {' '}
-        Active adjustments and bedtime phase changes remain unavailable.
+        Active adjustments remain unavailable.
       </p>
       <details className="border-t border-line pt-3 text-sm">
         <summary className="cursor-pointer text-fg-2">Recent observations</summary>
@@ -180,6 +210,9 @@ export function PersonalComfortDetails({ data, pending, onConfigure, onFeedback 
                   <li key={`${entry.at}:${index}`}>
                     <time className="text-xs text-fg-2" dateTime={new Date(entry.at).toISOString()}>{clock(entry.at)}</time>
                     <p>{entry.message}</p>
+                    {entry.timing?.selection && (
+                      <p className="text-xs text-fg-2">{`Bed-entry Preview: ${entry.timing.state} · ${entry.timing.selection.shiftMinutes} min shift. ${entry.timing.reason}`}</p>
+                    )}
                     {entry.kind === 'preview' && (
                       <p className="text-xs text-fg-2">
                         Reported target:

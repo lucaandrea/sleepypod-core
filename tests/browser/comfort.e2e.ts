@@ -8,15 +8,21 @@ test('sensor Preview persists consent, shows missing evidence and cannot activat
   await anonymous.dispose()
 
   await page.goto('/en/autopilot')
+  const follow = page.getByRole('checkbox', { name: /Follow earlier or later bed entry/ })
+  await expect(follow).toBeDisabled()
   const guard = page.getByRole('checkbox', { name: /Use Pod sensor guard in Preview/ })
   // The controlled checkbox reflects the persisted response, not an optimistic click.
   await guard.click()
   await expect(guard).toBeChecked()
+  await follow.click()
+  await expect(follow).toBeChecked()
   await page.getByRole('button', { name: 'Start Preview', exact: true }).click()
   await expect(page.getByRole('button', { name: 'Stop Preview', exact: true })).toBeVisible()
   await page.reload()
   await expect(guard).toBeChecked()
   await expect(page.getByRole('button', { name: 'Stop Preview', exact: true })).toBeVisible()
+  await expect(follow).toBeChecked()
+  await expect(page.getByLabel('Bed-entry timing observation')).toContainText('Waiting for a current bed-entry evaluation.')
   // CI never starts hardware or invents a completed personal baseline.
   const baseline = page.getByLabel('Personal Pod baseline')
   await expect(baseline).toContainText('Waiting for evaluation')
@@ -24,8 +30,8 @@ test('sensor Preview persists consent, shows missing evidence and cannot activat
   await expect(baseline).toContainText('Incomplete')
   await expect(page.getByText('The Preview service is stopped.')).toBeVisible()
   const saved = await (await request.get('/api/v1/comfort?side=left', { headers })).json()
-  expect(saved).toMatchObject({ activation: { available: false }, features: { sensorAware: true },
-    state: { config: { mode: 'preview', sensorAware: true }, lastAppliedAt: 0, lastTargetF: null }, signals: null })
+  expect(saved).toMatchObject({ activation: { available: false }, features: { sensorAware: true, followBedtime: true },
+    state: { config: { mode: 'preview', sensorAware: true, followBedtime: true }, lastAppliedAt: 0, lastTargetF: null }, signals: null, timing: null })
   const active = await request.post('/api/v1/comfort/configure', { headers, data: {
     side: 'left', config: { mode: 'active', minimumF: 70, maximumF: 95, sensorAware: true },
   } })
@@ -39,5 +45,12 @@ test('sensor Preview persists consent, shows missing evidence and cannot activat
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
   await page.getByRole('button', { name: 'Stop Preview', exact: true }).click()
   await expect(page.getByRole('button', { name: 'Start Preview', exact: true })).toBeVisible()
-  expect(await (await request.get('/api/v1/comfort?side=left', { headers })).json()).toMatchObject({ state: { config: { mode: 'off', sensorAware: true } } })
+  expect(await (await request.get('/api/v1/comfort?side=left', { headers })).json()).toMatchObject({ state: { config: { mode: 'off', sensorAware: true, followBedtime: true } } })
+  await guard.click()
+  await expect(guard).not.toBeChecked()
+  await expect(follow).not.toBeChecked()
+  await expect(follow).toBeDisabled()
+  expect(await (await request.get('/api/v1/comfort?side=left', { headers })).json()).toMatchObject({ state: { config: { sensorAware: false, followBedtime: false } } })
+  const invalid = await request.post('/api/v1/comfort/configure', { headers, data: { side: 'left', config: { mode: 'preview', minimumF: 70, maximumF: 95, followBedtime: true } } })
+  expect(invalid.status()).toBe(400)
 })

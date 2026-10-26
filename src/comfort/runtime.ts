@@ -1,3 +1,4 @@
+import { BedEntryTracker, bedtimePreview, type BedtimeStatus } from './bedtime'
 import type { ComfortSignals } from './signals'
 import type { Side } from '@/src/hardware/types'
 import { COMFORT_ACTIVATION_REASON, comfortConfigSchema, comfortFeedbackSchema, type ComfortStatus } from './contract'
@@ -5,7 +6,7 @@ import { comfortLocalDate, decideComfort, learnComfort, MANUAL_PAUSE_MS, type Co
 import { comfortEvent, type ComfortStore } from './store'
 
 const STORAGE_FAULT = 'Personal comfort is withheld because its current inputs, settings or observation journal are unavailable.'
-interface Observation { at: number, decision: ComfortDecision, stateKey: string, signals: ComfortSignals | null }
+interface Observation { at: number, decision: ComfortDecision, stateKey: string, signals: ComfortSignals | null, timing: BedtimeStatus }
 export class ComfortInputError extends Error {}
 
 export interface ComfortRuntimeDeps {
@@ -24,6 +25,7 @@ export class ComfortRuntime {
   private observations: Partial<Record<Side, Observation>> = {}
   private recorded: Partial<Record<Side, { at: number, key: string }>> = {}
   private faults: Partial<Record<Side, string>> = {}
+  private readonly entryTrackers = { left: new BedEntryTracker(), right: new BedEntryTracker() }
   private running = false
   private timer?: ReturnType<typeof setInterval>
   private pending?: Promise<void>
@@ -59,7 +61,8 @@ export class ComfortRuntime {
       decision: fault || signalExpired || observation?.stateKey !== JSON.stringify(state) ? null : observation?.decision ?? null,
       runtime: this.running ? 'running' : 'stopped',
       activation: { available: false, reason: COMFORT_ACTIVATION_REASON },
-      features: { sensorAware: true, followBedtime: false },
+      features: { sensorAware: true, followBedtime: true },
+      timing: fault || signalExpired || observation?.stateKey !== JSON.stringify(state) ? null : observation?.timing ?? null,
       signals: fault || signalExpired || observation?.stateKey !== JSON.stringify(state) ? null : signals ?? null,
     }
   }
@@ -67,11 +70,12 @@ export class ComfortRuntime {
   async configure(side: Side, input: ComfortConfig): Promise<ComfortStatus> {
     const config = comfortConfigSchema.parse(input)
     if (config.mode === 'active') throw new Error(COMFORT_ACTIVATION_REASON)
-    if (config.followBedtime) throw new Error('Bedtime-phase adapters have not been qualified for Core yet.')
+    if (config.followBedtime && !config.sensorAware) throw new ComfortInputError('Bed-entry timing requires the Pod sensor guard.')
     await this.deps.withSideLock(side, async () => {
       const state = this.recoverPause(side)
       this.deps.store.commit(side, { ...state, config },
         comfortEvent(this.deps.now(), 'configuration', `Personal comfort set to ${config.mode}.`))
+      if (state.config.followBedtime !== config.followBedtime || state.config.mode !== config.mode || !config.sensorAware) this.entryTrackers[side].reset()
       this.observations[side] = undefined
       this.recorded[side] = undefined
       this.faults[side] = undefined
@@ -112,6 +116,7 @@ export class ComfortRuntime {
     }
     catch {
       this.faults[side] = STORAGE_FAULT
+      this.entryTrackers[side].reset()
       this.observations[side] = undefined
       return
     }
@@ -120,20 +125,26 @@ export class ComfortRuntime {
         const now = this.deps.now()
         let state = this.recoverPause(side)
         const original = JSON.stringify(state)
-        const { context, timezone } = this.deps.readContext(side, state, now)
+        const { context: rawContext, timezone } = this.deps.readContext(side, state, now)
+        let context = rawContext
         // Preview may learn from check-ins, but never records a hardware acknowledgment.
         const learning = state.config.mode === 'preview' && context.window
           ? learnComfort(state, this.deps.store.feedback(side), context.window.session, timezone, now)
           : { state, message: null }
         state = learning.state
-        let decision = decideComfort(state, context)
-        if (state.config.mode === 'active' || state.config.followBedtime) {
+        const guard = decideComfort({ ...state, config: { ...state.config, followBedtime: false } }, context)
+        const timing = bedtimePreview(state, context, this.entryTrackers[side], guard.eligible)
+        if (timing.selection) state = { ...state, bedtime: timing.selection }
+        context = { ...context, window: timing.window, timing: timing.status }
+        // Preserve raw-schedule safety holds, especially the unexpected-target pause.
+        let decision = guard.eligible ? decideComfort(state, context) : guard
+        if (state.config.mode === 'active') {
           decision = { ...decision, eligible: false, proposedF: null, retainPreviousLease: false,
-            reason: state.config.mode === 'active' ? COMFORT_ACTIVATION_REASON : 'Bedtime-phase mapping is not available in Core Preview yet.' }
+            reason: COMFORT_ACTIVATION_REASON }
         }
         if (decision.pauseRequired) state = { ...state, pausedUntil: Math.max(state.pausedUntil, now + MANUAL_PAUSE_MS) }
         const key = JSON.stringify([decision, context.window?.segment, context.owner, context.device.targetF,
-          context.signals?.state, context.signals?.baselineDays, context.signals?.sampleAt])
+          context.signals?.state, context.signals?.baselineDays, context.signals?.sampleAt, timing.status])
         const previous = this.recorded[side]
         const record = state.config.mode !== 'off' && (!previous || previous.key !== key || now - previous.at >= 60_000 || now < previous.at)
         const event = record
@@ -141,16 +152,17 @@ export class ComfortRuntime {
               ...comfortEvent(now, 'preview', learning.message ? `${decision.reason} ${learning.message}` : decision.reason),
               session: context.window?.session ?? null, proposedF: decision.proposedF, reportedF: context.device.targetF,
               eligible: decision.eligible, deviceObservedAt: context.device.observedAt,
-              presenceObservedAt: context.presence.observedAt, owner: context.owner, signals: context.signals ?? null,
+              presenceObservedAt: context.presence.observedAt, owner: context.owner, signals: context.signals ?? null, timing: timing.status,
             }
           : undefined
         if (event || JSON.stringify(state) !== original) this.deps.store.commit(side, state, event)
         if (record) this.recorded[side] = { at: now, key }
-        this.observations[side] = { at: now, decision, stateKey: JSON.stringify(state), signals: context.signals ?? null }
+        this.observations[side] = { at: now, decision, stateKey: JSON.stringify(state), signals: context.signals ?? null, timing: timing.status }
         this.faults[side] = undefined
       }
       catch {
         this.faults[side] = STORAGE_FAULT
+        this.entryTrackers[side].reset()
         this.observations[side] = undefined
       }
     })
@@ -189,5 +201,8 @@ export class ComfortRuntime {
     this.running = false
     clearInterval(this.timer)
     await this.pending
+    this.entryTrackers.left.reset()
+    this.entryTrackers.right.reset()
+    this.observations = {}
   }
 }

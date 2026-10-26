@@ -38,7 +38,7 @@ export function readComfortContext(side: Side, state: ComfortState, now: number)
   const targets = source ? db.select().from(temperatureSchedules).where(and(eq(temperatureSchedules.side, source), eq(temperatureSchedules.enabled, true))).all() : []
   const alarms = source ? db.select().from(alarmSchedules).where(and(eq(alarmSchedules.side, source), eq(alarmSchedules.enabled, true))).all() : []
   const timezone = settings.timezone
-  const schedules = { powers, targets, alarms, timezone }
+  const schedules = { powers, targets, alarms, timezone, source: JSON.stringify([source, settings.bedMode, settings.unusedZoneMode]) }
   const key = JSON.stringify([Math.floor(now / 60_000), schedules])
   const cached = routineCache[side]
   const window = cached?.key === key ? cached.window : comfortRoutineAt(schedules, now)
@@ -72,7 +72,16 @@ export function readComfortContext(side: Side, state: ComfortState, now: number)
         baseMoving: baseFresh && typeof base?.moving === 'boolean' ? base.moving || base.busy : null,
         targetF,
       },
-      presence: { observedAt: presenceObservedAt, available: occupancy.available, occupied: occupancy.classification === 'person' },
+      presence: { observedAt: presenceObservedAt, available: occupancy.available, occupied: occupancy.classification === 'person',
+        entry: occupancy.level.sampleAt !== undefined && occupancy.level.sourceKey
+          ? {
+              measuredAt: occupancy.level.sampleAt, sourceKey: occupancy.level.sourceKey,
+              state: occupancy.level.active && occupancy.classification === 'person'
+                ? 'present'
+                : !occupancy.level.active && occupancy.classification === 'none' ? 'absent' : 'unknown',
+            }
+          : undefined,
+      },
       eitherAway: sides.length !== 2 || sides.some(row => row.awayMode),
       routinesPaused: source === null,
       alarmOverride,

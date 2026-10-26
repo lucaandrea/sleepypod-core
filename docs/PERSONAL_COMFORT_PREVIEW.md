@@ -57,8 +57,8 @@ date in `timezone`. Reads never start the service or hardware. Configuration
 updates do not erase a pause, learned offset or consumed-feedback cursor.
 
 Capabilities distinguish `personalComfortPreview` from `personalComfort`.
-Preview is implemented; active control remains unavailable. An `active` request
-or an unsupported `followBedtime` option returns HTTP 412. The explicit
+Preview is implemented; active control remains unavailable. An `active` request returns HTTP 412. `followBedtime` is now available in
+Off/Preview when `sensorAware` is also true (otherwise HTTP 400). The explicit
 `sensorAware` option is now available in Off/Preview; see [personal baseline
 evidence](PERSONAL_BASELINE_PREVIEW.md). Existing
 saved active settings remain inert and display the qualification gate.
@@ -76,7 +76,8 @@ saved active settings remain inert and display the qualification gate.
 - Does not assume the old Free Sleep five-minute vital-window format matches
   Core's processing. The [sensor-aware Preview adapter](PERSONAL_BASELINE_PREVIEW.md)
   now qualifies Core minute estimates and recorded mechanical receipts explicitly.
-  Bedtime-phase shifts and snoring remain unavailable.
+  [Bed-entry timing Preview](BED_ENTRY_PREVIEW.md) can shift proposed temperature
+  phases; snoring-based actuation remains unavailable.
 - SQLite migration 0029 adds separate state, feedback and observation tables.
   State and its observation are committed together. Malformed state fails
   closed; it is never silently replaced with defaults.
@@ -92,8 +93,7 @@ saved active settings remain inert and display the qualification gate.
 This is not deployment or qualification. The physical Pod still runs customized
 Free Sleep. The offline importer, compatibility API and corrected idle handoff
 trial are implemented separately; see [controller handoff](CONTROLLER_HANDOFF.md).
-Remaining work includes bedtime-phase mapping and actual shared-authority
-application receipts for active comfort, hardware qualification, seven real
+Remaining work includes actual shared-authority application receipts for active comfort, hardware qualification, seven real
 Preview nights with owner review, and bounded activation. A Preview proposal
 alone is not evidence of improved sleep or a completed night.
 

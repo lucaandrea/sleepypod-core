@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 /**
  * Virtual occupancy sensor — single source of truth shared by the HomeKit
  * OccupancySensor accessory and the web-app PresenceCard.
@@ -55,6 +56,9 @@ export interface MovementSignal {
 }
 
 export interface LevelSignal {
+  /** Firmware measurement time and calibrated source identity for transition tracking. */
+  sampleAt?: number
+  sourceKey?: string
   active: boolean
   /** Sum of compensated per-channel deviation from baseline, or null when
    *  the signal can't be evaluated (no frame, stale frame, no calibration). */
@@ -190,7 +194,12 @@ function readLevelSignal(side: Side): LevelSignal {
   const calibration = readCapSenseCalibration(side, snapshot.type)
   if (!calibration) return { ...empty, ageMs }
   const result = evaluateCapacitance(values, calibration, snapshot[`${side}Status`])
-  return { ...result, ageMs }
+  return { ...result, ageMs, ...(result.deviation === null
+    ? {}
+    : {
+        sampleAt: snapshot.ts * 1000,
+        sourceKey: createHash('sha256').update(JSON.stringify([side, snapshot.type, calibration])).digest('hex'),
+      }) }
 }
 
 function readCapSenseCalibration(side: Side, format: 'capSense' | 'capSense2') {
