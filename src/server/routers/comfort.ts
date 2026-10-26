@@ -18,7 +18,7 @@ export const comfortRouter = router({
     .input(z.object({ side: sideSchema, config: comfortConfigSchema }).strict())
     .output(comfortStatusSchema)
     .mutation(async ({ input }) => {
-      if (input.config.mode === 'active' || input.config.sensorAware || input.config.followBedtime) {
+      if (input.config.mode === 'active' || input.config.followBedtime) {
         throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'Only Off and Preview are available until the remaining adapters and qualification gates are complete.' })
       }
       return getComfortRuntime().configure(input.side, input.config)

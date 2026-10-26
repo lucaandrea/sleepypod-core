@@ -1,10 +1,11 @@
+import type { ComfortSignals } from './signals'
 import type { Side } from '@/src/hardware/types'
 import { COMFORT_ACTIVATION_REASON, comfortConfigSchema, comfortFeedbackSchema, type ComfortStatus } from './contract'
 import { comfortLocalDate, decideComfort, learnComfort, MANUAL_PAUSE_MS, type ComfortConfig, type ComfortContext, type ComfortDecision, type ComfortFeedback, type ComfortState } from './policy'
 import { comfortEvent, type ComfortStore } from './store'
 
 const STORAGE_FAULT = 'Personal comfort is withheld because its current inputs, settings or observation journal are unavailable.'
-interface Observation { at: number, decision: ComfortDecision, stateKey: string }
+interface Observation { at: number, decision: ComfortDecision, stateKey: string, signals: ComfortSignals | null }
 export class ComfortInputError extends Error {}
 
 export interface ComfortRuntimeDeps {
@@ -12,6 +13,7 @@ export interface ComfortRuntimeDeps {
   store: ComfortStore
   withSideLock<T>(side: Side, work: () => Promise<T>): Promise<T>
   readContext(side: Side, state: ComfortState, now: number): { context: ComfortContext, timezone: string }
+  prepareSignals?(side: Side, now: number): Promise<void>
   timezone(): string
   pendingPause(side: Side): number | null
   acknowledgePause(side: Side, at: number): void
@@ -45,22 +47,27 @@ export class ComfortRuntime {
       history = this.deps.store.history(side)
     }
     catch { this.faults[side] = STORAGE_FAULT }
-    const observation = this.observations[side]
+    const observed = this.observations[side]
+    const now = this.deps.now()
+    const observation = observed && observed.at <= now && now - observed.at < 10_000 ? observed : undefined
+    const signals = observation?.signals
+    const signalExpired = signals?.expiresAt !== null && signals?.expiresAt !== undefined && now >= signals.expiresAt
     const fault = this.faults[side] ?? (this.deps.pendingPause(side) !== null ? STORAGE_FAULT : null)
     return {
       apiVersion: 1, generatedAt: this.deps.now(), side, state, history, fault, timezone, deviceDate,
-      evaluatedAt: observation?.at ?? null,
-      decision: fault || observation?.stateKey !== JSON.stringify(state) ? null : observation?.decision ?? null,
+      evaluatedAt: observed?.at ?? null,
+      decision: fault || signalExpired || observation?.stateKey !== JSON.stringify(state) ? null : observation?.decision ?? null,
       runtime: this.running ? 'running' : 'stopped',
       activation: { available: false, reason: COMFORT_ACTIVATION_REASON },
-      features: { sensorAware: false, followBedtime: false },
+      features: { sensorAware: true, followBedtime: false },
+      signals: fault || signalExpired || observation?.stateKey !== JSON.stringify(state) ? null : signals ?? null,
     }
   }
 
   async configure(side: Side, input: ComfortConfig): Promise<ComfortStatus> {
     const config = comfortConfigSchema.parse(input)
     if (config.mode === 'active') throw new Error(COMFORT_ACTIVATION_REASON)
-    if (config.sensorAware || config.followBedtime) throw new Error('Sensor-aware and bedtime-phase adapters have not been qualified for Core yet.')
+    if (config.followBedtime) throw new Error('Bedtime-phase adapters have not been qualified for Core yet.')
     await this.deps.withSideLock(side, async () => {
       const state = this.recoverPause(side)
       this.deps.store.commit(side, { ...state, config },
@@ -99,6 +106,15 @@ export class ComfortRuntime {
   }
 
   async evaluate(side: Side): Promise<void> {
+    // Prepare history outside the actuator lock; current hardware is read again inside it.
+    try {
+      if (this.deps.store.read(side).config.sensorAware) await this.deps.prepareSignals?.(side, this.deps.now())
+    }
+    catch {
+      this.faults[side] = STORAGE_FAULT
+      this.observations[side] = undefined
+      return
+    }
     await this.deps.withSideLock(side, async () => {
       try {
         const now = this.deps.now()
@@ -116,7 +132,8 @@ export class ComfortRuntime {
             reason: state.config.mode === 'active' ? COMFORT_ACTIVATION_REASON : 'Bedtime-phase mapping is not available in Core Preview yet.' }
         }
         if (decision.pauseRequired) state = { ...state, pausedUntil: Math.max(state.pausedUntil, now + MANUAL_PAUSE_MS) }
-        const key = JSON.stringify([decision, context.window?.segment, context.owner, context.device.targetF])
+        const key = JSON.stringify([decision, context.window?.segment, context.owner, context.device.targetF,
+          context.signals?.state, context.signals?.baselineDays, context.signals?.sampleAt])
         const previous = this.recorded[side]
         const record = state.config.mode !== 'off' && (!previous || previous.key !== key || now - previous.at >= 60_000 || now < previous.at)
         const event = record
@@ -124,12 +141,12 @@ export class ComfortRuntime {
               ...comfortEvent(now, 'preview', learning.message ? `${decision.reason} ${learning.message}` : decision.reason),
               session: context.window?.session ?? null, proposedF: decision.proposedF, reportedF: context.device.targetF,
               eligible: decision.eligible, deviceObservedAt: context.device.observedAt,
-              presenceObservedAt: context.presence.observedAt, owner: context.owner,
+              presenceObservedAt: context.presence.observedAt, owner: context.owner, signals: context.signals ?? null,
             }
           : undefined
         if (event || JSON.stringify(state) !== original) this.deps.store.commit(side, state, event)
         if (record) this.recorded[side] = { at: now, key }
-        this.observations[side] = { at: now, decision, stateKey: JSON.stringify(state) }
+        this.observations[side] = { at: now, decision, stateKey: JSON.stringify(state), signals: context.signals ?? null }
         this.faults[side] = undefined
       }
       catch {

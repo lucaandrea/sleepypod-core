@@ -4,6 +4,7 @@ import { withSideLock } from '@/src/hardware/sideLock'
 import { ComfortRuntime, type ComfortRuntimeDeps } from '../runtime'
 import { createComfortStore } from '../store'
 import { defaultComfortState, MANUAL_PAUSE_MS, type ComfortContext } from '../policy'
+import { missingComfortSignals } from '../signals'
 import { migratedComfortDatabase } from './databaseFixture'
 
 const databases: ReturnType<typeof migratedComfortDatabase>[] = []
@@ -36,6 +37,43 @@ function harness() {
 }
 
 describe('production personal comfort Preview', () => {
+  it('persists sensor Preview consent and evidence, expires status, and never acknowledges hardware', async () => {
+    const { runtime, store, input } = harness()
+    await runtime.configure('left', { ...store.read('left').config, sensorAware: true })
+    input.signals = { ...missingComfortSignals(), state: 'ready', reason: 'Qualified comparison',
+      sampleAt: input.now - 60000, expiresAt: input.now + 2000, baselineHeartRate: 60, baselineDays: 7, baselineWindows: 84 }
+    await runtime.evaluate('left')
+    expect(runtime.status('left')).toMatchObject({ features: { sensorAware: true }, decision: { eligible: true }, signals: { baselineDays: 7 } })
+    expect(store.history('left')[0].signals?.baselineHeartRate).toBe(60)
+    expect(store.read('left')).toMatchObject({ lastAppliedAt: 0, lastTargetF: null })
+    input.now += 2000
+    expect(runtime.status('left')).toMatchObject({ decision: null, signals: null })
+    await runtime.evaluate('left')
+    expect(runtime.status('left').decision).toBeNull()
+  })
+
+  it('prepares history outside the side lock and rechecks manual control after preparation', async () => {
+    const { deps, store, input } = harness()
+    store.commit('left', { ...store.read('left'), config: { ...store.read('left').config, sensorAware: true } })
+    let locked = false
+    deps.withSideLock = async (_side, work) => {
+      locked = true
+      try {
+        return await work()
+      }
+      finally { locked = false }
+    }
+    deps.prepareSignals = async () => {
+      expect(locked).toBe(false)
+      store.commit('left', { ...store.read('left'), pausedUntil: input.now + MANUAL_PAUSE_MS })
+    }
+    const runtime = new ComfortRuntime(deps)
+    await runtime.evaluate('left')
+    expect(runtime.status('left').decision).toMatchObject({ eligible: false, reason: expect.stringContaining('six hours') })
+    input.now += 10000
+    expect(runtime.status('left')).toMatchObject({ evaluatedAt: input.now - 10000, decision: null })
+  })
+
   it('does not present an old eligible decision after a manual pause changes persisted state', async () => {
     const { runtime, store, input } = harness()
     await runtime.evaluate('left')
@@ -57,7 +95,6 @@ describe('production personal comfort Preview', () => {
     const { runtime, store } = harness()
     const config = store.read('left').config
     await expect(runtime.configure('left', { ...config, mode: 'active' })).rejects.toThrow('qualification')
-    await expect(runtime.configure('left', { ...config, sensorAware: true })).rejects.toThrow('qualified')
     await expect(runtime.configure('left', { ...config, followBedtime: true })).rejects.toThrow('qualified')
     expect(store.read('left').config).toEqual(config)
   })

@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { comfortSignalsSchema } from './signals'
 
 export const COMFORT_ACTIVATION_REASON = 'Hardware qualification and reviewed Preview nights are pending.' as const
 
@@ -51,6 +52,7 @@ export const comfortEventSchema = z.object({
   deviceObservedAt: timestamp.nullable(),
   presenceObservedAt: timestamp.nullable(),
   owner: z.enum(['manual', 'run-once', 'autopilot', 'schedule']).nullable(),
+  signals: comfortSignalsSchema.nullable().optional(),
 })
 export type ComfortEvent = z.infer<typeof comfortEventSchema>
 
@@ -70,6 +72,7 @@ export const comfortStatusSchema = z.object({
     available: z.literal(false),
     reason: z.literal(COMFORT_ACTIVATION_REASON),
   }),
-  features: z.object({ sensorAware: z.literal(false), followBedtime: z.literal(false) }),
+  features: z.object({ sensorAware: z.boolean(), followBedtime: z.literal(false) }),
+  signals: comfortSignalsSchema.nullable().optional(),
 })
 export type ComfortStatus = z.infer<typeof comfortStatusSchema>

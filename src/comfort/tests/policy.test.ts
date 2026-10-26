@@ -1,3 +1,4 @@
+import { missingComfortSignals } from '../signals'
 import { describe, expect, it } from 'vitest'
 import { ADJUSTMENT_INTERVAL_MS, decideComfort, defaultComfortState, learnComfort, MANUAL_PAUSE_MS } from '../policy'
 import type { ComfortContext, ComfortFeedback, ComfortState, RoutineWindow } from '../policy'
@@ -109,7 +110,7 @@ describe('personal comfort decisions', () => {
 
   it.each(['learning', 'stale', 'review'] as const)('withholds sensor-aware correction for %s estimates', (state) => {
     const input = context()
-    input.signals = { state, sampleAt: now, reason: 'Reviewing a Pod baseline.' }
+    input.signals = { ...missingComfortSignals(), expiresAt: now + 10000, state, sampleAt: now, reason: 'Reviewing a Pod baseline.' }
     const policy = activeState()
     policy.config.sensorAware = true
     expect(decideComfort(policy, input)).toMatchObject({ eligible: false, reason: input.signals.reason })
@@ -117,15 +118,22 @@ describe('personal comfort decisions', () => {
 
   it.each([null, NaN, Infinity, now + 1, now - 360_001])('withholds nominally ready but invalid vital time %s', (sampleAt) => {
     const input = context()
-    input.signals = { state: 'ready', sampleAt, reason: 'Ready' }
+    input.signals = { ...missingComfortSignals(), expiresAt: now + 10000, state: 'ready', sampleAt, reason: 'Ready' }
     const policy = activeState()
     policy.config.sensorAware = true
     expect(decideComfort(policy, input).eligible).toBe(false)
   })
 
+  it.each([null, NaN, Infinity, now])('withholds expired or invalid proof deadline %s', (expiresAt) => {
+    const input = context(), policy = activeState()
+    policy.config.sensorAware = true
+    input.signals = { ...missingComfortSignals(), state: 'ready', sampleAt: now, expiresAt, reason: 'Ready' }
+    expect(decideComfort(policy, input).eligible).toBe(false)
+  })
+
   it('admits fresh sensor-aware evidence only inside all other guards', () => {
     const input = context()
-    input.signals = { state: 'ready', sampleAt: now, reason: 'Ready' }
+    input.signals = { ...missingComfortSignals(), expiresAt: now + 10000, state: 'ready', sampleAt: now, reason: 'Ready' }
     const policy = activeState()
     policy.config.sensorAware = true
     expect(decideComfort(policy, input)).toMatchObject({ eligible: true, proposedF: 74 })

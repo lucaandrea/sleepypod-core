@@ -98,3 +98,20 @@ or stale. Unsupported clog discovery is withdrawn. See [the contract and
 validation limits](HOME_TELEMETRY.md). This is source-level integration; broker
 provisioning, actual pairing, sensor qualification and household automations
 remain pending.
+
+
+## Personal baseline in sensor-aware Preview
+
+The comfort panel now offers an explicit Pod sensor guard in Preview. Historical
+live estimates require recorded quality and mechanical receipts, consistent
+processing/source identity, complete five-minute summaries and equally weighted
+qualified local dates. Fresh adjacent current summaries can hold proposals when
+they differ substantially from that baseline. The API/journal retain evidence
+and expiry; historical scanning yields before taking the hardware side lock.
+See [Personal baseline Preview](PERSONAL_BASELINE_PREVIEW.md).
+
+The seven baseline-data dates are distinct from the seven real Preview nights
+and hardware qualification required for activation. Active comfort, bedtime
+phase shifts, snoring elevation and unattended motion remain unavailable. The
+working Pod still runs Free Sleep; this source change does not deploy Core or
+change live control.
