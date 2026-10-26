@@ -1,5 +1,7 @@
 vi.mock('@/src/hardware/base/instance', () => ({ getBaseController: vi.fn() }))
 /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-non-null-assertion */
+import { alarmStore } from '@/src/alarms/instance'
+import { occurrenceAt } from '@/src/alarms/model'
 import { resetControlDatabase } from '@/src/temperature/tests/databaseFixture'
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import type BetterSqlite3 from 'better-sqlite3'
@@ -273,6 +275,16 @@ const alarmSched = (side: 'left' | 'right') => ({
   updatedAt: new Date(),
 })
 
+/** Persist the complete fixture profile before invoking a current occurrence. */
+async function runCurrentAlarm(manager: JobManager, row: ReturnType<typeof alarmSched>) {
+  sqlite.prepare('INSERT OR IGNORE INTO device_settings(id,timezone) VALUES (1,\'America/Los_Angeles\')').run()
+  sqlite.prepare(`UPDATE alarm_schedules SET vibration_intensity=?,vibration_pattern=?,duration=?,snooze_duration=?,snooze_taper=? WHERE id=?`)
+    .run(row.vibrationIntensity, row.vibrationPattern, row.duration, row.snoozeDuration, row.snoozeTaper, row.id)
+  const now = Date.now()
+  const candidate = occurrenceAt(alarmStore().context(row.side), Math.floor(now / 60_000) * 60_000, now)!
+  await manager.runAlarmJob(row, candidate)
+}
+
 const powerSched = (side: 'left' | 'right') => ({
   id: 1,
   side,
@@ -362,7 +374,10 @@ describe('JobManager — job ordering and gating', () => {
       await vi.advanceTimersByTimeAsync(1002)
       expect(setAlarm).toHaveBeenCalledTimes(1)
       if (state === 'disabled') sqlite.prepare('UPDATE alarm_schedules SET enabled = 0 WHERE id = ?').run(alarm.id)
-      if (state === 'cancelled') manager.cancelAlarmJob(alarm.id)
+      if (state === 'cancelled') {
+        sqlite.prepare('DELETE FROM alarm_schedules WHERE id=?').run(alarm.id)
+        manager.cancelAlarmJob(alarm.id)
+      }
       await vi.advanceTimersByTimeAsync(new Date('2026-10-27T07:05:00-07:00').getTime() - Date.now() + 1)
       if (state === 'active') {
         expect(setPower).not.toHaveBeenCalledWith('left', false)
@@ -410,7 +425,7 @@ describe('JobManager — job ordering and gating', () => {
     it('fires alarm + temperature when side is powered', async () => {
       seedSidePowered('right', true)
 
-      await manager.runAlarmJob(alarmSched('right'))
+      await runCurrentAlarm(manager, alarmSched('right'))
 
       expect(setTemperature).toHaveBeenCalledWith('right', 88)
       expect(setAlarm).toHaveBeenCalledOnce()
@@ -422,7 +437,7 @@ describe('JobManager — job ordering and gating', () => {
       // a deliberately-off side.
       seedSidePowered('right', false)
 
-      await manager.runAlarmJob(alarmSched('right'))
+      await runCurrentAlarm(manager, alarmSched('right'))
 
       expect(setTemperature).not.toHaveBeenCalled()
       expect(setAlarm).toHaveBeenCalledOnce()
@@ -438,7 +453,7 @@ describe('JobManager — job ordering and gating', () => {
 
     it('fires alarm when side has no device_state row (treated as off)', async () => {
       // No row inserted at all
-      await manager.runAlarmJob(alarmSched('left'))
+      await runCurrentAlarm(manager, alarmSched('left'))
 
       expect(setTemperature).not.toHaveBeenCalled()
       expect(setAlarm).toHaveBeenCalledOnce()
@@ -447,7 +462,7 @@ describe('JobManager — job ordering and gating', () => {
     it('broadcast omits temperature fields but keeps isAlarmVibrating when not powered', async () => {
       seedSidePowered('right', false)
 
-      await manager.runAlarmJob(alarmSched('right'))
+      await runCurrentAlarm(manager, alarmSched('right'))
 
       expect(broadcastMutationStatus).toHaveBeenCalledWith('right', {
         isAlarmVibrating: true,
@@ -1374,7 +1389,7 @@ describe('JobManager handler closures', () => {
     const sched = manager.getScheduler()
     const origCron = sched.scheduleJob.bind(sched)
     sched.scheduleJob = (id, type, cron, handler, metadata) => {
-      captured.set(id, handler)
+      captured.set(id, () => handler(new Date(Math.floor(Date.now() / 60_000) * 60_000)))
       return origCron(id, type, cron, handler, metadata)
     }
     const origOne = sched.scheduleOneTimeJob.bind(sched)
@@ -1531,6 +1546,7 @@ describe('JobManager handler closures', () => {
   })
 
   it('alarm cron handler closure delegates to runAlarmJob with isPowered gate', async () => {
+    insertDeviceSettings()
     insertAlarmSchedule({ side: 'right', ...alarmNow(), alarmTemperature: 90 })
     seedSidePowered('right', true)
     await manager.loadSchedules()
@@ -1927,7 +1943,7 @@ describe('JobManager — streaming + downstream side-effects', () => {
     seedSidePowered('right', true)
     insertAlarmSchedule({ side: 'right', ...alarmNow(), alarmTemperature: 88 })
 
-    await manager.runAlarmJob({
+    await runCurrentAlarm(manager, {
       id: 1,
       side: 'right',
       ...alarmNow(),
@@ -1982,5 +1998,154 @@ describe('JobManager — streaming + downstream side-effects', () => {
 
     expect(cancelAutoOffTimer).not.toHaveBeenCalled()
     expect(broadcastMutationStatus).not.toHaveBeenCalled()
+  })
+})
+
+// Persisted overrides exercise the real migrated store and real node-schedule
+// callbacks, with only the DAC mocked. These are not physical vibration tests.
+describe('one-occurrence alarm runtime integration', () => {
+  let manager: JobManager
+  const originalAt = Date.parse('2026-10-27T07:00:00-07:00')
+  beforeEach(() => {
+    resetSchema()
+    vi.useFakeTimers()
+    vi.setSystemTime(originalAt - 60_000)
+    insertDeviceSettings()
+    insertAlarmSchedule({ side: 'left', dayOfWeek: 'tuesday', time: '07:00', alarmTemperature: 82 })
+    setAlarm.mockReset().mockResolvedValue(undefined)
+    connect.mockReset().mockResolvedValue(undefined)
+    setPower.mockReset().mockResolvedValue(undefined)
+    setTemperature.mockReset().mockResolvedValue(undefined)
+    manager = new JobManager('America/Los_Angeles')
+  })
+  afterEach(async () => {
+    await manager.shutdown()
+    vi.useRealTimers()
+  })
+  function temporary(action: 'skip' | 'time', time?: string) {
+    const store = alarmStore()
+    const page = store.page('left', Date.now())
+    return store.write({ side: 'left', action, time, expectedRevision: page.revision, expectedAt: page.alarm!.at }, Date.now())
+  }
+  it('suppresses the original, keeps an identical timer at its deadline, and fires the changed time once', async () => {
+    temporary('time', '07:10')
+    await manager.loadSchedules()
+    const job = manager.getScheduler().getJob('alarm-override-left')
+    expect(job?.schedule).toBe(new Date(originalAt + 10 * 60_000).toISOString())
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(setAlarm).not.toHaveBeenCalled()
+    // Heartbeat and one-shot now share a deadline, an important registration race.
+    await vi.advanceTimersByTimeAsync(10 * 60_000)
+    expect(setAlarm).toHaveBeenCalledTimes(1)
+    expect(alarmStore().page('left', Date.now()).execution).toBe('acknowledged')
+    manager.refreshAlarmOverrides()
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(setAlarm).toHaveBeenCalledTimes(1)
+  })
+  it('recovers future overrides after manager restart without replaying completed or missed ones', async () => {
+    temporary('time', '07:10')
+    await manager.loadSchedules()
+    await manager.shutdown()
+    manager = new JobManager('America/Los_Angeles')
+    await manager.loadSchedules()
+    expect(manager.getScheduler().getJob('alarm-override-left')).toBeDefined()
+    await vi.advanceTimersByTimeAsync(11 * 60_000)
+    expect(setAlarm).toHaveBeenCalledTimes(1)
+    await manager.shutdown()
+    manager = new JobManager('America/Los_Angeles')
+    await manager.loadSchedules()
+    expect(manager.getScheduler().getJob('alarm-override-left')).toBeUndefined()
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(setAlarm).toHaveBeenCalledTimes(1)
+  })
+  it('reopens a moved alarm wake window after a full reload without replacing its clock timer', async () => {
+    sqlite.exec('UPDATE alarm_schedules SET wake_window=30')
+    temporary('time', '07:10')
+    await manager.loadSchedules()
+    const windows = (manager as unknown as { wakeWindows: { isOpen(id: number): boolean } }).wakeWindows
+    const clock = manager.getScheduler().getJob('alarm-override-left')
+    expect(windows.isOpen(-1)).toBe(true)
+    await manager.reloadSchedules()
+    expect(windows.isOpen(-1)).toBe(true)
+    expect(manager.getScheduler().getJob('alarm-override-left')).toBe(clock)
+    expect(setAlarm).not.toHaveBeenCalled()
+  })
+  it('withholds an already queued callback after a skip or profile edit', async () => {
+    const row = dbModule.db.select().from(alarmSchedules).get()!
+    const candidate = occurrenceAt(alarmStore().context('left'), originalAt, Date.now())!
+    temporary('skip')
+    vi.setSystemTime(originalAt)
+    await manager.runAlarmJob(row, candidate)
+    expect(connect).not.toHaveBeenCalled()
+    expect(setAlarm).not.toHaveBeenCalled()
+  })
+  it('rechecks current persisted state when connection setup finishes', async () => {
+    vi.setSystemTime(originalAt)
+    const row = dbModule.db.select().from(alarmSchedules).get()!
+    const candidate = occurrenceAt(alarmStore().context('left'), originalAt, Date.now())!
+    let release!: () => void
+    let entered!: () => void
+    const connected = new Promise<void>((resolve) => {
+      entered = resolve
+    })
+    connect.mockImplementationOnce(() => new Promise<void>((resolve) => {
+      release = resolve
+      entered()
+    }))
+    const waiting = manager.runAlarmJob(row, candidate)
+    await connected
+    sqlite.prepare('UPDATE alarm_schedules SET enabled=0 WHERE id=?').run(row.id)
+    release()
+    await waiting
+    expect(setAlarm).not.toHaveBeenCalled()
+    expect(sqlite.prepare('SELECT * FROM alarm_occurrences').all()).toEqual([])
+  })
+  it('does not replay uncertain writes through retries, reload, or the normal clock callback', async () => {
+    temporary('time', '07:01')
+    setAlarm.mockRejectedValueOnce(new Error('Synthetic lost DAC acknowledgment'))
+    await manager.loadSchedules()
+    await vi.advanceTimersByTimeAsync(2 * 60_000 + 2000)
+    expect(setAlarm).toHaveBeenCalledTimes(1)
+    expect(alarmStore().page('left', Date.now()).execution).toBe('unknown')
+    await manager.reloadSchedules()
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(setAlarm).toHaveBeenCalledTimes(1)
+  })
+  it('rechecks a newly moved warm-up after waiting behind an edit on the side lock', async () => {
+    vi.setSystemTime(originalAt - 60 * 60_000)
+    seedSidePowered('left', true)
+    insertPowerSchedule({ side: 'left', dayOfWeek: 'tuesday', onTime: '01:00', offTime: '06:00', onTemperature: 75 })
+    const power = dbModule.db.select().from(powerSchedules).get()!
+    let finishEdit!: () => void
+    const edit = withSideLock('left', async () => {
+      await new Promise<void>((resolve) => {
+        finishEdit = resolve
+      })
+      temporary('time', '06:30')
+    })
+    await Promise.resolve()
+    const shutdown = manager.runPowerOffJob(power)
+    for (let count = 0; count < 50; count++) await Promise.resolve()
+    finishEdit()
+    await Promise.all([edit, shutdown])
+    expect(setPower).not.toHaveBeenCalled()
+    expect(manager.getScheduler().getNextInvocation('power-off-after-alarm-left')?.getTime()).toBe(originalAt - 30 * 60_000 + 30_000 + 15 * 60_000)
+  })
+  it('keeps the moved warm-up alive through a previously held shutdown, then shuts down at the new end', async () => {
+    seedSidePowered('left', true)
+    insertPowerSchedule({ side: 'left', dayOfWeek: 'tuesday', onTime: '01:00', offTime: '07:00', onTemperature: 75 })
+    await manager.loadSchedules()
+    // Hold the current planned shutdown at 06:59, then move the alarm while
+    // that absolute shutdown is pending. New warm-up overlaps its old deadline.
+    const power = dbModule.db.select().from(powerSchedules).get()!
+    await manager.runPowerOffJob(power)
+    temporary('time', '07:30')
+    manager.refreshAlarmOverrides()
+    await vi.advanceTimersByTimeAsync(16.5 * 60_000)
+    expect(setPower).not.toHaveBeenCalledWith('left', false)
+    const until = originalAt + 30 * 60_000 + 30_000 + 15 * 60_000
+    expect(manager.getScheduler().getNextInvocation('power-off-after-alarm-left')?.getTime()).toBe(until)
+    await vi.advanceTimersByTimeAsync(until - Date.now() + 1)
+    expect(setPower).toHaveBeenCalledExactlyOnceWith('left', false)
   })
 })

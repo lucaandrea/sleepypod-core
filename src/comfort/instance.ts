@@ -12,7 +12,8 @@ import type { Side } from '@/src/hardware/types'
 import { getOccupancy } from '@/src/lib/occupancy'
 import { scheduleSourceSide } from '@/src/lib/singleSleeper'
 import { getTemperatureControllerIfRunning } from '@/src/temperature/instance'
-import { alarmTemperatureTargets } from '@/src/temperature/baseline'
+import { readAlarmContext } from '@/src/alarms/store'
+import { effectiveAlarmTargets, validAlarmOverride } from '@/src/alarms/model'
 import { DEVICE_MAX_AGE_MS, type ComfortContext, type ComfortState, type RoutineWindow } from './policy'
 import { acknowledgeManualPause, pendingManualPause } from './manual'
 import { comfortRoutineAt } from './routines'
@@ -58,10 +59,12 @@ export function readComfortContext(side: Side, state: ComfortState, now: number)
   const base = getBaseControllerIfRunning()?.status()
   const baseFresh = base?.state === 'connected' && !base.stale && base.lastUpdate !== null
     && observedTimestamp(base.lastUpdate, now) !== null && now - base.lastUpdate <= 10_000
-  const alarmOverride = alarmTemperatureTargets(alarms.map(row => ({
-    id: `alarm:${row.id}`, dayOfWeek: row.dayOfWeek, time: row.time,
-    temperature: row.alarmTemperature, wakeWindow: row.wakeWindow, duration: row.duration,
-  })), timezone, now).length > 0
+  const alarmContext = source ? readAlarmContext(sqlite, source) : null
+  // The learner's weekly phases must not compete with a changed wake time on
+  // the affected night. A skip next week does not suppress this week's Preview.
+  const alarmChange = alarmContext ? validAlarmOverride(alarmContext, now) : null
+  const affectedRoutine = alarmChange && window && [alarmChange.originalAt, alarmChange.at].some(at => at !== null && at >= window.start && at <= window.end)
+  const alarmOverride = Boolean(affectedRoutine) || (alarmContext !== null && effectiveAlarmTargets(alarmContext, now).length > 0)
   const targetF = typeof reported?.targetTemperature === 'number' && Number.isFinite(reported.targetTemperature) ? reported.targetTemperature : null
   return {
     timezone,

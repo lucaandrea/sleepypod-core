@@ -28,7 +28,9 @@ import { withSideLock } from '@/src/hardware/sideLock'
 import { timeToDate, nowInTimezone } from './timeUtils'
 import { activeSleeperSides, type BedState, mirrorSideFor, scheduleSourceSide, singleSleeperSideFor } from '@/src/lib/singleSleeper'
 import { WakeWindows, slotBefore } from './wakeWindow'
-import { alarmTemperatureTargets } from '@/src/temperature/baseline'
+import { dispatchAlarm } from '@/src/alarms/dispatch'
+import { alarmStore } from '@/src/alarms/instance'
+import { alarmDigest, alarmRowSchema, consistentAlarm, effectiveAlarmTargets, occurrenceAt, validAlarmOverride, type AlarmOccurrence, type AlarmRow } from '@/src/alarms/model'
 
 const HEARTBEAT_INTERVAL_MS_DEFAULT = 60_000
 const HEARTBEAT_STALE_MS_DEFAULT = 90_000
@@ -318,6 +320,8 @@ export class JobManager {
       await yieldIfNeeded()
     }
 
+    this.refreshAlarmOverrides()
+
     const elevations = await db.select().from(baseSchedules)
     for (const elevation of elevations) {
       this.upsertBaseSchedule(elevation)
@@ -397,6 +401,12 @@ export class JobManager {
    * Returns the list of stale job IDs found this tick (empty if healthy).
    */
   async checkLiveness(): Promise<string[]> {
+    if (!this.shutdownRequested) {
+      try {
+        this.refreshAlarmOverrides()
+      }
+      catch (error) { console.error('[scheduler] temporary alarm recovery failed:', error) }
+    }
     const now = Date.now()
     const stale: string[] = []
     for (const job of this.scheduler.getJobs()) {
@@ -576,15 +586,7 @@ export class JobManager {
   /** Use arbitration's bounded alarm window even after cron advances to next week. */
   private async alarmWarmupEnd(side: 'left' | 'right'): Promise<number | null> {
     if (!activeSleeperSides(await this.awayModes()).includes(side)) return null
-    const alarms = await db.select().from(alarmSchedules)
-      .where(and(eq(alarmSchedules.side, side), eq(alarmSchedules.enabled, true)))
-    const targets = alarmTemperatureTargets(
-      alarms.filter(alarm => this.scheduler.getNextInvocation(`alarm-${alarm.id}`)).map(alarm => ({
-        id: `alarm:${alarm.id}`, dayOfWeek: alarm.dayOfWeek, time: alarm.time,
-        temperature: alarm.alarmTemperature, wakeWindow: alarm.wakeWindow, duration: alarm.duration,
-      })),
-      this.scheduler.getTimezone(), Date.now(),
-    )
+    const targets = effectiveAlarmTargets(alarmStore().context(side), Date.now())
     return targets.reduce<number | null>((end, target) => Math.max(end ?? 0, target.expiresAt), null)
   }
 
@@ -607,11 +609,24 @@ export class JobManager {
     sched: typeof powerSchedules.$inferSelect,
     generation?: Readonly<Record<'left' | 'right', number>>,
   ): Promise<void> {
+    if (generation && !(await this.drivenSides(sched.side)).some(side => generation[side] === this.powerOnGeneration[side])) return
+    if (await this.deferForCurrentAlarm(sched, generation)) return
     await this.forDrivenSides(sched.side, `power-off-${sched.id}`, side => withSideLock(side, async () => {
       if (!(await this.drivenSides(sched.side)).includes(side)) return
       if (generation && generation[side] !== this.powerOnGeneration[side]) return
+      // A one-time edit may have held this side's lock while shutdown waited.
+      if (await this.deferForCurrentAlarm(sched, generation)) return
       await this.powerOffForScheduleLocked(side)
     }))
+  }
+
+  private async deferForCurrentAlarm(sched: typeof powerSchedules.$inferSelect, generation?: Readonly<Record<'left' | 'right', number>>): Promise<boolean> {
+    const after = await this.alarmWarmupEnd(sched.side)
+    if (after === null || after <= Date.now()) return false
+    const heldGeneration = generation ?? { ...this.powerOnGeneration }
+    this.scheduler.scheduleOneTimeJob(`power-off-after-alarm-${sched.side}`, JobType.POWER_OFF, new Date(after),
+      () => this.powerOffAfterAlarm(sched, heldGeneration), { scheduleId: sched.id, side: sched.side })
+    return true
   }
 
   /** Respect a run-once override before a recurring or mirrored shutdown. */
@@ -635,7 +650,7 @@ export class JobManager {
   /**
    * Schedule an alarm
    */
-  private scheduleAlarm(sched: typeof alarmSchedules.$inferSelect): void {
+  private scheduleAlarm(sched: AlarmRow): void {
     const [hour, minute] = this.parseTime(sched.time)
     const cron = this.buildWeeklyCron(sched.dayOfWeek, hour, minute)
 
@@ -643,7 +658,7 @@ export class JobManager {
       `alarm-${sched.id}`,
       JobType.ALARM,
       cron,
-      () => this.runScheduledAlarm(sched),
+      fireDate => this.runScheduledAlarm(sched, fireDate),
       { scheduleId: sched.id, side: sched.side, targetTemperature: sched.alarmTemperature }
     )
 
@@ -666,32 +681,90 @@ export class JobManager {
     }
   }
 
-  /** The set-time alarm job — skipped when movement already fired it early. */
-  async runScheduledAlarm(sched: typeof alarmSchedules.$inferSelect): Promise<void> {
-    if (this.wakeWindows.claim(sched.id)) {
-      console.log(`[jobManager] alarm-${sched.id} already fired early in its wake window`)
-      return
-    }
-    await this.runAlarmJob(sched)
+  /** Match a captured weekly row to current persisted ownership and its exact occurrence. */
+  private alarmCandidate(sched: AlarmRow, originalAt: number, effectiveAt: number): AlarmOccurrence | null {
+    const current = alarmStore().context(sched.side)
+    const candidate = occurrenceAt(current, originalAt, Date.now())
+    if (!candidate || candidate.skipped || candidate.at !== effectiveAt || !candidate.rows.some(row => alarmDigest(row) === alarmDigest(alarmRowSchema.parse(sched)))) return null
+    // Identical simultaneous rows are one wake event. Preserve separate legacy
+    // profiles when they differ; the one-time editor makes that conflict visible.
+    if (consistentAlarm(candidate)) return candidate.rows[0].id === sched.id ? candidate : null
+    return { ...candidate, rows: candidate.rows.filter(row => row.id === sched.id) }
   }
 
-  /** Start watching for movement when the next alarm is within its wake window. */
-  private openWakeWindow(sched: typeof alarmSchedules.$inferSelect): void {
+  /** The clock callback carries its original fire date, never a guessed next week. */
+  async runScheduledAlarm(sched: AlarmRow, fireDate: Date): Promise<void> {
+    this.wakeWindows.claim(sched.id)
+    const candidate = this.alarmCandidate(sched, fireDate.getTime(), fireDate.getTime())
+    if (candidate) await this.runAlarmJob(sched, candidate)
+  }
+
+  /** Open only the currently valid weekly window; overrides register absolute windows below. */
+  private openWakeWindow(sched: AlarmRow): void {
+    this.wakeWindows.reset(sched.id)
     const alarmAt = this.scheduler.getNextInvocation(`alarm-${sched.id}`)
-    if (!alarmAt) return
-    // +1 min: the window-opening job fires at the top of its minute, so the
-    // alarm can read as up to a minute further away than the window.
-    if (alarmAt.getTime() - Date.now() > (sched.wakeWindow + 1) * 60_000) return
-    this.wakeWindows.open(sched.id, sched.side, alarmAt, sched.wakeWindow, () => this.runAlarmJob(sched))
+    if (!alarmAt || alarmAt.getTime() - Date.now() > sched.wakeWindow * 60_000) return
+    const candidate = this.alarmCandidate(sched, alarmAt.getTime(), alarmAt.getTime())
+    if (candidate && !alarmStore().execution(sched.side, candidate)) this.wakeWindows.open(sched.id, sched.side, alarmAt, sched.wakeWindow, () => this.runAlarmJob(sched, candidate, true))
   }
 
-  async runAlarmJob(sched: typeof alarmSchedules.$inferSelect): Promise<void> {
+  /** Recover a persisted future override after restart, edit, or scheduler drift. Past commands never replay. */
+  refreshAlarmOverrides(onlySide?: 'left' | 'right'): void {
+    for (const side of onlySide ? [onlySide] : ['left', 'right'] as const) {
+      const alarmId = `alarm-override-${side}`
+      const windowId = `${alarmId}-window`
+      const watchId = side === 'left' ? -1 : -2
+      const store = alarmStore()
+      const current = store.context(side)
+      for (const row of current.rows) if (row.wakeWindow > 0) this.openWakeWindow(row)
+      const now = Date.now()
+      const changed = validAlarmOverride(current, now)
+      const candidate = current.available && changed?.at ? occurrenceAt(current, changed.originalAt, now) : null
+      const existing = this.scheduler.getJob(alarmId)
+      // Keep an identical timer, especially at its exact deadline: a heartbeat
+      // must not cancel a due callback before node-schedule gets to run it.
+      if (candidate && !store.execution(side, candidate) && existing?.metadata?.occurrenceToken === candidate.token && now <= candidate.at + 60_000) {
+        const row = candidate.rows[0]
+        // Full reload preserves one-shots but closes movement watches. Recover
+        // only the watch, leaving the already registered deadline untouched.
+        if (row.wakeWindow > 0 && now >= candidate.at - row.wakeWindow * 60_000 && now < candidate.at && !this.wakeWindows.isOpen(watchId)) {
+          this.wakeWindows.reset(watchId)
+          this.wakeWindows.open(watchId, side, new Date(candidate.at), row.wakeWindow, () => this.runAlarmJob(row, candidate, true))
+        }
+        continue
+      }
+      this.scheduler.cancelJob(alarmId)
+      this.scheduler.cancelJob(windowId)
+      this.wakeWindows.reset(watchId)
+      if (!candidate || candidate.at <= now || store.execution(side, candidate)) continue
+      const row = candidate.rows[0]
+      const due = new Date(candidate.at)
+      this.scheduler.scheduleOneTimeJob(alarmId, JobType.ALARM, due, () => this.runAlarmJob(row, candidate),
+        { side, scheduleId: row.id, targetTemperature: row.alarmTemperature, originalAt: candidate.originalAt, occurrenceToken: candidate.token })
+      if (row.wakeWindow > 0) {
+        const open = async () => {
+          this.wakeWindows.open(watchId, side, due, row.wakeWindow, () => this.runAlarmJob(row, candidate, true))
+        }
+        const opensAt = candidate.at - row.wakeWindow * 60_000
+        if (opensAt <= now) void open()
+        else this.scheduler.scheduleOneTimeJob(windowId, JobType.WAKE_WINDOW, new Date(opensAt), open, { side, scheduleId: row.id })
+      }
+    }
+  }
+
+  async runAlarmJob(sched: AlarmRow, candidate: AlarmOccurrence, early = false): Promise<void> {
     // An away side's alarms stay silent: nobody is there to wake, and the
     // Schedule page no longer shows these rows. The mirror side's alarm
     // temperature follows through the controller's baseline, not from here.
     if (!activeSleeperSides(await this.awayModes()).includes(sched.side)) return
     await withSideLock(sched.side, async () => {
       if (!activeSleeperSides(await this.awayModes()).includes(sched.side)) return
+      const store = alarmStore()
+      if (!store.eligible(sched.side, candidate, Date.now(), early)) {
+        const outcome = store.execution(sched.side, candidate)
+        if (outcome === 'unknown' || outcome === 'attempting') throw new Error('Alarm delivery is unconfirmed; this occurrence will not be replayed.')
+        return
+      }
       // Vibration must fire regardless of power state — the alarm's purpose is
       // to wake the user, who often sleeps with the bed off or on a power
       // schedule that hasn't kicked in yet at wake time. Temperature, however,
@@ -703,6 +776,11 @@ export class JobManager {
       markSideMutated(sched.side)
       const client = getSharedHardwareClient()
       await client.connect()
+      if (!store.eligible(sched.side, candidate, Date.now(), early)) {
+        const outcome = store.execution(sched.side, candidate)
+        if (outcome === 'unknown' || outcome === 'attempting') throw new Error('Alarm delivery is unconfirmed; this occurrence will not be replayed.')
+        return
+      }
       if (powered && !stallBlocked) {
         await getTemperatureController().reconcileLocked(sched.side)
       }
@@ -719,10 +797,16 @@ export class JobManager {
         snoozeDuration: sched.snoozeDuration,
         snoozeTaper: sched.snoozeTaper,
       }
-      await client.setAlarm(sched.side, alarm)
-      // Recorded, not just broadcast: a tap gesture reads it to decide
-      // whether it snoozes or dismisses this alarm.
-      await markAlarmStarted(sched.side, alarm)
+      if (!store.claim(sched.side, candidate, Date.now(), early)) return
+      try {
+        await dispatchAlarm(store, sched.side, candidate, early, () => client.setAlarm(sched.side, alarm))
+        store.finish(sched.side, candidate, 'acknowledged')
+        await markAlarmStarted(sched.side, alarm)
+      }
+      catch (error) {
+        store.finish(sched.side, candidate, 'unknown')
+        throw error
+      }
     })
   }
 
@@ -1155,12 +1239,14 @@ export class JobManager {
       return
     }
     this.scheduleAlarm(sched)
+    this.refreshAlarmOverrides(sched.side)
   }
 
   cancelAlarmJob(id: number): void {
     this.scheduler.cancelJob(`alarm-${id}`)
     this.scheduler.cancelJob(`alarm-window-${id}`)
     this.wakeWindows.close(id)
+    this.refreshAlarmOverrides()
   }
 
   /**

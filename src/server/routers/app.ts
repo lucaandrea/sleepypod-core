@@ -28,6 +28,7 @@ import { comfortRouter } from './comfort'
 import { controlsRouter } from './controls'
 import { notificationsRouter } from './notifications'
 import { roomContextRouter } from './roomContext'
+import { nextAlarmRouter } from './nextAlarm'
 import { journalRouter } from './journal'
 import { importedHistoryRouter } from './importedHistory'
 
@@ -54,6 +55,7 @@ export const appRouter = router({
   roomContext: roomContextRouter,
   importedHistory: importedHistoryRouter,
   journal: journalRouter,
+  nextAlarm: nextAlarmRouter,
   environment: environmentRouter,
   raw: rawRouter,
   calibration: calibrationRouter,

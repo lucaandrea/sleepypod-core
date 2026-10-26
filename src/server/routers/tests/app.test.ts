@@ -35,6 +35,7 @@ describe('appRouter public surface', () => {
       'roomContext',
       'importedHistory',
       'journal',
+      'nextAlarm',
       'environment',
       'raw',
       'calibration',

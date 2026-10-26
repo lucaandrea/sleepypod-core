@@ -358,7 +358,7 @@ export const healthRouter = router({
           const jobManager = await getJobManager()
           const scheduler = jobManager.getScheduler()
           for (const job of scheduler.getJobs()) {
-            if (scheduleBackedJobTypes.includes(job.type)) {
+            if (!job.oneTime && scheduleBackedJobTypes.includes(job.type)) {
               actualUserJobs++
             }
           }

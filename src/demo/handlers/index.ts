@@ -13,6 +13,7 @@ import { device } from './device'
 import { environment } from './environment'
 import { health } from './health'
 import { homekit } from './homekit'
+import { nextAlarm } from './nextAlarm'
 import { journal } from './journal'
 import { importedHistory } from './importedHistory'
 import { mqtt } from './mqtt'
@@ -46,6 +47,7 @@ export const demoRouters = {
   homekit,
   importedHistory,
   journal,
+  nextAlarm,
   mqtt,
   notifications,
   roomContext,

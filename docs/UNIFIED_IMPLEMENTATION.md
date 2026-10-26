@@ -199,3 +199,11 @@ The direct comfort mode operation reads current settings under the write lock,
 so a mode switch preserves concurrent limit/sensor updates. Active remains locked.
 Native adoption, the future one-occurrence alarm override, target deployment and
 physical qualification are separate gates. See [the API and storage contract](MORNING_JOURNAL.md).
+
+## One-occurrence wake changes
+
+The Temp alarm card now separates skip/time/restore for one wake occurrence from
+weekly schedule editing. The authenticated native-ready contract, persistent
+compare-and-swap semantics, temperature spans, durable attempt records and
+migration limits are documented in [Next alarms](NEXT_ALARMS.md). Existing
+weekly schedules are preserved; actual Pod vibration remains unqualified.
