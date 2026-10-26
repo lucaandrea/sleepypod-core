@@ -8,6 +8,10 @@ Use private Tailscale HTTPS. Set `SLEEPYPOD_HTTPS_ONLY=1` behind the HTTPS proxy
 
 `/api/auth/session` exposes only configuration/session readiness without authentication. Route handlers recheck authorization independently of the Next proxy. Demo pages use simulated client data; the demo flag does not remove API authentication.
 
+Authenticated responses from the generated REST and tRPC handlers, including
+errors, use `Cache-Control: private, no-store` and vary by Authorization/Cookie.
+The response wrapper preserves streaming bodies and existing adapter headers.
+
 General-purpose MCP and raw hardware passthrough are disabled. `SLEEPYPOD_ENABLE_MCP=1` and `SLEEPYPOD_ENABLE_RAW_COMMANDS=1` are separate explicit diagnostic opt-ins; leave both unset in the home installation. Health import subprocesses inherit the service environment and send the connection key in an Authorization header, never as a command-line argument.
 
 These are local implementation checks, not a completed deployment or external security review. The working Free Sleep installation has not been replaced.

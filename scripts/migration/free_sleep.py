@@ -16,6 +16,11 @@ import tarfile
 import tempfile
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+if __package__:
+    from . import imported_history
+else:
+    import imported_history
+
 ROOT = Path(__file__).resolve().parents[2]
 DAYS = ('sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday')
 SIDES = ('left', 'right')
@@ -424,6 +429,8 @@ def stage_backup(backup, output, now=None):
                 map_schedules(read_json(legacy / 'lowdb/schedulesDB.json'), database, report)
                 map_comfort(legacy, database, report, now)
                 preserve_biometrics(legacy, biometrics, report, now)
+                report['importedHistory'] = imported_history.prepare(
+                    legacy / 'free-sleep.db', staging / imported_history.FILENAME, settings['timeZone'], now)
                 report['importedRows'] = {table: database.execute(f'SELECT COUNT(*) FROM {table}').fetchone()[0]
                     for table in ('power_schedules', 'temperature_schedules', 'alarm_schedules', 'tap_gestures', 'comfort_states', 'comfort_feedback')}
                 for connection in (database, biometrics):
@@ -432,7 +439,8 @@ def stage_backup(backup, output, now=None):
                     require(not connection.execute('PRAGMA foreign_key_check').fetchall(), 'Imported SQLite foreign-key failure')
         report['requiredGates'] = ['Complete installation/service/SSH rollback artifact', 'Native compatibility and overnight editor qualification',
                                   'Attended hardware and sensor qualification', 'Reviewed activation and seven actual Preview nights']
-        report['databaseHashes'] = {name: checksum(staging / name) for name in ('sleepypod.db', 'biometrics.db')}
+        report['databaseHashes'] = {name: checksum(staging / name)
+                                   for name in ('sleepypod.db', 'biometrics.db', imported_history.FILENAME)}
         write_private(staging / 'migration-report.json', report)
         for path in staging.rglob('*'):
             os.chmod(path, 0o700 if path.is_dir() else 0o600)

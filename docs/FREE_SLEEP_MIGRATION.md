@@ -60,6 +60,9 @@ Output contains:
 
 - `sleepypod.db` and `biometrics.db`, created using the checked-in Drizzle SQL
   and migration ledgers; the ordinary Drizzle migrator can subsequently resume.
+- `free-sleep-history.db`, a separate indexed read-only query snapshot of
+  supported original measurements. Allow additional disk space for its data
+  and indices; its checksum and source metadata are included in the report.
 - `legacy/`, with every original data file, including the legacy biometric DB,
   routines, journal and full learning history.
 - `source/`, with exact copies of all three backup files. Credentials remain
@@ -80,7 +83,7 @@ Output contains:
 | Tap gestures | Translate temperature and alarm actions; unrepresentable values fail rather than round silently. |
 | Personal comfort | Preserve learned offset, consumed-feedback/session cursors, manual pause and last request fields. Start Off; unsupported vital/bedtime adapters remain disabled. Preserve full original activity and timing-learning fields under `legacy/`. |
 | Journal | Import dated comfort feedback, retaining all original restfulness, habits and notes under `legacy/`. Import time is a bookkeeping timestamp, not an observed sleep night. |
-| Biometrics | Verify original SQLite integrity and table columns; retain it byte-for-byte. Do **not** merge old five-minute interval-start HR/HRV/respiration averages into Core's live metrics under different definitions. Historical UI/API support is pending. |
+| Biometrics | Verify original SQLite integrity and table columns; retain it byte-for-byte. Build a separate source-labelled query snapshot for Sleep → History and `/api/v1/history`. Do **not** merge old five-minute interval-start HR/HRV/respiration averages into Core's live metrics under different definitions. See [Imported history](IMPORTED_HISTORY.md). |
 | Legacy capacitance | Preserve channel means/std as **pending** profiles. Free Sleep used summed standardized deviations; Core uses a raw-unit threshold. No threshold/quality score is guessed. Tagged newer formats require a separate adapter. |
 | Transient overrides | Retain originals and report unexpired overrides; no equivalent Core override is invented. |
 | Credentials/integrations | Retain privately for recovery; do not provision owner access, MQTT or HomeKit from the archive. Their Core integrations start disabled. |
@@ -153,7 +156,7 @@ HTTP 412. Direct out-of-band row changes are detected on the next routine read.
 
 This contract is additive. Native and ESP32 owners should use it for imported
 bedtime routines; the old calendar mutation API intentionally refuses those
-rows. Legacy history APIs, native contract adoption, actual Pod qualification
+rows. Native history contract adoption, actual Pod qualification
 and seven Preview nights remain separate gates.
 
 ## Verification

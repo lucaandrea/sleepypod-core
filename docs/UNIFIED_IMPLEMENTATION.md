@@ -8,6 +8,7 @@ the current UI reference. See [navigation](UNIFIED_NAVIGATION.md).
 
 ## Implemented locally
 
+- Separate read-only imported history, with source-labelled web views and direct v1 pagination for native clients. Original records remain byte-preserved; they are not live measurements or Preview-night evidence. See [Imported history](IMPORTED_HISTORY.md).
 - Owner authorization across REST, tRPC, raw data, exports, diagnostics and the live sensor socket. See [owner access](OWNER_ACCESS.md). General MCP and raw actuator passthrough default to disabled.
 - Legacy Pod 4 capacitance profiles and frame quality/freshness checks, with incomplete readings treated as unavailable.
 - SleepyPod presentation: original neutral light/dark tokens and 3D temperature controls. Phone navigation matches the native Temp, Schedule and Sleep destinations, with a Settings entry for secondary controls. Desktop retains direct navigation for Base, Autopilot, Home, System and Settings. The former Free Sleep palette generator has been removed; `app/globals.css` owns the web theme.

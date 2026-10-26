@@ -12,9 +12,13 @@ const BiometricsPage = dynamic(
   () => import('@/src/components/biometrics/BiometricsPage').then(m => m.BiometricsPage),
   { loading: () => <Skeleton className="h-64" /> },
 )
+const ImportedHistory = dynamic(
+  () => import('./ImportedHistory').then(module => module.ImportedHistory),
+  { loading: () => <Skeleton className="h-64" /> },
+)
 
 /**
- * Sleep: Nights (the Night | Week | Month screen) and Biometrics. The section
+ * Sleep: Nights, Biometrics and separately labelled imported History. The section
  * lives in `?view=`; desktop switches it from the sidebar, phones from a
  * segmented switch.
  */
@@ -45,6 +49,7 @@ export function SleepSections() {
   )
 
   if (section === 'nights') return <SleepScreen sectionSwitch={sectionSwitch} />
+  if (section === 'history') return <ImportedHistory sectionSwitch={sectionSwitch} />
 
   return <BiometricsPage sectionSwitch={sectionSwitch} />
 }
