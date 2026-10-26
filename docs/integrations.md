@@ -110,13 +110,28 @@ the bridge resolves config in this order: `device_settings` row > env var > buil
 | Topic prefix | `MQTT_TOPIC_PREFIX` | `sleepypod` |
 | HA discovery | `MQTT_HA_DISCOVERY` | `true` |
 | HA discovery prefix | `MQTT_HA_DISCOVERY_PREFIX` | `homeassistant` |
-| TLS | `MQTT_TLS` | `false` |
+| Require TLS | `MQTT_TLS` | `false` |
 | TLS allow self-signed | `MQTT_TLS_INSECURE` | `false` |
 
-The URL scheme decides whether the connection is encrypted: `mqtts://` uses
-TLS, `mqtt://` is plain TCP. The TLS toggle does not upgrade an `mqtt://` URL;
-it only gates `MQTT_TLS_INSECURE`, which skips certificate verification when
-both are on.
+The URL scheme selects the transport: `mqtts://` and `wss://` are encrypted;
+`mqtt://` and `ws://` are plaintext. **Require TLS** rejects plaintext URLs
+before opening a connection. It does not change the URL or port. Enter the
+broker's actual secure endpoint when enabling this requirement. A secure URL
+still uses TLS when the requirement is off. Unsupported schemes are rejected.
+
+Enabled settings updates validate the fully resolved configuration, including
+inherited database/environment fields. Disabling an invalid configuration remains
+possible. If the settings database cannot be read, startup and connection tests
+stop rather than falling back to an unknown transport policy.
+
+Certificate verification stays enabled unless both Require TLS and the separate
+host-only `MQTT_TLS_INSECURE` override are on. That override permits unverified
+certificates; it is not exposed as an ordinary settings toggle.
+
+Saving a blank password preserves the saved password. **Test connection** uses
+only a password entered for that test; it never silently sends the saved password
+to a proposed broker. Re-enter it to test authenticated access. Editing the
+endpoint, TLS requirement or credentials clears the previous test result.
 
 ### Topics
 

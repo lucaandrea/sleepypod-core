@@ -4,6 +4,7 @@ import { eq } from 'drizzle-orm'
 import { publicProcedure, router } from '@/src/server/trpc'
 import { db } from '@/src/db'
 import { deviceSettings } from '@/src/db/schema'
+import { mqttEndpointIssue } from '@/src/streaming/mqttEndpoint'
 import {
   getBridgeStatus,
   resolveConfig,
@@ -104,7 +105,7 @@ export const mqttRouter = router({
     .output(z.object({ success: z.boolean() }))
     .mutation(async ({ input }) => {
       try {
-        const updates: Record<string, unknown> = { updatedAt: new Date() }
+        const updates: Partial<typeof deviceSettings.$inferSelect> = { updatedAt: new Date() }
         if ('enabled' in input) updates.mqttEnabled = input.enabled ?? null
         if ('url' in input) updates.mqttUrl = input.url ?? null
         if ('username' in input) updates.mqttUsername = input.username ?? null
@@ -113,9 +114,15 @@ export const mqttRouter = router({
         if ('haDiscovery' in input) updates.mqttHaDiscovery = input.haDiscovery ?? null
         if ('tlsEnabled' in input) updates.mqttTlsEnabled = input.tlsEnabled ?? null
 
+        const { config } = await resolveConfig(updates)
+        // Disabling must remain possible even when an existing configuration is invalid.
+        const issue = config.enabled ? mqttEndpointIssue(config.url, config.tlsEnabled) : null
+        if (issue) throw new TRPCError({ code: 'BAD_REQUEST', message: issue })
+
         await db.update(deviceSettings).set(updates).where(eq(deviceSettings.id, 1))
       }
       catch (err) {
+        if (err instanceof TRPCError) throw err
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',
           message: `Failed to update MQTT settings: ${err instanceof Error ? err.message : 'Unknown error'}`,

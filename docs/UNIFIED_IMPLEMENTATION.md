@@ -126,3 +126,17 @@ targets remain requests. Telemetry and pump-warning faults combine without
 clearing each other. Stable identities and existing command sequencing remain.
 See [HomeKit reported state](HOMEKIT_REPORTED_STATE.md) for source semantics and
 the remaining actual Apple Home qualification boundary.
+
+## MQTT transport requirements
+
+The web form, partial settings updates, test probe and running bridge now reject
+plaintext broker URLs when TLS is required. The URL and port remain explicit.
+Unreadable saved settings stop new connections instead of discarding a stored
+TLS policy. Connection tests use only the password entered for that test.
+The settings page explains these behaviors and clears stale test results when
+connection inputs change. See [MQTT configuration](integrations.md#configuration).
+
+Local validation includes actual loopback MQTT, MQTT/TLS and secure WebSocket
+handshakes, certificate rejection and zero socket connections for a TLS/URL
+mismatch. These fixtures contain no household credentials and do not provision
+the real broker, enable Pod control or qualify physical effects.

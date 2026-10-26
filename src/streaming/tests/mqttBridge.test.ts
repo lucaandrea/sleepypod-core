@@ -363,16 +363,10 @@ describe('mqttBridge — resolveConfig per-field precedence', () => {
     expect(config.username).toBeNull()
   })
 
-  it('falls back to env / default when reading device_settings throws', async () => {
+  it('does not replace unreadable stored requirements with environment defaults', async () => {
     dbMock.state.throwOnSelect = true
-    process.env.MQTT_URL = 'mqtt://env-only:1883'
-
-    const { config, sources } = await resolveConfig()
-
-    expect(sources.url).toBe('env')
-    expect(config.url).toBe('mqtt://env-only:1883')
-    expect(sources.enabled).toBe('default')
-    expect(config.enabled).toBe(false)
+    process.env.MQTT_URL = 'mqtt://env-broker:1883'
+    await expect(resolveConfig()).rejects.toThrow('Unable to read MQTT settings')
   })
 })
 
@@ -590,7 +584,7 @@ describe('mqttBridge — startMqttBridge connect flow', () => {
   })
 
   it('omits rejectUnauthorized when tlsEnabled but tlsInsecure is false', async () => {
-    await startBridgeWithFake({ config: { tlsEnabled: true, tlsInsecure: false } })
+    await startBridgeWithFake({ config: { url: 'mqtts://broker:8883', tlsEnabled: true, tlsInsecure: false } })
 
     const [, opts] = mqttMock.connect.mock.calls[0] as unknown as [string, any]
     expect(opts.rejectUnauthorized).toBeUndefined()
@@ -1172,7 +1166,7 @@ describe('mqttBridge — testConnection', () => {
   it('resolves ok=false with the thrown error when connect throws synchronously', async () => {
     mqttMock.state.throwOnConnect = new Error('bad url')
 
-    const result = await testConnection({ url: 'not-a-url' })
+    const result = await testConnection({ url: 'mqtt://valid-but-refused' })
 
     expect(result).toEqual({ ok: false, error: 'bad url' })
   })
@@ -1222,16 +1216,13 @@ describe('mqttBridge — testConnection', () => {
 // ---------------------------------------------------------------------------
 
 describe('mqttBridge — resolveConfig mutation coverage', () => {
-  it('warns with the device_settings fallback message when the row read throws', async () => {
+  it('refuses unknown settings rather than falling back past a stored TLS requirement', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     dbMock.state.throwOnSelect = true
-
-    await resolveConfig()
-
-    expect(warn).toHaveBeenCalledWith(
-      '[mqtt] failed to read device_settings — falling back to env:',
-      expect.anything(),
-    )
+    process.env.MQTT_ENABLED = 'true'
+    process.env.MQTT_URL = 'mqtt://fallback'
+    await expect(resolveConfig()).rejects.toThrow('Unable to read MQTT settings')
+    expect(warn).toHaveBeenCalledWith('[mqtt] settings unavailable; connection refused')
     warn.mockRestore()
   })
 
@@ -1466,5 +1457,60 @@ describe('mqttBridge — qualified non-retained state', () => {
     expect(JSON.parse(String(calls[live][1]))).toEqual(reading)
     expect(calls.filter(([path]) => String(path).endsWith('/clog_detected')).every(([, payload]) => payload === '')).toBe(true)
     await shutdownMqttBridge()
+  })
+})
+
+describe('MQTT transport requirements', () => {
+  it.each(['mqtt://broker:1883', 'ws://broker:8080/mqtt', 'https://broker', 'tls://broker'])('refuses %s before sending credentials when TLS is required', async (url) => {
+    const fake = await startBridgeWithFake({ config: { url, tlsEnabled: true, username: 'fixture-user', password: 'fixture-password' } })
+    expect(mqttMock.connect).not.toHaveBeenCalled()
+    expect(getBridgeStatus()).toMatchObject({ runState: 'errored', connected: false, commandsEnabled: false })
+    expect(getBridgeStatus().lastError).not.toContain('fixture-password')
+    expect(fake.publish).not.toHaveBeenCalled()
+    expect(await testConnection({ url, tlsEnabled: true, password: 'fixture-password' })).toMatchObject({ ok: false })
+    expect(mqttMock.connect).not.toHaveBeenCalled()
+    await shutdownMqttBridge()
+  })
+  it.each(['mqtts://broker:1883', 'wss://broker:8080/mqtt'])('keeps the explicitly chosen secure URL and port: %s', async (url) => {
+    await startBridgeWithFake({ config: { url, tlsEnabled: true } })
+    expect(mqttMock.connect).toHaveBeenCalledWith(url, expect.any(Object))
+    const options = (mqttMock.connect.mock.calls.at(-1) as unknown as [string, { rejectUnauthorized?: boolean }] | undefined)?.[1]
+    expect(options?.rejectUnauthorized).not.toBe(false)
+    await shutdownMqttBridge()
+  })
+  it('stops startup and testing if saved settings cannot be read', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    bridgeState.runState = 'stopped'
+    bridgeState.client = null
+    dbMock.state.throwOnSelect = true
+    process.env.MQTT_ENABLED = 'true'
+    process.env.MQTT_URL = 'mqtt://fallback'
+    await startMqttBridge()
+    expect(getBridgeStatus()).toMatchObject({ runState: 'errored', connected: false, commandsEnabled: false })
+    expect(await testConnection({ url: 'mqtts://broker', tlsEnabled: true })).toMatchObject({ ok: false })
+    expect(mqttMock.connect).not.toHaveBeenCalled()
+    warn.mockRestore()
+    await shutdownMqttBridge()
+  })
+  it('previews null resets through environment fallback without changing stored config', async () => {
+    dbMock.state.row = { mqttUrl: 'mqtts://saved', mqttTlsEnabled: true }
+    process.env.MQTT_URL = 'mqtt://environment'
+    process.env.MQTT_TLS = 'true'
+    expect((await resolveConfig({ mqttUrl: null })).config).toMatchObject({ url: 'mqtt://environment', tlsEnabled: true })
+    expect((await resolveConfig({ mqttTlsEnabled: false })).config).toMatchObject({ url: 'mqtts://saved', tlsEnabled: false })
+    expect((await resolveConfig()).config).toMatchObject({ url: 'mqtts://saved', tlsEnabled: true })
+  })
+  it('testing a new broker does not reuse saved credentials', async () => {
+    dbMock.state.row = { mqttUsername: 'saved-user', mqttPassword: 'saved-password' }
+    const fake = createFakeClient()
+    mqttMock.state.nextClient = fake
+    const pending = testConnection({ url: 'mqtts://new-broker', tlsEnabled: true })
+    await new Promise(resolve => setTimeout(resolve, 0))
+    expect(mqttMock.connect).toHaveBeenCalledWith('mqtts://new-broker', expect.not.objectContaining({ password: 'saved-password' }))
+    const options = (mqttMock.connect.mock.calls.at(-1) as unknown as [string, object] | undefined)?.[1]
+    expect(options).not.toHaveProperty('username')
+    expect(options).not.toHaveProperty('password')
+    fake.emit('connect')
+    expect(await pending).toEqual({ ok: true })
   })
 })

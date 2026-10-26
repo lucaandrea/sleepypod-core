@@ -36,6 +36,7 @@ import { deviceSettings } from '@/src/db/schema'
 import { onServerFrame } from './piezoStream'
 import { readHomeTelemetry } from '@/src/telemetry/home'
 import { homeDiscovery } from './mqttDiscovery'
+import { mqttEndpointIssue } from './mqttEndpoint'
 
 // ---------------------------------------------------------------------------
 // Configuration resolution
@@ -46,6 +47,7 @@ const STATE_PUBLISH_INTERVAL_MS = 5_000
 const RECONNECT_PERIOD_MS = 5_000
 const CONNECT_TIMEOUT_MS = 10_000
 const TEST_CONNECT_TIMEOUT_MS = 5_000
+const CONFIG_UNAVAILABLE = 'Unable to read MQTT settings. No connection was started.'
 
 export type ConfigSource = 'db' | 'env' | 'default'
 
@@ -76,7 +78,7 @@ function envBool(value: string | undefined): boolean | null {
   return value === '1' || value.toLowerCase() === 'true'
 }
 
-export async function resolveConfig(): Promise<{
+export async function resolveConfig(overrides: Partial<typeof deviceSettings.$inferSelect> = {}): Promise<{
   config: ResolvedMqttConfig
   sources: ResolvedMqttSources
 }> {
@@ -84,10 +86,14 @@ export async function resolveConfig(): Promise<{
   try {
     [row] = await db.select().from(deviceSettings).limit(1)
   }
-  catch (err) {
-    console.warn('[mqtt] failed to read device_settings — falling back to env:', err instanceof Error ? err.message : err)
+  catch {
+    // An unreadable DB is not an absent override: falling back could discard a stored TLS requirement.
+    console.warn('[mqtt] settings unavailable; connection refused')
+    throw new Error(CONFIG_UNAVAILABLE)
   }
 
+  // Preview partial writes through the same DB > environment > default resolution as startup.
+  const resolvedRow = { ...row, ...overrides }
   const envEnabled = envBool(process.env.MQTT_ENABLED)
   const envHaDiscovery = envBool(process.env.MQTT_HA_DISCOVERY)
   const envTls = envBool(process.env.MQTT_TLS)
@@ -99,14 +105,14 @@ export async function resolveConfig(): Promise<{
     return { value: fallback, source: 'default' }
   }
 
-  const enabled = pick<boolean>(row?.mqttEnabled ?? null, envEnabled, false)
-  const url = pick<string | null>(row?.mqttUrl ?? null, process.env.MQTT_URL ?? null, null)
-  const username = pick<string | null>(row?.mqttUsername ?? null, process.env.MQTT_USERNAME ?? null, null)
-  const password = pick<string | null>(row?.mqttPassword ?? null, process.env.MQTT_PASSWORD ?? null, null)
-  const topicPrefix = pick<string>(row?.mqttTopicPrefix ?? null, process.env.MQTT_TOPIC_PREFIX ?? null, DEFAULT_TOPIC_PREFIX)
-  const haDiscovery = pick<boolean>(row?.mqttHaDiscovery ?? null, envHaDiscovery, true)
-  const tlsEnabled = pick<boolean>(row?.mqttTlsEnabled ?? null, envTls, false)
-  const tlsInsecure = pick<boolean>(row?.mqttTlsInsecure ?? null, envTlsInsecure, false)
+  const enabled = pick<boolean>(resolvedRow.mqttEnabled ?? null, envEnabled, false)
+  const url = pick<string | null>(resolvedRow.mqttUrl ?? null, process.env.MQTT_URL ?? null, null)
+  const username = pick<string | null>(resolvedRow.mqttUsername ?? null, process.env.MQTT_USERNAME ?? null, null)
+  const password = pick<string | null>(resolvedRow.mqttPassword ?? null, process.env.MQTT_PASSWORD ?? null, null)
+  const topicPrefix = pick<string>(resolvedRow.mqttTopicPrefix ?? null, process.env.MQTT_TOPIC_PREFIX ?? null, DEFAULT_TOPIC_PREFIX)
+  const haDiscovery = pick<boolean>(resolvedRow.mqttHaDiscovery ?? null, envHaDiscovery, true)
+  const tlsEnabled = pick<boolean>(resolvedRow.mqttTlsEnabled ?? null, envTls, false)
+  const tlsInsecure = pick<boolean>(resolvedRow.mqttTlsInsecure ?? null, envTlsInsecure, false)
 
   return {
     config: {
@@ -287,20 +293,27 @@ export interface TestConnectionResult {
 }
 
 export async function testConnection(input: TestConnectionInput): Promise<TestConnectionResult> {
+  const issue = mqttEndpointIssue(input.url, input.tlsEnabled ?? false)
+  if (issue) return { ok: false, error: issue }
   // Test connection resolves tlsInsecure through the same db-then-env
   // precedence as the running bridge (resolveConfig), so the "Test" button
   // surfaces the same cert-trust outcome — env-only reads disagreed with a
   // db-configured bridge. tlsEnabled on its own does not relax cert
   // verification — mqtt.js defaults to strict.
-  const { config } = await resolveConfig()
+  let config: ResolvedMqttConfig
+  try {
+    ({ config } = await resolveConfig())
+  }
+  catch { return { ok: false, error: CONFIG_UNAVAILABLE } }
   const tlsInsecure = config.tlsInsecure
   return new Promise((resolve) => {
     let settled = false
     const finalize = (result: TestConnectionResult) => {
       if (settled) return
       settled = true
+      clearTimeout(timeout)
       try {
-        c.end(true)
+        testClient.end(true)
       }
       catch { /* ignore */ }
       resolve(result)
@@ -315,18 +328,18 @@ export async function testConnection(input: TestConnectionInput): Promise<TestCo
       ...(input.tlsEnabled && tlsInsecure ? { rejectUnauthorized: false } : {}),
     }
 
-    let c: MqttClient
+    let testClient: MqttClient
     try {
-      c = mqtt.connect(input.url, opts)
+      testClient = mqtt.connect(input.url, opts)
     }
     catch (err) {
       resolve({ ok: false, error: err instanceof Error ? err.message : String(err) })
       return
     }
 
-    c.once('connect', () => finalize({ ok: true }))
-    c.once('error', (err: Error) => finalize({ ok: false, error: err.message }))
-    setTimeout(() => finalize({ ok: false, error: 'connect timeout' }), TEST_CONNECT_TIMEOUT_MS + 500)
+    const timeout = setTimeout(() => finalize({ ok: false, error: 'connect timeout' }), TEST_CONNECT_TIMEOUT_MS + 500)
+    testClient.once('connect', () => finalize({ ok: true }))
+    testClient.once('error', (err: Error) => finalize({ ok: false, error: err.message }))
   })
 }
 
@@ -342,7 +355,17 @@ export async function startMqttBridge(): Promise<void> {
   state.commandsEnabled = false
   state.lastError = null
 
-  const { config } = await resolveConfig()
+  let config: ResolvedMqttConfig
+  try {
+    ({ config } = await resolveConfig())
+  }
+  catch {
+    if (state.generation === generation) {
+      state.runState = 'errored'
+      state.lastError = CONFIG_UNAVAILABLE
+    }
+    return
+  }
   if (state.generation !== generation) return
   state.resolved = config
 
@@ -355,6 +378,13 @@ export async function startMqttBridge(): Promise<void> {
     console.warn('[mqtt] enabled but no URL configured — set mqtt_url in device_settings or MQTT_URL')
     state.runState = 'errored'
     state.lastError = 'no broker URL configured'
+    return
+  }
+
+  const issue = mqttEndpointIssue(config.url, config.tlsEnabled)
+  if (issue) {
+    state.runState = 'errored'
+    state.lastError = issue
     return
   }
 

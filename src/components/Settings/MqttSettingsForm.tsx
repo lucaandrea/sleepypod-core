@@ -5,6 +5,7 @@ import { Plug } from 'lucide-react'
 import { trpc } from '@/src/utils/trpc'
 import { Badge, Button, Card, CardHeader, InlineError, SectionLabel, SettingRow, Skeleton, StatusDot, Toggle } from '@/src/components/ds'
 import { cn } from '@/lib/utils'
+import { mqttEndpointIssue } from '@/src/streaming/mqttEndpoint'
 
 type Source = 'db' | 'env' | 'default'
 
@@ -141,8 +142,11 @@ function SettingsFields({ data, onSaved }: { data: MqttSettings, onSaved: () => 
   const testMutation = trpc.mqtt.testConnection.useMutation()
 
   const isPending = updateMutation.isPending
+  const effectiveUrl = url.trim() || data.url || ''
+  const endpointIssue = mqttEndpointIssue(effectiveUrl, tlsEnabled)
 
   function handleSave() {
+    if (enabled && endpointIssue) return
     const payload: Partial<{
       enabled: boolean
       url: string
@@ -164,7 +168,7 @@ function SettingsFields({ data, onSaved }: { data: MqttSettings, onSaved: () => 
   }
 
   function handleTest() {
-    const effectiveUrl = url.trim() || data.url || ''
+    if (endpointIssue) return
     const effectiveUsername = username.trim() || data.username || ''
     testMutation.mutate({
       url: effectiveUrl,
@@ -174,7 +178,7 @@ function SettingsFields({ data, onSaved }: { data: MqttSettings, onSaved: () => 
     })
   }
 
-  const canTest = Boolean(url.trim() || data.url)
+  const canTest = endpointIssue === null
 
   return (
     <>
@@ -191,12 +195,24 @@ function SettingsFields({ data, onSaved }: { data: MqttSettings, onSaved: () => 
         value={url}
         placeholder={data.url || 'mqtt://broker.local:1883'}
         source={data.sources.url}
-        onChange={setUrl}
+        onChange={(value) => {
+          testMutation.reset()
+          setUrl(value)
+        }}
         disabled={isPending}
       />
-      <SettingRow label="TLS" sub="Use mqtts:// transport">
-        <Toggle on={tlsEnabled} onChange={setTlsEnabled} disabled={isPending} label="Toggle TLS" />
+      <SettingRow label="Require TLS" sub="Requires an mqtts:// or wss:// broker URL. The URL and port are not changed automatically.">
+        <Toggle
+          on={tlsEnabled}
+          onChange={(value) => {
+            testMutation.reset()
+            setTlsEnabled(value)
+          }}
+          disabled={isPending}
+          label="Toggle TLS"
+        />
       </SettingRow>
+      {endpointIssue && (enabled || effectiveUrl) && <InlineError className="text-xs">{endpointIssue}</InlineError>}
 
       <SectionLabel className="mt-2">AUTHENTICATION</SectionLabel>
       <div className="grid grid-cols-2 gap-3">
@@ -205,7 +221,10 @@ function SettingsFields({ data, onSaved }: { data: MqttSettings, onSaved: () => 
           value={username}
           placeholder={data.username || ''}
           source={data.sources.username}
-          onChange={setUsername}
+          onChange={(value) => {
+            testMutation.reset()
+            setUsername(value)
+          }}
           disabled={isPending}
         />
         <Field
@@ -215,12 +234,15 @@ function SettingsFields({ data, onSaved }: { data: MqttSettings, onSaved: () => 
           placeholder={data.passwordIsSet ? '••••••••' : ''}
           source={data.sources.password}
           tag={`${data.sources.password === 'env' ? '.env · ' : ''}${data.passwordIsSet ? 'set' : 'unset'}`}
-          onChange={setPassword}
+          onChange={(value) => {
+            testMutation.reset()
+            setPassword(value)
+          }}
           disabled={isPending}
           autoComplete="new-password"
         />
       </div>
-      <p className="text-xs text-fg-2">Leave both blank for anonymous brokers (e.g. local Mosquitto with allow_anonymous true).</p>
+      <p className="text-xs text-fg-2">Saving with a blank password keeps the saved password. Testing uses only a password entered here; re-enter it to test authentication.</p>
 
       <SectionLabel className="mt-2">TOPICS</SectionLabel>
       <Field
@@ -247,7 +269,7 @@ function SettingsFields({ data, onSaved }: { data: MqttSettings, onSaved: () => 
         <Button icon={Plug} onClick={handleTest} disabled={!canTest || testMutation.isPending}>
           {testMutation.isPending ? 'Testing…' : 'Test connection'}
         </Button>
-        <Button variant="primary" onClick={handleSave} disabled={isPending}>
+        <Button variant="primary" onClick={handleSave} disabled={isPending || (enabled && endpointIssue !== null)}>
           {isPending ? 'Saving…' : 'Save'}
         </Button>
       </div>
