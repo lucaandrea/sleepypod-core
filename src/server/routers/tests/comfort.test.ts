@@ -1,9 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { defaultComfortState } from '@/src/comfort/policy'
 import { ComfortInputError } from '@/src/comfort/runtime'
+import { PreviewReportError } from '@/src/comfort/report-summary'
 
 const runtime = vi.hoisted(() => ({ status: vi.fn(), configure: vi.fn(), feedback: vi.fn() }))
-vi.mock('@/src/comfort/instance', () => ({ getComfortRuntime: () => runtime }))
+const reports = vi.hoisted(() => ({ list: vi.fn(), detail: vi.fn(), review: vi.fn() }))
+vi.mock('@/src/comfort/instance', () => ({ getComfortRuntime: () => runtime, getPreviewReports: () => reports }))
 const { comfortRouter } = await import('../comfort')
 const caller = comfortRouter.createCaller({})
 
@@ -21,6 +23,23 @@ beforeEach(() => {
 })
 
 describe('personal comfort API contract', () => {
+  it('reads reports without starting the runtime and preserves actionable review conflicts', async () => {
+    reports.list.mockResolvedValue({ apiVersion: 1, generatedAt: 1, side: 'left', items: [], targetNights: 7,
+      ownerConfirmedNights: 0, activationAvailable: false })
+    expect(await caller.reports({ side: 'left' })).toMatchObject({ items: [], activationAvailable: false })
+    expect(runtime.status).not.toHaveBeenCalled()
+    const input = { side: 'left' as const, id: 'a'.repeat(64), digest: 'b'.repeat(64), expectedReviewId: null,
+      outcome: 'reviewed' as const, confirmedActualNight: true, note: '' }
+    reports.review.mockRejectedValue(new PreviewReportError('Refresh the report', 'CONFLICT'))
+    await expect(caller.reviewReport(input)).rejects.toMatchObject({ code: 'CONFLICT', message: 'Refresh the report' })
+    reports.detail.mockRejectedValue(new PreviewReportError('No report for this side', 'NOT_FOUND'))
+    await expect(caller.report({ side: 'right', id: input.id })).rejects.toMatchObject({ code: 'NOT_FOUND' })
+    await expect(caller.reviewReport({ ...input, confirmedActualNight: false })).rejects.toMatchObject({ code: 'BAD_REQUEST' })
+    await expect(caller.report({ side: 'left', id: '../source', afterId: -1 })).rejects.toMatchObject({ code: 'BAD_REQUEST' })
+    expect(reports.review).toHaveBeenCalledTimes(1)
+    expect(runtime.configure).not.toHaveBeenCalled()
+  })
+
   it('accepts explicit sensor-aware Preview without enabling Active', async () => {
     const config = { mode: 'preview' as const, minimumF: 70, maximumF: 95, sensorAware: true, followBedtime: true }
     await caller.configure({ side: 'left', config })

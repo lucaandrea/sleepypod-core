@@ -1,4 +1,6 @@
 import { test, expect } from '@playwright/test'
+import { execFile } from 'node:child_process'
+import { promisify } from 'node:util'
 
 test('sensor Preview persists consent, shows missing evidence and cannot activate hardware', async ({ page, request, playwright }, testInfo) => {
   const headers = { Authorization: `Bearer ${process.env.SLEEPYPOD_AUTH_TOKEN}` }
@@ -53,4 +55,63 @@ test('sensor Preview persists consent, shows missing evidence and cannot activat
   expect(await (await request.get('/api/v1/comfort?side=left', { headers })).json()).toMatchObject({ state: { config: { sensorAware: false, followBedtime: false } } })
   const invalid = await request.post('/api/v1/comfort/configure', { headers, data: { side: 'left', config: { mode: 'preview', minimumF: 70, maximumF: 95, followBedtime: true } } })
   expect(invalid.status()).toBe(400)
+})
+
+test('night reports require an exact owner review and never activate after confirmation', async ({ page, request, playwright }, testInfo) => {
+  const headers = { Authorization: `Bearer ${process.env.SLEEPYPOD_AUTH_TOKEN}` }
+  const anonymous = await playwright.request.newContext({ baseURL: 'http://127.0.0.1:3218', storageState: { cookies: [], origins: [] } })
+  for (const path of ['/api/v1/comfort/reports?side=left', `/api/v1/comfort/report?side=left&id=${'a'.repeat(64)}`,
+    '/api/trpc/comfort.reports?input=%7B%22json%22%3A%7B%22side%22%3A%22left%22%7D%7D']) {
+    expect((await anonymous.get(path)).status()).toBe(401)
+  }
+  expect((await anonymous.post('/api/v1/comfort/report/review', { data: {} })).status()).toBe(401)
+  expect((await anonymous.post('/api/trpc/comfort.reviewReport', { data: { json: {} } })).status()).toBe(401)
+  await anonymous.dispose()
+  await page.goto('/en/autopilot')
+  const reports = page.getByRole('region', { name: 'Preview night reports' })
+  await expect(reports).toContainText('No overnight Preview report has been recorded.')
+  await expect(reports).toContainText('Owner-confirmed nights: 0 / 7 minimum')
+  await promisify(execFile)('pnpm', ['exec', 'tsx', 'tests/browser/fixture.ts', 'comfort-report'], { timeout: 30_000, maxBuffer: 65536 })
+  await page.reload()
+  await reports.getByRole('button', { name: /Ready for review/ }).click()
+  const detail = page.getByLabel('Selected Preview report')
+  await expect(detail).toContainText('4h 0m')
+  await expect(detail).toContainText('1 journal gap(s)')
+  await detail.getByText('Recorded observations', { exact: true }).click()
+  await expect(detail.locator('ol li')).toHaveCount(200)
+  await detail.getByRole('button', { name: 'Next observations' }).click()
+  await expect(detail.locator('ol li')).toHaveCount(41)
+  await detail.getByRole('button', { name: 'First observations' }).click()
+  await expect(detail.locator('ol li')).toHaveCount(200)
+
+  await detail.getByLabel('Review conclusion').selectOption('reviewed')
+  await detail.getByRole('button', { name: 'Save review' }).click()
+  await expect(detail.getByRole('alert')).toContainText('Confirm this was an actual overnight Preview session')
+  await detail.getByRole('button', { name: 'Refresh report' }).click()
+  await detail.getByRole('checkbox', { name: /I used this side/ }).check()
+  await detail.getByLabel('Review notes').fill('Synthetic browser review; no real overnight session.')
+  await detail.getByRole('button', { name: 'Save review' }).click()
+  await expect(reports).toContainText('Owner-confirmed nights: 1 / 7 minimum')
+  await expect(detail).toContainText('Active adjustment remains locked.')
+  const listing = await (await request.get('/api/v1/comfort/reports?side=left', { headers })).json()
+  const item = listing.items[0]
+  expect(listing.activationAvailable).toBe(false)
+  expect((await request.get(`/api/v1/comfort/report?side=right&id=${item.summary.id}`, { headers })).status()).toBe(404)
+  expect((await request.get(`/api/v1/comfort/report?side=left&id=${item.summary.id}&afterId=-1`, { headers })).status()).toBe(400)
+  expect((await request.post('/api/v1/comfort/report/review', { headers, data: { side: 'left', id: item.summary.id,
+    digest: 'f'.repeat(64), expectedReviewId: item.review.id, outcome: 'needs_retest', confirmedActualNight: false, note: '' } })).status()).toBe(409)
+  expect((await request.post('/api/v1/comfort/configure', { headers, data: { side: 'left', config: { mode: 'active', minimumF: 70, maximumF: 95 } } })).status()).toBe(412)
+  await detail.getByText('Recorded observations', { exact: true }).click()
+  await detail.scrollIntoViewIfNeeded()
+  await page.screenshot({ path: testInfo.outputPath('night-report-desktop.png') })
+  await page.setViewportSize({ width: 390, height: 844 })
+  await detail.scrollIntoViewIfNeeded()
+  await page.screenshot({ path: testInfo.outputPath('night-report-mobile.png') })
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+  await detail.getByLabel('Review conclusion').selectOption('needs_retest')
+  await detail.getByLabel('Review notes').fill('Request another observation session.')
+  await detail.getByRole('button', { name: 'Save review' }).click()
+  await expect(reports).toContainText('Owner-confirmed nights: 0 / 7 minimum')
+  await page.reload()
+  await expect(reports.getByRole('button', { name: /Retest requested/ })).toBeVisible()
 })

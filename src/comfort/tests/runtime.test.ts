@@ -37,6 +37,31 @@ function harness() {
 }
 
 describe('production personal comfort Preview', () => {
+  it('captures report provenance only for bounded Preview observations and changes the runtime identity after restart', async () => {
+    const { deps, input, store } = harness()
+    if (!input.window) throw new Error('Fixture requires a routine')
+    input.window.phases = { revision: 'b'.repeat(64), startF: 75, changes: [] }
+    input.presence.entry = { measuredAt: input.now, sourceKey: 'c'.repeat(64), state: 'present' }
+    deps.origin = { environment: 'production', buildRevision: 'a'.repeat(40) }
+    const runtime = new ComfortRuntime(deps)
+    await runtime.evaluate('left')
+    const first = store.history('left')[0].preview
+    expect(first).toMatchObject({ environment: 'production', buildRevision: 'a'.repeat(40), presence: 'occupied',
+      presenceSourceKey: 'c'.repeat(64), mechanicallyQuiet: true, deviceFresh: true, scheduledBaselineF: 75 })
+    const restarted = new ComfortRuntime(deps)
+    await restarted.evaluate('left')
+    expect(store.history('left')[0].preview?.runId).not.toBe(first?.runId)
+    await restarted.configure('left', { ...store.read('left').config, mode: 'off' })
+    const length = store.history('left').length
+    await restarted.evaluate('left')
+    expect(store.history('left')).toHaveLength(length)
+    await restarted.configure('left', { ...store.read('left').config, mode: 'preview' })
+    input.window = null
+    await restarted.evaluate('left')
+    expect(store.history('left')[0].preview).toBeUndefined()
+    expect(store.read('left')).toMatchObject({ lastAppliedAt: 0, lastTargetF: null })
+  })
+
   it('persists a qualified phase choice, reuses it after restart, and withdraws on schedule edits or pauses', async () => {
     const { deps, input, store, runtime } = harness()
     const routine = input.window

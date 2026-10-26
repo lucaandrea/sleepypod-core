@@ -1,3 +1,4 @@
+import { previewReportId } from './report-evidence'
 import type Database from 'better-sqlite3'
 import type { Side } from '@/src/hardware/types'
 import { comfortEventSchema, comfortFeedbackSchema, comfortStateSchema, type ComfortEvent } from './contract'
@@ -24,7 +25,7 @@ export function createComfortStore(database: Database.Database): ComfortStore {
       const eventJson = event ? JSON.stringify(comfortEventSchema.parse(event)) : null
       database.transaction(() => {
         database.prepare('INSERT INTO comfort_states (side, state) VALUES (?, ?) ON CONFLICT(side) DO UPDATE SET state = excluded.state').run(side, encoded)
-        if (event && eventJson) database.prepare('INSERT INTO comfort_events (side, observed_at, event) VALUES (?, ?, ?)').run(side, event.at, eventJson)
+        if (event && eventJson) database.prepare('INSERT INTO comfort_events (side, observed_at, event, report_id) VALUES (?, ?, ?, ?)').run(side, event.at, eventJson, event.preview ? previewReportId(event.preview) : null)
       })()
     },
     history(side) {

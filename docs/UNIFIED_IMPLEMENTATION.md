@@ -12,7 +12,7 @@ the current UI reference. See [navigation](UNIFIED_NAVIGATION.md).
 - Legacy Pod 4 capacitance profiles and frame quality/freshness checks, with incomplete readings treated as unavailable.
 - SleepyPod presentation: original neutral light/dark tokens and 3D temperature controls. Phone navigation matches the native Temp, Schedule and Sleep destinations, with a Settings entry for secondary controls. Desktop retains direct navigation for Base, Autopilot, Home, System and Settings. The former Free Sleep palette generator has been removed; `app/globals.css` owns the web theme.
 - Autopilot's persisted setting is loaded before timers start. Missing/unreadable settings and new installations default to disabled. Existing explicit settings survive the generated migration.
-- Pure personal comfort learning and decision policy, with default 70–95°F limits, one-degree steps, 30-minute spacing, six-hour manual-pause semantics and explicit freshness/presence/water/artifact guards. Preview produces explanations without changing hardware. This policy is not yet connected to the production runtime.
+- Persisted personal comfort Preview, with default 70–95°F limits, one-degree steps, 30-minute spacing, six-hour manual-pause semantics and explicit freshness/presence/water/artifact guards. The production runtime records proposals without changing hardware; active comfort remains unavailable. See [Personal comfort Preview](PERSONAL_COMFORT_PREVIEW.md).
 - Passive policy proposals join the existing temperature authority without being erased by rule refreshes. Each producer owns its leases; failed freshness/consent guards revoke them, and the controller rechecks after transport recovery. Policy proposals cannot turn an off side on or extend a hardware duration.
 - Next.js updated from 16.4.0 to 16.4.3 after review of the official October 14 security update and patch release notes.
 
@@ -42,13 +42,14 @@ were not used in these checks.
 
 ## Remaining integration gates
 
-Production wiring for the personal comfort policy, native compatibility API, reversible Free Sleep importer,
-Home Assistant room-context adapter, real notification delivery and hardware qualification
-are still required. The Home screen describes the unconnected services honestly.
-The comfort runtime must resolve actual routine windows (including DST and bedtime
-shifts), persist learning cursors/manual pauses/acknowledgments, include the global
-Autopilot opt-in in every lease guard and withdraw proposals in Off/Preview. None of
-those requirements can be inferred from the pure policy tests.
+Production Preview wiring, the reversible offline importer, room-context input and
+foreground notification delivery now exist in source, as documented below. Native
+clients use negotiated direct version 1 APIs; the legacy compatibility adapter has
+not shipped. Broker provisioning, actual home integration, hardware qualification
+and active comfort application receipts remain required. Active must include the
+global Autopilot opt-in in every lease guard; Off/Preview must never submit leases.
+Per-night reporting and exact-source owner review are now implemented in
+[Preview night reports](PREVIEW_NIGHT_REPORTS.md), with separate real-night gates.
 
 The working Pod has not been switched to this fork. No base movement, vibration or new
 automatic thermal action was issued. Preserve its installation and dedicated SSH service
@@ -113,8 +114,9 @@ and expiry; historical scanning yields before taking the hardware side lock.
 See [Personal baseline Preview](PERSONAL_BASELINE_PREVIEW.md).
 
 The seven baseline-data dates are distinct from the seven real Preview nights
-and hardware qualification required for activation. Active comfort, bedtime
-phase shifts, snoring elevation and unattended motion remain unavailable. The
+and hardware qualification required for activation. Optional [bed-entry timing](BED_ENTRY_PREVIEW.md)
+now shifts proposed phases only. Active comfort, actual phase adjustments,
+snoring elevation and unattended motion remain unavailable. The
 working Pod still runs Free Sleep; this source change does not deploy Core or
 change live control.
 

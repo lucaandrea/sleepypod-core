@@ -476,7 +476,7 @@ describe('db schema definitions', () => {
     expect(actualTableExports).toEqual([...Object.keys(expectedTables),
       'bedtimeRoutines', 'controlReceipts', 'biometricProfileRevisions', 'biometricProfileBindings', 'sideStageModels', 'stageModelLibrary',
       'biometricActivationEvents', 'biometricConfigOutbox',
-      'comfortEvents', 'comfortFeedback', 'comfortStates',
+      'comfortEvents', 'comfortFeedback', 'comfortStates', 'comfortReviews',
       'notificationInbox',
       'roomContextSettings', 'roomContextLatest', 'roomContextHistory',
     ].sort())
