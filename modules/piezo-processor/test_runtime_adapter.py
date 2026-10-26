@@ -10,7 +10,7 @@ import pytest
 import main
 from common.biometrics.config import resolve_config
 from runtime_adapter import RuntimeCoordinator, restore_applied
-from live_frames import FIRMWARE_TIMESTAMP_BASIS
+from common.biometrics.live_input import FIRMWARE_TIMESTAMP_BASIS
 
 
 class Clock:

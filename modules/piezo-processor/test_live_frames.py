@@ -4,7 +4,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from live_frames import LiveFrameClock, FIRMWARE_TIMESTAMP_BASIS
+from common.biometrics.live_input import LiveFrameClock, FIRMWARE_TIMESTAMP_BASIS
 
 
 @pytest.fixture

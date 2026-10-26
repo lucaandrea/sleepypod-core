@@ -1,6 +1,12 @@
-"""Fresh, ordered firmware time for the live estimator, never for replay."""
+"""Shared input boundary for live estimation and prospective comparison."""
+from dataclasses import dataclass
 import math
 import time
+from typing import Optional, Tuple
+
+import numpy as np
+
+from .frames import decode_int32_samples
 
 FIRMWARE_TIMESTAMP_BASIS = "firmware_event_time_v1"
 MAX_SOURCE_AGE_S = 10.0
@@ -55,3 +61,33 @@ class LiveFrameClock:
         self.problem = None
         self._broken = False
         return True
+
+
+@dataclass(frozen=True)
+class LiveFrameResult:
+    status: str
+    samples: Optional[Tuple[np.ndarray, np.ndarray]] = None
+
+
+def reset_live_buffers(processors):
+    """Discard unfinished estimates across gaps, retaining completed candidates."""
+    for processor in processors:
+        processor.install_runtime(processor.parameters, processor.run_context, reset_side=True)
+
+
+def prepare_live_frame(record, clock, processors, pump_gate):
+    """Apply one timestamp, channel and pump boundary in both production paths."""
+    if not clock.admit(record.get("ts")):
+        reset_live_buffers(processors)
+        return LiveFrameResult("timestamp_rejected_frames")
+    if clock.discontinuous:
+        reset_live_buffers(processors)
+    left = decode_int32_samples(record.get("left1", b""))
+    right = decode_int32_samples(record.get("right1", b""))
+    status = ("empty_channel_frames" if left.size == 0 or right.size == 0
+              else "pump_gated_frames" if pump_gate.check(left, right) else None)
+    if status:
+        clock.break_continuity()
+        reset_live_buffers(processors)
+        return LiveFrameResult(status)
+    return LiveFrameResult("accepted_frames", (left, right))

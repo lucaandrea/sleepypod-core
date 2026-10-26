@@ -8,6 +8,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from common.biometrics.config import manifest
+from common.biometrics.live_input import FIRMWARE_TIMESTAMP_BASIS
 from common.biometrics.replay import RecordedContext, WaveformReplay
 from common.biometrics.shadow import ProspectiveShadow
 
@@ -22,7 +23,7 @@ def configs():
 def frames():
     for second in range(150):
         values = (np.sin((np.arange(500) + second * 500) / 500 * 2 * np.pi * 1.2) * 1_000_000).astype('<i4').tobytes()
-        yield START + second * 1000, {'type': 'piezo-dual', 'left1': values, 'right1': bytes(2000)}
+        yield START + second * 1000, {'type': 'piezo-dual', 'ts': START / 1000 + second, 'left1': values, 'right1': bytes(2000)}
 
 
 def shadow(sink, **changes):
@@ -32,11 +33,11 @@ def shadow(sink, **changes):
     return ProspectiveShadow(configs(), **options)
 
 
-def test_prospective_adapter_matches_shared_arrival_time_core_and_stays_separate():
+def test_prospective_adapter_matches_shared_firmware_time_core_and_stays_separate():
     expected, actual = [], []
     core = WaveformReplay(configs(), retained_start_ms=START, score_start_ms=START,
                           score_end_ms=START + 150000, sink=expected.append,
-                          clock_mode='observed_arrival_time')
+                          clock_mode=FIRMWARE_TIMESTAMP_BASIS)
     candidate = shadow(actual.append)
     for timestamp, record in frames():
         core.feed(timestamp, record, CONTEXT)

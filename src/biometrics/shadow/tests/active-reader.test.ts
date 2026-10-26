@@ -39,7 +39,7 @@ function setup(maximumRows = 10) {
   const bundle = { schemaVersion: 1, manifestHash, resolved: defaultConfig, generation: 0, revisionId: null,
     components: biometricManifest.components, sourceHashes: biometricManifest.sourceHashes }
   writer.prepare('INSERT INTO biometric_processing_runs (id, side, kind, bundle, config_hash, calibration_hash, input_identity, started_at_ms) VALUES (?, ?, ?, ?, ?, NULL, ?, ?)')
-    .run(runId, 'left', 'live', JSON.stringify(bundle), hash, JSON.stringify({ sourceSide: 'right', timestampBasis: 'processing_clock', rawIdentity: 'not_retained', sensorCalibration: 'not_consumed' }), start)
+    .run(runId, 'left', 'live', JSON.stringify(bundle), hash, JSON.stringify({ sourceSide: 'right', timestampBasis: 'firmware_event_time_v1', rawIdentity: 'not_retained', sensorCalibration: 'not_consumed' }), start)
   const options = { side: 'left', startMs: start, endMs: start + 10000, activeConfigHash: hash, maximumRows }
   let now = start
   const reader = () => new ShadowActiveReader(readonly, options, () => now)
@@ -62,7 +62,7 @@ it('captures only newly inserted rows with original values, quality and verified
   const rows = capture.poll()
   expect(rows).toHaveLength(1)
   expect(rows[0]).toMatchObject({ timestampMs: start + 1000, configHash: hash, inputHash: null,
-    provenance: { processingRunId: runId, sourceSide: 'right', generation: 0, manifestHash },
+    provenance: { processingRunId: runId, sourceSide: 'right', generation: 0, manifestHash, timestampBasis: 'firmware_event_time_v1' },
     readings: [{ metric: 'heart_rate', value: 60, quality: 0.9 }, { metric: 'breathing_rate', value: 12 }, { metric: 'window_ibi_variability_v1', value: null, windowMs: 300000 }] })
   expect(capture.poll()).toEqual([])
 })
@@ -74,10 +74,10 @@ it('requires read-only access and never writes through the capture connection', 
   expect(capture.poll()).toHaveLength(1)
   expect(() => readonly.prepare('DELETE FROM vitals').run()).toThrow(/readonly/)
 })
-it('withholds firmware-time live rows until the shadow candidate uses matching clock semantics', () => {
+it('withholds legacy processing-clock rows from firmware-time comparisons', () => {
   const { writer, reader, insert } = setup()
   writer.prepare('UPDATE biometric_processing_runs SET input_identity=?').run(JSON.stringify({
-    sourceSide: 'right', timestampBasis: 'firmware_event_time_v1', rawIdentity: 'not_retained', sensorCalibration: 'not_consumed',
+    sourceSide: 'right', timestampBasis: 'processing_clock', rawIdentity: 'not_retained', sensorCalibration: 'not_consumed',
   }))
   const capture = reader()
   insert()
@@ -141,7 +141,7 @@ it('retains active run provenance when the stream join persists an active-only p
   stream.active(capture.poll()[0])
   stream.advance(start + 1)
   expect(store.snapshot(run.id, { maximumPoints: 10, maximumBytes: 10000 }).samples[0]).toMatchObject({
-    inputHash: null, inputIdentityKind: 'unavailable', activeProvenance: { processingRunId: runId, sourceSide: 'right' }, pairing: { activePresent: true, candidatePresent: false } })
+    inputHash: null, inputIdentityKind: 'unavailable', activeProvenance: { processingRunId: runId, sourceSide: 'right', timestampBasis: 'firmware_event_time_v1' }, pairing: { activePresent: true, candidatePresent: false } })
 })
 it.each(['manifestHash', 'components', 'sourceHashes', 'resolved'])('rejects substituted %s in a live run bundle', (field) => {
   const { reader, insert, writer, bundle } = setup()

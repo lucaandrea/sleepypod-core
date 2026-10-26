@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { biometricManifest, manifestHash, validateConfig } from '../algorithms/registry'
 import { configHash, dataHash } from '../algorithms/canonical'
 import { shadowActiveReadingSchema } from './worker-sink'
+import { firmwareTimestampBasis } from './worker-protocol'
 
 const integer = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER)
 const optionsSchema = z.object({ side: z.enum(['left', 'right']), startMs: integer, endMs: integer,
@@ -15,7 +16,7 @@ const rowSchema = z.object({ id: integer.positive(), side: z.enum(['left', 'righ
 })
 const bundleSchema = z.object({ schemaVersion: z.literal(1), manifestHash: z.string(), resolved: z.unknown(),
   generation: integer, revisionId: z.string().uuid().nullable(), components: z.unknown(), sourceHashes: z.unknown() }).strict()
-const inputSchema = z.object({ sourceSide: z.enum(['left', 'right']), timestampBasis: z.literal('processing_clock'),
+const inputSchema = z.object({ sourceSide: z.enum(['left', 'right']), timestampBasis: z.literal(firmwareTimestampBasis),
   rawIdentity: z.literal('not_retained'), sensorCalibration: z.literal('not_consumed') }).strict()
 
 /** Poll an already-open read-only connection. Only observations inserted after
@@ -78,7 +79,7 @@ export class ShadowActiveReader {
           || bundle.manifestHash !== manifestHash || configHash(bundle.components) !== configHash(biometricManifest.components)
           || configHash(bundle.sourceHashes) !== configHash(biometricManifest.sourceHashes)) throw new Error('Active observation provenance mismatch')
         return shadowActiveReadingSchema.parse({ side, timestampMs, configHash: activeConfigHash, inputHash: null,
-          provenance: { processingRunId: row.processing_run_id, sourceSide: input.sourceSide, generation: bundle.generation, manifestHash: bundle.manifestHash },
+          provenance: { processingRunId: row.processing_run_id, sourceSide: input.sourceSide, generation: bundle.generation, manifestHash: bundle.manifestHash, timestampBasis: input.timestampBasis },
           readings: [
             { metric: 'heart_rate', unit: 'bpm', windowMs: null, value: row.heart_rate, quality: row.quality_score },
             { metric: 'breathing_rate', unit: 'breaths/min', windowMs: null, value: row.breathing_rate, quality: row.quality_score },
