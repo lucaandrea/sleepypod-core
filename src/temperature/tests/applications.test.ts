@@ -70,7 +70,7 @@ describe('durable temperature application evidence', () => {
     const context = fixture()
     vi.spyOn(console, 'warn').mockImplementation(() => {})
     context.database.exec('CREATE TRIGGER reject_ack BEFORE UPDATE ON temperature_applications WHEN NEW.outcome = \'acknowledged\' BEGIN SELECT RAISE(ABORT, \'test\'); END')
-    await expect(context.record(context.input, async () => {})).resolves.toBeUndefined()
+    await expect(context.record(context.input, async () => {})).resolves.toMatchObject({ outcome: 'unknown' })
     expect(context.read().items[0]).toMatchObject({ outcome: 'unknown', acknowledgment: 'unconfirmed' })
     context.database.exec('DROP TRIGGER reject_ack')
     await context.record(context.input, async () => {

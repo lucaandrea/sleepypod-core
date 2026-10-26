@@ -1,5 +1,6 @@
 import { MAX_TEMP, MIN_TEMP, type Side } from '@/src/hardware/types'
-import type { RecordTemperatureApplication, TemperatureApplicationInput } from './applications'
+import { ControlGuardError, withinDispatchGuard } from '@/src/controls/context'
+import type { RecordTemperatureApplication, TemperatureApplicationInput, TemperatureApplicationReceipt } from './applications'
 
 export class TemperatureBlockedError extends Error {
   constructor() {
@@ -38,7 +39,12 @@ interface PolicyLease {
   request: TemperatureRequest
   /** Synchronous current-input check, repeated after transport recovery. */
   isEligible: () => boolean
+  application?: PolicyApplication
 }
+
+/** Runs only for the selected policy, inside its side lock; never acquire that lock again. */
+export type PolicyApplication = (input: TemperatureApplicationInput,
+  execute: () => Promise<TemperatureApplicationReceipt | undefined>) => Promise<void>
 
 export interface TemperatureControllerDeps {
   now: () => number
@@ -120,10 +126,21 @@ export class TemperatureController {
   /** Keep the selected owner with the attempt; arbitration status alone is not delivery evidence. */
   private recordApplication(side: Side, targetF: number, durationSec: number | undefined,
     request: TemperatureRequest | null, reason: TemperatureApplicationInput['reason'], apply: () => Promise<void>): Promise<void> {
-    return this.deps.recordApplication
-      ? this.deps.recordApplication({ side, targetF, durationSec: durationSec ?? null,
-          source: request?.source ?? null, requestId: request?.id ?? null, reason }, apply)
-      : apply()
+    const input = { side, targetF, durationSec: durationSec ?? null,
+      source: request?.source ?? null, requestId: request?.id ?? null, reason }
+    const execute = async () => {
+      if (this.deps.recordApplication) return this.deps.recordApplication(input, apply)
+      await apply()
+      return undefined
+    }
+    // Identity, not a caller-controlled ID: an automation rule cannot borrow a policy's hook.
+    const policy = request && [...this.policies[side].values()].flat().find(lease => lease.request === request)
+    if (!policy) return execute().then(() => {})
+    const guarded = () => withinDispatchGuard(() => {
+      if (!this.isPowered(side) || this.deps.isBlocked(side)
+        || this.select(side, this.deps.now()) !== request) throw new ControlGuardError()
+    }, execute)
+    return policy.application ? policy.application(input, guarded) : guarded().then(() => {})
   }
 
   private isPowered(side: Side): boolean {
@@ -183,6 +200,7 @@ export class TemperatureController {
     requests: TemperatureRequest[],
     isEligible: () => boolean,
     isCurrent: () => boolean = () => true,
+    application?: PolicyApplication,
   ): Promise<TemperatureControlStatus> {
     if (!/^[a-z][a-z0-9-]{0,63}$/.test(producer)) throw new Error('Invalid policy producer')
     return this.deps.withSideLock(side, async () => {
@@ -197,7 +215,7 @@ export class TemperatureController {
           throw new Error('Invalid policy lease')
         }
         identities.add(request.id)
-        return { request: { ...request, id: `policy:${producer}:${request.id}` }, isEligible: () => isCurrent() && isEligible() }
+        return { request: { ...request, id: `policy:${producer}:${request.id}` }, isEligible: () => isCurrent() && isEligible(), application }
       })
       if (leases.length) this.policies[side].set(producer, leases)
       else this.policies[side].delete(producer)

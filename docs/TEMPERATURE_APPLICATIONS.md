@@ -83,10 +83,11 @@ storage-failure, arbitration, side-isolation, pagination and authenticated API
 tests using synthetic data and mocked hardware. It is not a live Pod test.
 The physical installation remains on Free Sleep.
 
-Active personal comfort still needs its own admission and application adapter:
-global Autopilot consent, qualification and reviewed-night evidence; freshness
-and manual-pause checks; a durable correction cursor that treats uncertain
-attempts conservatively; and reconciliation with these receipts. The journal
-does not claim those requirements are implemented or that any Preview night
-has occurred. The web and native visual designs are unchanged; clients can
-adopt this optional read-only history without changing existing controls.
+The [personal execution adapter](COMFORT_APPLICATION_ADAPTER.md) now implements
+guarded policy dispatch, durable correction cursors and conservative handling of
+uncertain attempts. It is not constructed by production until the separate
+owner activation, qualification and reviewed-night admission service is complete.
+No Preview night or physical qualification is claimed. The web and native visual
+designs are unchanged; clients can adopt this optional read-only history without
+changing existing controls. Internally, the recorder also returns its result so
+the adapter can distinguish a durable acknowledgment from a failed receipt save.

@@ -15,7 +15,7 @@ import { Server, Socket } from 'net'
 import { once } from 'events'
 import { getStatusRevision } from '../statusRevision'
 import { installMechanicalObserver } from '@/src/biometrics/mechanical/dispatch'
-import { ControlDeadlineError, withinControlRequest } from '@/src/controls/context'
+import { ControlDeadlineError, ControlGuardError, withinControlRequest, withinDispatchGuard } from '@/src/controls/context'
 import { testScope } from '@/src/controls/tests/fixtures'
 import { promises as fs } from 'fs'
 import {
@@ -189,6 +189,32 @@ describe('dacTransport', () => {
     await rejected
     expect(bytes).toEqual(['14\n\n'])
     expect(scope.beforeDispatch).not.toHaveBeenCalled()
+    expect(isDacConnected()).toBe(true)
+  })
+
+  test('rechecks policy permission at FIFO dispatch after another command finishes', async () => {
+    const connecting = connectDac(socketPath)
+    await vi.waitFor(() => fs.stat(socketPath))
+    mockFranken = await connectAsFrankenfirmware(socketPath)
+    await connecting
+    const received = Promise.withResolvers<undefined>()
+    const bytes: string[] = []
+    mockFranken.on('data', (chunk) => {
+      bytes.push(chunk.toString())
+      received.resolve(undefined)
+    })
+    const earlier = sendCommand('14')
+    await received.promise
+    let allowed = true
+    const pending = withinDispatchGuard(() => {
+      if (!allowed) throw new ControlGuardError()
+    }, () => sendCommand('11', '20'))
+    const rejected = expect(pending).rejects.toBeInstanceOf(ControlGuardError)
+    allowed = false
+    mockFranken.write('OK\n\n')
+    await earlier
+    await rejected
+    expect(bytes).toEqual(['14\n\n'])
     expect(isDacConnected()).toBe(true)
   })
 

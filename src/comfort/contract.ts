@@ -1,6 +1,7 @@
 import { previewEvidenceSchema } from './report-contract'
 import { bedtimeSelectionSchema, bedtimeStatusSchema } from './bedtime'
 import { z } from 'zod'
+import { comfortApplicationSchema } from './application-contract'
 import { comfortSignalsSchema } from './signals'
 
 export const COMFORT_ACTIVATION_REASON = 'Hardware qualification and reviewed Preview nights are pending.' as const
@@ -28,6 +29,7 @@ export const comfortStateSchema = z.object({
   lastTargetF: z.number().min(55).max(110).nullable(),
   lastSegment: z.string().max(1000),
   bedtime: bedtimeSelectionSchema.optional(),
+  application: comfortApplicationSchema.optional(),
 }).strict()
 
 export const comfortFeedbackSchema = z.object({

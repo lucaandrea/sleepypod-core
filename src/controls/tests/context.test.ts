@@ -1,9 +1,38 @@
 import { describe, expect, it, vi } from 'vitest'
 import { withSideLock } from '@/src/hardware/sideLock'
-import { beforeControlWrite, ControlDeadlineError, outsideControlRequest, withinControlRequest } from '../context'
+import { beforeControlWrite, ControlDeadlineError, ControlGuardError, outsideControlRequest, withinControlRequest, withinDispatchGuard } from '../context'
 import { testScope } from './fixtures'
 
 describe('control dispatch context', () => {
+  it('composes nested dispatch guards with durable request checks and rechecks after persistence', async () => {
+    const scope = testScope()
+    let permitted = true
+    const outer = vi.fn()
+    const inner = () => {
+      if (!permitted) throw new ControlGuardError()
+    }
+    scope.beforeDispatch = vi.fn(() => {
+      permitted = false
+    })
+    await expect(withinControlRequest(scope, () => withinDispatchGuard(outer,
+      () => withinDispatchGuard(inner, async () => beforeControlWrite())))).rejects.toBeInstanceOf(ControlGuardError)
+    expect(scope.beforeDispatch).toHaveBeenCalledOnce()
+    expect(outer.mock.calls.length).toBeGreaterThanOrEqual(3)
+    expect(() => beforeControlWrite()).not.toThrow()
+  })
+
+  it('closes orphaned policy callbacks but detaches independent schedulers explicitly', async () => {
+    const gate = Promise.withResolvers<undefined>()
+    let orphan!: Promise<void>, detached!: Promise<void>
+    await withinDispatchGuard(() => {}, async () => {
+      orphan = gate.promise.then(() => beforeControlWrite())
+      detached = outsideControlRequest(() => gate.promise.then(() => beforeControlWrite()))
+    })
+    const rejected = expect(orphan).rejects.toBeInstanceOf(ControlGuardError)
+    gate.resolve(undefined)
+    await rejected
+    await detached
+  })
   it('rechecks expiry after waiting for the side lock', async () => {
     const gate = Promise.withResolvers<undefined>()
     const earlier = withSideLock('left', () => gate.promise)
