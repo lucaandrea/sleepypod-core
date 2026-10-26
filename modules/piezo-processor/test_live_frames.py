@@ -54,7 +54,7 @@ def test_duplicate_and_reversed_frames_cannot_reset_the_watermark(timeline):
     assert not frames.discontinuous
 
 
-@pytest.mark.parametrize("event_gap,arrival_gap", [(2, 1), (1, 2), (1, -1)])
+@pytest.mark.parametrize("event_gap,arrival_gap", [(2, 1), (1, -1)])
 def test_source_gaps_and_arrival_clock_discontinuities_reset_windows(timeline, event_gap, arrival_gap):
     clock, frames = timeline
     assert frames.admit(clock.wall)
@@ -62,6 +62,18 @@ def test_source_gaps_and_arrival_clock_discontinuities_reset_windows(timeline, e
     clock.monotonic += arrival_gap
     assert frames.admit(clock.wall)
     assert frames.discontinuous
+
+
+def test_slow_processing_preserves_complete_consecutive_source_frames(timeline):
+    clock, frames = timeline
+    assert frames.admit(clock.wall)
+    clock.wall += 3
+    clock.monotonic += 3
+    # Three seconds of processing did not lose either of the queued frames.
+    assert frames.admit(clock.wall - 2)
+    assert not frames.discontinuous
+    assert frames.admit(clock.wall - 1)
+    assert not frames.discontinuous
 
 
 def test_dropped_or_pump_gated_frame_requires_a_new_window(timeline):

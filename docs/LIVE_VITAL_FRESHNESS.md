@@ -21,9 +21,9 @@ flowchart LR
   no more than ten seconds old. Missing, boolean, malformed, future, stale,
   duplicate and reversed timestamps are rejected before samples enter buffers.
 - The documented live format carries one second of samples per piezo frame.
-  More than 1.5 seconds between source frames or between monotonic arrival
-  times starts a new window. This intentionally favors missing estimates over
-  silently concatenating disconnected samples.
+  More than 1.5 seconds between source frames, or a regressed monotonic arrival
+  clock, starts a new window. Slow processing alone does not discard complete,
+  consecutive source frames, provided they remain within the age limit.
 - Rejected timestamps, empty channels and pump-gated frames clear unfinished
   HR, breathing and HRV buffers, trackers and presence state. Normal consecutive
   frames retain state. Completed candidates awaiting the other side or a

@@ -50,7 +50,7 @@ class LiveFrameClock:
         self.discontinuous = (self._broken or self.timestamp is None
                               or timestamp - self.timestamp > MAX_FRAME_GAP_S
                               or self.last_arrival is None
-                              or not 0 <= arrival - self.last_arrival <= MAX_FRAME_GAP_S)
+                              or arrival < self.last_arrival)
         self.timestamp, self.last_arrival = timestamp, arrival
         self.problem = None
         self._broken = False
