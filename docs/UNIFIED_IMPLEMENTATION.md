@@ -140,3 +140,12 @@ Local validation includes actual loopback MQTT, MQTT/TLS and secure WebSocket
 handshakes, certificate rejection and zero socket connections for a TLS/URL
 mismatch. These fixtures contain no household credentials and do not provision
 the real broker, enable Pod control or qualify physical effects.
+
+## Explicit service restart
+
+Device settings now uses the allowlisted maintenance endpoint instead of the
+software updater. Core restart requests are queued without waiting for the
+calling service to stop itself; denied requests and lost replies are distinguished
+from acceptance. See [the contract and deployment limits](SERVICE_RESTART.md).
+The isolated Pod runtime still needs a scoped supervisor mechanism compatible
+with its existing privilege restriction and attended restart/recovery testing.

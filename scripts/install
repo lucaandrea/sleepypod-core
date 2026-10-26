@@ -813,14 +813,16 @@ fi
 # exactly `systemctl reboot` — both common systemctl paths so the rule matches
 # whichever the image ships. secure_path (below) lets sudo resolve it.
 # The restart rules back System → Health's "Restart <module>" fix, scoped to
-# exactly the three biometrics module units.
+# exactly the three biometrics module units. Core restart is a separate,
+# non-blocking command so the server does not await its own termination.
 SUDOERS_FILE="/etc/sudoers.d/sleepypod-update"
 SUDOERS_CONTENT='Defaults secure_path="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 sleepypod ALL=(root) NOPASSWD: /usr/local/bin/sp-update
 sleepypod ALL=(root) NOPASSWD: /bin/systemctl reboot, /usr/bin/systemctl reboot
 sleepypod ALL=(root) NOPASSWD: /bin/systemctl restart sleepypod-piezo-processor.service, /usr/bin/systemctl restart sleepypod-piezo-processor.service
 sleepypod ALL=(root) NOPASSWD: /bin/systemctl restart sleepypod-sleep-detector.service, /usr/bin/systemctl restart sleepypod-sleep-detector.service
-sleepypod ALL=(root) NOPASSWD: /bin/systemctl restart sleepypod-environment-monitor.service, /usr/bin/systemctl restart sleepypod-environment-monitor.service'
+sleepypod ALL=(root) NOPASSWD: /bin/systemctl restart sleepypod-environment-monitor.service, /usr/bin/systemctl restart sleepypod-environment-monitor.service
+sleepypod ALL=(root) NOPASSWD: /bin/systemctl --no-block restart sleepypod.service, /usr/bin/systemctl --no-block restart sleepypod.service'
 SUDOERS_TMP=$(mktemp)
 printf '%s\n' "$SUDOERS_CONTENT" > "$SUDOERS_TMP"
 chmod 0440 "$SUDOERS_TMP"
