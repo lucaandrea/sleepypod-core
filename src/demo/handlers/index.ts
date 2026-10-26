@@ -15,6 +15,7 @@ import { health } from './health'
 import { homekit } from './homekit'
 import { mqtt } from './mqtt'
 import { notifications } from './notifications'
+import { roomContext } from './roomContext'
 import { pumpAlerts } from './pumpAlerts'
 import { raw } from './raw'
 import { runOnce } from './runOnce'
@@ -43,6 +44,7 @@ export const demoRouters = {
   homekit,
   mqtt,
   notifications,
+  roomContext,
   pumpAlerts,
   raw,
   runOnce,

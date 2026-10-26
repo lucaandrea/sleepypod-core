@@ -2,6 +2,22 @@ import { sql } from 'drizzle-orm'
 import { index, integer, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
 import type { DayOfWeek } from '@/src/lib/scheduleTime'
 
+export const roomContextSettings = sqliteTable('room_context_settings', {
+  id: integer('id').primaryKey(), revision: integer('revision').notNull(), config: text('config').notNull(),
+})
+export const roomContextLatest = sqliteTable('room_context_latest', {
+  metric: text('metric').primaryKey(), revision: integer('revision').notNull(),
+  measuredAt: integer('measured_at'), lastMeasuredAt: integer('last_measured_at'),
+  reportedAt: integer('reported_at').notNull(), receivedAt: integer('received_at').notNull(),
+  value: real('value'), available: integer('available').notNull(),
+})
+export const roomContextHistory = sqliteTable('room_context_history', {
+  id: integer('id').primaryKey({ autoIncrement: true }), revision: integer('revision').notNull(),
+  metric: text('metric').notNull(), entityId: text('entity_id').notNull(), unit: text('unit').notNull(),
+  measuredAt: integer('measured_at'), reportedAt: integer('reported_at').notNull(), receivedAt: integer('received_at').notNull(),
+  value: real('value'), available: integer('available').notNull(),
+}, table => [index('room_context_history_received').on(table.receivedAt)])
+
 /** Owner-visible automation alerts. Acknowledgment is separate from delivery. */
 export const notificationInbox = sqliteTable('notification_inbox', {
   id: integer('id').primaryKey({ autoIncrement: true }),

@@ -93,7 +93,7 @@ describe('capability evidence contract', () => {
     const result = buildCapabilities(input)
     expect(result.features.deviceTelemetry.runtime).toBe('not_ready')
     expect(result.features.basePosition.runtime).toBe('not_ready')
-    for (const key of ['personalComfort', 'nativeCompatibility', 'musicVibration', 'homeContext'] as const) {
+    for (const key of ['personalComfort', 'nativeCompatibility', 'musicVibration'] as const) {
       expect(result.features[key]).toMatchObject({ implemented: false, runtime: 'not_ready' })
     }
     expect(result.endpoints.nativeCompatibility).toBeNull()
@@ -101,5 +101,8 @@ describe('capability evidence contract', () => {
     input.mqttConnected = true
     expect(buildCapabilities(input).features.mqtt.runtime).toBe('ready')
     expect(buildCapabilities(input).features.homeContext.runtime).toBe('not_ready')
+    expect(result.features.homeContext.implemented).toBe(true)
+    input.roomContextFresh = true
+    expect(buildCapabilities(input).features.homeContext).toMatchObject({ runtime: 'ready', reason: 'fresh_mapped_room_measurements' })
   })
 })

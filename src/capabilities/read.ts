@@ -1,4 +1,5 @@
 import { readFile } from 'node:fs/promises'
+import { getRoomContext } from '@/src/home-context/instance'
 import { getDacMonitorIfRunning } from '@/src/hardware/dacMonitor.instance'
 import { getBaseControllerIfRunning } from '@/src/hardware/base/instance'
 import { getBridgeStatus } from '@/src/streaming/mqttBridge'
@@ -30,5 +31,6 @@ export async function readCapabilities() {
     base: base?.status() ?? null,
     mqttConnected: getBridgeStatus().connected,
     comfortPreviewRunning: getComfortRuntimeIfRunning()?.isRunning() ?? false,
+    roomContextFresh: Object.keys(getRoomContext().signals()).length > 0,
   })
 }

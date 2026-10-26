@@ -14,6 +14,7 @@ import { getTemperatureController } from '@/src/temperature/instance'
 import { publishAutomationNotification } from '@/src/notifications/instance'
 import { AutomationEngine } from './engine'
 import { BiometricsSignalReader } from './signals.biometrics'
+import { RoomSignalReader } from '@/src/home-context/instance'
 import { CompositeSignalReader, DeviceSignalReader, clockInTimezone } from './signals'
 import type {
   Action,
@@ -98,6 +99,7 @@ export async function getAutomationEngine(): Promise<AutomationEngine> {
       // authoritative for any overlapping key (e.g. water.low).
       const reader = new CompositeSignalReader([
         new BiometricsSignalReader(),
+        new RoomSignalReader(),
         new DeviceSignalReader(),
       ])
       const engine = new AutomationEngine({

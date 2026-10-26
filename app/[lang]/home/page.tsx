@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { House, MoonStar, Sunrise, Wind } from 'lucide-react'
 import { PageHeader } from '@/src/components/ds'
+import { RoomContext } from '@/src/components/Home/RoomContext'
 
 export default async function HomePage({ params }: { params: Promise<{ lang: string }> }) {
   const { lang } = await params
@@ -10,12 +11,13 @@ export default async function HomePage({ params }: { params: Promise<{ lang: str
       <section className="rounded-card border border-line bg-surface p-4">
         <House className="mb-5 text-cool" size={36} aria-hidden />
         <h2 className="text-base font-medium">Connect your room</h2>
-        <p className="mt-3 max-w-xl text-fg-2">Home Assistant has not been connected to this controller. Room measurements and accessory controls will appear once the home server is configured.</p>
+        <p className="mt-3 max-w-xl text-fg-2">Bring your bedroom measurements into sleep insights and reviewable Autopilot rules. Existing Home Assistant entities provide sensor input; house scenes remain separately controlled.</p>
         <div className="mt-6 flex flex-wrap gap-3">
           <Link href={`/${lang}/settings?section=mqtt`} className="rounded-ctl border border-line-2 px-4 py-3 text-fg">MQTT connection</Link>
           <Link href={`/${lang}/settings?section=homekit`} className="rounded-ctl border border-line-2 px-4 py-3 text-fg">Apple Home bridge</Link>
         </div>
       </section>
+      <RoomContext />
       <div className="grid gap-4 sm:grid-cols-3">
         {[{ icon: MoonStar, title: 'Wind down', text: 'Lighting and shades follow your evening.' }, { icon: Sunrise, title: 'Wake together', text: 'Coordinate your alarm with a Home scene.' }, { icon: Wind, title: 'Room comfort', text: 'Understand humidity, temperature and air quality.' }].map(item => (
           <section key={item.title} className="rounded-card border border-line bg-surface p-4">

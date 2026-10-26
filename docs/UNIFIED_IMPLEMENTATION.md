@@ -170,3 +170,14 @@ for the REST/tRPC native contract, retention, deduplication and restart behavior
 Production-browser and real SQLite checks use synthetic alerts and do not operate
 hardware. Native integration, APNs/Web Push and live Pod qualification remain
 separate work; background push is explicitly unavailable in the API.
+
+## Home Assistant room input
+
+Home now supports explicitly mapped, timestamped room temperature, humidity,
+CO₂, fine-particle and light measurements over the existing MQTT connection.
+Source clocks, revisions, units, expiry and persisted replay watermarks gate
+the live signals; broker loss and restart withdraw them. The owner UI and
+versioned native API expose mapping, status, bounded history and generated HA
+publishers. See [Room context](ROOM_CONTEXT.md) for the contract and qualification
+steps. Input is opt-in and does not activate rules or household actions. Synthetic
+loopback/browser evidence is separate from deployment and physical acceptance.

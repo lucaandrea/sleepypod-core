@@ -46,6 +46,11 @@ export interface SignalDef {
 
 /** Numeric, engine-evaluable signals (subset wired for live read and/or backtest). */
 export const SIGNALS: SignalDef[] = [
+  { id: 'room.temperature', label: 'Home sensor temperature', unit: '°F', kind: 'num', group: 'Room', icon: 'Thermometer' },
+  { id: 'room.humidity', label: 'Home sensor humidity', unit: '%', kind: 'num', group: 'Room', icon: 'Droplet' },
+  { id: 'room.co2', label: 'Home sensor CO₂', unit: 'ppm', kind: 'num', group: 'Room', icon: 'Wind' },
+  { id: 'room.pm25', label: 'Home sensor particles', unit: 'µg/m³', kind: 'num', group: 'Room', icon: 'Wind' },
+  { id: 'room.light', label: 'Home sensor light', unit: 'lx', kind: 'num', group: 'Room', icon: 'Moon' },
   { id: 'ambient.temperature', label: 'Ambient temp', unit: '°F', kind: 'num', group: 'Room', icon: 'Thermometer' },
   { id: 'ambient.humidity', label: 'Ambient humidity', unit: '%', kind: 'num', group: 'Room', icon: 'Droplet' },
   { id: 'ambient.light', label: 'Ambient light', unit: 'lux', kind: 'num', group: 'Room', icon: 'Moon' },
@@ -516,6 +521,7 @@ export function buildSentence(r: BuilderRule, timeFormat: TimeFormat = '12h'): S
  * backtest only, so a rule reading them can never fire on the bed yet.
  */
 export const LIVE_SIGNALS: ReadonlySet<string> = new Set([
+  'room.temperature', 'room.humidity', 'room.co2', 'room.pm25', 'room.light',
   '{side}.currentTemperature',
   '{side}.targetTemperature',
   '{side}.currentLevel',

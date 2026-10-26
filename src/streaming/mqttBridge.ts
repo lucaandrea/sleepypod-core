@@ -28,6 +28,7 @@
  */
 
 import os from 'node:os'
+import { getRoomContext, getRoomContextIfRunning } from '@/src/home-context/instance'
 import type { ControlRequest } from '@/src/controls/contract'
 import { MqttCommandGateway, type MqttPacketFlags } from './mqttCommands'
 import mqtt, { type IClientOptions, type IClientPublishOptions, type MqttClient } from 'mqtt'
@@ -424,6 +425,7 @@ export async function startMqttBridge(): Promise<void> {
   state.commandsEnabled = envBool(process.env.MQTT_COMMANDS_ENABLED) === true
 
   const current = () => state.client === client && state.generation === generation
+  let connectionGeneration = 0
   const commands = new MqttCommandGateway(async (request) => {
     if (!current() || !client.connected || !state.commandsEnabled) throw new Error('command_connection_closed')
     return submitControl(request, () => current() && client.connected && state.commandsEnabled)
@@ -431,6 +433,7 @@ export async function startMqttBridge(): Promise<void> {
 
   client.on('connect', () => {
     if (!current()) return
+    const connection = ++connectionGeneration
     state.runState = 'connected'
     state.lastError = null
     console.log(`[mqtt] connected (deviceId=${id}, prefix=${config.topicPrefix})`)
@@ -440,6 +443,12 @@ export async function startMqttBridge(): Promise<void> {
     publishState(true)
     publishHaDiscovery()
     safePublish(availabilityTopic, 'online', RETAINED_QOS_0)
+    // Room telemetry is independent of actuator permissions. The store checks
+    // owner mappings and revision; a SUBACK is not proof of a sensor reading.
+    client.subscribe(topic('room', 'report'), { qos: 0 }, (err, granted) => {
+      if (!current() || !client.connected || connection !== connectionGeneration) return
+      getRoomContext().connection(!err && granted?.some(item => item.qos !== 128) === true, topic('room', 'report'))
+    })
     if (state.commandsEnabled) {
       client.subscribe(topic('cmd', 'request'), { qos: 0 }, (err: Error | null) => {
         if (err && current()) console.warn('[mqtt] command subscription failed')
@@ -450,6 +459,8 @@ export async function startMqttBridge(): Promise<void> {
 
   client.on('reconnect', () => {
     if (!current()) return
+    connectionGeneration++
+    getRoomContext().connection(false)
     state.runState = 'reconnecting'
     console.log('[mqtt] reconnecting…')
   })
@@ -462,11 +473,21 @@ export async function startMqttBridge(): Promise<void> {
 
   client.on('close', () => {
     if (!current()) return
+    connectionGeneration++
+    getRoomContext().connection(false)
     if (state.runState === 'connected') state.runState = 'reconnecting'
   })
 
   client.on('message', (incomingTopic: string, payload: Buffer, packet: MqttPacketFlags) => {
-    if (!current() || !client.connected || !state.commandsEnabled || incomingTopic !== topic('cmd', 'request')) return
+    if (!current() || !client.connected) return
+    if (incomingTopic === topic('room', 'report')) {
+      try {
+        getRoomContext().receive(payload, packet)
+      }
+      catch { console.warn('[mqtt] room input unavailable') }
+      return
+    }
+    if (!state.commandsEnabled || incomingTopic !== topic('cmd', 'request')) return
     void commands.receive(payload, packet).then((receipt) => {
       if (current() && client.connected) {
         safePublish(topic('receipt', receipt.requestId), JSON.stringify(receipt), VOLATILE_QOS_0)
@@ -492,6 +513,7 @@ export async function startMqttBridge(): Promise<void> {
 }
 
 export async function shutdownMqttBridge(): Promise<void> {
+  getRoomContextIfRunning()?.connection(false)
   state.generation++
   state.commandsEnabled = false
   if (state.runState === 'stopped' && !state.client) return

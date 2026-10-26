@@ -22,7 +22,8 @@ test('SleepyPod phone navigation reaches secondary controls and owner sign-out',
   await page.screenshot({ path: test.info().outputPath('phone-settings-light.png'), fullPage: true })
 
   await page.getByRole('main').getByRole('link', { name: 'Home', exact: true }).click()
-  await expect(page.getByText('Home Assistant has not been connected', { exact: false })).toBeVisible()
+  await expect(page.getByText('Sensor mapping and setup', { exact: true })).toBeVisible()
+  await expect(page.getByText('MQTT not connected', { exact: true })).toBeVisible()
   await page.goto('/en/more')
   await expect(page).toHaveURL(/\/en\/settings$/)
 
