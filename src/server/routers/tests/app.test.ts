@@ -32,6 +32,7 @@ describe('appRouter public surface', () => {
       'comfort',
       'controls',
       'notifications',
+      'roomContext',
       'environment',
       'raw',
       'calibration',

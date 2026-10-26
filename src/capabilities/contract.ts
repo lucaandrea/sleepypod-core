@@ -70,6 +70,7 @@ export interface CapabilitySnapshot {
   base: BaseStatus | null
   mqttConnected: boolean
   comfortPreviewRunning?: boolean
+  roomContextFresh?: boolean
 }
 
 /** Preserve a valid old timestamp, but never label malformed or future data fresh. */
@@ -120,7 +121,7 @@ export function buildCapabilities(snapshot: CapabilitySnapshot): ControllerCapab
       personalComfortPreview: feature(snapshot.comfortPreviewRunning ? 'ready' : 'not_ready', snapshot.comfortPreviewRunning ? 'preview_only' : 'preview_runtime_stopped'),
       musicVibration: feature('not_ready', 'hardware_protocol_unqualified', true, false),
       mqtt: feature(snapshot.mqttConnected ? 'ready' : 'not_ready', snapshot.mqttConnected ? 'broker_connected' : 'broker_disconnected'),
-      homeContext: feature('not_ready', 'room_context_integration_pending', false, false),
+      homeContext: feature(snapshot.roomContextFresh ? 'ready' : 'not_ready', snapshot.roomContextFresh ? 'fresh_mapped_room_measurements' : 'room_measurements_unavailable'),
       nativeCompatibility: feature('not_ready', 'compatibility_api_pending', false, false),
     },
     baseScope: 'whole_bed',

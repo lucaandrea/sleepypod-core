@@ -102,6 +102,8 @@ vi.mock('@/src/db', () => ({
 }))
 
 const controlMock = vi.hoisted(() => ({ submit: vi.fn() }))
+const roomMock = vi.hoisted(() => ({ connection: vi.fn(), receive: vi.fn() }))
+vi.mock('@/src/home-context/instance', () => ({ getRoomContext: () => roomMock, getRoomContextIfRunning: () => roomMock }))
 vi.mock('@/src/controls/instance', () => ({ getControlService: () => controlMock }))
 
 const telemetryMock = vi.hoisted(() => ({ read: vi.fn((): Record<string, unknown> => ({ 'state/device-status': { available: false, ts: null } })) }))
@@ -724,7 +726,8 @@ describe('mqttBridge — durable message dispatch', () => {
     const fake = await startBridgeWithFake({ commands: false, config: { haDiscovery: true } })
     fake.connected = true
     fake.emit('connect')
-    expect(fake.subscribe).not.toHaveBeenCalled()
+    expect(fake.subscribe).not.toHaveBeenCalledWith(expect.stringContaining('/cmd/'), expect.anything(), expect.anything())
+    expect(fake.subscribe).toHaveBeenCalledWith(expect.stringContaining('/room/report'), { qos: 0 }, expect.any(Function))
     expect(getBridgeStatus().commandsEnabled).toBe(false)
     const climate = JSON.parse(fake.publish.mock.calls.find(([topic]) => String(topic).includes('/climate/'))?.[1] ?? 'null')
     expect(climate).not.toHaveProperty('temperature_command_topic')
@@ -1512,5 +1515,32 @@ describe('MQTT transport requirements', () => {
     expect(options).not.toHaveProperty('password')
     fake.emit('connect')
     expect(await pending).toEqual({ ok: true })
+  })
+})
+
+describe('room subscription connection boundaries', () => {
+  it('ignores old SUBACK callbacks after reconnect and never grants room input on a denied subscription', async () => {
+    const fake = await startBridgeWithFake({ commands: false })
+    const callbacks: ((error: Error | null, grants?: { qos: number }[]) => void)[] = []
+    fake.subscribe.mockImplementation((_topic, _options, callback) => {
+      callbacks.push(callback)
+      return fake
+    })
+    roomMock.connection.mockClear()
+    fake.connected = true
+    fake.emit('connect')
+    fake.emit('close')
+    fake.emit('connect')
+    roomMock.connection.mockClear()
+    callbacks[0](null, [{ qos: 0 }])
+    expect(roomMock.connection).not.toHaveBeenCalled()
+    callbacks[1](null, [{ qos: 128 }])
+    expect(roomMock.connection).toHaveBeenLastCalledWith(false, expect.stringContaining('/room/report'))
+    fake.emit('close')
+    fake.emit('connect')
+    callbacks[2](null, [{ qos: 0 }])
+    expect(roomMock.connection).toHaveBeenLastCalledWith(true, expect.stringContaining('/room/report'))
+    await shutdownMqttBridge()
+    expect(roomMock.connection).toHaveBeenLastCalledWith(false)
   })
 })

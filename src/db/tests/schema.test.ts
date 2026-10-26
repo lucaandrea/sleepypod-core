@@ -478,6 +478,7 @@ describe('db schema definitions', () => {
       'biometricActivationEvents', 'biometricConfigOutbox',
       'comfortEvents', 'comfortFeedback', 'comfortStates',
       'notificationInbox',
+      'roomContextSettings', 'roomContextLatest', 'roomContextHistory',
     ].sort())
   })
 })

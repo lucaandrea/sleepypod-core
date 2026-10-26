@@ -274,6 +274,13 @@
       "when": 1792994735635,
       "tag": "0038_same_charles_xavier",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "6",
+      "when": 1792996550205,
+      "tag": "0039_neat_inertia",
+      "breakpoints": true
     }
   ]
 }

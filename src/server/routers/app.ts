@@ -27,6 +27,7 @@ import { capabilitiesRouter } from './capabilities'
 import { comfortRouter } from './comfort'
 import { controlsRouter } from './controls'
 import { notificationsRouter } from './notifications'
+import { roomContextRouter } from './roomContext'
 
 export const appRouter = router({
   healthcheck: publicProcedure
@@ -48,6 +49,7 @@ export const appRouter = router({
   comfort: comfortRouter,
   controls: controlsRouter,
   notifications: notificationsRouter,
+  roomContext: roomContextRouter,
   environment: environmentRouter,
   raw: rawRouter,
   calibration: calibrationRouter,
