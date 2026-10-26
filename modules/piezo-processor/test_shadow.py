@@ -11,9 +11,14 @@ from common.biometrics.config import manifest
 from common.biometrics.live_input import FIRMWARE_TIMESTAMP_BASIS
 from common.biometrics.replay import RecordedContext, WaveformReplay
 from common.biometrics.shadow import ProspectiveShadow
+from common.tests_support.mechanical import quiet_snapshot
 
 START = 1_700_000_000_000
 CONTEXT = RecordedContext(('left',), True, False, True)
+
+
+def context_at(timestamp):
+    return RecordedContext(('left',), True, False, True, quiet_snapshot(timestamp))
 
 
 def configs():
@@ -40,8 +45,8 @@ def test_prospective_adapter_matches_shared_firmware_time_core_and_stays_separat
                           clock_mode=FIRMWARE_TIMESTAMP_BASIS)
     candidate = shadow(actual.append)
     for timestamp, record in frames():
-        core.feed(timestamp, record, CONTEXT)
-        candidate.feed(timestamp, record, CONTEXT)
+        core.feed(timestamp, record, context_at(timestamp))
+        candidate.feed(timestamp, record, context_at(timestamp))
     core.close()
     candidate.finish()
     assert actual and [row.reading for row in actual] == expected
@@ -72,10 +77,10 @@ def test_cooperative_cpu_budget_discards_provisional_outputs_and_stops():
     candidate = shadow(emitted.append, maximum_cpu_ms=1, cpu_clock=lambda: next(ticks))
     timestamp, record = next(frames())
     with pytest.raises(ValueError, match='CPU budget'):
-        candidate.feed(timestamp, record, CONTEXT)
+        candidate.feed(timestamp, record, context_at(timestamp))
     assert emitted == [] and candidate.health()['state'] == 'failed'
     with pytest.raises(ValueError, match='stopped'):
-        candidate.feed(timestamp, record, CONTEXT)
+        candidate.feed(timestamp, record, context_at(timestamp))
 
 
 def test_record_budget_cancellation_and_invalid_frames_stop_processing():
@@ -100,7 +105,7 @@ def test_real_outputs_stop_at_quota_and_sink_failure_never_retries_silently():
     candidate = shadow(output.append, maximum_outputs=1)
     with pytest.raises(ValueError, match='output budget'):
         for timestamp, record in frames():
-            candidate.feed(timestamp, record, CONTEXT)
+            candidate.feed(timestamp, record, context_at(timestamp))
         candidate.finish()
     assert len(output) == 1 and output[0].sequence == 0
     assert candidate.health()['state'] == 'failed'
@@ -112,7 +117,7 @@ def test_real_outputs_stop_at_quota_and_sink_failure_never_retries_silently():
     failed = shadow(failing_sink)
     with pytest.raises(RuntimeError, match='storage unavailable'):
         for timestamp, record in frames():
-            failed.feed(timestamp, record, CONTEXT)
+            failed.feed(timestamp, record, context_at(timestamp))
         failed.finish()
     assert len(attempted) == 1
     with pytest.raises(ValueError, match='stopped'):

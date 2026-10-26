@@ -29,7 +29,7 @@ vi.mock('../worker-child', () => ({ runShadowChild: async (_location: unknown, i
         ] })
     }
     result = { health: { timestampBasis: 'firmware_event_time_v1', state: 'completed', reason: 'window_complete', records: sequence, outputs: sequence, cpu_ms: 1,
-      input_hash: 'a'.repeat(64), counts: { timestamp_rejected_frames: 0, records: sequence, accepted_frames: sequence, empty_channel_frames: 0,
+      input_hash: 'a'.repeat(64), counts: { mechanical_gated_frames: 0, timestamp_rejected_frames: 0, records: sequence, accepted_frames: sequence, empty_channel_frames: 0,
         pump_gated_frames: 0, preroll_outputs: 0, scored_outputs: sequence }, limitations: [] },
     inputBytes: worker.corruptReceipt ? 100001 : 100, outputBytes: 100, peakObservedRssBytes: 1000, rssSamples: 2, maximumObservationGapMs: 100,
     budgets: options.budgets, memoryScope: 'sum_rss_of_shadow_process_group', exactKernelPeak: false }

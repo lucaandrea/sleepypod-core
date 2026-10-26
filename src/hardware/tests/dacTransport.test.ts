@@ -14,6 +14,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { Server, Socket } from 'net'
 import { once } from 'events'
 import { getStatusRevision } from '../statusRevision'
+import { installMechanicalObserver } from '@/src/biometrics/mechanical/dispatch'
 import { ControlDeadlineError, withinControlRequest } from '@/src/controls/context'
 import { testScope } from '@/src/controls/tests/fixtures'
 import { promises as fs } from 'fs'
@@ -128,6 +129,40 @@ describe('dacTransport', () => {
       '[DAC] connected',
     ]))
     log.mockRestore()
+  })
+
+  test('journals mechanical commands inside the real FIFO before sending, preserving emergency clear', async () => {
+    const connecting = connectDac(socketPath)
+    await vi.waitFor(async () => {
+      await fs.stat(socketPath)
+    })
+    mockFranken = await connectAsFrankenfirmware(socketPath)
+    await connecting
+    const recorded: unknown[][] = [], received: string[] = []
+    let fail = false
+    const uninstall = installMechanicalObserver({ command: (...args) => {
+      recorded.push(args)
+      if (fail) throw new Error('journal unavailable')
+    } })
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    mockFranken.on('data', (bytes) => {
+      received.push(bytes.toString().split('\n')[0])
+      expect(recorded.length).toBeGreaterThanOrEqual(received.length)
+    })
+    handleCommands(mockFranken, { 5: 'SET: ok', 13: 'SET: ok', 16: 'SET: ok' })
+    try {
+      await sendCommand('5', 'opaque-firmware-payload')
+      await sendCommand('13')
+      expect(recorded).toEqual([['vibration', 180000], ['priming', 0]])
+      fail = true
+      await expect(sendCommand('13')).rejects.toThrow('journal unavailable')
+      await sendCommand('16', '0')
+      expect(received).toEqual(['5', '13', '16'])
+    }
+    finally {
+      uninstall()
+      warning.mockRestore()
+    }
   })
 
   test('expires an actuator request behind a queued read without sending its bytes', async () => {

@@ -75,13 +75,20 @@ def reset_live_buffers(processors):
         processor.install_runtime(processor.parameters, processor.run_context, reset_side=True)
 
 
-def prepare_live_frame(record, clock, processors, pump_gate):
+def prepare_live_frame(record, clock, processors, pump_gate, mechanical=None):
     """Apply one timestamp, channel and pump boundary in both production paths."""
     if not clock.admit(record.get("ts")):
         reset_live_buffers(processors)
         return LiveFrameResult("timestamp_rejected_frames")
     if clock.discontinuous:
         reset_live_buffers(processors)
+    if mechanical is not None:
+        if not mechanical.admit(clock()):
+            clock.break_continuity()
+            reset_live_buffers(processors)
+            return LiveFrameResult('mechanical_gated_frames')
+        if mechanical.changed:
+            reset_live_buffers(processors)
     left = decode_int32_samples(record.get("left1", b""))
     right = decode_int32_samples(record.get("right1", b""))
     status = ("empty_channel_frames" if left.size == 0 or right.size == 0

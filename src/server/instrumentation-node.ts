@@ -1,4 +1,5 @@
-import { shutdownBaseController } from '@/src/hardware/base/instance'
+import { getBaseController, shutdownBaseController } from '@/src/hardware/base/instance'
+import { startMechanicalContext, stopMechanicalContext } from '@/src/biometrics/mechanical/instance'
 /**
  * Server startup and process lifecycle management.
  *
@@ -182,6 +183,7 @@ async function gracefulShutdown(signal: string): Promise<void> {
 
   // Step 7: Close database connections
   try {
+    stopMechanicalContext()
     closeDatabase()
     closeBiometricsDatabase()
   }
@@ -326,6 +328,9 @@ async function prepareHardware(): Promise<void> {
 
   // Start DAC monitor (non-blocking — waits for frankenfirmware to connect)
   initializeDacMonitor()
+  if (isShuttingDown) return
+  // Subscribe to configured base telemetry for interference detection; no movement.
+  getBaseController()
 
   if (isShuttingDown) return
   hardwareReady = true
@@ -480,6 +485,8 @@ export async function registerNodeInstrumentation(): Promise<void> {
     console.log('CI environment detected — skipping hardware initialization')
     return
   }
+
+  startMechanicalContext()
 
   // Validate and auto-repair iptables rules (mDNS, LAN access, NTP)
   try {

@@ -16,10 +16,10 @@ export const shadowWorkerOutputSchema = z.object({ sequence: integer, inputHash:
   timestampMs: integer, timestampBasis: z.literal(firmwareTimestampBasis), configHash: hash, readings: z.array(metricReading).length(3),
   flags: z.array(z.string().max(200)).max(32).nullable(), limitations: z.array(z.string().max(200)).max(32),
 }).strict().refine(output => new Set(output.readings.map(row => row.metric)).size === 3, 'All typed metrics required')
-// Optional only when reading historical stored receipts; current replies must include both new fields.
+// New context fields are optional only for historical receipts; current replies require them.
 export const shadowWorkerHealthSchema = z.object({ timestampBasis: z.literal(firmwareTimestampBasis).optional(), state: z.enum(['running', 'completed', 'stopped']), reason: z.string().max(500).nullable(),
   records: integer, outputs: integer, cpu_ms: z.number().finite().nonnegative(), input_hash: hash,
-  counts: z.object({ timestamp_rejected_frames: integer.optional(), records: integer, accepted_frames: integer, empty_channel_frames: integer,
+  counts: z.object({ mechanical_gated_frames: integer.optional(), timestamp_rejected_frames: integer.optional(), records: integer, accepted_frames: integer, empty_channel_frames: integer,
     pump_gated_frames: integer, preroll_outputs: integer, scored_outputs: integer }).strict(),
   limitations: z.array(z.string().max(200)).max(32),
 }).strict()
@@ -74,10 +74,10 @@ export class ShadowWorkerProtocol {
     }
     const health = response.health
     const state = response.type === 'frame_result' ? 'running' : response.type === 'finished' ? 'completed' : 'stopped'
-    if (health.timestampBasis !== firmwareTimestampBasis || health.counts.timestamp_rejected_frames === undefined
+    if (health.timestampBasis !== firmwareTimestampBasis || health.counts.timestamp_rejected_frames === undefined || health.counts.mechanical_gated_frames === undefined
       || health.state !== state || health.records !== records || health.counts.records !== records || health.outputs !== outputCount
       || health.cpu_ms < this.cpuMs || health.cpu_ms > expected.maximumCpuMs
-      || health.counts.accepted_frames + health.counts.empty_channel_frames + health.counts.pump_gated_frames + (health.counts.timestamp_rejected_frames ?? 0) > records
+      || health.counts.accepted_frames + health.counts.empty_channel_frames + health.counts.pump_gated_frames + (health.counts.timestamp_rejected_frames ?? 0) + (health.counts.mechanical_gated_frames ?? 0) > records
       || health.counts.scored_outputs < outputCount
       || health.counts.scored_outputs + health.counts.preroll_outputs > 2 * health.counts.accepted_frames
       || batch.some(output => output.inputHash !== health.input_hash)) throw new Error('Shadow health receipt inconsistent')

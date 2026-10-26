@@ -39,13 +39,13 @@ function setup(maximumRows = 10) {
   const bundle = { schemaVersion: 1, manifestHash, resolved: defaultConfig, generation: 0, revisionId: null,
     components: biometricManifest.components, sourceHashes: biometricManifest.sourceHashes }
   writer.prepare('INSERT INTO biometric_processing_runs (id, side, kind, bundle, config_hash, calibration_hash, input_identity, started_at_ms) VALUES (?, ?, ?, ?, ?, NULL, ?, ?)')
-    .run(runId, 'left', 'live', JSON.stringify(bundle), hash, JSON.stringify({ sourceSide: 'right', timestampBasis: 'firmware_event_time_v1', rawIdentity: 'not_retained', sensorCalibration: 'not_consumed' }), start)
+    .run(runId, 'left', 'live', JSON.stringify(bundle), hash, JSON.stringify({ sourceSide: 'right', timestampBasis: 'firmware_event_time_v1', rawIdentity: 'not_retained', sensorCalibration: 'not_consumed', mechanicalContext: 'mechanical-context-v1' }), start)
   const options = { side: 'left', startMs: start, endMs: start + 10000, activeConfigHash: hash, maximumRows }
   let now = start
   const reader = () => new ShadowActiveReader(readonly, options, () => now)
   const insert = (seconds = 0, side = 'left', provenance: string | null = runId) => {
     const id = Number(writer.prepare('INSERT INTO vitals (side,timestamp,heart_rate,hrv,breathing_rate,processing_run_id) VALUES (?,?,60,NULL,12,?)').run(side, start / 1000 + seconds, provenance).lastInsertRowid)
-    writer.prepare('INSERT INTO vitals_quality (vitals_id,side,timestamp,quality_score,created_at) VALUES (?,?,?,0.9,?)').run(id, side, start / 1000 + seconds, start / 1000 + seconds)
+    writer.prepare('INSERT INTO vitals_quality (vitals_id,side,timestamp,quality_score,created_at,flags) VALUES (?,?,?,0.9,?,?)').run(id, side, start / 1000 + seconds, start / 1000 + seconds, JSON.stringify([`mechanical_context_v1:${runId}:${runId}:${start + seconds * 1000 - 61000}:${start + seconds * 1000 + 1000}`]))
     return id
   }
   return { writer, readonly, path, runId, bundle, options, reader, insert, advance: (milliseconds: number) => {
@@ -298,7 +298,7 @@ it('applies the saved context and capture policy to real connections and subscri
   const source = open(), frames = source.frames[Symbol.asyncIterator]()
   const next = frames.next()
   publishProspectiveFrame({ type: 'piezo-dual', ts: start / 1000, freq: 500, left1: [1], right1: [2] }, false, start)
-  expect((await next).value.context).toEqual({ activeSides: ['left'], leftOccupied: true, rightOccupied: null, pumpContextKnown: false })
+  expect((await next).value.context).toEqual({ activeSides: ['left'], leftOccupied: true, rightOccupied: null, pumpContextKnown: false, mechanical: null })
   insert()
   source.flush?.()
   expect(active).toHaveBeenCalledOnce()

@@ -5,6 +5,7 @@ import numpy as np
 import pytest
 
 from common.biometrics.live_input import LiveFrameClock, FIRMWARE_TIMESTAMP_BASIS
+from common.tests_support.mechanical import quiet_snapshot
 
 
 @pytest.fixture
@@ -116,6 +117,7 @@ def test_main_rejects_backlog_and_resets_before_accepting_recovery(monkeypatch, 
     monkeypatch.setattr(main, "BIOMETRICS_DB", tmp_path / "biometrics.db")
     monkeypatch.setattr(main, "open_biometrics_db", lambda: SimpleNamespace(close=lambda: None))
     monkeypatch.setattr(main, "report_health", lambda *args: None)
+    monkeypatch.setattr(main, "read_snapshot", lambda _, now: quiet_snapshot(now))
     monkeypatch.setattr(main, "KNOWN_RECORD_TYPES", {"piezo-dual"})
     processors = []
 
@@ -140,7 +142,7 @@ def test_main_rejects_backlog_and_resets_before_accepting_recovery(monkeypatch, 
 
     monkeypatch.setattr(main, "SideProcessor", Processor)
     monkeypatch.setattr(main, "RuntimeCoordinator", coordinator)
-    monkeypatch.setattr(main, "SingleSleeperVitals", lambda *args: SimpleNamespace(submit=lambda *args: True, tick=lambda: None, flush=lambda: True))
+    monkeypatch.setattr(main, "SingleSleeperVitals", lambda *args, **kwargs: SimpleNamespace(submit=lambda *args: True, tick=lambda: None, flush=lambda: True))
     monkeypatch.setattr(main.PumpGate, "check", lambda *args: clock.monotonic == 1003)
 
     class Follower:

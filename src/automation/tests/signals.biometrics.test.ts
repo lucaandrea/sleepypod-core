@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+// Eligibility has real SQLite/window tests; these fixtures isolate scalar conversion.
+const eligibility = vi.hoisted(() => ({ allowed: true }))
+vi.mock('@/src/biometrics/mechanical/eligibility', () => ({ isMechanicallyQualifiedVital: () => eligibility.allowed }))
+
 // Hoisted DB mock — drives BiometricsSignalReader by stubbing the chained
 // biometricsDb.select().from(table)[.where()].orderBy().limit().all() call.
 // Rows are keyed by table; per-side tables (vitals, movement) resolve left
@@ -95,6 +99,7 @@ describe('reduceCap', () => {
 
 describe('BiometricsSignalReader', () => {
   beforeEach(() => {
+    eligibility.allowed = true
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-01-15T12:00:00Z'))
     dbMock.state.rows = {}
@@ -175,6 +180,19 @@ describe('BiometricsSignalReader', () => {
     expect(out['right.cap.max']).toBe(42)
     expect(out['right.cap.mean']).toBe(42)
     expect(out['right.cap.spread']).toBe(0)
+  })
+
+  it('withholds unqualified vitals without hiding independent environmental signals', () => {
+    eligibility.allowed = false
+    dbMock.state.rows = {
+      'vitals.left': [{ timestamp: new Date(Date.now() - 1000), heartRate: 55, hrv: 40, breathingRate: 14 }],
+      'ambientLight': [{ timestamp: new Date(Date.now() - 1000), lux: 12 }],
+    }
+    const out = new BiometricsSignalReader().read()
+    expect(out['left.heartRate']).toBeUndefined()
+    expect(out['left.hrv']).toBeUndefined()
+    expect(out['left.breathingRate']).toBeUndefined()
+    expect(out['ambient.light']).toBe(12)
   })
 
   it('treats rows older than their freshness window as absent', () => {

@@ -21,7 +21,7 @@ const readline = require('node:readline');
 const mode = ${JSON.stringify(state.mode)};
 let init, records = 0, outputs = 0;
 const health = state => ({state, reason:null, records, outputs, cpu_ms:1, input_hash:'a'.repeat(64), limitations:[],
- timestampBasis:"firmware_event_time_v1",counts:{timestamp_rejected_frames:0,records,accepted_frames:records,empty_channel_frames:0,pump_gated_frames:0,preroll_outputs:0,scored_outputs:outputs}});
+ timestampBasis:"firmware_event_time_v1",counts:{mechanical_gated_frames:0,timestamp_rejected_frames:0,records,accepted_frames:records,empty_channel_frames:0,pump_gated_frames:0,preroll_outputs:0,scored_outputs:outputs}});
 function emit(row) { process.stdout.write(JSON.stringify({runId:init.runId,attemptId:init.attemptId,...row})+'\\n'); }
 if(mode==='ignore') { setInterval(()=>{},1000); }
 else readline.createInterface({input:process.stdin}).on('line', line => {

@@ -509,3 +509,5 @@ describe('getOccupancy — classification', () => {
     expect(classify(true, level(3), { ...noVitals, humanRange: false })).toBe('person')
   })
 })
+// Mechanical provenance is independently checked with real SQLite evidence.
+vi.mock('@/src/biometrics/mechanical/eligibility', () => ({ isMechanicallyQualifiedVital: () => true }))
