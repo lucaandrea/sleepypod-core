@@ -159,6 +159,7 @@ def prepare(repo, output):
         probe = application / 'scripts/deployment'
         probe.mkdir(parents=True, exist_ok=True)
         shutil.copy2(repo / 'scripts/deployment/probe_runtime.mjs', probe / 'probe_runtime.mjs')
+        shutil.copy2(repo / 'scripts/deployment/maintenance_broker.py', probe / 'maintenance_broker.py')
         shutil.copy2(repo / 'pnpm-lock.yaml', application / 'pnpm-lock.yaml')
         package = json.loads((repo / 'package.json').read_text())
         package.pop('scripts', None)

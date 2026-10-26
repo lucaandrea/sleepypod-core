@@ -7,11 +7,13 @@
  * mocked too.
  */
 
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type * as DrizzleOrmModule from 'drizzle-orm'
 import type * as ChildProcessModule from 'node:child_process'
 
 const processMock = vi.hoisted(() => ({ execFile: vi.fn() }))
+const maintenanceMock = vi.hoisted(() => ({ requestBrokerRestart: vi.fn() }))
+vi.mock('@/src/server/maintenance', () => maintenanceMock)
 vi.mock('node:child_process', async (importOriginal) => {
   const actual = await importOriginal<typeof ChildProcessModule>()
   return { ...actual, execFile: processMock.execFile, default: { ...actual, execFile: processMock.execFile } }
@@ -130,7 +132,7 @@ describe('allowlisted service restarts', () => {
     expect(processMock.execFile).toHaveBeenCalledWith('sudo', ['-n', 'systemctl', 'restart', 'sleepypod-piezo-processor.service'], { timeout: 20_000 }, expect.any(Function))
   })
   it('returns a denied restart as an unsuccessful outcome without falling back to another action', async () => {
-    processMock.execFile.mockImplementationOnce((_command, _arguments, _options, callback) => callback(new Error('permission denied\nextra diagnostic'), '', ''))
+    processMock.execFile.mockImplementationOnce((_command, _arguments, _options, callback) => callback(Object.assign(new Error('permission denied\nextra diagnostic'), { code: 'EACCES' }), '', ''))
     const outcome = await caller.restartService({ unit: 'sleepypod.service' })
     expect(outcome).toMatchObject({ ok: false, message: expect.stringContaining('permission denied') })
     expect(outcome.message).not.toContain('extra diagnostic')
@@ -140,9 +142,35 @@ describe('allowlisted service restarts', () => {
     await expect(caller.restartService({ unit: unit as never })).rejects.toMatchObject({ code: 'BAD_REQUEST' })
     expect(processMock.execFile).not.toHaveBeenCalled()
   })
+  it.each([true, false])('uses only the configured broker for a definite result: %s', async (ok) => {
+    vi.stubEnv('SLEEPYPOD_MAINTENANCE_SOCKET', '/run/sleepypod-maintenance/control.sock')
+    maintenanceMock.requestBrokerRestart.mockResolvedValue({ ok, message: 'Broker receipt' })
+    await expect(caller.restartService({ unit: 'sleepypod.service' })).resolves.toEqual({ ok, message: 'Broker receipt' })
+    expect(maintenanceMock.requestBrokerRestart).toHaveBeenCalledWith('sleepypod.service', '/run/sleepypod-maintenance/control.sock')
+    expect(processMock.execFile).not.toHaveBeenCalled()
+  })
+  it('preserves an unknown broker outcome as an error without sudo fallback', async () => {
+    vi.stubEnv('SLEEPYPOD_MAINTENANCE_SOCKET', '/run/sleepypod-maintenance/control.sock')
+    maintenanceMock.requestBrokerRestart.mockRejectedValue(new Error('Maintenance could not be confirmed'))
+    await expect(caller.restartService({ unit: 'sleepypod.service' })).rejects.toThrow('could not be confirmed')
+    expect(processMock.execFile).not.toHaveBeenCalled()
+  })
+  it('does not label an interrupted legacy process as a definite denial', async () => {
+    processMock.execFile.mockImplementationOnce((_command, _arguments, _options, callback) => callback(Object.assign(new Error('timeout'), { killed: true }), '', ''))
+    await expect(caller.restartService({ unit: 'sleepypod.service' })).rejects.toThrow('could not be confirmed')
+    expect(processMock.execFile).toHaveBeenCalledTimes(1)
+  })
+  it('keeps an unsuccessful systemctl exchange uncertain', async () => {
+    processMock.execFile.mockImplementationOnce((_command, _arguments, _options, callback) => callback(Object.assign(new Error('connection lost'), { code: 1 }), '', ''))
+    await expect(caller.restartService({ unit: 'sleepypod.service' })).rejects.toThrow('could not be confirmed')
+  })
 })
 
+afterEach(() => vi.unstubAllEnvs())
+
 beforeEach(() => {
+  vi.stubEnv('SLEEPYPOD_MAINTENANCE_SOCKET', '')
+  maintenanceMock.requestBrokerRestart.mockReset()
   processMock.execFile.mockReset().mockImplementation((_command, _arguments, _options, callback) => callback(null, '', ''))
   schedulerMock.scheduler.isEnabled.mockReset().mockReturnValue(true)
   schedulerMock.scheduler.getJobs.mockReset().mockReturnValue([])

@@ -149,3 +149,8 @@ calling service to stop itself; denied requests and lost replies are distinguish
 from acceptance. See [the contract and deployment limits](SERVICE_RESTART.md).
 The isolated Pod runtime still needs a scoped supervisor mechanism compatible
 with its existing privilege restriction and attended restart/recovery testing.
+The optional restricted supervisor now provides the source implementation: a
+private Unix socket, current-process and reviewed-plan checks, expiring requests,
+durable attempt receipts, and a shared migration lock. Rendering its service
+plan does not install or enable it. See [Service restart](SERVICE_RESTART.md)
+for provisioning and the remaining physical qualification.

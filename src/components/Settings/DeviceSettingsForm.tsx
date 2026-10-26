@@ -130,6 +130,7 @@ export function DeviceSettingsForm({ device }: { device: DeviceSettings }) {
 
   const [restartNeedsReconnect, setRestartNeedsReconnect] = useState(false)
   const restartMutation = trpc.health.restartService.useMutation({
+    retry: false,
     onSuccess: (result) => {
       if (result.ok) setRestartNeedsReconnect(true)
     },
