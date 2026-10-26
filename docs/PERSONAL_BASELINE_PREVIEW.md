@@ -3,7 +3,8 @@
 Personal comfort now offers an explicit **Use Pod sensor guard in Preview**
 setting. It persists across stopping/starting Preview and remains off unless
 selected or imported from the owner's prior configuration. Preview has no
-actuator dependency. Active mode and bedtime phase shifts remain locked.
+actuator dependency. Active mode remains locked. Optional [bed-entry timing Preview](BED_ENTRY_PREVIEW.md)
+can shift proposed temperature phases without changing the bed.
 
 ```mermaid
 flowchart LR

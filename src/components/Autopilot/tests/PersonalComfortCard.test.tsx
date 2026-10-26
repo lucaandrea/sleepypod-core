@@ -15,6 +15,22 @@ function status(): ComfortStatus {
 }
 
 describe('personal comfort controls', () => {
+  it('requires sensor consent, preserves bedtime consent across Preview and clears it when disabling sensors', () => {
+    const data = status()
+    data.features = { sensorAware: true, followBedtime: true }
+    const configure = vi.fn()
+    const view = render(<PersonalComfortDetails data={data} pending={false} onConfigure={configure} onFeedback={vi.fn()} />)
+    expect((screen.getByRole('checkbox', { name: /Follow earlier/ }) as HTMLInputElement).disabled).toBe(true)
+    if (!data.state) throw new Error('Fixture requires state')
+    data.state.config = { ...data.state.config, sensorAware: true, followBedtime: true }
+    view.rerender(<PersonalComfortDetails data={data} pending={false} onConfigure={configure} onFeedback={vi.fn()} />)
+    expect(screen.getByLabelText('Bed-entry timing observation').textContent).toContain('Waiting for a current bed-entry evaluation')
+    fireEvent.click(screen.getByRole('button', { name: 'Start Preview' }))
+    expect(configure).toHaveBeenLastCalledWith(expect.objectContaining({ mode: 'preview', followBedtime: true }))
+    fireEvent.click(screen.getByRole('checkbox', { name: /Use Pod sensor guard/ }))
+    expect(configure).toHaveBeenLastCalledWith(expect.objectContaining({ sensorAware: false, followBedtime: false }))
+  })
+
   it('keeps sensor consent through starting Preview and shows actual baseline coverage', () => {
     const data = status()
     data.features.sensorAware = true

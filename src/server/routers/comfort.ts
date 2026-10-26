@@ -18,8 +18,11 @@ export const comfortRouter = router({
     .input(z.object({ side: sideSchema, config: comfortConfigSchema }).strict())
     .output(comfortStatusSchema)
     .mutation(async ({ input }) => {
-      if (input.config.mode === 'active' || input.config.followBedtime) {
+      if (input.config.mode === 'active') {
         throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'Only Off and Preview are available until the remaining adapters and qualification gates are complete.' })
+      }
+      if (input.config.followBedtime && !input.config.sensorAware) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Bed-entry timing requires the Pod sensor guard.' })
       }
       return getComfortRuntime().configure(input.side, input.config)
     }),

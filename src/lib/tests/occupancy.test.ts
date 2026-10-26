@@ -97,6 +97,20 @@ describe('getOccupancy', () => {
     vi.useRealTimers()
   })
 
+  it('exposes measurement time and a stable calibrated identity only for usable frames', () => {
+    snapshot = makeFrame('left', [14.5, 14.4, 13.7, 13.6, 19.4, 19.2, 1.157, 1.157])
+    calRows = [{ parameters: BASELINE_CAL }]
+    const first = getOccupancy('left').level
+    expect(first.sampleAt).toBe(snapshot.ts * 1000)
+    expect(first.sourceKey).toMatch(/^[a-f0-9]{64}$/)
+    snapshot.receivedAtMs += 100
+    expect(getOccupancy('left').level.sourceKey).toBe(first.sourceKey)
+    calRows = [{ parameters: { ...BASELINE_CAL, threshold: 7 } }]
+    expect(getOccupancy('left').level.sourceKey).not.toBe(first.sourceKey)
+    snapshot.ts -= 31
+    expect(getOccupancy('left').level.sampleAt).toBeUndefined()
+  })
+
   it('returns occupied=false when both signals are quiet', () => {
     movementRows = [{ peak: 30 }]
     snapshot = makeFrame('left', [14.5, 14.4, 13.7, 13.6, 19.4, 19.2, 1.157, 1.157])

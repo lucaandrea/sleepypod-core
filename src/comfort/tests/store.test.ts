@@ -9,14 +9,15 @@ import { defaultComfortState, MANUAL_PAUSE_MS } from '../policy'
 import { migratedComfortDatabase } from './databaseFixture'
 
 describe('personal comfort SQLite persistence', () => {
-  it('retains settings, manual pause and consumed feedback through reopening', () => {
+  it('retains settings, bed-entry selection, manual pause and consumed feedback through reopening', () => {
     const directory = mkdtempSync(path.join(os.tmpdir(), 'comfort-store-'))
     const filename = path.join(directory, 'state.db')
     let database = migratedComfortDatabase(filename)
     try {
       const store = createComfortStore(database)
       expect(store.read('right').config.mode).toBe('off')
-      const state = { ...defaultComfortState(), pausedUntil: Date.now() + MANUAL_PAUSE_MS, feedbackThrough: '2026-10-24', offsetF: -2 }
+      const state = { ...defaultComfortState(), pausedUntil: Date.now() + MANUAL_PAUSE_MS, feedbackThrough: '2026-10-24', offsetF: -2,
+        bedtime: { session: 'night-1', revision: 'b'.repeat(64), sourceKey: 'a'.repeat(64), entryAt: 1792922400000, confirmedAt: 1792923000000, shiftMinutes: -20 } }
       store.commit('left', state, comfortEvent(Date.now(), 'manual_pause', 'Manual pause'))
       database.close()
       database = new Database(filename)

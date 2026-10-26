@@ -53,6 +53,18 @@ afterEach(() => {
 })
 
 describe('live comfort input adapter', () => {
+  it('binds bed-entry evidence to calibrated level samples, never residual movement alone', () => {
+    const level = { active: true, ageMs: 200, sampleAt: now - 2000, sourceKey: 'a'.repeat(64) }
+    fixture.occupancy.mockReturnValue({ level, available: true, classification: 'person' })
+    expect(readComfortContext('left', defaultComfortState(), now).context.presence.entry).toEqual({ measuredAt: now - 2000, sourceKey: level.sourceKey, state: 'present' })
+    fixture.occupancy.mockReturnValue({ level: { ...level, active: false }, available: true, classification: 'person' })
+    expect(readComfortContext('left', defaultComfortState(), now).context.presence.entry?.state).toBe('unknown')
+    fixture.occupancy.mockReturnValue({ level: { ...level, active: false }, available: true, classification: 'none' })
+    expect(readComfortContext('left', defaultComfortState(), now).context.presence.entry?.state).toBe('absent')
+    fixture.occupancy.mockReturnValue({ level: { ageMs: 200 }, available: false, classification: 'person' })
+    expect(readComfortContext('left', defaultComfortState(), now).context.presence.entry).toBeUndefined()
+  })
+
   it('does not treat an unconfigured base as confirmed absent', () => {
     fixture.base.mockReturnValue({ status: () => ({ state: 'unconfigured' }) })
     expect(readComfortContext('left', defaultComfortState(), now).context.device.baseMoving).toBeNull()

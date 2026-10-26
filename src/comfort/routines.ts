@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { DAYS_OF_WEEK, powerOffDay, type DayOfWeek } from '@/src/lib/scheduleTime'
 import { expandOccurrences, type OccurrenceSource } from '@/src/scheduler/occurrences'
 import type { RoutineWindow } from './policy'
@@ -5,7 +6,7 @@ import type { RoutineWindow } from './policy'
 interface PowerRow { id: number, dayOfWeek: DayOfWeek, onTime: string, offTime: string, offDayOffset?: number, onTemperature: number }
 interface TargetRow { id: number, dayOfWeek: DayOfWeek, time: string, temperature: number }
 interface AlarmRow { id: number, dayOfWeek: DayOfWeek, time: string }
-export interface ComfortSchedules { powers: PowerRow[], targets: TargetRow[], alarms: AlarmRow[], timezone: string }
+export interface ComfortSchedules { powers: PowerRow[], targets: TargetRow[], alarms: AlarmRow[], timezone: string, source?: string }
 const DAY_MS = 86_400_000
 const clockPattern = /^([01]\d|2[0-3]):[0-5]\d$/
 
@@ -46,7 +47,14 @@ export function comfortRoutineAt(schedules: ComfortSchedules, now: number): Rout
     if (!target || target.targetTempF === null || target.targetTempF < 55 || target.targetTempF > 110) return null
     const alarm = events.find(event => event.type === 'alarm' && event.at > start.at && event.at <= end.at)
     const session = `${start.id}:${start.at}`
-    return { session, segment: `${session}:${target.id}:${target.at}`, start: start.at, end: end.at, baselineF: target.targetTempF, alarmAt: alarm?.at ?? null }
+    const revision = createHash('sha256').update(JSON.stringify([schedules.timezone, schedules.source ?? null, [...jobs].sort((first, second) => first.id.localeCompare(second.id))])).digest('hex')
+    const changes: { id: string, at: number, temperatureF: number }[] = []
+    for (const event of events.filter(event => event.type === 'target' && event.at > start.at && event.at < end.at)) {
+      if (event.targetTempF === null || !Number.isFinite(event.targetTempF) || event.targetTempF < 55 || event.targetTempF > 110) return null
+      changes.push({ id: event.id, at: event.at, temperatureF: event.targetTempF })
+    }
+    if (start.targetTempF === null) return null
+    return { phases: { revision, startF: start.targetTempF, changes }, session, segment: `${session}:${target.id}:${target.at}`, start: start.at, end: end.at, baselineF: target.targetTempF, alarmAt: alarm?.at ?? null }
   }
   catch { return null }
 }

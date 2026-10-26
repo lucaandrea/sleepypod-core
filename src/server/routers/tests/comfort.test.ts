@@ -22,7 +22,7 @@ beforeEach(() => {
 
 describe('personal comfort API contract', () => {
   it('accepts explicit sensor-aware Preview without enabling Active', async () => {
-    const config = { mode: 'preview' as const, minimumF: 70, maximumF: 95, sensorAware: true }
+    const config = { mode: 'preview' as const, minimumF: 70, maximumF: 95, sensorAware: true, followBedtime: true }
     await caller.configure({ side: 'left', config })
     expect(runtime.configure).toHaveBeenCalledWith('left', config)
   })
@@ -33,10 +33,8 @@ describe('personal comfort API contract', () => {
   })
 
   it('rejects activation and unsupported adapters before touching persisted state', async () => {
-    for (const config of [
-      { mode: 'active' as const, minimumF: 70, maximumF: 95 },
-      { mode: 'preview' as const, minimumF: 70, maximumF: 95, followBedtime: true },
-    ]) await expect(caller.configure({ side: 'left', config })).rejects.toMatchObject({ code: 'PRECONDITION_FAILED' })
+    await expect(caller.configure({ side: 'left', config: { mode: 'active', minimumF: 70, maximumF: 95 } })).rejects.toMatchObject({ code: 'PRECONDITION_FAILED' })
+    await expect(caller.configure({ side: 'left', config: { mode: 'preview', minimumF: 70, maximumF: 95, followBedtime: true } })).rejects.toMatchObject({ code: 'BAD_REQUEST' })
     expect(runtime.configure).not.toHaveBeenCalled()
   })
 

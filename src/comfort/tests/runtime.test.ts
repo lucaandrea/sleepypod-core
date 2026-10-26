@@ -37,6 +37,85 @@ function harness() {
 }
 
 describe('production personal comfort Preview', () => {
+  it('persists a qualified phase choice, reuses it after restart, and withdraws on schedule edits or pauses', async () => {
+    const { deps, input, store, runtime } = harness()
+    const routine = input.window
+    if (!routine) throw new Error('Fixture requires a routine')
+    routine.start = input.now - 5 * 60000
+    routine.phases = { revision: 'b'.repeat(64), startF: 75,
+      changes: [{ id: 'cool', at: routine.start + 30 * 60000, temperatureF: 70 }] }
+    const entryAt = input.now
+    const refresh = (now: number, occupied = true) => {
+      input.now = now
+      input.device.observedAt = now
+      input.presence = { observedAt: now, available: true, occupied,
+        entry: { measuredAt: now, sourceKey: 'a'.repeat(64), state: occupied ? 'present' : 'absent' } }
+      input.signals = { ...missingComfortSignals(), state: 'ready', sampleAt: now, expiresAt: now + 60000 }
+    }
+    await runtime.configure('left', { ...store.read('left').config, sensorAware: true, followBedtime: true })
+    refresh(entryAt - 60000, false)
+    await runtime.evaluate('left')
+    for (let minute = 0; minute < 10; minute++) {
+      refresh(entryAt + minute * 60000)
+      await runtime.evaluate('left')
+      expect(store.read('left').bedtime).toBeUndefined()
+    }
+    refresh(entryAt + 10 * 60000)
+    await runtime.evaluate('left')
+    const selection = store.read('left').bedtime
+    expect(selection).toMatchObject({ entryAt, shiftMinutes: 5, session: routine.session })
+    expect(store.history('left')[0].timing).toMatchObject({ state: 'ready', selection })
+    expect(store.read('left')).toMatchObject({ lastAppliedAt: 0, lastTargetF: null })
+    const restarted = new ComfortRuntime(deps)
+    refresh(entryAt + 11 * 60000)
+    await restarted.evaluate('left')
+    expect(restarted.status('left')).toMatchObject({ decision: { eligible: true }, timing: { selection } })
+    expect(restarted.status('right').state?.bedtime).toBeUndefined()
+    store.commit('left', { ...store.read('left'), pausedUntil: input.now + MANUAL_PAUSE_MS })
+    await restarted.evaluate('left')
+    expect(restarted.status('left').decision).toMatchObject({ eligible: false, reason: expect.stringContaining('six hours') })
+    store.commit('left', { ...store.read('left'), pausedUntil: 0 })
+    routine.phases.revision = 'c'.repeat(64)
+    await restarted.evaluate('left')
+    expect(restarted.status('left')).toMatchObject({ decision: { eligible: false }, timing: { state: 'withheld' } })
+    expect(store.read('left').bedtime).toEqual(selection)
+    // A shifted phase outside the user range must not mask an unknown-target pause.
+    routine.phases.revision = 'b'.repeat(64)
+    routine.phases.startF = 60
+    input.targetKnown = false
+    await restarted.evaluate('left')
+    expect(store.read('left').pausedUntil).toBe(input.now + MANUAL_PAUSE_MS)
+  })
+
+  it('does not publish a selected phase when its atomic journal write fails', async () => {
+    const { database, input, store, runtime } = harness()
+    const entryAt = input.now
+    if (!input.window) throw new Error('Fixture requires a routine')
+    input.window.start = entryAt
+    input.window.phases = { revision: 'b'.repeat(64), startF: 75, changes: [{ id: 'cool', at: entryAt + 30 * 60000, temperatureF: 70 }] }
+    await runtime.configure('left', { ...store.read('left').config, sensorAware: true, followBedtime: true })
+    for (let minute = -1; minute <= 10; minute++) {
+      input.now = entryAt + minute * 60000
+      input.device.observedAt = input.now
+      input.presence = { observedAt: input.now, available: true, occupied: minute >= 0,
+        entry: { measuredAt: input.now, sourceKey: 'a'.repeat(64), state: minute < 0 ? 'absent' : 'present' } }
+      input.signals = { ...missingComfortSignals(), state: 'ready', sampleAt: input.now, expiresAt: input.now + 60000 }
+      if (minute === 10) database.exec('CREATE TRIGGER reject_timing BEFORE INSERT ON comfort_events BEGIN SELECT RAISE(ABORT, \'test\'); END')
+      await runtime.evaluate('left')
+    }
+    expect(runtime.status('left')).toMatchObject({ decision: null, timing: null, fault: expect.any(String) })
+    expect(store.read('left').bedtime).toBeUndefined()
+    database.exec('DROP TRIGGER reject_timing')
+    input.now += 5000
+    input.device.observedAt = input.now
+    input.presence.observedAt = input.now
+    if (!input.presence.entry) throw new Error('Fixture requires an entry sample')
+    input.presence.entry.measuredAt = input.now
+    await runtime.evaluate('left')
+    expect(runtime.status('left').timing?.state).toBe('waiting')
+    expect(store.read('left').bedtime).toBeUndefined()
+  })
+
   it('persists sensor Preview consent and evidence, expires status, and never acknowledges hardware', async () => {
     const { runtime, store, input } = harness()
     await runtime.configure('left', { ...store.read('left').config, sensorAware: true })
@@ -95,7 +174,7 @@ describe('production personal comfort Preview', () => {
     const { runtime, store } = harness()
     const config = store.read('left').config
     await expect(runtime.configure('left', { ...config, mode: 'active' })).rejects.toThrow('qualification')
-    await expect(runtime.configure('left', { ...config, followBedtime: true })).rejects.toThrow('qualified')
+    await expect(runtime.configure('left', { ...config, followBedtime: true })).rejects.toThrow('sensor guard')
     expect(store.read('left').config).toEqual(config)
   })
 

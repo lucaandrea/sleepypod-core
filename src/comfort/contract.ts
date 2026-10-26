@@ -1,3 +1,4 @@
+import { bedtimeSelectionSchema, bedtimeStatusSchema } from './bedtime'
 import { z } from 'zod'
 import { comfortSignalsSchema } from './signals'
 
@@ -25,6 +26,7 @@ export const comfortStateSchema = z.object({
   lastAppliedAt: timestamp,
   lastTargetF: z.number().min(55).max(110).nullable(),
   lastSegment: z.string().max(1000),
+  bedtime: bedtimeSelectionSchema.optional(),
 }).strict()
 
 export const comfortFeedbackSchema = z.object({
@@ -53,6 +55,7 @@ export const comfortEventSchema = z.object({
   presenceObservedAt: timestamp.nullable(),
   owner: z.enum(['manual', 'run-once', 'autopilot', 'schedule']).nullable(),
   signals: comfortSignalsSchema.nullable().optional(),
+  timing: bedtimeStatusSchema.nullable().optional(),
 })
 export type ComfortEvent = z.infer<typeof comfortEventSchema>
 
@@ -72,7 +75,8 @@ export const comfortStatusSchema = z.object({
     available: z.literal(false),
     reason: z.literal(COMFORT_ACTIVATION_REASON),
   }),
-  features: z.object({ sensorAware: z.boolean(), followBedtime: z.literal(false) }),
+  features: z.object({ sensorAware: z.boolean(), followBedtime: z.boolean() }),
   signals: comfortSignalsSchema.nullable().optional(),
+  timing: bedtimeStatusSchema.nullable().optional(),
 })
 export type ComfortStatus = z.infer<typeof comfortStatusSchema>
