@@ -10,6 +10,7 @@ import hashlib
 import time
 
 from .config import canonical_json
+from .live_input import FIRMWARE_TIMESTAMP_BASIS
 from .replay import MAX_CHANNEL_BYTES, RecordedContext, ReplayReading, WaveformReplay
 
 
@@ -40,7 +41,7 @@ class ProspectiveShadow:
         self.state, self.reason = 'running', None
         self._processor = WaveformReplay(deepcopy(configs), retained_start_ms=start_ms,
             score_start_ms=start_ms, score_end_ms=end_ms, sink=self._capture,
-            clock_mode='observed_arrival_time')
+            clock_mode=FIRMWARE_TIMESTAMP_BASIS)
 
     def _capture(self, reading):
         if reading.side != self.side:
@@ -86,9 +87,10 @@ class ProspectiveShadow:
             self._staged = []
 
     def feed(self, observed_at_ms, record, context):
-        """Observed arrival time matches the live core's clock semantics.
-        Preserve source event time in record metadata, but never use it as the
-        live processing clock. Both channels/context feed the isolated state.
+        """Use firmware time for estimates and recorded arrival for admission.
+
+        Arrival also drives pump/router timers; its difference from production's
+        local monotonic clock is retained as an explicit comparison limitation.
         """
         def action():
             if self._records >= self.maximum_records:
@@ -129,7 +131,7 @@ class ProspectiveShadow:
             self._staged = []
 
     def health(self):
-        return {'state': self.state, 'reason': self.reason, 'records': self._records,
+        return {'timestampBasis': FIRMWARE_TIMESTAMP_BASIS, 'state': self.state, 'reason': self.reason, 'records': self._records,
                 'outputs': self._outputs, 'cpu_ms': self._cpu_ns / 1_000_000,
                 'input_hash': self._digest.hex(), 'counts': dict(self._processor.counts),
                 'limitations': tuple(sorted(self._processor.limitations))}

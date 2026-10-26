@@ -48,7 +48,9 @@ from common.side_mode import SingleSleeperMode
 from common.bed_presence import BedPresence
 import numpy as np
 from runtime_adapter import RuntimeCoordinator, RunContext
-from live_frames import LiveFrameClock, FIRMWARE_TIMESTAMP_BASIS
+from common.biometrics.live_input import (
+    LiveFrameClock, FIRMWARE_TIMESTAMP_BASIS, prepare_live_frame, reset_live_buffers,
+)
 from common.biometrics.frames import decode_int32_samples as _int32_samples, LOST_SAMPLE
 from common.biometrics.processing import (
     StatefulSideProcessor, HR_WINDOW_S, BREATHING_WINDOW_S, HRV_WINDOW_S,
@@ -302,15 +304,6 @@ class SideProcessor(StatefulSideProcessor):
                          autocorr_quality=lambda samples: _autocorr_quality(samples))
 
 
-def reset_live_buffers(processors):
-    """Do not concatenate samples across a dropped frame or pump artifact.
-
-    Completed candidates keep their original event timestamps and retry
-    semantics; only unfinished estimates and trackers are discarded.
-    """
-    for processor in processors:
-        processor.install_runtime(processor.parameters, processor.run_context, reset_side=True)
-
 # ---------------------------------------------------------------------------
 # Main loop
 # ---------------------------------------------------------------------------
@@ -378,29 +371,14 @@ def main() -> None:
             if rtype != "piezo-dual":
                 continue
 
-            if not frame_clock.admit(record.get("ts")):
-                reset_live_buffers((left, right))
+            frame = prepare_live_frame(record, frame_clock, (left, right), pump_gate)
+            if frame.status == "timestamp_rejected_frames":
                 if frame_clock.problem != input_problem:
                     input_problem = frame_clock.problem
                     report_health("degraded", input_problem)
+            if frame.samples is None:
                 continue
-            if frame_clock.discontinuous:
-                reset_live_buffers((left, right))
-
-            # Each record contains ~500 int32 samples per channel
-            l_samples = _int32_samples(record.get("left1", b""))
-            r_samples = _int32_samples(record.get("right1", b""))
-
-            if l_samples.size == 0 or r_samples.size == 0:
-                frame_clock.break_continuity()
-                reset_live_buffers((left, right))
-                continue
-
-            # Pump gating — drop entire record if pump detected or guard active
-            if pump_gate.check(l_samples, r_samples):
-                frame_clock.break_continuity()
-                reset_live_buffers((left, right))
-                continue
+            l_samples, r_samples = frame.samples
 
             frame_time_ms = int(frame_clock() * 1000)
             runtime.before_frame(bed_mode.home_side(), bed.occupied, frame_time_ms)
