@@ -275,6 +275,16 @@ describe('thermostat accessory', () => {
     expect(setPower).not.toHaveBeenCalled()
   })
 
+  it('shows the staged target while OFF even when firmware retains an older non-null target', async () => {
+    const off = { ...status, leftSide: { ...status.leftSide, targetLevel: 0, heatingDuration: 0, targetTemperature: 70 } }
+    const { service } = buildThermostatService('left', { ...fakeMonitor, getFreshStatus: () => off } as unknown as DacMonitor)
+    const target = service.getCharacteristic(Characteristic.TargetTemperature)
+    await target.handleSetRequest(f2c(75))
+    expect(Math.abs(Number(await target.handleGetRequest()) - f2c(75))).toBeLessThan(0.5)
+    expect(setTemperature).not.toHaveBeenCalled()
+    expect(await service.getCharacteristic(Characteristic.TargetHeatingCoolingState).handleGetRequest()).toBe(0)
+  })
+
   it('always allows an explicit power-off even when reports are unavailable', async () => {
     const { service } = buildThermostatService('left', { ...fakeMonitor, getFreshStatus: () => null } as unknown as DacMonitor)
     await service.getCharacteristic(Characteristic.TargetHeatingCoolingState).handleSetRequest(0)

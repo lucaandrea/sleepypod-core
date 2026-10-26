@@ -52,7 +52,7 @@ function readThermostatState(monitor: DacMonitor, side: Side): Readings {
     if (!observation) return missing
     const reported = observation.status[side === 'left' ? 'leftSide' : 'rightSide']
     // A target explicitly staged while OFF is a request. No neutral/default value becomes a measurement.
-    const requested = reported.targetLevel === 0 && reported.targetTemperature === null ? getRequestedTargetF(side) : reported.targetTemperature
+    const requested = reported.targetLevel === 0 ? getRequestedTargetF(side) ?? reported.targetTemperature : reported.targetTemperature
     return {
       current: temperature(reported.currentTemperature), target: temperature(requested),
       requestedMode: validLevel(reported.targetLevel) ? reported.targetLevel === 0 ? TARGET_OFF : TARGET_AUTO : null,
