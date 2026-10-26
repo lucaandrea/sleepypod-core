@@ -63,13 +63,13 @@ function awaitingTarget(state: ComfortState, context: ComfortContext): boolean {
 }
 
 /**
- * Execution adapter, intentionally not constructed by the production Preview runtime.
- * The separate owner activation/qualification workflow must supply admission before wiring it.
+ * The owner activation service must verify qualification and night evidence before admission.
  * Proposals enter the shared authority; this class never calls a hardware client or powers a side on.
  */
 export class ComfortApplicationAdapter {
   private generations: Record<Side, number> = { left: 0, right: 0 }
   private unexpectedTargets: Partial<Record<Side, number>> = {}
+  private published = new Set<Side>()
 
   constructor(private readonly deps: ComfortApplicationDeps) {}
 
@@ -81,6 +81,8 @@ export class ComfortApplicationAdapter {
   async reconcile(side: Side): Promise<void> {
     const generation = ++this.generations[side]
     const candidate = await this.deps.withSideLock(side, async () => this.candidate(side, generation))
+    // An inert Preview/withheld adapter must not trigger baseline reconciliation.
+    if (!candidate && !this.published.has(side)) return
     // A newer evaluation or stop must never be overwritten by work queued before it.
     const current = () => this.generations[side] === generation
     const request: TemperatureRequest[] = candidate
@@ -90,9 +92,11 @@ export class ComfortApplicationAdapter {
           priority: Number.MIN_SAFE_INTEGER,
         }]
       : []
+    this.published.add(side)
     await this.deps.authority.replacePolicy(side, PRODUCER, request,
       () => candidate !== null && this.eligible(candidate), current,
       candidate ? this.application(candidate) : undefined)
+    if (!candidate && current()) this.published.delete(side)
   }
 
   private candidate(side: Side, generation: number): Candidate | null {
@@ -102,7 +106,7 @@ export class ComfortApplicationAdapter {
     if (pending !== undefined) {
       state = { ...state, pausedUntil: Math.max(state.pausedUntil, pending + MANUAL_PAUSE_MS) }
       this.deps.store.commit(side, state,
-        comfortEvent(pending, 'manual_pause', 'An unexpected target requires a six-hour adaptive pause.'))
+        comfortEvent(pending, 'manual_pause', 'An unexpected target requires a six-hour adaptive pause.'), true)
       this.unexpectedTargets[side] = undefined
     }
     const admission = this.deps.admission(side, state)
@@ -115,7 +119,7 @@ export class ComfortApplicationAdapter {
     const decision = decideComfort(state, context)
     if (decision.pauseRequired) {
       this.deps.store.commit(side, { ...state, pausedUntil: Math.max(state.pausedUntil, now + MANUAL_PAUSE_MS) },
-        comfortEvent(now, 'manual_pause', decision.reason))
+        comfortEvent(now, 'manual_pause', decision.reason), true)
     }
     const waitingForReport = awaitingTarget(state, context)
       && decideComfort({ ...state, lastAppliedAt: 0 }, context).eligible
@@ -200,7 +204,7 @@ export class ComfortApplicationAdapter {
         targetF: candidate.targetF, previousF, createdAt: candidate.createdAt,
         reservedAt: this.deps.now(), finishedAt: null, receiptId: null, outcome: 'attempting' }
       // Reserve before the shared attempt journal. A crash in either commit stays withheld after restart.
-      this.deps.store.commit(side, { ...state, application })
+      this.deps.store.commit(side, { ...state, application }, undefined, true)
       candidate.applying = true
       try {
         const receipt = await execute()
@@ -220,14 +224,14 @@ export class ComfortApplicationAdapter {
                 lastTargetF: candidate.targetF, lastSegment: candidate.segment }
             : {}),
           application: { ...application, outcome: acknowledged ? 'acknowledged' : 'unknown',
-            receiptId: receipt?.attemptId ?? null, finishedAt } })
+            receiptId: receipt?.attemptId ?? null, finishedAt } }, undefined, true)
       }
       catch (error) {
         // Preserve the original failure. If this commit also fails, attempting is equally withholding.
         try {
           const current = this.deps.store.read(side)
           if (current.application?.requestId === candidate.id) {
-            this.deps.store.commit(side, { ...current, application: { ...application, outcome: 'unknown' } })
+            this.deps.store.commit(side, { ...current, application: { ...application, outcome: 'unknown' } }, undefined, true)
           }
         }
         catch { /* The already durable reservation must not be cleared. */ }

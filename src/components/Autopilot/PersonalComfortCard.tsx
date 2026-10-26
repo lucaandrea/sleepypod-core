@@ -9,6 +9,7 @@ import type { ComfortStatus } from '@/src/comfort/contract'
 import type { ComfortConfig, ComfortFeedback } from '@/src/comfort/policy'
 import { Card } from './primitives'
 import { ComfortSignals } from './ComfortSignals'
+import { ComfortOwnerReview } from './ComfortOwnerReview'
 import { PreviewNightReports } from './PreviewNightReports'
 
 const fieldClass = 'rounded-ctl border border-line bg-surface px-3 py-2 text-sm text-fg'
@@ -57,6 +58,7 @@ export function PersonalComfortCard() {
       )}
       {(configuration.error || mode.error || feedback.error) && <p className="mt-4 text-sm text-danger" role="alert">{configuration.error?.message ?? mode.error?.message ?? feedback.error?.message}</p>}
       {query.data?.features.nightReports && <PreviewNightReports key={side} side={side} />}
+      {query.data?.features.ownerActivation && <ComfortOwnerReview key={`owner:${side}:${JSON.stringify(query.data.state?.config)}`} side={side} />}
       {feedback.isSuccess && <p className="mt-3 text-sm text-fg-2" role="status">Check-in saved.</p>}
     </Card>
   )
@@ -85,8 +87,8 @@ export function PersonalComfortDetails({ data, pending, onConfigure, onMode, onF
   return (
     <div className="mt-5 space-y-5">
       <div className="rounded-ctl border border-line bg-active p-4 text-sm">
-        <p className="font-medium">{state?.config.mode === 'preview' ? 'Preview only' : state?.config.mode === 'active' ? 'Activation locked' : 'Personal comfort off'}</p>
-        <p className="mt-1 text-fg-2">Preview does not adjust the bed. Your existing routines and rules continue.</p>
+        <p className="font-medium">{state?.config.mode === 'preview' ? 'Preview only' : state?.config.mode === 'active' ? data.activation.current ? 'Active personal comfort' : 'Activation withheld' : 'Personal comfort off'}</p>
+        <p className="mt-1 text-fg-2">{state?.config.mode === 'active' ? 'Bounded thermal adjustments use your existing routine. Manual controls and live safety guards retain priority.' : 'Preview does not adjust the bed. Your existing routines and rules continue.'}</p>
         <p className="mt-2">{data.fault ?? data.decision?.reason ?? (data.evaluatedAt === null ? 'No evaluation recorded yet.' : 'Waiting for a current evaluation.')}</p>
         {data.evaluatedAt !== null && (
           <p className="mt-2 text-xs text-fg-2">
@@ -104,12 +106,12 @@ export function PersonalComfortDetails({ data, pending, onConfigure, onMode, onF
               disabled={pending || (Boolean(data.fault) && state.config.mode !== 'preview')}
               variant="primary"
               onClick={() => {
-                const next = state.config.mode === 'preview' ? 'off' : 'preview'
+                const next = state.config.mode !== 'off' ? 'off' : 'preview'
                 if (onMode) onMode(next)
                 else onConfigure({ ...state.config, mode: next })
               }}
             >
-              {state.config.mode === 'preview' ? 'Stop Preview' : 'Start Preview'}
+              {state.config.mode === 'active' ? 'Stop personal comfort' : state.config.mode === 'preview' ? 'Stop Preview' : 'Start Preview'}
             </Button>
             <span className="text-sm text-fg-2">
               {`Learned offset ${state.offsetF > 0 ? '+' : ''}${state.offsetF}°F · maximum change 1°F`}
@@ -179,6 +181,7 @@ export function PersonalComfortDetails({ data, pending, onConfigure, onMode, onF
               )}
             </div>
           )}
+          {state.config.mode === 'active' && <p className="text-sm text-fg-2">Changing comfort settings switches personal comfort Off and requires a new activation review.</p>}
           <form onSubmit={saveRange} className="flex flex-wrap items-end gap-3">
             <label className="grid gap-1 text-xs text-fg-2">
               Minimum °F
@@ -212,7 +215,7 @@ export function PersonalComfortDetails({ data, pending, onConfigure, onMode, onF
       <p className="text-xs text-fg-2">
         {data.activation.reason}
         {' '}
-        Active adjustments remain unavailable.
+        Use the separate owner review below to qualify and activate thermal adjustments.
       </p>
       <details className="border-t border-line pt-3 text-sm">
         <summary className="cursor-pointer text-fg-2">Recent observations</summary>

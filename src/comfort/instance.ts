@@ -1,3 +1,7 @@
+import { ComfortApplicationAdapter } from './application'
+import { createComfortOwner } from './owner'
+import { readComfortHardwareIdentity } from './hardware-identity'
+import { ownerIdentitySchema } from './owner-contract'
 import { createPreviewReports } from './reports'
 import { readFileSync } from 'node:fs'
 import type { PreviewOrigin } from './report-evidence'
@@ -16,12 +20,12 @@ import { readAlarmContext } from '@/src/alarms/store'
 import { effectiveAlarmTargets, validAlarmOverride } from '@/src/alarms/model'
 import { DEVICE_MAX_AGE_MS, type ComfortContext, type ComfortState, type RoutineWindow } from './policy'
 import { acknowledgeManualPause, pendingManualPause } from './manual'
-import { comfortRoutineAt } from './routines'
+import { comfortRoutineAt, comfortScheduleRevision } from './routines'
 import { ComfortRuntime } from './runtime'
 import { createComfortStore } from './store'
 import { ComfortSignalReader } from './signal-reader'
 
-const globals = globalThis as typeof globalThis & { __sp_comfortRuntime?: ComfortRuntime, __sp_comfortSignals?: ComfortSignalReader }
+const globals = globalThis as typeof globalThis & { __sp_comfortRuntime?: ComfortRuntime, __sp_comfortSignals?: ComfortSignalReader, __sp_comfortOwner?: ReturnType<typeof createComfortOwner>, __sp_comfortApplication?: ComfortApplicationAdapter }
 function signalsReader() {
   return globals.__sp_comfortSignals ??= new ComfortSignalReader(biometricsDb.$client)
 }
@@ -32,8 +36,7 @@ function observedTimestamp(value: number | null | undefined, now: number): numbe
   return typeof value === 'number' && Number.isSafeInteger(value) && value > 0 && value <= now ? value : null
 }
 
-/** Read existing sensors and arbitration only; status evaluation never opens a hardware connection. */
-export function readComfortContext(side: Side, state: ComfortState, now: number): { context: ComfortContext, timezone: string } {
+function readComfortSchedules(side: Side) {
   const settings = db.select().from(deviceSettings).get()
   if (!settings) throw new Error('Device settings unavailable')
   const sides = db.select().from(sideSettings).all()
@@ -43,11 +46,17 @@ export function readComfortContext(side: Side, state: ComfortState, now: number)
   const alarms = source ? db.select().from(alarmSchedules).where(and(eq(alarmSchedules.side, source), eq(alarmSchedules.enabled, true))).all() : []
   const timezone = settings.timezone
   const schedules = { powers, targets, alarms, timezone, source: JSON.stringify([source, settings.bedMode, settings.unusedZoneMode]) }
+  return { settings, sides, source, timezone, schedules }
+}
+
+/** Read existing sensors and arbitration only; status evaluation never opens a hardware connection. */
+export function readComfortContext(side: Side, state: ComfortState, now: number, includeArbitration = true): { context: ComfortContext, timezone: string } {
+  const { sides, source, timezone, schedules } = readComfortSchedules(side)
   const key = JSON.stringify([Math.floor(now / 60_000), schedules])
   const cached = routineCache[side]
   const window = cached?.key === key ? cached.window : comfortRoutineAt(schedules, now)
   routineCache[side] = { key, window }
-  const control = getTemperatureControllerIfRunning()?.status(side)
+  const control = includeArbitration ? getTemperatureControllerIfRunning()?.status(side) : undefined
   const monitor = getDacMonitorIfRunning()
   const status = monitor?.getFreshStatus(DEVICE_MAX_AGE_MS)
   const reported = side === 'left' ? status?.leftSide : status?.rightSide
@@ -72,6 +81,7 @@ export function readComfortContext(side: Side, state: ComfortState, now: number)
       now, window,
       device: {
         observedAt: deviceObservedAt, powered: hasFirmwareSynced() && mirror?.isPowered === true && (reported?.heatingDuration ?? 0) > 0,
+        offConfirmed: hasFirmwareSynced() && mirror?.isPowered === false && reported?.heatingDuration === 0,
         waterAdequate: status?.waterLevel === 'ok' ? true : status?.waterLevel === 'low' ? false : null,
         priming: status?.isPriming !== false,
         vibrating: states.length !== 2 || states.some(row => row.isAlarmVibrating),
@@ -110,7 +120,7 @@ function previewOrigin(): PreviewOrigin {
   const environment = process.env.CI || process.env.NODE_ENV === 'test'
     ? 'test'
     : process.env.NODE_ENV === 'production' ? 'production' : 'development'
-  return { environment, buildRevision }
+  return { environment, buildRevision, hardwareIdentity: readComfortHardwareIdentity() }
 }
 
 export function getComfortRuntime(): ComfortRuntime {
@@ -123,6 +133,14 @@ export function getComfortRuntime(): ComfortRuntime {
     },
     prepareSignals: (side, now) => signalsReader().prepare(side, db.select().from(deviceSettings).get()?.timezone ?? 'UTC', now),
     pendingPause: pendingManualPause, acknowledgePause: acknowledgeManualPause,
+    activation: {
+      admitted: (side, state) => getComfortOwner().admission(side, state) !== null,
+      revoke: (side, reason) => getComfortOwner().revoke(side, reason),
+      revokeLease: side => globals.__sp_comfortApplication?.revoke(side),
+      reconcile: async (side) => {
+        if (createComfortStore(sqlite).read(side).config.mode === 'active' || globals.__sp_comfortApplication) await getComfortApplication()?.reconcile(side)
+      },
+    },
   })
 }
 
@@ -139,4 +157,37 @@ export async function stopComfortPreview(): Promise<void> {
 /** Read/review endpoints do not start the Preview runtime or any hardware service. */
 export function getPreviewReports() {
   return createPreviewReports(sqlite)
+}
+
+function autopilotEnabled(): boolean {
+  return db.select({ enabled: deviceSettings.autopilotEnabled }).from(deviceSettings).get()?.enabled === true
+}
+
+/** These readers use existing services and never open a hardware connection. */
+export function getComfortOwner() {
+  return globals.__sp_comfortOwner ??= createComfortOwner({
+    database: sqlite, store: createComfortStore(sqlite), now: Date.now, withSideLock, autopilotEnabled,
+    running: () => globals.__sp_comfortRuntime?.isRunning() === true,
+    revokeLease: side => globals.__sp_comfortApplication?.revoke(side),
+    context: (side, state, now) => readComfortContext(side, state, now, false).context,
+    identity: (side, state) => {
+      const origin = previewOrigin()
+      const calibration = getOccupancy(side).level.sourceKey
+      const schedule = comfortScheduleRevision(readComfortSchedules(side).schedules)
+      if (origin.environment !== 'production' || !origin.hardwareIdentity || !origin.buildRevision || !calibration || !schedule) return null
+      return ownerIdentitySchema.parse({ hardware: origin.hardwareIdentity, build: origin.buildRevision, calibration, schedule,
+        policy: { minimumF: state.config.minimumF, maximumF: state.config.maximumF,
+          sensorAware: state.config.sensorAware === true, followBedtime: state.config.followBedtime === true } })
+    },
+  })
+}
+
+function getComfortApplication(): ComfortApplicationAdapter | undefined {
+  const authority = getTemperatureControllerIfRunning()
+  if (!authority) return undefined
+  return globals.__sp_comfortApplication ??= new ComfortApplicationAdapter({
+    now: Date.now, monotonicNow: () => performance.now(), store: createComfortStore(sqlite), authority, withSideLock,
+    autopilotEnabled, admission: (side, state) => getComfortOwner().admission(side, state), pendingPause: pendingManualPause,
+    readContext: (side, state, now) => readComfortContext(side, state, now, false).context,
+  })
 }

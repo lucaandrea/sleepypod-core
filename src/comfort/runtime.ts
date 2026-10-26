@@ -21,9 +21,15 @@ export interface ComfortRuntimeDeps {
   timezone(): string
   pendingPause(side: Side): number | null
   acknowledgePause(side: Side, at: number): void
+  activation?: {
+    admitted(side: Side, state: ComfortState): boolean
+    revoke(side: Side, reason: string): void
+    revokeLease(side: Side): void
+    reconcile(side: Side): Promise<void>
+  }
 }
 
-/** Preview has no actuator dependency. Only the shared temperature authority may later admit active leases. */
+/** Preview remains inert; qualified Active proposals use the shared temperature authority. */
 export class ComfortRuntime {
   private readonly runId = randomUUID()
   private observations: Partial<Record<Side, Observation>> = {}
@@ -59,13 +65,18 @@ export class ComfortRuntime {
     const signals = observation?.signals
     const signalExpired = signals?.expiresAt !== null && signals?.expiresAt !== undefined && now >= signals.expiresAt
     const fault = this.faults[side] ?? (this.deps.pendingPause(side) !== null ? STORAGE_FAULT : null)
+    const active = state !== null && this.deps.activation?.admitted(side, state) === true
+    let decision = fault || signalExpired || observation?.stateKey !== JSON.stringify(state) ? null : observation?.decision ?? null
+    if (decision && state?.config.mode === 'active' && !active) {
+      decision = { ...decision, eligible: false, proposedF: null, retainPreviousLease: false, reason: COMFORT_ACTIVATION_REASON }
+    }
     return {
       apiVersion: 1, generatedAt: this.deps.now(), side, state, history, fault, timezone, deviceDate,
       evaluatedAt: observed?.at ?? null,
-      decision: fault || signalExpired || observation?.stateKey !== JSON.stringify(state) ? null : observation?.decision ?? null,
+      decision,
       runtime: this.running ? 'running' : 'stopped',
-      activation: { available: false, reason: COMFORT_ACTIVATION_REASON },
-      features: { sensorAware: true, followBedtime: true, nightReports: true, modeOnly: true },
+      activation: { available: false, current: active, reason: active ? 'Owner activation is current. Every adjustment still rechecks live guards.' : COMFORT_ACTIVATION_REASON },
+      features: { sensorAware: true, followBedtime: true, nightReports: true, modeOnly: true, ...(this.deps.activation ? { ownerActivation: true } : {}) },
       timing: fault || signalExpired || observation?.stateKey !== JSON.stringify(state) ? null : observation?.timing ?? null,
       signals: fault || signalExpired || observation?.stateKey !== JSON.stringify(state) ? null : signals ?? null,
     }
@@ -94,6 +105,7 @@ export class ComfortRuntime {
   }
 
   private commitConfiguration(side: Side, state: ComfortState, config: ComfortConfig): void {
+    this.deps.activation?.revoke(side, 'Owner changed personal comfort configuration')
     this.deps.store.commit(side, { ...state, config },
       comfortEvent(this.deps.now(), 'configuration', `Personal comfort set to ${config.mode}.`))
     if (state.config.followBedtime !== config.followBedtime || state.config.mode !== config.mode || !config.sensorAware) this.entryTrackers[side].reset()
@@ -122,7 +134,7 @@ export class ComfortRuntime {
     const pending = this.deps.pendingPause(side)
     if (pending !== null) {
       state = { ...state, pausedUntil: Math.max(state.pausedUntil, pending + MANUAL_PAUSE_MS) }
-      this.deps.store.commit(side, state, comfortEvent(pending, 'manual_pause', 'Recovered the six-hour pause after a manual control.'))
+      this.deps.store.commit(side, state, comfortEvent(pending, 'manual_pause', 'Recovered the six-hour pause after a manual control.'), true)
       this.deps.acknowledgePause(side, pending)
     }
     return state
@@ -134,6 +146,7 @@ export class ComfortRuntime {
       if (this.deps.store.read(side).config.sensorAware) await this.deps.prepareSignals?.(side, this.deps.now())
     }
     catch {
+      this.deps.activation?.revokeLease(side)
       this.faults[side] = STORAGE_FAULT
       this.entryTrackers[side].reset()
       this.observations[side] = undefined
@@ -146,8 +159,9 @@ export class ComfortRuntime {
         const original = JSON.stringify(state)
         const { context: rawContext, timezone } = this.deps.readContext(side, state, now)
         let context = rawContext
-        // Preview may learn from check-ins, but never records a hardware acknowledgment.
-        const learning = state.config.mode === 'preview' && context.window
+        const admitted = state.config.mode === 'active' && this.deps.activation?.admitted(side, state) === true
+        // Only the application adapter records hardware acknowledgments.
+        const learning = (state.config.mode === 'preview' || (admitted && (!state.application || state.application.outcome === 'acknowledged'))) && context.window
           ? learnComfort(state, this.deps.store.feedback(side), context.window.session, timezone, now)
           : { state, message: null }
         state = learning.state
@@ -157,7 +171,7 @@ export class ComfortRuntime {
         context = { ...context, window: timing.window, timing: timing.status }
         // Preserve raw-schedule safety holds, especially the unexpected-target pause.
         let decision = guard.eligible ? decideComfort(state, context) : guard
-        if (state.config.mode === 'active') {
+        if (state.config.mode === 'active' && !admitted) {
           decision = { ...decision, eligible: false, proposedF: null, retainPreviousLease: false,
             reason: COMFORT_ACTIVATION_REASON }
         }
@@ -170,23 +184,33 @@ export class ComfortRuntime {
         const record = state.config.mode !== 'off' && (!previous || previous.key !== key || now - previous.at >= 60_000 || now < previous.at)
         const event = record
           ? {
-              ...comfortEvent(now, 'preview', learning.message ? `${decision.reason} ${learning.message}` : decision.reason),
+              ...comfortEvent(now, state.config.mode === 'active' ? 'active' : 'preview', learning.message ? `${decision.reason} ${learning.message}` : decision.reason),
               session: context.window?.session ?? null, proposedF: decision.proposedF, reportedF: context.device.targetF,
               eligible: decision.eligible, deviceObservedAt: context.device.observedAt,
               presenceObservedAt: context.presence.observedAt, owner: context.owner, signals: context.signals ?? null, timing: timing.status, preview,
             }
           : undefined
-        if (event || JSON.stringify(state) !== original) this.deps.store.commit(side, state, event)
+        if (event || JSON.stringify(state) !== original) this.deps.store.commit(side, state, event, decision.pauseRequired)
         if (record) this.recorded[side] = { at: now, key }
         this.observations[side] = { at: now, decision, stateKey: JSON.stringify(state), signals: context.signals ?? null, timing: timing.status }
         this.faults[side] = undefined
       }
       catch {
+        this.deps.activation?.revokeLease(side)
         this.faults[side] = STORAGE_FAULT
         this.entryTrackers[side].reset()
         this.observations[side] = undefined
       }
     })
+    if (!this.faults[side]) {
+      try {
+        await this.deps.activation?.reconcile(side)
+      }
+      catch {
+        this.deps.activation?.revokeLease(side)
+        this.faults[side] = STORAGE_FAULT
+      }
+    }
   }
 
   private tick(): Promise<void> {
@@ -220,6 +244,8 @@ export class ComfortRuntime {
 
   async stop(): Promise<void> {
     this.running = false
+    this.deps.activation?.revokeLease('left')
+    this.deps.activation?.revokeLease('right')
     clearInterval(this.timer)
     await this.pending
     this.entryTrackers.left.reset()

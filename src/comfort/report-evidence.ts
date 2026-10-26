@@ -3,7 +3,7 @@ import type { ComfortContext, ComfortState } from './policy'
 import { DEVICE_MAX_AGE_MS, PRESENCE_MAX_AGE_MS, VITAL_MAX_AGE_MS } from './policy'
 import { previewEvidenceSchema, type PreviewEvidence } from './report-contract'
 
-export type PreviewOrigin = Pick<PreviewEvidence, 'environment' | 'buildRevision'>
+export type PreviewOrigin = Pick<PreviewEvidence, 'environment' | 'buildRevision' | 'hardwareIdentity'>
 const CALIBRATED_FRAME_MAX_AGE_MS = 30_000
 
 /** Side is selected by the authenticated route/store; session identity contains no credentials. */

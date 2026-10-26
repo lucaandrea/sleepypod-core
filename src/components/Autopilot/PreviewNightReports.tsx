@@ -160,7 +160,7 @@ function NightReport({ side, id }: { side: Side, id: string }) {
         </>
       )}
       {review.error && <p role="alert" className="text-danger">{`${review.error.message} Refresh the report before retrying.`}</p>}
-      {review.isSuccess && <p role="status" className="text-fg-2">Review saved. Active adjustment remains locked.</p>}
+      {review.isSuccess && <p role="status" className="text-fg-2">Review saved. Activation requires a separate owner review.</p>}
       <Button
         disabled={report.isFetching || review.isPending}
         onClick={() => {

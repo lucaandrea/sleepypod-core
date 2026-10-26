@@ -2,13 +2,33 @@ import path from 'node:path'
 import os from 'node:os'
 import { mkdtempSync, rmSync } from 'node:fs'
 import Database from 'better-sqlite3'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { createComfortStore, comfortEvent } from '../store'
 import { defaultComfortState, MANUAL_PAUSE_MS } from '../policy'
 
 import { migratedComfortDatabase } from './databaseFixture'
 
 describe('personal comfort SQLite persistence', () => {
+  it('flushes command checkpoints with FULL sync and restores ordinary write mode, including failure', () => {
+    const database = migratedComfortDatabase()
+    try {
+      database.pragma('synchronous = NORMAL')
+      const observed: number[] = []
+      const prepare = database.prepare.bind(database)
+      vi.spyOn(database, 'prepare').mockImplementation((sql) => {
+        if (sql.startsWith('INSERT INTO comfort_states')) observed.push(database.pragma('synchronous', { simple: true }) as number)
+        return prepare(sql)
+      })
+      createComfortStore(database).commit('left', defaultComfortState(), undefined, true)
+      expect(observed).toEqual([2])
+      expect(database.pragma('synchronous', { simple: true })).toBe(1)
+      database.exec('CREATE TRIGGER reject_sync BEFORE INSERT ON comfort_states BEGIN SELECT RAISE(ABORT, \'disk failure\'); END')
+      expect(() => createComfortStore(database).commit('right', defaultComfortState(), undefined, true)).toThrow('disk failure')
+      expect(database.pragma('synchronous', { simple: true })).toBe(1)
+      expect(() => database.transaction(() => createComfortStore(database).commit('right', defaultComfortState(), undefined, true))()).toThrow('independent')
+    }
+    finally { database.close() }
+  })
   it('retains settings, bed-entry selection, manual pause and consumed feedback through reopening', () => {
     const directory = mkdtempSync(path.join(os.tmpdir(), 'comfort-store-'))
     const filename = path.join(directory, 'state.db')

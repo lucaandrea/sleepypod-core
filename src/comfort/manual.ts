@@ -13,7 +13,7 @@ export function pauseComfortAfterManual(side: Side): void {
     const store = createComfortStore(sqlite)
     const current = store.read(side)
     store.commit(side, { ...current, pausedUntil: Math.max(current.pausedUntil, now + MANUAL_PAUSE_MS) },
-      comfortEvent(now, 'manual_pause', 'Personal comfort paused for six hours after a manual control.'))
+      comfortEvent(now, 'manual_pause', 'Personal comfort paused for six hours after a manual control.'), true)
     faults[side] = undefined
   }
   catch {

@@ -92,7 +92,7 @@ test('night reports require an exact owner review and never activate after confi
   await detail.getByLabel('Review notes').fill('Synthetic browser review; no real overnight session.')
   await detail.getByRole('button', { name: 'Save review' }).click()
   await expect(reports).toContainText('Owner-confirmed nights: 1 / 7 minimum')
-  await expect(detail).toContainText('Active adjustment remains locked.')
+  await expect(detail).toContainText('Activation requires a separate owner review.')
   const listing = await (await request.get('/api/v1/comfort/reports?side=left', { headers })).json()
   const item = listing.items[0]
   expect(listing.activationAvailable).toBe(false)
@@ -114,4 +114,29 @@ test('night reports require an exact owner review and never activate after confi
   await expect(reports).toContainText('Owner-confirmed nights: 0 / 7 minimum')
   await page.reload()
   await expect(reports.getByRole('button', { name: /Retest requested/ })).toBeVisible()
+})
+
+test('owner activation UI and API require real controller evidence and authentication', async ({ page, request, playwright }, testInfo) => {
+  const headers = { Authorization: `Bearer ${process.env.SLEEPYPOD_AUTH_TOKEN}` }
+  const anonymous = await playwright.request.newContext({ baseURL: 'http://127.0.0.1:3218', storageState: { cookies: [], origins: [] } })
+  expect((await anonymous.get('/api/v1/comfort/owner?side=left')).status()).toBe(401)
+  for (const endpoint of ['prepare', 'confirm', 'retest']) {
+    expect((await anonymous.post(`/api/v1/comfort/owner/${endpoint}`, { data: {} })).status()).toBe(401)
+  }
+  expect((await anonymous.post('/api/trpc/comfort.confirmOwnerReview', { data: { json: {} } })).status()).toBe(401)
+  await anonymous.dispose()
+  const status = await (await request.get('/api/v1/comfort/owner?side=left', { headers })).json()
+  expect(status).toMatchObject({ identity: null, qualifications: [], nights: [], active: false, canActivate: false })
+  expect((await request.post('/api/v1/comfort/owner/prepare', { headers, data: { side: 'left', purpose: 'activation', kind: null } })).status()).toBe(412)
+  expect((await request.post('/api/v1/comfort/owner/prepare', { headers, data: { side: 'left', purpose: 'qualification', kind: 'presence_empty' } })).status()).toBe(412)
+  await page.goto('/en/autopilot')
+  const section = page.getByRole('region', { name: 'Owner activation review' })
+  await expect(section).toContainText('0/7 matching nights')
+  await expect(section.getByRole('button', { name: 'Review activation', exact: true })).toBeDisabled()
+  await expect(section.getByRole('button', { name: 'Inspect check evidence' })).toBeDisabled()
+  await expect(section).toContainText('Production Pod identity')
+  await page.setViewportSize({ width: 390, height: 844 })
+  await section.scrollIntoViewIfNeeded()
+  await page.screenshot({ path: testInfo.outputPath('comfort-owner-mobile.png') })
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
 })

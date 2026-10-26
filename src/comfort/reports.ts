@@ -1,4 +1,5 @@
 import type Database from 'better-sqlite3'
+import type { NightProof, OwnerIdentity } from './owner-contract'
 import type { Side } from '@/src/hardware/types'
 import {
   previewReportDetailSchema, previewReportListSchema, previewReviewInputSchema, previewReviewSchema,
@@ -24,8 +25,8 @@ export function createPreviewReports(database: Database.Database, clock = Date.n
   }
   function latestReview(side: Side, id: string): ReviewRow | undefined {
     return database.prepare(`SELECT id, created_at AS at, review, snapshot FROM comfort_reviews
-      WHERE side = ? AND report_id = ? AND created_at >= ? ORDER BY id DESC LIMIT 1`)
-      .get(side, id, now() - REVIEW_RETENTION_MS) as ReviewRow | undefined
+      WHERE side = ? AND report_id = ? ORDER BY id DESC LIMIT 1`)
+      .get(side, id) as ReviewRow | undefined
   }
   function decodeReview(row: ReviewRow | undefined): PreviewReview | null {
     return row ? previewReviewSchema.parse({ ...JSON.parse(row.review), id: row.id, at: row.at }) : null
@@ -49,6 +50,54 @@ export function createPreviewReports(database: Database.Database, clock = Date.n
   }
 
   return {
+    /** Activation requires four hours of eligible intervals per reviewed night on this exact configuration. */
+    async activationProofs(side: Side, identity: OwnerIdentity): Promise<NightProof[]> {
+      const generatedAt = now()
+      const ids = database.prepare(`SELECT report_id AS id FROM comfort_events WHERE side = ? AND report_id IS NOT NULL
+        GROUP BY report_id ORDER BY MAX(observed_at) DESC LIMIT 30`).all(side) as { id: string }[]
+      const proofs: NightProof[] = []
+      for (const { id } of ids) {
+        const result = await load(side, id, generatedAt)
+        if (!result.countsAsOwnerConfirmedNight || !result.review) continue
+        let eligibleMs = 0
+        const matches = (observation: typeof result.observations[number]) => {
+          const value = observation.evidence
+          return observation.eligible && value.hardwareIdentity === identity.hardware && value.buildRevision === identity.build
+            && value.scheduleRevision === identity.schedule && value.presenceSourceKey === identity.calibration
+            && value.policy.minimumF === identity.policy.minimumF && value.policy.maximumF === identity.policy.maximumF
+            && value.policy.sensorAware === identity.policy.sensorAware && value.policy.followBedtime === identity.policy.followBedtime
+            && value.presence === 'occupied' && value.deviceFresh && value.mechanicallyQuiet && !value.manualPaused
+            && (!identity.policy.sensorAware || value.sensorReady)
+        }
+        for (let index = 1; index < result.observations.length; index++) {
+          const previous = result.observations[index - 1]
+          const current = result.observations[index]
+          const gap = current.at - previous.at
+          if (gap > 0 && gap <= 90_000 && current.evidence.runId === previous.evidence.runId
+            && matches(previous) && matches(current)) eligibleMs += gap
+        }
+        const last = result.observations.at(-1)
+        if (eligibleMs >= 14_400_000 && last) proofs.push({ summary: result.summary, reviewId: result.review.id, lastObservationId: last.id, eligibleMs })
+      }
+      const accepted: NightProof[] = []
+      for (const proof of proofs.sort((first, second) => first.summary.metadata.start - second.summary.metadata.start)) {
+        if (!accepted.some(previous => previous.summary.localDate === proof.summary.localDate
+          || (previous.summary.metadata.start < proof.summary.metadata.end && previous.summary.metadata.end > proof.summary.metadata.start))) accepted.push(proof)
+      }
+      return accepted.slice(-7)
+    },
+    assertProofsCurrent(side: Side, proofs: NightProof[], includeSource: boolean) {
+      for (const proof of proofs) {
+        const review = decodeReview(latestReview(side, proof.summary.id))
+        if (review?.id !== proof.reviewId || review.at > now() || review.outcome !== 'reviewed' || !review.confirmedActualNight
+          || review.digest !== proof.summary.digest) throw new PreviewReportError('A night review changed. Review activation again.', 'CONFLICT')
+        if (includeSource && reportDigest(source(side, proof.summary.id)) !== proof.summary.digest) {
+          throw new PreviewReportError('Night source changed during activation review.', 'CONFLICT')
+        }
+        const appended = database.prepare('SELECT 1 FROM comfort_events WHERE side = ? AND report_id = ? AND id > ? LIMIT 1').get(side, proof.summary.id, proof.lastObservationId)
+        if (appended) throw new PreviewReportError('New observations were added to a reviewed night.', 'CONFLICT')
+      }
+    },
     async list(side: Side) {
       const generatedAt = now()
       const ids = database.prepare(`SELECT report_id AS id, MAX(at) AS latest FROM (
@@ -102,9 +151,10 @@ export function createPreviewReports(database: Database.Database, clock = Date.n
         if ((previous?.id ?? null) !== request.expectedReviewId) throw new PreviewReportError('Another review was saved. Refresh before replacing its conclusion.', 'CONFLICT')
         const insert = database.prepare('INSERT INTO comfort_reviews (side, report_id, created_at, review, snapshot) VALUES (?, ?, ?, ?, ?)')
           .run(request.side, request.id, at, JSON.stringify(value), JSON.stringify(result.summary))
-        database.prepare('DELETE FROM comfort_reviews WHERE created_at < ?').run(at - REVIEW_RETENTION_MS)
+        const protectedReviews = `SELECT json_extract(night.value, '$.reviewId') FROM comfort_activations, json_each(comfort_activations.snapshot, '$.nights') AS night WHERE revoked_at IS NULL`
+        database.prepare(`DELETE FROM comfort_reviews WHERE created_at < ? AND id NOT IN (${protectedReviews})`).run(at - REVIEW_RETENTION_MS)
         database.prepare(`DELETE FROM comfort_reviews WHERE side = ? AND id NOT IN
-          (SELECT id FROM comfort_reviews WHERE side = ? ORDER BY id DESC LIMIT ?)`)
+          (SELECT id FROM comfort_reviews WHERE side = ? ORDER BY id DESC LIMIT ?) AND id NOT IN (${protectedReviews})`)
           .run(request.side, request.side, MAX_REVIEWS_PER_SIDE)
         return previewReviewSchema.parse({ ...value, id: Number(insert.lastInsertRowid), at })
       })()
