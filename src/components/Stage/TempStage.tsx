@@ -383,7 +383,7 @@ export function TempStage({ onExit }: { onExit: () => void }) {
         <div className="flex flex-wrap items-center justify-center gap-2 whitespace-nowrap *:pointer-events-auto">
           {previewing
             ? (
-                <button type="button" onClick={() => setPreviewAt(null)} data-testid="stage-mode" className={cn(PILL, 'font-mono text-[11px] uppercase tracking-[0.12em]')} style={{ ...GLASS, color: STAGE.preview, borderColor: STAGE.preview }}>
+                <button type="button" onClick={() => setPreviewAt(null)} data-testid="stage-mode" className={cn(PILL, 'h-auto min-h-[34px] min-w-0 max-w-full whitespace-normal py-[6px] text-center font-mono text-[11px] uppercase tracking-[0.12em]')} style={{ ...GLASS, color: STAGE.preview, borderColor: STAGE.preview }}>
                   <span aria-hidden className="size-1.5 rounded-full" style={{ background: STAGE.preview }} />
                   {`Preview · ${clock(previewAt, timeFormat)} · Back to live`}
                 </button>

@@ -19,7 +19,9 @@ routes and do not hijack controls or the 3D stage.
 
 Browser regression coverage checks secondary routes, owner sign-out, light/dark
 appearance, 305px and 320px viewports at 200% text with scrollbar space, keyboard navigation and the bed/tab-bar
-boundary. Offline WebGL and the 2D fallback remain covered. The fallback uses normal
+boundary. Fixed evening/morning clocks and preview scrubbing cover both edges
+of the timeline; timestamp labels stay inside the plot and the long preview
+button wraps when needed. Offline WebGL and the 2D fallback remain covered. The fallback uses normal
 scroll flow, with its toolbar, both side controls and timeline in order rather
 than fixed overlapping regions. This is
 software/browser verification; it does not establish physical Pod behavior or
