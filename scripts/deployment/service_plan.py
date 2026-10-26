@@ -13,6 +13,7 @@ LEGACY_UNITS = ('free-sleep.service', 'free-sleep-stream.service')
 CORE_UNIT = 'sleepypod.service'
 CORE_UNITS = (CORE_UNIT,) + tuple('sleepypod-' + name + '.service' for name in MODULES)
 PLAN_FORMAT = 'sleepypod-service-plan/1'
+MAINTENANCE_SOCKET = '/run/sleepypod-maintenance/control.sock'
 
 
 def pod_path(value):
@@ -27,8 +28,10 @@ def pod_path(value):
 
 def validate_config(config):
     required = {'release', 'modules', 'data', 'environment', 'dacSocket', 'rawData'}
-    if not isinstance(config, dict) or set(config) != required:
+    if not isinstance(config, dict) or set(config) not in (required, required | {'maintenanceSocket'}):
         raise ValueError('Unexpected service configuration fields')
+    if 'maintenanceSocket' in config and config['maintenanceSocket'] != MAINTENANCE_SOCKET:
+        raise ValueError('Use the fixed private maintenance socket')
     for value in config.values():
         pod_path(value)
     # Never let a new runtime or database overwrite the retained controller.
@@ -52,6 +55,7 @@ def render(config):
     """Use the existing dac account and exact private paths, without global runtime changes."""
     validate_config(config)
     release, modules, data = (config[name] for name in ('release', 'modules', 'data'))
+    maintenance = f'Environment="SLEEPYPOD_MAINTENANCE_SOCKET={MAINTENANCE_SOCKET}"\n' if 'maintenanceSocket' in config else ''
     shared = f'''User=dac
 Group=dac
 UMask=0077
@@ -87,7 +91,7 @@ RequiresMountsFor={release} {data}
 Type=simple
 {shared}WorkingDirectory={release}/app
 EnvironmentFile={config['environment']}
-Environment="NODE_ENV=production"
+{maintenance}Environment="NODE_ENV=production"
 Environment="HOSTNAME=0.0.0.0"
 Environment="PORT=3000"
 Environment="PIEZO_WS_PORT=3001"

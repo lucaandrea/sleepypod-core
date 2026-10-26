@@ -191,6 +191,7 @@ def prepare(repo, output):
         if current != commit or subprocess.check_output(['git', 'status', '--porcelain', '--untracked-files=all'], cwd=repo).strip():
             raise ValueError('Source changed during packaging; rebuild the committed revision')
         manifest = {'format': 'sleepypod-offline-runtime/1', 'sourceCommit': commit,
+                    'maintenanceProtocol': 1,
                     'node': {'version': NODE_VERSION, 'sha256': NODE_SHA256},
                     'sqlite': {'version': SQLITE_VERSION, 'sha256': SQLITE_SHA256},
                     'pnpm': PNPM_VERSION, 'controllerStarted': False,
