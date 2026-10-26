@@ -9,6 +9,13 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type * as DrizzleOrmModule from 'drizzle-orm'
+import type * as ChildProcessModule from 'node:child_process'
+
+const processMock = vi.hoisted(() => ({ execFile: vi.fn() }))
+vi.mock('node:child_process', async (importOriginal) => {
+  const actual = await importOriginal<typeof ChildProcessModule>()
+  return { ...actual, execFile: processMock.execFile, default: { ...actual, execFile: processMock.execFile } }
+})
 
 const sqlMock = vi.hoisted(() => ({
   eq: vi.fn((left: unknown, right: unknown) => ({ op: 'eq', left, right })),
@@ -112,7 +119,31 @@ vi.mock('@/src/db/integrity', () => integrityMock)
 const { healthRouter } = await import('@/src/server/routers/health')
 const caller = healthRouter.createCaller({})
 
+describe('allowlisted service restarts', () => {
+  it('queues a core restart without downloading an update or waiting for its own shutdown', async () => {
+    await expect(caller.restartService({ unit: 'sleepypod.service' })).resolves.toMatchObject({ ok: true, message: expect.stringContaining('Restart requested') })
+    expect(processMock.execFile).toHaveBeenCalledTimes(1)
+    expect(processMock.execFile).toHaveBeenCalledWith('sudo', ['-n', 'systemctl', '--no-block', 'restart', 'sleepypod.service'], { timeout: 20_000 }, expect.any(Function))
+  })
+  it('preserves the existing module restart command', async () => {
+    await expect(caller.restartService({ unit: 'sleepypod-piezo-processor.service' })).resolves.toEqual({ ok: true, message: 'Restarted sleepypod-piezo-processor.service' })
+    expect(processMock.execFile).toHaveBeenCalledWith('sudo', ['-n', 'systemctl', 'restart', 'sleepypod-piezo-processor.service'], { timeout: 20_000 }, expect.any(Function))
+  })
+  it('returns a denied restart as an unsuccessful outcome without falling back to another action', async () => {
+    processMock.execFile.mockImplementationOnce((_command, _arguments, _options, callback) => callback(new Error('permission denied\nextra diagnostic'), '', ''))
+    const outcome = await caller.restartService({ unit: 'sleepypod.service' })
+    expect(outcome).toMatchObject({ ok: false, message: expect.stringContaining('permission denied') })
+    expect(outcome.message).not.toContain('extra diagnostic')
+    expect(processMock.execFile).toHaveBeenCalledTimes(1)
+  })
+  it.each(['free-sleep.service', 'sshd.service', 'sleepypod.service; reboot', '--all'])('rejects a non-allowlisted target: %s', async (unit) => {
+    await expect(caller.restartService({ unit: unit as never })).rejects.toMatchObject({ code: 'BAD_REQUEST' })
+    expect(processMock.execFile).not.toHaveBeenCalled()
+  })
+})
+
 beforeEach(() => {
+  processMock.execFile.mockReset().mockImplementation((_command, _arguments, _options, callback) => callback(null, '', ''))
   schedulerMock.scheduler.isEnabled.mockReset().mockReturnValue(true)
   schedulerMock.scheduler.getJobs.mockReset().mockReturnValue([])
   schedulerMock.scheduler.getNextInvocation.mockReset().mockReturnValue(null)

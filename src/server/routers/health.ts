@@ -34,6 +34,7 @@ const checkStatus = z.enum(['ok', 'idle', 'stale', 'down', 'unknown'])
 const nodeId = z.enum(NODES.map(n => n.id) as [typeof NODES[number]['id'], ...Array<typeof NODES[number]['id']>])
 const stage = z.enum(STAGES.map(s => s.id) as [typeof STAGES[number]['id'], ...Array<typeof STAGES[number]['id']>])
 const unitEnum = z.enum(RESTARTABLE_UNITS)
+const restartUnitEnum = z.enum([...RESTARTABLE_UNITS, 'sleepypod.service'])
 
 /**
  * Health router — exposes system observability endpoints.
@@ -601,18 +602,21 @@ export const healthRouter = router({
     .query(() => readHistory(biometricsDb as never, Date.now())),
 
   /**
-   * Restart one biometrics module. next-server runs as User=sleepypod, so
-   * this goes through the NOPASSWD rule scripts/install writes for exactly
-   * these units; pods installed before that rule get the manual command back.
+   * Restart an allowlisted service without running the updater. Queue a core
+   * restart without waiting for this process to stop itself. Older installs
+   * without the exact sudoers permission get a failure and manual command.
    */
   restartService: publicProcedure
     .meta({ openapi: { method: 'POST', path: '/health/restart-service', protect: false, tags: ['Health'] } })
-    .input(z.object({ unit: unitEnum }))
+    .input(z.object({ unit: restartUnitEnum }))
     .output(z.object({ ok: z.boolean(), message: z.string() }))
     .mutation(async ({ input }) => {
       try {
-        await execFileAsync('sudo', ['-n', 'systemctl', 'restart', input.unit], { timeout: 20_000 })
-        return { ok: true, message: `Restarted ${input.unit}` }
+        const core = input.unit === 'sleepypod.service'
+        await execFileAsync('sudo', ['-n', 'systemctl', ...(core ? ['--no-block'] : []), 'restart', input.unit], { timeout: 20_000 })
+        return { ok: true, message: core
+          ? 'Restart requested. The service may be briefly unavailable; reconnect to check its status.'
+          : `Restarted ${input.unit}` }
       }
       catch (error) {
         const reason = error instanceof Error ? error.message.split('\n')[0] : String(error)

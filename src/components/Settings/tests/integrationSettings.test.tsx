@@ -25,7 +25,8 @@ vi.mock('@/src/utils/trpc', () => {
     useUtils: () => ({ archivePush: { getConfig: { invalidate: mock.invalidate } }, homekit: { getStatus: { invalidate: mock.invalidate } }, settings: { getAll: { invalidate: mock.invalidate } } }),
     archivePush: { getConfig: endpoint('config'), setConfig: endpoint('save'), generateKey: endpoint('generate'), testConnection: endpoint('test') },
     homekit: { getStatus: endpoint('homekit'), setEnabled: endpoint('enable'), unpair: endpoint('unpair') },
-    settings: { updateDevice: endpoint('device') }, system: { triggerUpdate: endpoint('restart') },
+    settings: { updateDevice: endpoint('device') }, system: { triggerUpdate: endpoint('update') },
+    health: { restartService: endpoint('restart') },
   } }
 })
 beforeEach(() => {
@@ -138,16 +139,31 @@ it('commits LED changes on release, clamps recovery inputs and confirms restarts
   }
   const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
   fireEvent.click(screen.getByRole('button', { name: 'Restart service' }))
-  expect(mock.calls).not.toHaveBeenCalledWith('restart', {})
+  expect(mock.calls).not.toHaveBeenCalledWith('restart', expect.anything())
   confirm.mockReturnValue(true)
   fireEvent.click(screen.getByRole('button', { name: 'Restart service' }))
-  expect(mock.calls).toHaveBeenCalledWith('restart', {})
+  expect(mock.calls).toHaveBeenCalledWith('restart', { unit: 'sleepypod.service' })
+  expect(mock.calls).not.toHaveBeenCalledWith('update', expect.anything())
   act(() => vi.advanceTimersByTime(1500))
   mock.error = new Error('Save failed')
   mock.success = true
   rerender(<DeviceSettingsForm device={{ ...device, timezone: 'Europe/London' }} />)
-  expect(screen.getAllByText('Save failed')).toHaveLength(2)
-  expect(screen.getByText('Service restarting — reconnecting…')).toBeTruthy()
+  expect(screen.getByText('Save failed')).toBeTruthy()
+  expect(screen.getByText('Restart could not be confirmed. Reconnect to check the service before trying again.')).toBeTruthy()
+})
+
+it('distinguishes a denied restart from a queued restart and prevents duplicate pending requests', () => {
+  mock.success = true // HTTP success is not evidence that systemctl accepted the request.
+  mock.data.restart = { ok: false, message: 'Restart permission denied' }
+  const { rerender } = render(<DeviceSettingsForm device={device} />)
+  expect(screen.getByText('Restart permission denied')).toBeTruthy()
+  mock.data.restart = { ok: true, message: 'Restart requested. Reconnect to check its status.' }
+  rerender(<DeviceSettingsForm device={device} />)
+  expect(screen.queryByText('Restart permission denied')).toBeNull()
+  expect(screen.getByRole('status').textContent).toContain('Restart requested.')
+  mock.pending = true
+  rerender(<DeviceSettingsForm device={device} />)
+  expect(screen.getByRole('button', { name: 'Requesting restart…' }).hasAttribute('disabled')).toBe(true)
 })
 
 it('saves the pod-wide time format from the Device section and follows server changes', () => {
