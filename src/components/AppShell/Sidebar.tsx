@@ -14,7 +14,7 @@ import { trpc } from '@/src/utils/trpc'
 import { buildLine } from './footerStatus'
 import { useBaseAvailable } from './useBaseAvailable'
 import { usePodHealth } from './usePodHealth'
-import { activeNavId, DOCS_URL, langFromPath, NAV_ITEMS, pathWithoutLang, type NavId } from './navItems'
+import { activeNavId, DOCS_URL, langFromPath, NAV_ITEMS, type NavId } from './navItems'
 
 const noopSubscribe = () => () => {}
 
@@ -22,7 +22,8 @@ const POD_NAMES: Record<string, string> = { H00: 'Pod 3', I00: 'Pod 4', J00: 'Po
 
 /** Desktop navigation rail (≥ 900px). */
 export function Sidebar({ className }: { className?: string }) {
-  const items = NAV_ITEMS
+  const hasBase = useBaseAvailable()
+  const items = NAV_ITEMS.filter(item => item.id !== 'base' || hasBase)
   const pathname = usePathname()
   const lang = langFromPath(pathname)
   const active = activeNavId(pathname)
@@ -51,13 +52,12 @@ export function Sidebar({ className }: { className?: string }) {
       <div className="flex min-h-0 flex-col gap-0.5 overflow-y-auto">
         {items.map((n) => {
           const on = n.id === active
-          const group = n.id !== 'home'
+          const group = n.id === 'autopilot' || n.id === 'sleep' || n.id === 'settings' || n.id === 'system'
           const Chevron = on ? ChevronDown : ChevronRight
           return (
             <div key={n.id} className="flex flex-col gap-0.5">
               <Link
                 href={`/${lang}${n.href === '/' ? '' : n.href}`}
-                data-primary-destination={n.id}
                 aria-current={on && !group ? 'page' : undefined}
                 aria-expanded={group ? on : undefined}
                 className={cn(
@@ -65,13 +65,13 @@ export function Sidebar({ className }: { className?: string }) {
                   on ? (group ? 'text-fg hover:bg-active' : 'bg-active text-fg') : 'text-fg-2 hover:bg-active',
                 )}
               >
-                <n.icon size={16} aria-hidden />
+                <n.icon size={16} />
                 {n.label}
                 {group && <Chevron size={14} className="ml-auto text-fg-3" />}
               </Link>
               {group && on && (
                 <Suspense fallback={null}>
-                  <SubTree group={n.id as Exclude<NavId, 'home'>} lang={lang} statusDot={statusDot} />
+                  <SubTree group={n.id as 'autopilot' | 'sleep' | 'settings' | 'system'} lang={lang} statusDot={statusDot} />
                 </Suspense>
               )}
             </div>
@@ -117,40 +117,18 @@ export function Sidebar({ className }: { className?: string }) {
 }
 
 /**
- * Secondary routes stay under their five-tab owner. More expands the existing
- * Settings or System sections when a deep link selects either page.
+ * Sections nested under their parent (Autopilot, Sleep, Settings, System), indented along a
+ * hairline without icons. Only the current group is expanded.
  */
 function SubTree({ group, lang, statusDot }: {
-  group: Exclude<NavId, 'home'> | 'settings' | 'system'
+  group: Extract<NavId, 'autopilot' | 'sleep' | 'settings' | 'system'>
   lang: string
   statusDot?: 'ok' | 'warn'
 }) {
   const searchParams = useSearchParams()
-  const path = pathWithoutLang(usePathname())
-  const hasBase = useBaseAvailable()
-  const inRoute = (route: string) => path === route || path.startsWith(`${route}/`)
-  const nestedGroup = group === 'more'
-    ? inRoute('/settings') ? 'settings' : ['/system', '/sensors', '/debug', '/status'].some(inRoute) ? 'system' : null
-    : null
   let items: Array<{ id: string, label: string, href: string, dot?: 'ok' | 'warn' }>
   let current: string
-  if (group === 'tonight') {
-    items = [
-      { id: 'overview', label: 'Overview', href: `/${lang}` },
-      { id: 'schedule', label: 'Routines & wake alarms', href: `/${lang}/schedule` },
-      ...(hasBase ? [{ id: 'base', label: 'Base', href: `/${lang}/base` }] : []),
-    ]
-    current = inRoute('/schedule') ? 'schedule' : inRoute('/base') ? 'base' : 'overview'
-  }
-  else if (group === 'more') {
-    items = [
-      { id: 'overview', label: 'Overview', href: `/${lang}/more` },
-      { id: 'settings', label: 'Settings', href: `/${lang}/settings` },
-      { id: 'system', label: 'System', href: `/${lang}/system`, dot: statusDot },
-    ]
-    current = nestedGroup ?? 'overview'
-  }
-  else if (group === 'settings') {
+  if (group === 'settings') {
     items = SECTIONS.map(sec => ({
       id: sec.id,
       label: sec.label,
@@ -192,8 +170,7 @@ function SubTree({ group, lang, statusDot }: {
           <Link
             key={it.id}
             href={it.href}
-            aria-current={on && !nestedGroup ? 'page' : undefined}
-            aria-expanded={on && nestedGroup ? true : undefined}
+            aria-current={on ? 'page' : undefined}
             className={cn(
               'flex items-center gap-2 rounded-ctl px-2.5 py-[7px] text-sm no-underline transition-colors hover:no-underline',
               on ? 'bg-active text-fg' : 'text-fg-2 hover:bg-active',
@@ -204,7 +181,6 @@ function SubTree({ group, lang, statusDot }: {
           </Link>
         )
       })}
-      {nestedGroup && <SubTree group={nestedGroup} lang={lang} statusDot={statusDot} />}
     </div>
   )
 }

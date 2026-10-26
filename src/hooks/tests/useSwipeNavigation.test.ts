@@ -1,5 +1,5 @@
 /**
- * Tests for useSwipeNavigation — horizontal swipes between the five primary
+ * Tests for useSwipeNavigation — horizontal swipes between the three primary
  * screens. Filters out vertical scroll, slow swipes, and gestures that
  * start inside horizontally-scrollable elements.
  */
@@ -46,11 +46,11 @@ describe('useSwipeNavigation', () => {
       result.current.onTouchStart(touchEvent([{ clientX: 200, clientY: 100 }]))
       result.current.onTouchEnd(touchEvent([{ clientX: 50, clientY: 100 }]))
     })
-    expect(navMock.push).toHaveBeenCalledWith('/en/sleep')
+    expect(navMock.push).toHaveBeenCalledWith('/en/schedule')
   })
 
   it('navigates to the previous screen on a rightward swipe', () => {
-    navMock.pathname = '/en/sleep'
+    navMock.pathname = '/en/schedule'
     const { result } = renderHook(() => useSwipeNavigation())
     act(() => {
       result.current.onTouchStart(touchEvent([{ clientX: 50, clientY: 100 }]))
@@ -66,7 +66,7 @@ describe('useSwipeNavigation', () => {
       result.current.onTouchStart(touchEvent([{ clientX: 200, clientY: 100 }]))
       result.current.onTouchEnd(touchEvent([{ clientX: 50, clientY: 100 }]))
     })
-    expect(navMock.push).toHaveBeenCalledWith('/fr/sleep')
+    expect(navMock.push).toHaveBeenCalledWith('/fr/schedule')
   })
 
   it('defaults a missing pathname to the English home screen', () => {
@@ -76,12 +76,12 @@ describe('useSwipeNavigation', () => {
       result.current.onTouchStart(touchEvent([{ clientX: 200, clientY: 100 }]))
       result.current.onTouchEnd(touchEvent([{ clientX: 50, clientY: 100 }]))
     })
-    expect(navMock.push).toHaveBeenCalledWith('/en/sleep')
+    expect(navMock.push).toHaveBeenCalledWith('/en/schedule')
   })
 
   it('uses the latest pathname after rerender', () => {
     const { result, rerender } = renderHook(() => useSwipeNavigation())
-    navMock.pathname = '/fr/sleep'
+    navMock.pathname = '/fr/schedule'
     rerender()
 
     act(() => {
@@ -103,7 +103,7 @@ describe('useSwipeNavigation', () => {
   })
 
   it('does not navigate past the last screen', () => {
-    navMock.pathname = '/en/more'
+    navMock.pathname = '/en/sleep'
     const { result } = renderHook(() => useSwipeNavigation())
     act(() => {
       result.current.onTouchStart(touchEvent([{ clientX: 200, clientY: 100 }]))
@@ -127,7 +127,7 @@ describe('useSwipeNavigation', () => {
       result.current.onTouchStart(touchEvent([{ clientX: 200, clientY: 100 }]))
       result.current.onTouchEnd(touchEvent([{ clientX: 50, clientY: 180 }]))
     })
-    expect(navMock.push).toHaveBeenCalledWith('/en/sleep')
+    expect(navMock.push).toHaveBeenCalledWith('/en/schedule')
   })
 
   it('rejects swipes shorter than the threshold', () => {
@@ -145,7 +145,7 @@ describe('useSwipeNavigation', () => {
       result.current.onTouchStart(touchEvent([{ clientX: 200, clientY: 100 }]))
       result.current.onTouchEnd(touchEvent([{ clientX: 140, clientY: 100 }]))
     })
-    expect(navMock.push).toHaveBeenCalledWith('/en/sleep')
+    expect(navMock.push).toHaveBeenCalledWith('/en/schedule')
   })
 
   it('rejects swipes that take longer than 500ms', () => {
@@ -167,7 +167,7 @@ describe('useSwipeNavigation', () => {
     act(() => result.current.onTouchStart(touchEvent([{ clientX: 200, clientY: 100 }])))
     act(() => vi.advanceTimersByTime(500))
     act(() => result.current.onTouchEnd(touchEvent([{ clientX: 50, clientY: 100 }])))
-    expect(navMock.push).toHaveBeenCalledWith('/en/sleep')
+    expect(navMock.push).toHaveBeenCalledWith('/en/schedule')
   })
 
   it('ignores swipes inside horizontally-scrollable containers', () => {
@@ -193,27 +193,6 @@ describe('useSwipeNavigation', () => {
     expect(navMock.push).toHaveBeenCalledWith('/en/sleep')
   })
 
-  it.each([
-    ['/en/sleep', '/en/autopilot'], ['/en/autopilot', '/en/home'], ['/en/home', '/en/more'],
-    ['/fr/base', '/fr/sleep'], ['/fr/data', '/fr/autopilot'],
-  ])('swipes from %s to %s in the primary destination order', (pathname, expected) => {
-    navMock.pathname = pathname
-    const { result } = renderHook(() => useSwipeNavigation())
-    act(() => {
-      result.current.onTouchStart(touchEvent([{ clientX: 200, clientY: 100 }]))
-      result.current.onTouchEnd(touchEvent([{ clientX: 50, clientY: 100 }]))
-    })
-    expect(navMock.push).toHaveBeenCalledWith(expected)
-  })
-  it('maps legacy settings into More for a backward swipe', () => {
-    navMock.pathname = '/fr/settings'
-    const { result } = renderHook(() => useSwipeNavigation())
-    act(() => {
-      result.current.onTouchStart(touchEvent([{ clientX: 50, clientY: 100 }]))
-      result.current.onTouchEnd(touchEvent([{ clientX: 200, clientY: 100 }]))
-    })
-    expect(navMock.push).toHaveBeenCalledWith('/fr/home')
-  })
   it('does not navigate from an unknown path', () => {
     navMock.pathname = '/en/not-a-screen'
     const { result } = renderHook(() => useSwipeNavigation())

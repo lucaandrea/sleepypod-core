@@ -357,6 +357,7 @@ describe('TempStage', () => {
     expect(screen.queryByTestId('stage-canvas')).toBeNull()
     expect(screen.queryByTestId('stage-labels')).toBeNull()
     expect(screen.queryByTestId('stage-loading')).toBeNull()
+    expect(screen.queryByTestId('stage-panel')).toBeNull()
     expect(screen.getByTestId('stage-timeline')).toBeTruthy()
     expect(screen.getByTestId('stage-mode').textContent).toBe('Live')
     expect(screen.getByTestId('stage-hints').textContent).toContain('set temp on a side')

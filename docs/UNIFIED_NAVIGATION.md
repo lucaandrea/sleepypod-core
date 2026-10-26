@@ -1,50 +1,26 @@
-# Five shared destinations
+# SleepyPod navigation
 
-The web shell follows the approved Tonight, Sleep, Autopilot, Home and More
-order on phones and desktop. This matches the independently written native
-`SleepTab` contract in `lucaandrea/free-sleep` at
-`96e8a614956980d60a064c5d3816ef4f4b838989`. No native source is copied or changed.
+The current design follows the owner's updated SleepyPod direction. Phone tabs
+are **Temp, Schedule, Sleep**, matching the active `lucaandrea/sleepypod-ios`
+project. The older five-destination `free-sleep/ios` shell is not the active
+native UI. Future parity checks must inspect `Sleepypod/SleepypodApp.swift`
+in its own checkout rather than infer behavior from the original app.
 
-| Destination | Routes and secondary controls |
-| --- | --- |
-| Tonight | `/[lang]`, existing temperature cards and 3D stage; routines at `/schedule`, configured base at `/base` |
-| Sleep | `/sleep`, including its existing biometric and analysis views; `/data` remains a legacy entry |
-| Autopilot | `/autopilot`, including rule editing, activity and diagnostics |
-| Home | `/home`, bedroom input, MQTT and Apple Home setup |
-| More | `/more`, a real setup hub; existing `/settings` and `/system` pages remain directly accessible |
+On phones, Settings and the temperature-stage Settings shortcut keep Autopilot,
+Home, System, owner connection controls and configured base controls accessible.
+Desktop retains the direct SleepyPod sidebar. Existing `/more` bookmarks redirect
+to Settings. Added Free Sleep capabilities use these existing surfaces.
 
-The desktop rail expands the current destination. More keeps Settings and
-System section links; Tonight keeps routines and configured base controls.
-The phone bar has a stable five-item order regardless of base availability.
-Both temperature views have a localized Routines shortcut. Existing direct
-Settings routes and owner sign-out are preserved. The 3D toolbar uses its former
-Settings slot for Routines; settings remain available from More and from the
-standard page toolbar.
+The bottom tab bar grows with text size and safe-area insets. Its measured height
+reserves content space and keeps the fixed 3D bed above the bar. Labels remain
+unbroken and keyboard focus remains visible. Settings rows, segmented choices
+and temperature-control previews wrap within the available width. Swipes follow the three primary
+routes and do not hijack controls or the 3D stage.
 
-Legacy diagnostics routes `/sensors`, `/debug` and `/status` select More. The
-matcher uses whole path segments, so unrelated prefixes do not select a tab.
-Swipes use the same order and route ownership as the navigation; control
-drags, dialogs, canvases and horizontal scrollers keep their gesture handling.
-
-The bottom bar wraps links into rows and measures its actual height. Enlarged
-text and safe-area padding reserve corresponding space in both the page and
-the full-screen bed view. Every destination remains a keyboard-accessible link
-with at least a 44-pixel touch height; selected phone links use `aria-current`.
-Neutral light/dark tokens, the accessible temperature cards and reduced-motion
-behavior remain in place.
-
-## Scope and evidence
-
-This change aligns navigation and entry points. It does not claim full visual
-or feature parity: native HealthKit and model settings remain native features,
-and the existing temperature and base renderers remain separate web views.
-More describes those boundaries explicitly. No hardware command, persisted
-schedule, authorization rule or API contract changes here.
-
-Validation covers localized and legacy paths, nested desktop sections, unknown
-routes, base visibility and swipe ownership. Production-browser workflows use
-isolated authenticated fixture databases for all five destinations, old settings
-links, routine access in both temperature views, owner sign-out, light/dark
-screens, 320-pixel layout, enlarged text and keyboard navigation. The existing
-offline 3D workflow verifies that rendering needs no internet asset download.
-These checks are software evidence, not a deployment or physical qualification.
+Browser regression coverage checks secondary routes, owner sign-out, light/dark
+appearance, a 320px viewport at 200% text, keyboard navigation and the bed/tab-bar
+boundary. Offline WebGL and the 2D fallback remain covered. The fallback uses normal
+scroll flow, with its toolbar, both side controls and timeline in order rather
+than fixed overlapping regions. This is
+software/browser verification; it does not establish physical Pod behavior or
+complete feature parity with the independent native implementation.

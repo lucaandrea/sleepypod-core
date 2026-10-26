@@ -29,7 +29,6 @@ import { useAwayMode } from './useAwayMode'
 import { useNightPhases } from './useNightPhases'
 import { useSideTemperature } from './useSideTemperature'
 import { useTempNotices } from './useTempNotices'
-import { RoutinesLink } from './RoutinesLink'
 
 const TempStage = dynamic(() => import('../Stage/TempStage').then(m => m.TempStage), { ssr: false, loading: () => <div aria-hidden="true" className="fixed inset-0 z-30 bg-[#0b0b0c] min-[900px]:left-[224px]" /> })
 
@@ -45,7 +44,7 @@ const GRID = 'grid gap-3.5 min-[900px]:gap-4 min-[900px]:@min-[680px]:grid-cols-
 const CONTEXT = 'grid content-start gap-3.5 min-[900px]:gap-3 min-[900px]:@min-[680px]:col-span-2 min-[900px]:@min-[680px]:grid-cols-2 min-[900px]:@min-[976px]:col-span-1 min-[900px]:@min-[976px]:grid-cols-1'
 
 /**
- * Tonight: temperature controls and the current routine.
+ * Temp (home) screen.
  *
  * Device router wiring:
  * - device.getStatus (WS-preferred via useDeviceStatus) → per-side current/target
@@ -185,10 +184,9 @@ export const TempScreen = () => {
 
   const header = (
     <PageHeader
-      title="Tonight"
+      title="Temperature"
       right={(
         <>
-          <RoutinesLink />
           <AutopilotStatusChip className="no-underline" />
           <ViewSwitch view={view} onChange={setView} />
           <Button

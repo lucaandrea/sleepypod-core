@@ -12,7 +12,7 @@ import { useSideNames } from '@/src/hooks/useSideNames'
 import { cn } from '@/lib/utils'
 import { Card, IndexRow, InlineError, PageHeader, SectionLabel, SettingRow, Skeleton } from '@/src/components/ds'
 import { InternetToggleCard } from '@/src/components/status/InternetToggleCard'
-import { DOCS_URL, NAV_ITEMS, SECONDARY_NAV_ITEMS, langFromPath } from '@/src/components/AppShell/navItems'
+import { DOCS_URL, NAV_ITEMS, langFromPath } from '@/src/components/AppShell/navItems'
 import { useBaseAvailable } from '@/src/components/AppShell/useBaseAvailable'
 import { OwnerSessionControls } from '@/src/components/AppShell/OwnerSessionControls'
 import { UpdateCard } from '@/src/components/status/UpdateCard'
@@ -244,7 +244,7 @@ function SettingsIndex({ onOpen, className }: { onOpen: (id: SectionId) => void,
 
       <SectionLabel>CONTROLS</SectionLabel>
       <div className="rounded-card border border-line bg-surface px-4">
-        {[...NAV_ITEMS, ...SECONDARY_NAV_ITEMS].filter(item => ['base', 'autopilot', 'home', 'system'].includes(item.id) && (item.id !== 'base' || hasBase)).map(item => (
+        {NAV_ITEMS.filter(item => ['base', 'autopilot', 'home', 'system'].includes(item.id) && (item.id !== 'base' || hasBase)).map(item => (
           <Link key={item.id} href={`/${lang}${item.href}`} className="flex min-h-12 items-center gap-3 border-t border-line py-3.5 text-[15px] text-fg no-underline first:border-t-0 hover:bg-active hover:no-underline">
             <item.icon size={17} className="text-icon" aria-hidden />
             <span className="flex-1">{item.label}</span>
@@ -301,7 +301,7 @@ function SettingsIndex({ onOpen, className }: { onOpen: (id: SectionId) => void,
           href={DOCS_URL}
           target="_blank"
           rel="noopener noreferrer"
-          className="flex w-full items-center gap-3 px-0.5 py-3.5 text-[15px] text-fg no-underline hover:bg-active hover:no-underline"
+          className="flex w-full flex-wrap items-center gap-3 px-0.5 py-3.5 text-[15px] text-fg no-underline hover:bg-active hover:no-underline"
         >
           <BookOpen size={17} className="text-icon" />
           <span className="flex-1">Docs</span>

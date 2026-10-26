@@ -2,7 +2,7 @@
 
 import { useCallback, useRef } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
-import { matchedNavItem, PHONE_NAV_ITEMS } from '@/src/components/AppShell/navItems'
+import { PHONE_NAV_ITEMS } from '@/src/components/AppShell/navItems'
 
 /** Ordered screen routes for swipe navigation. */
 const SCREEN_ORDER = PHONE_NAV_ITEMS.map(item => item.href)
@@ -21,7 +21,7 @@ interface SwipeState {
 }
 
 /**
- * Hook that provides horizontal swipe navigation between the five primary screens.
+ * Hook that provides horizontal swipe navigation between the three primary screens.
  * Returns touch event handlers to attach to the swipeable container.
  *
  * Swipe right → previous screen, swipe left → next screen.
@@ -33,6 +33,14 @@ export function useSwipeNavigation() {
   const pathname = usePathname()
   const swipeRef = useRef<SwipeState | null>(null)
   const isNavigatingRef = useRef(false)
+
+  // Extract path without lang prefix
+  const getBasePath = useCallback(() => {
+    if (!pathname) return '/'
+    const segments = pathname.split('/')
+    const pathWithoutLang = '/' + segments.slice(2).join('/')
+    return pathWithoutLang === '' ? '/' : pathWithoutLang
+  }, [pathname])
 
   const getLang = useCallback(() => {
     return pathname?.split('/')[1] ?? 'en'
@@ -74,7 +82,10 @@ export function useSwipeNavigation() {
     const target = e.target as HTMLElement
     if (target.closest(INTERACTIVE_TARGETS)) return
 
-    const currentIndex = screenOrder.indexOf(matchedNavItem(pathname)?.href ?? '')
+    const basePath = getBasePath()
+    const currentIndex = screenOrder.findIndex(
+      path => basePath === path || (path !== '/' && basePath.startsWith(`${path}/`)),
+    )
     if (currentIndex === -1) return
 
     const direction = deltaX > 0 ? -1 : 1 // swipe right = prev, swipe left = next
@@ -92,7 +103,7 @@ export function useSwipeNavigation() {
     setTimeout(() => {
       isNavigatingRef.current = false
     }, 400)
-  }, [pathname, getLang, router, screenOrder])
+  }, [getBasePath, getLang, router, screenOrder])
 
   return {
     onTouchStart,

@@ -8,7 +8,7 @@ import { langFromPath } from './navItems'
 import { usePodHealth } from './usePodHealth'
 import { NotificationInbox } from './NotificationInbox'
 
-/** Direct settings shortcut, also available from the More destination. */
+/** Secondary destinations stay within reach without crowding the three phone tabs. */
 export function SettingsLink({ className, summary }: { className?: string, summary?: string }) {
   const lang = langFromPath(usePathname())
   return (

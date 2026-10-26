@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useEffect, useRef } from 'react'
 import { cn } from '@/lib/utils'
+import { useScheduleActive } from '@/src/hooks/useScheduleActive'
 import { activeNavId, langFromPath, PHONE_NAV_ITEMS } from './navItems'
 
 /** Phone bottom tab bar (< 900px). Respects the safe-area inset. */
@@ -12,6 +13,7 @@ export function TabBar({ className }: { className?: string }) {
   const pathname = usePathname()
   const lang = langFromPath(pathname)
   const active = activeNavId(pathname)
+  const { isActive: scheduleActive } = useScheduleActive()
   const navigation = useRef<HTMLElement>(null)
 
   // Large text and safe-area insets change the bar height; keep the stage above it.
@@ -37,7 +39,7 @@ export function TabBar({ className }: { className?: string }) {
       aria-label="Main"
       className={cn(
         'fixed inset-x-0 bottom-0 z-40 flex flex-wrap gap-x-1 border-t border-line bg-app px-2 pb-[calc(10px+env(safe-area-inset-bottom,0px))] pt-2.5 font-mono',
-        'text-[0.6875rem] tracking-[0.02em]',
+        'text-[0.6875rem] uppercase tracking-[0.06em]',
         className,
       )}
     >
@@ -54,7 +56,12 @@ export function TabBar({ className }: { className?: string }) {
               on ? 'text-fg' : 'text-fg-3',
             )}
           >
-            <n.icon size={21} aria-hidden />
+            <span className="relative">
+              <n.icon size={19} aria-hidden />
+              {n.id === 'schedule' && scheduleActive && (
+                <span className="absolute -right-1 -top-0.5 size-1.5 rounded-full bg-ok" aria-hidden />
+              )}
+            </span>
             <span className="whitespace-nowrap text-center">{n.label}</span>
           </Link>
         )
