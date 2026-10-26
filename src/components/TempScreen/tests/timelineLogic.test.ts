@@ -22,19 +22,21 @@ describe('timelineWindow', () => {
 
 describe('nightCurve', () => {
   const temps = [
-    row('sunday', '23:00', 80), row('sunday', '01:00', 70), row('sunday', '07:00', 84),
+    row('sunday', '23:00', 80), row('monday', '01:00', 70), row('monday', '07:00', 84),
+    row('sunday', '01:00', 99), row('sunday', '07:00', 98),
     row('sunday', '12:00', 99, false), row('monday', '23:00', 75),
   ]
-  it('places overnight points on the morning after', () => {
+  it('uses the following calendar morning, not the starting weekday\'s morning', () => {
     expect(nightCurve(temps, new Date(2026, 8, 27))).toEqual([
       { at: at(27, 23), temperature: 80 },
       { at: at(28, 1), temperature: 70 },
       { at: at(28, 7), temperature: 84 },
     ])
   })
-  it('moves a curve saved entirely after midnight to the next morning', () => {
-    const early = [row('sunday', '01:00', 70), row('sunday', '06:00', 82)]
+  it('places a morning-only calendar curve without inventing another day', () => {
+    const early = [row('monday', '01:00', 70), row('monday', '06:00', 82)]
     expect(nightCurve(early, new Date(2026, 8, 27)).map(p => p.at)).toEqual([at(28, 1), at(28, 6)])
+    expect(nightCurve(early, new Date(2026, 8, 28))).toEqual([])
   })
   it('is empty without enabled points for that day', () => {
     expect(nightCurve(temps, new Date(2026, 8, 29))).toEqual([])
