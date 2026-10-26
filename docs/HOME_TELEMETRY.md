@@ -75,8 +75,9 @@ The ambient accessory uses the same live cache. Missing, invalid or expired
 readings return HAP communication failure and StatusFault, rather than an invented
 20°C or an indefinitely cached value. Occupancy also faults when calibration or
 fresh data is unavailable. Stable accessory names and subtypes are preserved.
-Other HomeKit surfaces, notably thermostat optimistic/manual-intent display,
-remain separate and still need their own end-to-end qualification.
+Thermostats now also enforce [fresh reported state](HOMEKIT_REPORTED_STATE.md),
+with explicit staged targets kept separate and independent fault contributions.
+Actual Apple Home pairing, presentation and controls still need end-to-end qualification.
 
 Tests cover actual streaming dispatch/backlog/shutdown, both environmental wire
 formats, finite/sentinel/missing fields, source expiry, calibrated occupancy,
