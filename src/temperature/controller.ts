@@ -198,7 +198,7 @@ export class TemperatureController {
     return this.deps.withSideLock(side, () => this.setManualLocked(side, temperature, holdMs, durationSec))
   }
 
-  async setManualLocked(side: Side, temperature: number, holdMs = DEFAULT_HOLD_MS, durationSec?: number): Promise<TemperatureControlStatus> {
+  async setManualLocked(side: Side, temperature: number, holdMs = DEFAULT_HOLD_MS, durationSec?: number, validateBeforeApply?: () => void): Promise<TemperatureControlStatus> {
     if (!Number.isFinite(temperature) || temperature < MIN_TEMP || temperature > MAX_TEMP) {
       throw new Error('Temperature outside hardware bounds')
     }
@@ -214,6 +214,8 @@ export class TemperatureController {
     }
     await this.deps.connect()
     if (this.deps.isBlocked(side)) throw new TemperatureBlockedError()
+    // Conditional manual surfaces recheck their evidence after a reconnect, before any hold or hardware write.
+    validateBeforeApply?.()
     this.deps.onManualControl?.(side)
     const now = this.deps.now()
     const previous = this.deps.readHold(side)

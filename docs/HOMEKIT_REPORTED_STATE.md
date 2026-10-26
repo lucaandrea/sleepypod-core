@@ -26,9 +26,9 @@ flowchart LR
 - These temperatures retain the existing DAC level-to-Fahrenheit conversion.
   They are not independent mattress/water thermistor measurements. The derived
   current mode is a firmware-level indication, not physical heat-flow proof.
-- Target mode uses the fresh reported target level. The internal intended-power
-  latch still protects command ordering but is not substituted for reported
-  mode on HomeKit reads.
+- Target mode uses the fresh reported target level. An acknowledged power command can
+  support a queued slider gesture for at most fifteen seconds, but is never
+  substituted for reported mode on HomeKit reads.
 - A target explicitly staged while the side is OFF remains available as a
   **requested target**. It never supplies current temperature or evidence of
   power. A default power-on value is not displayed as a report.
@@ -51,10 +51,20 @@ contributes independently, including on direct reads. Fresh telemetry cannot
 clear a pump warning; clearing a pump warning cannot make stale telemetry
 healthy. No leak accessory, new identity or pairing reset is introduced.
 
-Commands retain their existing serialization, temperature bounds, pump guard,
-manual pause and staging behavior. An explicit power-off remains available to
-the handler even when status reads fail. Command success is not physical
-confirmation, and a fresh report is still required afterward.
+Commands retain serialization, temperature bounds, pump guard and manual pause.
+A slider change requires a fresh active session (non-neutral target plus a
+positive countdown) or a recent acknowledged write with no intervening hardware
+command. This replaces the unbounded intended-power latch. A fresh OFF report
+wins immediately; a retained target with zero countdown cannot restart heat.
+The remaining reported countdown can shorten that window. Rapid slider changes
+cannot renew either deadline. The controller
+rechecks this evidence after connecting and before persisting a manual hold.
+
+An unavailable report rejects the slider's hardware push while retaining its
+explicit requested value for a later deliberate ON. An explicit ON can still
+use that staged target or the existing 75°F default; OFF remains available even
+with missing telemetry or a tripped guard. Failed writes revoke their temporary
+command authority. No acknowledgment is presented as physical confirmation.
 
 ## Validation and deployment boundary
 
@@ -63,6 +73,9 @@ hardware responses, and the existing side-controller regression suite. They
 exercise startup, expiry without events, clock reversal, disconnection,
 intervening/delayed writes, recovery, independent faults, cleanup, off-side
 staging, rejected commands and explicit power-off with unavailable status.
+Write tests also cover stale/invalid countdowns, retained targets, concurrent
+AUTO/slider and OFF gestures, expiry without renewal, intervening commands,
+failed writes and evidence loss during connection establishment.
 
 The bridge identity, enabled/status/unpair API contracts, native occupancy wire
 contract and MQTT settings are unchanged. This is source validation. Actual

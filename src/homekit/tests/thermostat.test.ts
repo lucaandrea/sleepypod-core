@@ -9,7 +9,10 @@ const shouldBlock = vi.fn<() => boolean>().mockReturnValue(false)
 // controller boundary. Controller/hardware integration has its own real-DB tests.
 vi.mock('@/src/temperature/instance', () => ({
   getTemperatureController: () => ({
-    setManualLocked: setTemperature,
+    setManualLocked: (side: 'left' | 'right', target: number, _hold?: number, _duration?: number, validate?: () => void) => {
+      validate?.()
+      return setTemperature(side, target)
+    },
     powerOffLocked: (side: 'left' | 'right') => setPower(side, false),
   }),
 }))
@@ -40,7 +43,7 @@ afterEach(() => {
 })
 
 const status: DeviceStatus = {
-  leftSide: { currentTemperature: 75, targetTemperature: 70, currentLevel: -20, targetLevel: -45, heatingDuration: 0 },
+  leftSide: { currentTemperature: 75, targetTemperature: 70, currentLevel: -20, targetLevel: -45, heatingDuration: 900 },
   rightSide: { currentTemperature: 80, targetTemperature: 80, currentLevel: 0, targetLevel: 0, heatingDuration: 0 },
   waterLevel: 'ok',
   isPriming: false,

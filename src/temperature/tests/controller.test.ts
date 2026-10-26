@@ -44,6 +44,21 @@ function harness() {
 }
 
 describe('shared passive policy arbitration', () => {
+  it('revalidates a conditional manual target after connecting, before persistence or manual pause', async () => {
+    const context = harness(), paused = vi.fn()
+    let current = true
+    context.deps.onManualControl = paused
+    context.deps.connect = async () => {
+      current = false
+    }
+    await expect(withSideLock('left', () => context.controller.setManualLocked('left', 74, undefined, undefined, () => {
+      if (!current) throw new Error('HomeKit observation expired')
+    }))).rejects.toThrow('HomeKit observation expired')
+    expect(context.holds.left).toBeNull()
+    expect(context.apply).not.toHaveBeenCalled()
+    expect(paused).not.toHaveBeenCalled()
+  })
+
   it('records explicit manual intent before a write but leaves scheduled reconciliation alone', async () => {
     const context = harness()
     const paused = vi.fn()

@@ -25,11 +25,12 @@ import type { Side } from '@/src/hardware/types'
 import { MAX_LEVEL, MAX_TEMP, MIN_LEVEL, MIN_TEMP } from '@/src/hardware/types'
 import { getRequestedTargetF, setSidePowerOff, setSidePowerOn, setTargetTemperature } from './sideController'
 import { registerServiceFault } from './serviceFaults'
+import { freshThermostatReport } from './reportedState'
+export { THERMOSTAT_FRESH_MS } from './reportedState'
 
 const fahrenheitToCelsius = (value: number): number => ((value - 32) * 5) / 9
 const MIN_C = fahrenheitToCelsius(MIN_TEMP)
 const MAX_C = fahrenheitToCelsius(MAX_TEMP)
-export const THERMOSTAT_FRESH_MS = 15_000
 const TARGET_OFF = 0, TARGET_AUTO = 3
 const CURRENT_OFF = 0, CURRENT_HEAT = 1, CURRENT_COOL = 2
 
@@ -47,10 +48,9 @@ function temperature(value: unknown): number | null {
 function readThermostatState(monitor: DacMonitor, side: Side): Readings {
   const missing: Readings = { current: null, target: null, requestedMode: null, currentMode: null }
   try {
-    const status = monitor.getFreshStatus(THERMOSTAT_FRESH_MS)
-    const observedAt = monitor.getLastPollAt(), now = Date.now()
-    if (!status || observedAt === null || !Number.isSafeInteger(observedAt) || observedAt <= 0 || observedAt > now || now - observedAt >= THERMOSTAT_FRESH_MS) return missing
-    const reported = status[side === 'left' ? 'leftSide' : 'rightSide']
+    const observation = freshThermostatReport(monitor)
+    if (!observation) return missing
+    const reported = observation.status[side === 'left' ? 'leftSide' : 'rightSide']
     // A target explicitly staged while OFF is a request. No neutral/default value becomes a measurement.
     const requested = reported.targetLevel === 0 && reported.targetTemperature === null ? getRequestedTargetF(side) : reported.targetTemperature
     return {
