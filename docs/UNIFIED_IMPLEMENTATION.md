@@ -186,3 +186,16 @@ versioned native API expose mapping, status, bounded history and generated HA
 publishers. See [Room context](ROOM_CONTEXT.md) for the contract and qualification
 steps. Input is opt-in and does not activate rules or household actions. Synthetic
 loopback/browser evidence is separate from deployment and physical acceptance.
+
+## Full personal check-ins and atomic comfort mode
+
+The morning journal now preserves restfulness, habits and private notes alongside
+comfort feedback. The offline importer restores full original entries with source
+provenance, and the web editor uses revision checks, retained drafts and explicit
+conflict/deletion handling. Habit comparisons keep current Core and imported
+Free Sleep bed-presence sources separate; unknown data is not zero.
+
+The direct comfort mode operation reads current settings under the write lock,
+so a mode switch preserves concurrent limit/sensor updates. Active remains locked.
+Native adoption, the future one-occurrence alarm override, target deployment and
+physical qualification are separate gates. See [the API and storage contract](MORNING_JOURNAL.md).

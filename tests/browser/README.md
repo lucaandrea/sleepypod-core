@@ -59,3 +59,8 @@ continuous live processing, or target-pod resource budgets.
 CI runs these tests in the Browser Tests matrix entry. JUnit results, failure
 screenshots, and successful report/rollback screenshots are written under
 `test-results/browser` (ignored) and uploaded as CI artifacts.
+
+- Save and remove a full morning journal entry through authenticated REST/tRPC,
+  reject stale revisions (including deletion tombstones), preserve side-scoped
+  drafts, explicitly resolve a concurrent edit and verify phone overflow. Notes
+  and all check-ins are synthetic; no Pod, cloud model or automation is started.

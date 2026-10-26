@@ -33,6 +33,7 @@ export const capabilitiesSchema = z.object({
     nativeCompatibility: z.string().startsWith('/api/').nullable(),
     controls: z.literal('/api/v1/controls'),
     importedHistory: z.literal('/api/v1/history'),
+    journal: z.literal('/api/v1/journal'),
   }),
   authentication: z.object({ required: z.literal(true), bearer: z.literal(true), browserSession: z.literal(true) }),
   observations: z.object({ device: observationSchema, base: observationSchema }),
@@ -53,6 +54,7 @@ export const capabilitiesSchema = z.object({
     homeContext: featureSchema,
     nativeCompatibility: featureSchema,
     importedHistory: featureSchema,
+    morningJournal: featureSchema,
   }),
   baseScope: z.literal('whole_bed'),
   controlSemantics: z.object({
@@ -105,7 +107,7 @@ export function buildCapabilities(snapshot: CapabilitySnapshot): ControllerCapab
     apiVersion: 1,
     generatedAt: new Date(now).toISOString(),
     controller: { id: 'sleepypod-core', upstreamBaseline: '3.4.0', revision: snapshot.revision },
-    endpoints: { rest: '/api', trpc: '/api/trpc', openapi: '/api/openapi.json', nativeCompatibility: null, controls: '/api/v1/controls', importedHistory: '/api/v1/history' },
+    endpoints: { rest: '/api', trpc: '/api/trpc', openapi: '/api/openapi.json', nativeCompatibility: null, controls: '/api/v1/controls', importedHistory: '/api/v1/history', journal: '/api/v1/journal' },
     authentication: { required: true, bearer: true, browserSession: true },
     observations: { device: deviceObservation, base: baseObservation },
     features: {
@@ -126,6 +128,7 @@ export function buildCapabilities(snapshot: CapabilitySnapshot): ControllerCapab
       homeContext: feature(snapshot.roomContextFresh ? 'ready' : 'not_ready', snapshot.roomContextFresh ? 'fresh_mapped_room_measurements' : 'room_measurements_unavailable'),
       nativeCompatibility: feature('not_ready', 'compatibility_api_pending', false, false),
       importedHistory: feature('ready', 'read_only_history_api_check_snapshot_availability'),
+      morningJournal: feature('ready', 'local_revision_checked_journal'),
     },
     baseScope: 'whole_bed',
     controlSemantics: { acknowledgment: 'accepted_not_physically_verified', durableCommandReceipts: true, commandExpiry: true, receiptScope: 'versioned_controls_only', maxLifetimeMs: 60000 },

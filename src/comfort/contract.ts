@@ -77,7 +77,7 @@ export const comfortStatusSchema = z.object({
     available: z.literal(false),
     reason: z.literal(COMFORT_ACTIVATION_REASON),
   }),
-  features: z.object({ sensorAware: z.boolean(), followBedtime: z.boolean(), nightReports: z.boolean().optional() }),
+  features: z.object({ sensorAware: z.boolean(), followBedtime: z.boolean(), nightReports: z.boolean().optional(), modeOnly: z.boolean().optional() }),
   signals: comfortSignalsSchema.nullable().optional(),
   timing: bedtimeStatusSchema.nullable().optional(),
 })

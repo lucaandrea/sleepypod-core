@@ -3,7 +3,7 @@ import { defaultComfortState } from '@/src/comfort/policy'
 import { ComfortInputError } from '@/src/comfort/runtime'
 import { PreviewReportError } from '@/src/comfort/report-summary'
 
-const runtime = vi.hoisted(() => ({ status: vi.fn(), configure: vi.fn(), feedback: vi.fn() }))
+const runtime = vi.hoisted(() => ({ status: vi.fn(), configure: vi.fn(), setMode: vi.fn(), feedback: vi.fn() }))
 const reports = vi.hoisted(() => ({ list: vi.fn(), detail: vi.fn(), review: vi.fn() }))
 vi.mock('@/src/comfort/instance', () => ({ getComfortRuntime: () => runtime, getPreviewReports: () => reports }))
 const { comfortRouter } = await import('../comfort')
@@ -19,10 +19,19 @@ beforeEach(() => {
   }
   runtime.status.mockReturnValue(result)
   runtime.configure.mockResolvedValue(result)
+  runtime.setMode.mockResolvedValue(result)
   runtime.feedback.mockResolvedValue(result)
 })
 
 describe('personal comfort API contract', () => {
+  it('accepts a mode-only change and rejects extra settings and Active before dispatch', async () => {
+    await caller.mode({ side: 'right', mode: 'preview' })
+    expect(runtime.setMode).toHaveBeenCalledWith('right', 'preview')
+    await expect(caller.mode({ side: 'left', mode: 'active' })).rejects.toMatchObject({ code: 'PRECONDITION_FAILED' })
+    await expect(caller.mode({ side: 'left', mode: 'off', config: {} } as never)).rejects.toMatchObject({ code: 'BAD_REQUEST' })
+    expect(runtime.setMode).toHaveBeenCalledTimes(1)
+    expect(runtime.configure).not.toHaveBeenCalled()
+  })
   it('reads reports without starting the runtime and preserves actionable review conflicts', async () => {
     reports.list.mockResolvedValue({ apiVersion: 1, generatedAt: 1, side: 'left', items: [], targetNights: 7,
       ownerConfirmedNights: 0, activationAvailable: false })

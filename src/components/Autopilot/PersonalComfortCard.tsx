@@ -22,6 +22,7 @@ export function PersonalComfortCard() {
     void utils.comfort.get.invalidate()
   }
   const configuration = trpc.comfort.configure.useMutation({ onSuccess: refresh })
+  const mode = trpc.comfort.mode.useMutation({ onSuccess: refresh })
   const feedback = trpc.comfort.feedback.useMutation({ onSuccess: refresh })
   return (
     <Card className="p-5 sm:p-6">
@@ -35,6 +36,7 @@ export function PersonalComfortCard() {
           value={side}
           onChange={(value) => {
             configuration.reset()
+            mode.reset()
             feedback.reset()
             setSide(value)
           }}
@@ -47,22 +49,24 @@ export function PersonalComfortCard() {
         <PersonalComfortDetails
           key={`${side}:${JSON.stringify(query.data.state?.config)}`}
           data={query.data}
-          pending={configuration.isPending || feedback.isPending || Boolean(query.error)}
+          pending={configuration.isPending || mode.isPending || feedback.isPending || Boolean(query.error)}
           onConfigure={config => configuration.mutate({ side, config })}
+          onMode={value => mode.mutate({ side, mode: value })}
           onFeedback={report => feedback.mutate({ side, feedback: report })}
         />
       )}
-      {(configuration.error || feedback.error) && <p className="mt-4 text-sm text-danger" role="alert">{configuration.error?.message ?? feedback.error?.message}</p>}
+      {(configuration.error || mode.error || feedback.error) && <p className="mt-4 text-sm text-danger" role="alert">{configuration.error?.message ?? mode.error?.message ?? feedback.error?.message}</p>}
       {query.data?.features.nightReports && <PreviewNightReports key={side} side={side} />}
       {feedback.isSuccess && <p className="mt-3 text-sm text-fg-2" role="status">Check-in saved.</p>}
     </Card>
   )
 }
 
-export function PersonalComfortDetails({ data, pending, onConfigure, onFeedback }: {
+export function PersonalComfortDetails({ data, pending, onConfigure, onMode, onFeedback }: {
   data: ComfortStatus
   pending: boolean
   onConfigure(config: ComfortConfig): void
+  onMode?(mode: 'off' | 'preview'): void
   onFeedback(feedback: ComfortFeedback): void
 }) {
   const state = data.state
@@ -96,7 +100,15 @@ export function PersonalComfortDetails({ data, pending, onConfigure, onFeedback 
       {state && (
         <>
           <div className="flex flex-wrap items-center gap-3">
-            <Button disabled={pending || (Boolean(data.fault) && state.config.mode !== 'preview')} variant="primary" onClick={() => onConfigure({ ...state.config, mode: state.config.mode === 'preview' ? 'off' : 'preview' })}>
+            <Button
+              disabled={pending || (Boolean(data.fault) && state.config.mode !== 'preview')}
+              variant="primary"
+              onClick={() => {
+                const next = state.config.mode === 'preview' ? 'off' : 'preview'
+                if (onMode) onMode(next)
+                else onConfigure({ ...state.config, mode: next })
+              }}
+            >
               {state.config.mode === 'preview' ? 'Stop Preview' : 'Start Preview'}
             </Button>
             <span className="text-sm text-fg-2">

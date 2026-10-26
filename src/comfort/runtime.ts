@@ -65,7 +65,7 @@ export class ComfortRuntime {
       decision: fault || signalExpired || observation?.stateKey !== JSON.stringify(state) ? null : observation?.decision ?? null,
       runtime: this.running ? 'running' : 'stopped',
       activation: { available: false, reason: COMFORT_ACTIVATION_REASON },
-      features: { sensorAware: true, followBedtime: true, nightReports: true },
+      features: { sensorAware: true, followBedtime: true, nightReports: true, modeOnly: true },
       timing: fault || signalExpired || observation?.stateKey !== JSON.stringify(state) ? null : observation?.timing ?? null,
       signals: fault || signalExpired || observation?.stateKey !== JSON.stringify(state) ? null : signals ?? null,
     }
@@ -77,14 +77,29 @@ export class ComfortRuntime {
     if (config.followBedtime && !config.sensorAware) throw new ComfortInputError('Bed-entry timing requires the Pod sensor guard.')
     await this.deps.withSideLock(side, async () => {
       const state = this.recoverPause(side)
-      this.deps.store.commit(side, { ...state, config },
-        comfortEvent(this.deps.now(), 'configuration', `Personal comfort set to ${config.mode}.`))
-      if (state.config.followBedtime !== config.followBedtime || state.config.mode !== config.mode || !config.sensorAware) this.entryTrackers[side].reset()
-      this.observations[side] = undefined
-      this.recorded[side] = undefined
-      this.faults[side] = undefined
+      this.commitConfiguration(side, state, config)
     })
     return this.status(side)
+  }
+
+  /** Read settings inside the same lock as the write; a mode switch cannot restore stale limits. */
+  async setMode(side: Side, mode: ComfortConfig['mode']): Promise<ComfortStatus> {
+    comfortConfigSchema.shape.mode.parse(mode)
+    if (mode === 'active') throw new Error(COMFORT_ACTIVATION_REASON)
+    await this.deps.withSideLock(side, async () => {
+      const state = this.recoverPause(side)
+      this.commitConfiguration(side, state, { ...state.config, mode })
+    })
+    return this.status(side)
+  }
+
+  private commitConfiguration(side: Side, state: ComfortState, config: ComfortConfig): void {
+    this.deps.store.commit(side, { ...state, config },
+      comfortEvent(this.deps.now(), 'configuration', `Personal comfort set to ${config.mode}.`))
+    if (state.config.followBedtime !== config.followBedtime || state.config.mode !== config.mode || !config.sensorAware) this.entryTrackers[side].reset()
+    this.observations[side] = undefined
+    this.recorded[side] = undefined
+    this.faults[side] = undefined
   }
 
   async feedback(side: Side, input: ComfortFeedback): Promise<ComfortStatus> {

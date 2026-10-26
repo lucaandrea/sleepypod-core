@@ -53,7 +53,12 @@ Only enable a feature when this controller reports it.
 software readiness does not mean a snapshot exists. Legacy presence and
 five-minute vitals remain a separate, unqualified source and never count as
 Preview nights. See [Imported history](IMPORTED_HISTORY.md) for pagination,
-units and the remaining native journal/Health/coaching boundaries.
+units and the remaining Health/coaching boundaries.
+
+`morningJournal` and `endpoints.journal` advertise the full private check-in API.
+`comfort.get.features.modeOnly` advertises the atomic Off/Preview operation.
+Both use direct versioned contracts, with revision conflicts for journal edits;
+see [Morning journal and comfort mode](MORNING_JOURNAL.md).
 
 Durable command receipts and expiry are implemented **only** for the versioned
 control endpoint advertised by `endpoints.controls`, with

@@ -52,6 +52,14 @@ export const comfortRouter = router({
       }
       return getComfortRuntime().configure(input.side, input.config)
     }),
+  mode: publicProcedure
+    .meta({ openapi: { method: 'POST', path: '/v1/comfort/mode', tags: ['Autopilot'] } })
+    .input(z.object({ side: sideSchema, mode: comfortConfigSchema.shape.mode }).strict())
+    .output(comfortStatusSchema)
+    .mutation(({ input }) => {
+      if (input.mode === 'active') throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'Active comfort still requires hardware qualification and reviewed Preview nights.' })
+      return getComfortRuntime().setMode(input.side, input.mode)
+    }),
   feedback: publicProcedure
     .meta({ openapi: { method: 'POST', path: '/v1/comfort/feedback', tags: ['Autopilot'] } })
     .input(z.object({ side: sideSchema, feedback: comfortFeedbackSchema }).strict())

@@ -37,6 +37,24 @@ function harness() {
 }
 
 describe('production personal comfort Preview', () => {
+  it('switches only mode after concurrent settings writes and preserves learning and manual pause', async () => {
+    const { runtime, store, pending, input } = harness()
+    pending.left = input.now
+    const config = { mode: 'off' as const, minimumF: 72, maximumF: 91, sensorAware: true, followBedtime: true }
+    await Promise.all([runtime.configure('left', config), runtime.setMode('left', 'preview')])
+    expect(store.read('left')).toMatchObject({ config: { ...config, mode: 'preview' }, offsetF: -2,
+      pausedUntil: input.now + MANUAL_PAUSE_MS, lastAppliedAt: 0, lastTargetF: null })
+    expect(store.read('right')).toEqual(defaultComfortState())
+    expect(runtime.status('left').features.modeOnly).toBe(true)
+    const before = store.read('left')
+    await expect(runtime.setMode('left', 'active')).rejects.toThrow('Hardware qualification')
+    expect(store.read('left')).toEqual(before)
+    store.commit = () => {
+      throw new Error('Synthetic storage failure')
+    }
+    await expect(runtime.setMode('left', 'off')).rejects.toThrow('Synthetic storage failure')
+    expect(store.read('left')).toEqual(before)
+  })
   it('captures report provenance only for bounded Preview observations and changes the runtime identity after restart', async () => {
     const { deps, input, store } = harness()
     if (!input.window) throw new Error('Fixture requires a routine')
