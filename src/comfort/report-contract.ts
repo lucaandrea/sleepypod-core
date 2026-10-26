@@ -15,6 +15,7 @@ export const previewEvidenceSchema = z.object({
   format: z.literal(1), runId: z.string().uuid(),
   environment: z.enum(['production', 'test', 'development', 'unknown']),
   buildRevision: z.string().regex(/^[a-f0-9]{7,40}$/).nullable(),
+  hardwareIdentity: reportIdSchema.nullable().optional(),
   session: z.string().min(1).max(500), start: timestamp, end: timestamp, timezone,
   scheduleRevision: reportIdSchema,
   policy: z.object({ minimumF: z.number().min(55).max(110), maximumF: z.number().min(55).max(110),

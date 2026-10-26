@@ -53,6 +53,7 @@ export const capabilitiesSchema = z.object({
     personalStageModels: featureSchema,
     personalComfort: featureSchema,
     personalComfortPreview: featureSchema,
+    personalComfortOwnerReview: featureSchema.optional(),
     musicVibration: featureSchema,
     mqtt: featureSchema,
     homeContext: featureSchema,
@@ -79,6 +80,7 @@ export interface CapabilitySnapshot {
   base: BaseStatus | null
   mqttConnected: boolean
   comfortPreviewRunning?: boolean
+  comfortActive?: boolean
   roomContextFresh?: boolean
 }
 
@@ -127,7 +129,8 @@ export function buildCapabilities(snapshot: CapabilitySnapshot): ControllerCapab
       alarmSnooze: feature('ready', 'per_alarm_snooze_length_and_taper'),
       curveLibrary: feature('ready', 'calendar_curves_with_bedtime_ownership_guard'),
       personalStageModels: feature('ready', 'validated_library_explicit_selection_rules_fallback'),
-      personalComfort: feature('not_ready', 'personal_comfort_activation_unqualified', false, false),
+      personalComfort: feature(snapshot.comfortActive ? 'ready' : 'not_ready', snapshot.comfortActive ? 'owner_activation_current_live_guards_required' : 'personal_comfort_activation_unqualified', true),
+      personalComfortOwnerReview: feature('ready', 'source_bound_qualification_and_seven_preview_nights'),
       personalComfortPreview: feature(snapshot.comfortPreviewRunning ? 'ready' : 'not_ready', snapshot.comfortPreviewRunning ? 'preview_only' : 'preview_runtime_stopped'),
       musicVibration: feature('not_ready', 'hardware_protocol_unqualified', true, false),
       mqtt: feature(snapshot.mqttConnected ? 'ready' : 'not_ready', snapshot.mqttConnected ? 'broker_connected' : 'broker_disconnected'),

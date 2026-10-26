@@ -4,8 +4,9 @@ import { ComfortInputError } from '@/src/comfort/runtime'
 import { PreviewReportError } from '@/src/comfort/report-summary'
 
 const runtime = vi.hoisted(() => ({ status: vi.fn(), configure: vi.fn(), setMode: vi.fn(), feedback: vi.fn() }))
+const owner = vi.hoisted(() => ({ status: vi.fn(), prepare: vi.fn(), confirm: vi.fn(), retest: vi.fn() }))
 const reports = vi.hoisted(() => ({ list: vi.fn(), detail: vi.fn(), review: vi.fn() }))
-vi.mock('@/src/comfort/instance', () => ({ getComfortRuntime: () => runtime, getPreviewReports: () => reports }))
+vi.mock('@/src/comfort/instance', () => ({ getComfortRuntime: () => runtime, getPreviewReports: () => reports, getComfortOwner: () => owner }))
 const { comfortRouter } = await import('../comfort')
 const caller = comfortRouter.createCaller({})
 
@@ -24,6 +25,14 @@ beforeEach(() => {
 })
 
 describe('personal comfort API contract', () => {
+  it('accepts only server-issued owner review references and preserves gate failures', async () => {
+    owner.prepare.mockRejectedValue(new PreviewReportError('Seven matching nights required', 'PRECONDITION_FAILED'))
+    await expect(caller.prepareOwnerReview({ side: 'left', purpose: 'activation', kind: null })).rejects.toMatchObject({ code: 'PRECONDITION_FAILED' })
+    await expect(caller.confirmOwnerReview({ side: 'left', id: 'not-an-id', confirmed: true, note: '' })).rejects.toMatchObject({ code: 'BAD_REQUEST' })
+    await expect(caller.prepareOwnerReview({ side: 'left', purpose: 'activation', kind: null, evidence: {} } as never)).rejects.toMatchObject({ code: 'BAD_REQUEST' })
+    expect(owner.confirm).not.toHaveBeenCalled()
+    expect(runtime.configure).not.toHaveBeenCalled()
+  })
   it('accepts a mode-only change and rejects extra settings and Active before dispatch', async () => {
     await caller.mode({ side: 'right', mode: 'preview' })
     expect(runtime.setMode).toHaveBeenCalledWith('right', 'preview')

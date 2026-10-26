@@ -30,6 +30,7 @@ export async function readCapabilities() {
     },
     base: base?.status() ?? null,
     mqttConnected: getBridgeStatus().connected,
+    comfortActive: ['left', 'right'].some(side => getComfortRuntimeIfRunning()?.status(side as 'left' | 'right').activation.available === true),
     comfortPreviewRunning: getComfortRuntimeIfRunning()?.isRunning() ?? false,
     roomContextFresh: Object.keys(getRoomContext().signals()).length > 0,
   })

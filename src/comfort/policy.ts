@@ -56,6 +56,7 @@ export interface ComfortContext {
   device: {
     observedAt: number | null
     powered: boolean
+    offConfirmed?: boolean
     waterAdequate: boolean | null
     priming: boolean
     vibrating: boolean

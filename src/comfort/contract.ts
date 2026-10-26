@@ -48,7 +48,7 @@ export const comfortDecisionSchema = z.object({
 
 export const comfortEventSchema = z.object({
   at: timestamp,
-  kind: z.enum(['preview', 'configuration', 'feedback', 'manual_pause']),
+  kind: z.enum(['preview', 'active', 'configuration', 'feedback', 'manual_pause']),
   session: z.string().nullable(),
   message: z.string(),
   proposedF: z.number().nullable(),
@@ -76,10 +76,10 @@ export const comfortStatusSchema = z.object({
   history: z.array(comfortEventSchema),
   runtime: z.enum(['running', 'stopped']),
   activation: z.object({
-    available: z.literal(false),
-    reason: z.literal(COMFORT_ACTIVATION_REASON),
+    available: z.boolean(),
+    reason: z.string(),
   }),
-  features: z.object({ sensorAware: z.boolean(), followBedtime: z.boolean(), nightReports: z.boolean().optional(), modeOnly: z.boolean().optional() }),
+  features: z.object({ sensorAware: z.boolean(), followBedtime: z.boolean(), nightReports: z.boolean().optional(), modeOnly: z.boolean().optional(), ownerActivation: z.boolean().optional() }),
   signals: comfortSignalsSchema.nullable().optional(),
   timing: bedtimeStatusSchema.nullable().optional(),
 })

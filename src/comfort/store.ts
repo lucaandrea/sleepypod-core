@@ -1,4 +1,5 @@
 import { synchronizeJournalComfort } from '@/src/journal/store'
+import { durableTransaction } from '@/src/db/durable'
 import { previewReportId } from './report-evidence'
 import type Database from 'better-sqlite3'
 import type { Side } from '@/src/hardware/types'
@@ -7,7 +8,7 @@ import { defaultComfortState, type ComfortFeedback, type ComfortState } from './
 
 export interface ComfortStore {
   read(side: Side): ComfortState
-  commit(side: Side, state: ComfortState, event?: ComfortEvent): void
+  commit(side: Side, state: ComfortState, event?: ComfortEvent, durable?: boolean): void
   history(side: Side): ComfortEvent[]
   feedback(side: Side): ComfortFeedback[]
   saveFeedback(side: Side, feedback: ComfortFeedback, event: ComfortEvent): void
@@ -21,13 +22,15 @@ export function createComfortStore(database: Database.Database): ComfortStore {
       const row = database.prepare('SELECT state FROM comfort_states WHERE side = ?').get(side) as { state: string } | undefined
       return row ? comfortStateSchema.parse(JSON.parse(row.state)) : defaultComfortState()
     },
-    commit(side, state, event) {
+    commit(side, state, event, durable = false) {
       const encoded = JSON.stringify(comfortStateSchema.parse(state))
       const eventJson = event ? JSON.stringify(comfortEventSchema.parse(event)) : null
-      database.transaction(() => {
+      const write = () => {
         database.prepare('INSERT INTO comfort_states (side, state) VALUES (?, ?) ON CONFLICT(side) DO UPDATE SET state = excluded.state').run(side, encoded)
         if (event && eventJson) database.prepare('INSERT INTO comfort_events (side, observed_at, event, report_id) VALUES (?, ?, ?, ?)').run(side, event.at, eventJson, event.preview ? previewReportId(event.preview) : null)
-      })()
+      }
+      if (durable) durableTransaction(database, write)
+      else database.transaction(write)()
     },
     history(side) {
       const rows = database.prepare('SELECT event FROM comfort_events WHERE side = ? ORDER BY observed_at DESC, id DESC LIMIT 60').all(side) as { event: string }[]

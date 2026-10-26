@@ -309,6 +309,13 @@
       "when": 1793020717510,
       "tag": "0043_temperature_applications",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "6",
+      "when": 1793024990963,
+      "tag": "0044_comfort_owner_activation",
+      "breakpoints": true
     }
   ]
 }

@@ -97,10 +97,12 @@ describe('capability evidence contract', () => {
     const result = buildCapabilities(input)
     expect(result.features.deviceTelemetry.runtime).toBe('not_ready')
     expect(result.features.basePosition.runtime).toBe('not_ready')
-    for (const key of ['personalComfort', 'nativeCompatibility', 'musicVibration'] as const) {
+    for (const key of ['nativeCompatibility', 'musicVibration'] as const) {
       expect(result.features[key]).toMatchObject({ implemented: false, runtime: 'not_ready' })
     }
     expect(result.endpoints.nativeCompatibility).toBeNull()
+    expect(result.features.personalComfort).toMatchObject({ implemented: true, runtime: 'not_ready', physicalVerification: 'unverified' })
+    expect(result.features.personalComfortOwnerReview?.implemented).toBe(true)
     expect(result.features.mqtt.runtime).toBe('not_ready')
     input.mqttConnected = true
     expect(buildCapabilities(input).features.mqtt.runtime).toBe('ready')

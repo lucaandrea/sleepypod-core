@@ -39,7 +39,7 @@ describe('authenticated versioned capability discovery', () => {
     expect(response.headers.get('vary')).toBe('Authorization, Cookie')
     const expected = await capabilitiesRouter.createCaller({}).get({})
     expect(await response.json()).toEqual(expected)
-    expect(expected.features.personalComfort.implemented).toBe(false)
+    expect(expected.features.personalComfort).toMatchObject({ implemented: true, runtime: 'not_ready', physicalVerification: 'unverified' })
   })
 
   it('rejects browser origins from another site even with a valid bearer', async () => {

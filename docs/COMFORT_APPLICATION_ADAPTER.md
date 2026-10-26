@@ -1,13 +1,13 @@
 # Personal comfort execution adapter
 
-This revision implements and tests the **execution** portion of Active comfort.
-It does **not** enable Active. Production still constructs the Preview runtime,
-the owner API still rejects Active, and a migrated Active setting remains inert.
-There is no environment-variable or client-supplied qualification bypass.
+The execution adapter is wired through the owner activation service documented in
+[Owner activation](COMFORT_OWNER_ACTIVATION.md). Off and Preview remain inert;
+a saved Active setting alone never authorizes a command. There is no environment
+variable or client-supplied qualification bypass.
 
 ```mermaid
 flowchart LR
-  Review[Future owner activation service] --> Admission[Revocable admission]
+  Review[Owner qualification and seven reviewed nights] --> Admission[Revocable admission]
   Admission --> Policy[Fresh bounded comfort decision]
   Policy --> Authority[Shared temperature authority]
   Authority --> Reserve[Persist comfort reservation]
@@ -47,7 +47,7 @@ revoked proposal.
 `comfort_states.state.application` is optional for backward-compatible reads.
 It records the policy request UUID, segment, target and preceding reported
 target, reservation time, nullable completion time, outcome and shared-journal
-receipt UUID. The reservation is committed before the shared temperature journal
+receipt UUID. The reservation is committed with SQLite FULL synchronous durability before the shared temperature journal
 or hardware call. The separate commits intentionally leave uncertainty on a
 crash between them. No new SQL migration is needed for this versioned JSON field.
 
@@ -63,30 +63,22 @@ persists `attempting` or `unknown`. Either withholds later personal adjustments,
 including after a restart, an elapsed correction interval or a mode change.
 Manual controls, shutdown and ordinary routines remain separate authorities.
 There is deliberately no automatic retry or automatic clearing of uncertainty.
-The owner review/resolution workflow remains to be implemented before activation.
+The owner recovery workflow archives the uncertain application, returns to Preview and persists a six-hour pause. It neither replays the command nor labels it successful.
 
 Unexpected target changes seen during selection latch a hold in memory without
 writing during a status read. The next adapter evaluation persists the six-hour
 pause under the side lock before admitting another proposal. Normal explicit
 manual controls continue to use the existing durable manual-pause path.
 
-## Integration still required
+## Runtime integration
 
-The adapter is not constructed by production yet. `ComfortAdmission` is an
-internal dependency boundary, **not evidence by itself**. Its production provider
-must validate actual hardware-qualification records and seven distinct real,
-source-backed, owner-reviewed Preview nights; bind the owner's activation to
-the reviewed configuration/calibration; and revoke it on relevant changes.
-It must not mint an admission from a checkbox, an elapsed date, a model opinion,
-an environment flag, or an unverified client-supplied count.
-
-That service also needs the reviewable activation UI/API and explicit resolution
-of unconfirmed attempts. Then wire the adapter after the runtime's learning and
-journal transaction, outside its side lock, with stop/reconfiguration invalidation.
-Its `readContext` dependency must not call the temperature authority's `status`
-method: eligibility is itself called by arbitration, so doing so recurses.
-It must read fresh source observations and retain independent timestamp/quality
-checks. The current production `readComfortContext` needs that split first.
+The owner service verifies source-bound qualification and seven distinct reviewed
+nights before supplying `ComfortAdmission`. The runtime learns and commits its
+observation inside the side lock, then reconciles the adapter outside that lock.
+Stop, configuration changes and runtime teardown invalidate pending generations.
+The adapter's context reader omits arbitration lookup to avoid recursive selection.
+An adapter that has never published a policy does not trigger baseline reconciliation
+when evaluating Preview or an unqualified saved Active state.
 
 Bed-entry phase shifting remains Preview-only: this adapter withholds any
 configuration with `followBedtime` enabled until its Active phase mapping is

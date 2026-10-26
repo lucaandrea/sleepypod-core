@@ -2,6 +2,24 @@ import { sql } from 'drizzle-orm'
 import { index, integer, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
 import type { DayOfWeek } from '@/src/lib/scheduleTime'
 
+// Source snapshots are server-created. Owner confirmation is distinct from sensor/command evidence.
+export const comfortOwnerReviews = sqliteTable('comfort_owner_reviews', {
+  id: text('id').primaryKey(), side: text('side').notNull(), createdAt: integer('created_at').notNull(),
+  expiresAt: integer('expires_at').notNull(), review: text('review').notNull(), consumedAt: integer('consumed_at'),
+}, table => [index('comfort_owner_reviews_expiry').on(table.expiresAt)])
+export const comfortQualifications = sqliteTable('comfort_qualifications', {
+  sequence: integer('sequence').primaryKey({ autoIncrement: true }), id: text('id').notNull().unique(),
+  side: text('side').notNull(), kind: text('kind').notNull(), record: text('record').notNull(),
+}, table => [index('comfort_qualifications_side_kind').on(table.side, table.kind, table.sequence)])
+export const comfortActivations = sqliteTable('comfort_activations', {
+  id: text('id').primaryKey(), side: text('side').notNull(), createdAt: integer('created_at').notNull(),
+  snapshot: text('snapshot').notNull(), revokedAt: integer('revoked_at'), reason: text('reason'),
+}, table => [index('comfort_activations_side').on(table.side, table.createdAt)])
+export const comfortResolutions = sqliteTable('comfort_resolutions', {
+  id: text('id').primaryKey(), side: text('side').notNull(), createdAt: integer('created_at').notNull(),
+  snapshot: text('snapshot').notNull(), note: text('note').notNull(),
+})
+
 // Attempted commands are separate from proposals and firmware-reported sensor state.
 export const temperatureApplications = sqliteTable('temperature_applications', {
   id: integer('id').primaryKey({ autoIncrement: true }),

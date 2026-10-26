@@ -3,7 +3,8 @@ import { PreviewReportError } from '@/src/comfort/report-summary'
 import { TRPCError } from '@trpc/server'
 import { z } from 'zod'
 import { comfortConfigSchema, comfortFeedbackSchema, comfortStatusSchema } from '@/src/comfort/contract'
-import { getComfortRuntime, getPreviewReports } from '@/src/comfort/instance'
+import { getComfortOwner, getComfortRuntime, getPreviewReports } from '@/src/comfort/instance'
+import { ownerConfirmSchema, ownerPrepareSchema, ownerReviewSchema, ownerStatusSchema, qualificationKindSchema } from '@/src/comfort/owner-contract'
 import { ComfortInputError } from '@/src/comfort/runtime'
 import { publicProcedure, router } from '../trpc'
 
@@ -19,6 +20,23 @@ async function reportResult<Result>(work: () => Promise<Result>): Promise<Result
 }
 
 export const comfortRouter = router({
+  owner: publicProcedure
+    .meta({ openapi: { method: 'GET', path: '/v1/comfort/owner', tags: ['Autopilot'] } })
+    .input(z.object({ side: sideSchema }).strict()).output(ownerStatusSchema)
+    .query(({ input }) => reportResult(() => getComfortOwner().status(input.side))),
+  prepareOwnerReview: publicProcedure
+    .meta({ openapi: { method: 'POST', path: '/v1/comfort/owner/prepare', tags: ['Autopilot'] } })
+    .input(ownerPrepareSchema).output(ownerReviewSchema)
+    .mutation(({ input }) => reportResult(() => getComfortOwner().prepare(input))),
+  confirmOwnerReview: publicProcedure
+    .meta({ openapi: { method: 'POST', path: '/v1/comfort/owner/confirm', tags: ['Autopilot'] } })
+    .input(ownerConfirmSchema).output(z.object({ saved: z.literal(true) }))
+    .mutation(({ input }) => reportResult(() => getComfortOwner().confirm(input))),
+  retestQualification: publicProcedure
+    .meta({ openapi: { method: 'POST', path: '/v1/comfort/owner/retest', tags: ['Autopilot'] } })
+    .input(z.object({ side: sideSchema, kind: qualificationKindSchema, expectedId: z.string().uuid() }).strict())
+    .output(z.object({ saved: z.literal(true) }))
+    .mutation(({ input }) => reportResult(() => getComfortOwner().retest(input.side, input.kind, input.expectedId))),
   reports: publicProcedure
     .meta({ openapi: { method: 'GET', path: '/v1/comfort/reports', tags: ['Autopilot'] } })
     .input(z.object({ side: sideSchema }).strict())
@@ -45,7 +63,7 @@ export const comfortRouter = router({
     .output(comfortStatusSchema)
     .mutation(async ({ input }) => {
       if (input.config.mode === 'active') {
-        throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'Only Off and Preview are available until the remaining adapters and qualification gates are complete.' })
+        throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'Active requires a separate owner activation review with current qualification and seven reviewed Preview nights.' })
       }
       if (input.config.followBedtime && !input.config.sensorAware) {
         throw new TRPCError({ code: 'BAD_REQUEST', message: 'Bed-entry timing requires the Pod sensor guard.' })
