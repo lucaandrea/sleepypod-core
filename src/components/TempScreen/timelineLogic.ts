@@ -5,7 +5,6 @@ import { DAYS_OF_WEEK } from '@/src/lib/scheduleTime'
 
 const MINUTE = 60_000
 const HOUR = 60 * MINUTE
-const HALF_DAY_MIN = 12 * 60
 /** Gaps shorter than this between a schedule edge and presence aren't worth a label. */
 const MISMATCH_MIN_MS = 15 * MINUTE
 
@@ -39,17 +38,15 @@ export function timelineWindow(now: Date): TimelineWindow {
   }
 }
 
-/**
- * A night's set points on absolute time. A curve saved entirely before noon
- * belongs to the morning after `midnight` (same rule as the Scheduler lanes).
- */
+/** Project actual calendar rows onto one displayed night without changing their weekdays. */
 export function nightCurve(temps: TempRow[] | undefined, midnight: Date): CurvePoint[] {
   const tl = buildTimeline(nightSetPoints(temps, DAYS_OF_WEEK[midnight.getDay()]))
-  const shift = tl.length > 0 && tl[tl.length - 1].minutes < HALF_DAY_MIN ? 24 * 60 : 0
-  return tl.map(p => ({
-    at: new Date(midnight.getFullYear(), midnight.getMonth(), midnight.getDate(), 0, p.minutes + shift).getTime(),
-    temperature: p.temperature,
-  }))
+  return tl.flatMap((point) => {
+    const at = new Date(midnight.getFullYear(), midnight.getMonth(), midnight.getDate(), 0, point.minutes)
+    // Match cron's midnight-gap exception; ordinary spring gaps shift forward.
+    if (Math.floor(point.minutes / 60) % 24 === 0 && at.getHours() !== 0) return []
+    return [{ at: at.getTime(), temperature: point.temperature }]
+  })
 }
 
 export interface SleepRecordLike {
