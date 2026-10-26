@@ -636,3 +636,25 @@ export const stageModelLibrary = sqliteTable('stage_model_library', {
   modelHash: text('model_hash').notNull(),
   uploadedAt: integer('uploaded_at', { mode: 'timestamp' }).notNull(),
 }, table => [index('stage_model_library_side_idx').on(table.side), uniqueIndex('stage_model_library_side_hash').on(table.side, table.modelHash)])
+
+// Temporary wake changes never rewrite alarm_schedules. Null records retain a
+// generation after restore so stale clients cannot replay a prior change.
+export const alarmOverrides = sqliteTable('alarm_overrides', {
+  side: text('side', { enum: ['left', 'right'] }).primaryKey(),
+  revision: text('revision').notNull(),
+  record: text('record'),
+})
+
+// One durable attempt per original weekly occurrence, shared by early wake,
+// changed-time and normal callbacks. An unknown transport result is not retried.
+export const alarmOccurrences = sqliteTable('alarm_occurrences', {
+  side: text('side', { enum: ['left', 'right'] }).notNull(),
+  scheduleId: integer('schedule_id').notNull(),
+  originalAt: integer('original_at').notNull(),
+  effectiveAt: integer('effective_at').notNull(),
+  outcome: text('outcome', { enum: ['attempting', 'acknowledged', 'unknown'] }).notNull(),
+  attemptedAt: integer('attempted_at').notNull(),
+}, table => [
+  uniqueIndex('idx_alarm_occurrences_identity').on(table.side, table.scheduleId, table.originalAt),
+  index('idx_alarm_occurrences_retention').on(table.attemptedAt),
+])

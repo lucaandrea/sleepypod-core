@@ -32,7 +32,7 @@ vi.mock('drizzle-orm', async (importOriginal) => {
 const schedulerMock = vi.hoisted(() => {
   const scheduler = {
     isEnabled: vi.fn(() => true),
-    getJobs: vi.fn(() => [] as { id: string, type: string, metadata?: { side?: string } }[]),
+    getJobs: vi.fn(() => [] as { id: string, type: string, oneTime?: boolean, metadata?: { side?: string } }[]),
     getNextInvocation: vi.fn<(id: string) => Date | null>(() => null),
   }
   const jobManager = {
@@ -431,6 +431,8 @@ describe('health.system', () => {
       { id: 'led-pm', type: 'led_brightness' },
       { id: 'away', type: 'away_mode' },
       { id: 'ro-1', type: 'run_once' },
+      { id: 'alarm-override-left', type: 'alarm', oneTime: true },
+      { id: 'power-off-after-alarm-left', type: 'power_off', oneTime: true },
       { id: 'cal', type: 'calibration' },
       { id: 'prime', type: 'prime' },
       { id: 'reboot', type: 'reboot' },

@@ -1,6 +1,16 @@
-vi.mock('@/src/hardware/base/instance', () => ({ getBaseController: vi.fn() }))
 /* eslint-disable @typescript-eslint/no-explicit-any */
+// These unit tests isolate JobManager wiring/thermal gates. Durable occurrence
+// checks use the real migrated database in alarms/tests and jobOrdering tests.
+const alarmStoreMock = vi.hoisted(() => ({
+  rows: [] as any[],
+  context: vi.fn((side: string) => ({ side, timeZone: 'UTC', configured: true, available: true, rows: alarmStoreMock.rows.filter(row => row.side === side).map(row => alarmRowSchema.parse({ vibrationIntensity: 50, vibrationPattern: 'rise', snoozeDuration: 300, snoozeTaper: 0, ...row })), revision: null, override: null })),
+  dispatchable: vi.fn(() => true), eligible: vi.fn(() => true), claim: vi.fn(() => true), execution: vi.fn(() => null), finish: vi.fn(),
+}))
+vi.mock('@/src/alarms/instance', () => ({ alarmStore: () => alarmStoreMock }))
+const testOccurrence = { rows: [], originalAt: 9_000_000_000_000, at: 9_000_000_000_000, token: 'unit-fixture', source: 'routine' as const, skipped: false }
+vi.mock('@/src/hardware/base/instance', () => ({ getBaseController: vi.fn() }))
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { alarmRowSchema } from '@/src/alarms/model'
 import type { WakeWindows } from '../wakeWindow'
 
 const hardwareClient = vi.hoisted(() => ({
@@ -200,6 +210,23 @@ describe('JobManager.reloadSchedules coalescing', () => {
     expect(count()).toBe(2)
     await p2
     expect(count()).toBe(2)
+  })
+})
+
+const upsertAlarm = JobManager.prototype.upsertAlarmJob
+const cancelAlarm = JobManager.prototype.cancelAlarmJob
+beforeEach(() => {
+  alarmStoreMock.rows = []
+  alarmStoreMock.eligible.mockReturnValue(true)
+  alarmStoreMock.claim.mockReturnValue(true)
+  vi.spyOn(JobManager.prototype, 'upsertAlarmJob').mockImplementation(function (this: JobManager, row) {
+    alarmStoreMock.rows = alarmStoreMock.rows.filter(saved => saved.id !== row.id)
+    if (row.enabled) alarmStoreMock.rows.push(row)
+    upsertAlarm.call(this, row)
+  })
+  vi.spyOn(JobManager.prototype, 'cancelAlarmJob').mockImplementation(function (this: JobManager, id) {
+    alarmStoreMock.rows = alarmStoreMock.rows.filter(saved => saved.id !== id)
+    cancelAlarm.call(this, id)
   })
 })
 
@@ -1184,16 +1211,17 @@ describe('JobManager incremental upsert/cancel', () => {
       const open = vi.spyOn(windows(), 'open').mockImplementation(() => {})
       const run = vi.spyOn(manager, 'runAlarmJob').mockResolvedValue()
       const alarm = { ...baseAlarm, wakeWindow: 20 }
+      vi.spyOn(manager as any, 'alarmCandidate').mockReturnValue(testOccurrence)
       manager.upsertAlarmJob(alarm)
       expect(open).not.toHaveBeenCalled()
       const due = new Date(Date.now() + 20 * 60_000)
       next.mockReturnValue(due)
       const callback = schedule.mock.calls.find(([id]) => id === 'alarm-window-1')?.[3]
       if (!callback) throw new Error('Missing window-opening job')
-      await callback()
+      await callback(new Date())
       expect(open).toHaveBeenCalledExactlyOnceWith(1, 'left', due, 20, expect.any(Function))
       await open.mock.calls[0][4]()
-      expect(run).toHaveBeenCalledExactlyOnceWith(alarm)
+      expect(run).toHaveBeenCalledExactlyOnceWith(alarm, testOccurrence, true)
     })
 
     it('the registered alarm job runs the set-time early-fire check', async () => {
@@ -1202,29 +1230,27 @@ describe('JobManager incremental upsert/cancel', () => {
       manager.upsertAlarmJob(baseAlarm)
       const callback = schedule.mock.calls.find(([id]) => id === 'alarm-1')?.[3]
       if (!callback) throw new Error('Missing alarm job')
-      await callback()
-      expect(run).toHaveBeenCalledExactlyOnceWith(baseAlarm)
+      await callback(new Date())
+      expect(run).toHaveBeenCalledExactlyOnceWith(baseAlarm, expect.any(Date))
     })
 
-    it('the set-time job skips an alarm that already fired early, and fires otherwise', async () => {
+    it('passes set-time execution to persisted receipt checks even after an in-memory early mark', async () => {
       const run = vi.spyOn(manager, 'runAlarmJob').mockResolvedValue()
-      vi.spyOn(console, 'log').mockImplementation(() => {})
+      vi.spyOn(manager as any, 'alarmCandidate').mockReturnValue(testOccurrence)
       const claim = vi.spyOn(windows(), 'claim').mockReturnValueOnce(true)
-      await manager.runScheduledAlarm(baseAlarm)
+      await manager.runScheduledAlarm(baseAlarm, new Date())
       expect(claim).toHaveBeenCalledWith(1)
-      expect(run).not.toHaveBeenCalled()
-      await manager.runScheduledAlarm(baseAlarm)
-      expect(run).toHaveBeenCalledWith(baseAlarm)
+      expect(run).toHaveBeenCalledWith(baseAlarm, testOccurrence)
     })
   })
 
   it('alarm CRUD via incremental helpers completes well under the 200ms unit-test budget', () => {
     const start = performance.now()
     for (let i = 0; i < 50; i++) {
-      manager.upsertAlarmJob({ ...baseAlarm, id: i, time: '07:00' })
+      manager.upsertAlarmJob({ ...baseAlarm, id: i + 1, time: '07:00' })
     }
     for (let i = 0; i < 50; i++) {
-      manager.cancelAlarmJob(i)
+      manager.cancelAlarmJob(i + 1)
     }
     const elapsed = performance.now() - start
     // 100 ops well under 200ms — incremental work is O(1) per call, no DB scan.
@@ -1657,7 +1683,7 @@ describe('JobManager residual mutation contracts', () => {
       control.powerOnLocked.mockClear()
       await manager.runPowerOnJob({ ...power, side: 'right' })
       expect(control.powerOnLocked.mock.calls.map(call => call[0])).toEqual(unusedZoneMode === 'independent' ? ['right'] : [])
-      await manager.runAlarmJob({ ...row, side: 'right' } as any)
+      await manager.runAlarmJob({ ...row, side: 'right' } as any, testOccurrence)
       expect(hardwareClient.setAlarm).not.toHaveBeenCalled()
     })
 
@@ -1783,7 +1809,7 @@ describe('JobManager residual mutation contracts', () => {
         vibrationIntensity: 50,
         vibrationPattern: 'rise',
         duration: 30,
-      })
+      }, testOccurrence)
       expect(hardwareClient.setAlarm).not.toHaveBeenCalled()
       expect(control.reconcileLocked).not.toHaveBeenCalled()
     })
@@ -1950,7 +1976,7 @@ describe('JobManager residual mutation contracts', () => {
     }
 
     const alarmIn = (minutes: number, wakeWindow = 0) => {
-      vi.spyOn(db, 'select').mockReturnValueOnce({ from: () => queryRows([futureAlarm(minutes, { wakeWindow })]) } as any)
+      alarmStoreMock.rows = [futureAlarm(minutes, { wakeWindow })]
       vi.spyOn(manager.getScheduler(), 'getNextInvocation').mockImplementation(id =>
         id === 'alarm-5' ? new Date(Date.now() + minutes * 60_000) : null)
     }
@@ -1971,6 +1997,7 @@ describe('JobManager residual mutation contracts', () => {
       vi.spyOn(manager as any, 'awayModes').mockResolvedValue({ left: { awayMode: false }, right: { awayMode: true }, unusedZoneMode: 'off' })
       await manager.applyBedConfiguration()
       control.powerOffLocked.mockClear()
+      vi.setSystemTime(required(vi.mocked(manager.getScheduler().scheduleOneTimeJob).mock.calls.at(-1), 'alarm fixture')[2])
       await required(captured.get('power-off-after-alarm-left'), 'held power-off').handler()
       expect(control.powerOffLocked).toHaveBeenCalledExactlyOnceWith('left')
     })
@@ -1986,6 +2013,7 @@ describe('JobManager residual mutation contracts', () => {
       expect(type).toBe(JobType.POWER_OFF)
       // Alarm in 10 min + 120 s vibration + the 15 min temperature hold.
       expect(fireDate.getTime()).toBe(Date.now() + 10 * 60_000 + 120_000 + ALARM_HOLD_AFTER_MIN * 60_000)
+      vi.setSystemTime(required(vi.mocked(manager.getScheduler().scheduleOneTimeJob).mock.calls.at(-1), 'alarm fixture')[2])
       await required(captured.get('power-off-after-alarm-left'), 'held power-off').handler()
       expect(control.powerOffLocked).toHaveBeenCalledWith('left')
     })
@@ -1996,6 +2024,7 @@ describe('JobManager residual mutation contracts', () => {
       alarmIn(10)
       await manager.runPowerOffJob(power)
       expect(control.powerOffLocked).not.toHaveBeenCalled()
+      vi.setSystemTime(required(vi.mocked(manager.getScheduler().scheduleOneTimeJob).mock.calls.at(-1), 'alarm fixture')[2])
       await required(captured.get('power-off-after-alarm-left'), 'held power-off').handler()
       expect(control.powerOffLocked.mock.calls).toEqual([['left'], ['right']])
     })
@@ -2007,6 +2036,7 @@ describe('JobManager residual mutation contracts', () => {
       await manager.runPowerOffJob(power)
       // The device and HomeKit power-on paths release held shutdowns for the addressed side.
       manager.releaseHeldPowerOff('right')
+      vi.setSystemTime(required(vi.mocked(manager.getScheduler().scheduleOneTimeJob).mock.calls.at(-1), 'alarm fixture')[2])
       await required(captured.get('power-off-after-alarm-left'), 'held power-off').handler()
       expect(control.powerOffLocked.mock.calls).toEqual([['left']])
 
@@ -2041,6 +2071,7 @@ describe('JobManager residual mutation contracts', () => {
       alarmIn(10)
       await manager.runPowerOffJob(power)
       modes.mockResolvedValue({ unusedZoneMode: 'follow', left: { awayMode: true }, right: { awayMode: true } })
+      vi.setSystemTime(required(vi.mocked(manager.getScheduler().scheduleOneTimeJob).mock.calls.at(-1), 'alarm fixture')[2])
       await required(captured.get('power-off-after-alarm-left'), 'held power-off').handler()
       expect(control.powerOffLocked).not.toHaveBeenCalled()
     })
@@ -2055,17 +2086,14 @@ describe('JobManager residual mutation contracts', () => {
 
     it('holds power until the last overlapping alarm finishes, regardless of row order', async () => {
       const captured = captureOneTimeJobs()
-      vi.spyOn(db, 'select').mockReturnValueOnce({ from: () => queryRows([
-        futureAlarm(10, { id: 5, duration: 120 }),
-        futureAlarm(20, { id: 6, duration: 180 }),
-        futureAlarm(10, { id: 7, duration: 60 }),
-      ]) } as any)
+      alarmStoreMock.rows = [futureAlarm(10, { id: 5, duration: 120 }), futureAlarm(20, { id: 6, duration: 180 }), futureAlarm(10, { id: 7, duration: 60 })]
       vi.spyOn(manager.getScheduler(), 'getNextInvocation').mockImplementation(id =>
         new Date(Date.now() + (id === 'alarm-6' ? 20 : 10) * 60_000))
       await manager.runPowerOffJob(power)
       const schedule = vi.mocked(manager.getScheduler().scheduleOneTimeJob)
       expect(schedule.mock.calls[0][2].getTime()).toBe(Date.now() + 20 * 60_000 + 180_000 + ALARM_HOLD_AFTER_MIN * 60_000)
       expect(control.powerOffLocked).not.toHaveBeenCalled()
+      vi.setSystemTime(required(vi.mocked(manager.getScheduler().scheduleOneTimeJob).mock.calls.at(-1), 'alarm fixture')[2])
       await required(captured.get('power-off-after-alarm-left'), 'held power-off').handler()
       expect(control.powerOffLocked).toHaveBeenCalledExactlyOnceWith('left')
     })
@@ -2077,8 +2105,8 @@ describe('JobManager residual mutation contracts', () => {
       expect(control.powerOffLocked).not.toHaveBeenCalled()
     })
 
-    it('ignores alarms with no upcoming run', async () => {
-      vi.spyOn(db, 'select').mockReturnValueOnce({ from: () => queryRows([futureAlarm(10)]) } as any)
+    it('has no alarm hold when no enabled rows remain', async () => {
+      alarmStoreMock.rows = []
       vi.spyOn(manager.getScheduler(), 'getNextInvocation').mockReturnValue(null)
       await manager.runPowerOffJob(power)
       expect(control.powerOffLocked).toHaveBeenCalledWith('left')
@@ -2177,7 +2205,7 @@ describe('JobManager residual mutation contracts', () => {
       vibrationIntensity: 50,
       vibrationPattern: 'rise',
       duration: 30,
-    })
+    }, testOccurrence)
 
     expect(control.reconcile).toHaveBeenCalledWith('left')
     expect(log).toHaveBeenCalledWith(
@@ -2241,7 +2269,7 @@ describe('JobManager residual mutation contracts', () => {
       vibrationIntensity: 50,
       vibrationPattern: 'rise',
       duration: 30,
-    })
+    }, testOccurrence)
 
     expect(hardwareClient.setTemperature).not.toHaveBeenCalled()
     expect(hardwareClient.setAlarm).toHaveBeenCalledWith('right', {
@@ -2274,7 +2302,7 @@ describe('JobManager residual mutation contracts', () => {
         vibrationIntensity: 100,
         vibrationPattern: 'rise',
         duration: 120,
-      })
+      }, testOccurrence)
       expect(getActiveAlarmConfig('left')).toEqual({ vibrationIntensity: 100, vibrationPattern: 'rise', duration: 120, snoozeDuration: 300, snoozeTaper: 0 })
     }
     finally {
@@ -2552,7 +2580,7 @@ describe('JobManager residual mutation contracts', () => {
       handler,
       metadata,
     ) => {
-      handlers.set(id, handler)
+      handlers.set(id, () => handler(new Date()))
       return { id, type, schedule, handler, metadata, job: { cancel: vi.fn() } } as any
     })
     const reboot = vi.spyOn(manager as any, 'executeReboot').mockResolvedValue(undefined)
