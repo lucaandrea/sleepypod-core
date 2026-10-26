@@ -29,23 +29,20 @@
 
 import os from 'node:os'
 import type { ControlRequest } from '@/src/controls/contract'
-import { MqttCommandGateway, mqttClimateCommandTemplate, type MqttPacketFlags } from './mqttCommands'
+import { MqttCommandGateway, type MqttPacketFlags } from './mqttCommands'
 import mqtt, { type IClientOptions, type IClientPublishOptions, type MqttClient } from 'mqtt'
-import { eq, desc } from 'drizzle-orm'
-import { db, biometricsDb } from '@/src/db'
-import { deviceSettings, deviceState } from '@/src/db/schema'
-import { bedTemp, flowReadings, vitals } from '@/src/db/biometrics-schema'
-import { getPumpStallNotice } from '@/src/hardware/pumpStallNotification'
-import { centiDegreesToC, centiPercentToPercent } from '@/src/lib/tempUtils'
+import { db } from '@/src/db'
+import { deviceSettings } from '@/src/db/schema'
 import { onServerFrame } from './piezoStream'
-import { getDacMonitorIfRunning } from '@/src/hardware/dacMonitor.instance'
+import { readHomeTelemetry } from '@/src/telemetry/home'
+import { homeDiscovery } from './mqttDiscovery'
 
 // ---------------------------------------------------------------------------
 // Configuration resolution
 // ---------------------------------------------------------------------------
 
 const DEFAULT_TOPIC_PREFIX = 'sleepypod'
-const STATE_PUBLISH_INTERVAL_MS = 30_000
+const STATE_PUBLISH_INTERVAL_MS = 5_000
 const RECONNECT_PERIOD_MS = 5_000
 const CONNECT_TIMEOUT_MS = 10_000
 const TEST_CONNECT_TIMEOUT_MS = 5_000
@@ -240,340 +237,25 @@ function safePublish(t: string, payload: string | Buffer, opts: IClientPublishOp
 // HA discovery
 // ---------------------------------------------------------------------------
 
-interface HaDiscoveryDevice {
-  identifiers: string[]
-  name: string
-  manufacturer: string
-  model: string
-  sw_version?: string
-}
-
-function haDevice(): HaDiscoveryDevice {
-  const id = deviceId()
-  return {
-    identifiers: [id],
-    name: `Sleepypod ${id}`,
-    manufacturer: 'Sleepypod',
-    model: 'Pod',
-  }
-}
-
 function publishHaDiscovery(): void {
   if (!state.resolved?.haDiscovery) return
-  const id = deviceId()
-  const dev = haDevice()
-  const availability = topic('availability')
-  const haPrefix = process.env.MQTT_HA_DISCOVERY_PREFIX || 'homeassistant'
-
-  const climate = (side: 'left' | 'right') => ({
-    name: `${side === 'left' ? 'Left' : 'Right'} side`,
-    unique_id: `${id}_${side}_climate`,
-    availability_topic: availability,
-    payload_available: 'online',
-    payload_not_available: 'offline',
-    current_temperature_topic: topic('state', side, 'climate'),
-    current_temperature_template: '{{ value_json.currentTemperature }}',
-    temperature_state_topic: topic('state', side, 'climate'),
-    temperature_state_template: '{{ value_json.targetTemperature }}',
-    mode_state_topic: topic('state', side, 'climate'),
-    mode_state_template: '{{ value_json.mode }}',
-    ...(state.commandsEnabled
-      ? {
-          temperature_command_topic: topic('cmd', 'request'),
-          temperature_command_template: mqttClimateCommandTemplate(side, 'temperature'),
-          mode_command_topic: topic('cmd', 'request'),
-          mode_command_template: mqttClimateCommandTemplate(side, 'power'),
-          retain: false,
-          qos: 0,
-        }
-      : {}),
-    modes: ['off', 'heat'],
-    min_temp: 55,
-    max_temp: 110,
-    temp_step: 1,
-    temperature_unit: 'F',
-    device: dev,
-  })
-
-  const sensor = (objectId: string, name: string, stateTopic: string, template: string, unit?: string) => {
-    const cfg: Record<string, unknown> = {
-      name,
-      unique_id: `${id}_${objectId}`,
-      availability_topic: availability,
-      payload_available: 'online',
-      payload_not_available: 'offline',
-      state_topic: stateTopic,
-      value_template: template,
-      state_class: 'measurement',
-      device: dev,
-    }
-    if (unit) cfg.unit_of_measurement = unit
-    return cfg
-  }
-
-  safePublish(
-    `${haPrefix}/climate/${id}/left/config`,
-    JSON.stringify(climate('left')),
-    RETAINED_QOS_0,
-  )
-  safePublish(
-    `${haPrefix}/climate/${id}/right/config`,
-    JSON.stringify(climate('right')),
-    RETAINED_QOS_0,
-  )
-  safePublish(
-    `${haPrefix}/sensor/${id}/water_level/config`,
-    JSON.stringify(sensor('water_level', 'Water level', topic('state', 'water-level'), '{{ value_json.level }}')),
-    RETAINED_QOS_0,
-  )
-
-  // Ambient temperature + humidity from bed_temp. Two HA sensor entities
-  // sharing one state topic so a single retained payload feeds both.
-  const ambientTopic = topic('state', 'environment', 'ambient')
-  const ambientTemp = sensor(
-    'ambient_temperature',
-    'Ambient temperature',
-    ambientTopic,
-    '{{ value_json.temperature }}',
-    '°C',
-  )
-  ambientTemp.device_class = 'temperature'
-  safePublish(
-    `${haPrefix}/sensor/${id}/ambient_temperature/config`,
-    JSON.stringify(ambientTemp),
-    RETAINED_QOS_0,
-  )
-  const ambientHumidity = sensor(
-    'ambient_humidity',
-    'Ambient humidity',
-    ambientTopic,
-    '{{ value_json.humidity }}',
-    '%',
-  )
-  ambientHumidity.device_class = 'humidity'
-  safePublish(
-    `${haPrefix}/sensor/${id}/ambient_humidity/config`,
-    JSON.stringify(ambientHumidity),
-    RETAINED_QOS_0,
-  )
-  // Pump topics — one set per side. RPM + loop temp as measurement sensors;
-  // stall / clog as binary sensors with the `problem` device_class so HA
-  // renders them as red alert tiles.
-  for (const side of ['left', 'right'] as const) {
-    const rpmTopic = topic('pump', side, 'rpm')
-    const loopTopic = topic('pump', side, 'loop_temp_c')
-    const stallTopic = topic('pump', side, 'stall')
-    const clogTopic = topic('pump', side, 'clog_detected')
-
-    const pumpRpm = sensor(
-      `pump_${side}_rpm`,
-      `${side === 'left' ? 'Left' : 'Right'} pump RPM`,
-      rpmTopic,
-      '{{ value_json.rpm }}',
-      'rpm',
-    )
-    safePublish(
-      `${haPrefix}/sensor/${id}/pump_${side}_rpm/config`,
-      JSON.stringify(pumpRpm),
-      RETAINED_QOS_0,
-    )
-    const pumpLoop = sensor(
-      `pump_${side}_loop_temp`,
-      `${side === 'left' ? 'Left' : 'Right'} pump loop temp`,
-      loopTopic,
-      '{{ value_json.temperature }}',
-      '°C',
-    )
-    pumpLoop.device_class = 'temperature'
-    safePublish(
-      `${haPrefix}/sensor/${id}/pump_${side}_loop_temp/config`,
-      JSON.stringify(pumpLoop),
-      RETAINED_QOS_0,
-    )
-    safePublish(
-      `${haPrefix}/binary_sensor/${id}/pump_${side}_stall/config`,
-      JSON.stringify({
-        name: `${side === 'left' ? 'Left' : 'Right'} pump stall`,
-        unique_id: `${id}_pump_${side}_stall`,
-        availability_topic: availability,
-        payload_available: 'online',
-        payload_not_available: 'offline',
-        state_topic: stallTopic,
-        payload_on: 'on',
-        payload_off: 'off',
-        device_class: 'problem',
-        device: dev,
-      }),
-      RETAINED_QOS_0,
-    )
-    safePublish(
-      `${haPrefix}/binary_sensor/${id}/pump_${side}_clog/config`,
-      JSON.stringify({
-        name: `${side === 'left' ? 'Left' : 'Right'} pump clog detected`,
-        unique_id: `${id}_pump_${side}_clog`,
-        availability_topic: availability,
-        payload_available: 'online',
-        payload_not_available: 'offline',
-        state_topic: clogTopic,
-        payload_on: 'on',
-        payload_off: 'off',
-        device_class: 'problem',
-        device: dev,
-      }),
-      RETAINED_QOS_0,
-    )
-  }
-
-  for (const side of ['left', 'right'] as const) {
-    safePublish(
-      `${haPrefix}/sensor/${id}/${side}_heart_rate/config`,
-      JSON.stringify(sensor(`${side}_heart_rate`, `${side === 'left' ? 'Left' : 'Right'} heart rate`,
-        topic('state', 'biometrics', side), '{{ value_json.heartRate }}', 'bpm')),
-      RETAINED_QOS_0,
-    )
-    safePublish(
-      `${haPrefix}/sensor/${id}/${side}_breathing_rate/config`,
-      JSON.stringify(sensor(`${side}_breathing_rate`, `${side === 'left' ? 'Left' : 'Right'} breathing rate`,
-        topic('state', 'biometrics', side), '{{ value_json.breathingRate }}', 'br/min')),
-      RETAINED_QOS_0,
-    )
-    safePublish(
-      `${haPrefix}/sensor/${id}/${side}_hrv/config`,
-      JSON.stringify(sensor(`${side}_hrv`, `${side === 'left' ? 'Left' : 'Right'} HRV`,
-        topic('state', 'biometrics', side), '{{ value_json.hrv }}', 'ms')),
-      RETAINED_QOS_0,
-    )
+  for (const [path, config] of homeDiscovery(deviceId(), topic(), state.commandsEnabled)) {
+    safePublish(`${process.env.MQTT_HA_DISCOVERY_PREFIX || 'homeassistant'}/${path}`,
+      config === null ? '' : JSON.stringify(config), RETAINED_QOS_0)
   }
 }
 
-// ---------------------------------------------------------------------------
-// State publication
-// ---------------------------------------------------------------------------
-
-async function publishState(): Promise<void> {
+// Live measurements are deliberately not retained: a subscriber restart must
+// wait for fresh publication, not resurrect yesterday's retained observation.
+function publishState(clearRetained = false): void {
   if (!state.client?.connected) return
-
-  const monitor = getDacMonitorIfRunning()
-  const status = monitor?.getLastStatus()
-
-  if (status) {
-    safePublish(topic('state', 'device-status'), JSON.stringify({
-      ts: Date.now(),
-      leftSide: status.leftSide,
-      rightSide: status.rightSide,
-      waterLevel: status.waterLevel,
-      isPriming: status.isPriming,
-      podVersion: status.podVersion,
-    }), RETAINED_QOS_0)
-
-    safePublish(topic('state', 'water-level'), JSON.stringify({
-      ts: Date.now(),
-      level: status.waterLevel,
-    }), RETAINED_QOS_0)
+  const readings = readHomeTelemetry()
+  for (const [path, reading] of Object.entries(readings)) {
+    if (clearRetained) safePublish(topic(path), '', RETAINED_QOS_0)
+    else safePublish(topic(path), JSON.stringify(reading), VOLATILE_QOS_0)
   }
-
-  try {
-    const sides = await db.select().from(deviceState)
-    for (const row of sides) {
-      const mode = row.isPowered ? 'heat' : 'off'
-      safePublish(topic('state', row.side, 'climate'), JSON.stringify({
-        ts: row.lastUpdated.getTime(),
-        currentTemperature: row.currentTemperature,
-        targetTemperature: row.targetTemperature,
-        isPowered: row.isPowered,
-        isAlarmVibrating: row.isAlarmVibrating,
-        mode,
-        waterLevel: row.waterLevel,
-      }), RETAINED_QOS_0)
-    }
-  }
-  catch (err) {
-    console.warn('[mqtt] device_state publish failed:', err instanceof Error ? err.message : err)
-  }
-
-  for (const side of ['left', 'right'] as const) {
-    try {
-      const [latest] = await biometricsDb
-        .select()
-        .from(vitals)
-        .where(eq(vitals.side, side))
-        .orderBy(desc(vitals.timestamp))
-        .limit(1)
-      if (latest) {
-        safePublish(topic('state', 'biometrics', side), JSON.stringify({
-          ts: latest.timestamp.getTime(),
-          heartRate: latest.heartRate,
-          hrv: latest.hrv,
-          breathingRate: latest.breathingRate,
-        }), RETAINED_QOS_0)
-      }
-    }
-    catch (err) {
-      console.warn(`[mqtt] biometrics publish (${side}) failed:`, err instanceof Error ? err.message : err)
-    }
-  }
-
-  try {
-    const [latestEnv] = await biometricsDb
-      .select({
-        timestamp: bedTemp.timestamp,
-        ambientTemp: bedTemp.ambientTemp,
-        humidity: bedTemp.humidity,
-      })
-      .from(bedTemp)
-      .orderBy(desc(bedTemp.timestamp))
-      .limit(1)
-    if (latestEnv) {
-      safePublish(topic('state', 'environment', 'ambient'), JSON.stringify({
-        ts: latestEnv.timestamp.getTime(),
-        temperature: latestEnv.ambientTemp != null ? centiDegreesToC(latestEnv.ambientTemp) : null,
-        humidity: latestEnv.humidity != null ? centiPercentToPercent(latestEnv.humidity) : null,
-      }), RETAINED_QOS_0)
-    }
-  }
-  catch (err) {
-    console.warn('[mqtt] ambient environment publish failed:', err instanceof Error ? err.message : err)
-  }
-
-  try {
-    const [latestFlow] = await biometricsDb
-      .select()
-      .from(flowReadings)
-      .orderBy(desc(flowReadings.timestamp))
-      .limit(1)
-    if (latestFlow) {
-      const ts = latestFlow.timestamp.getTime()
-      safePublish(topic('pump', 'left', 'rpm'), JSON.stringify({
-        ts,
-        rpm: latestFlow.leftPumpRpm,
-      }), RETAINED_QOS_0)
-      safePublish(topic('pump', 'right', 'rpm'), JSON.stringify({
-        ts,
-        rpm: latestFlow.rightPumpRpm,
-      }), RETAINED_QOS_0)
-      safePublish(topic('pump', 'left', 'loop_temp_c'), JSON.stringify({
-        ts,
-        temperature: latestFlow.leftFlowrateCd != null ? latestFlow.leftFlowrateCd / 100 : null,
-      }), RETAINED_QOS_0)
-      safePublish(topic('pump', 'right', 'loop_temp_c'), JSON.stringify({
-        ts,
-        temperature: latestFlow.rightFlowrateCd != null ? latestFlow.rightFlowrateCd / 100 : null,
-      }), RETAINED_QOS_0)
-    }
-  }
-  catch (err) {
-    console.warn('[mqtt] pump rpm publish failed:', err instanceof Error ? err.message : err)
-  }
-
-  // Stall + clog state per side. Clog stays 'off' until the nightly job
-  // lands — that work is out of scope for this PR.
-  for (const side of ['left', 'right'] as const) {
-    safePublish(
-      topic('pump', side, 'stall'),
-      getPumpStallNotice(side) ? 'on' : 'off',
-      RETAINED_QOS_0,
-    )
-    safePublish(topic('pump', side, 'clog_detected'), 'off', RETAINED_QOS_0)
+  if (clearRetained) {
+    for (const side of ['left', 'right']) safePublish(topic('pump', side, 'clog_detected'), '', RETAINED_QOS_0)
   }
 }
 
@@ -722,14 +404,18 @@ export async function startMqttBridge(): Promise<void> {
     state.runState = 'connected'
     state.lastError = null
     console.log(`[mqtt] connected (deviceId=${id}, prefix=${config.topicPrefix})`)
-    safePublish(availabilityTopic, 'online', RETAINED_QOS_0)
+    // Clear legacy retained measurements while still offline to avoid a stale
+    // availability flash when upgrading or reconnecting an existing discovery.
+    safePublish(availabilityTopic, 'offline', RETAINED_QOS_0)
+    publishState(true)
     publishHaDiscovery()
+    safePublish(availabilityTopic, 'online', RETAINED_QOS_0)
     if (state.commandsEnabled) {
       client.subscribe(topic('cmd', 'request'), { qos: 0 }, (err: Error | null) => {
         if (err && current()) console.warn('[mqtt] command subscription failed')
       })
     }
-    void publishState()
+    publishState()
   })
 
   client.on('reconnect', () => {
@@ -770,7 +456,8 @@ export async function startMqttBridge(): Promise<void> {
   state.unsubscribeFrame = onServerFrame((frame) => {
     if (!current() || frame.type !== 'deviceStatus') return
     if (!state.client?.connected) return
-    safePublish(topic('state', 'device-status'), JSON.stringify(frame), RETAINED_QOS_0)
+    // A WebSocket frame may contain optimistic overlays; re-read verified sources.
+    publishState()
   })
 }
 

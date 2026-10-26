@@ -1,4 +1,5 @@
 // @vitest-environment node
+import { homeSensors } from '@/src/telemetry/sensorCache'
 import { TEST_OWNER_TOKEN } from '@/src/auth/tests/support'
 /**
  * Tests for the WebSocket streaming resource-management surfaces:
@@ -749,6 +750,25 @@ describe('piezoStream — server lifecycle and protocol', () => {
     await client.close()
   })
 
+  it('keeps startup backlog out of live home telemetry and clears observations on shutdown', async () => {
+    const timestamp = Math.floor(Date.now() / 1000)
+    homeSensors.clear()
+    const before = getLatestCapSenseSnapshot()
+    const cap = { type: 'capSense', ts: timestamp, left: { out: 1, cen: 2, in: 3 }, right: { out: 1, cen: 2, in: 3 } }
+    const ambient = { type: 'bedTemp', ts: timestamp, amb: 2150, hu: 4500 }
+    __test__.dispatchSensorFrame(cap, true)
+    __test__.dispatchSensorFrame(ambient, true)
+    expect(getLatestCapSenseSnapshot()).toBe(before)
+    expect(homeSensors.ambient().available).toBe(false)
+    __test__.dispatchSensorFrame(cap, false)
+    __test__.dispatchSensorFrame(ambient, false)
+    expect(getLatestCapSenseSnapshot()?.ts).toBe(timestamp)
+    expect(homeSensors.ambient()).toMatchObject({ available: true, temperature: 21.5 })
+    await shutdownPiezoStreamServer()
+    expect(getLatestCapSenseSnapshot()).toBeNull()
+    expect(homeSensors.ambient().available).toBe(false)
+  })
+
   it('supports lps-only diagnostic subscriptions and preserves channel bytes', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     __test__.warnedUnknownTypes.delete('lps')
@@ -1283,11 +1303,14 @@ describe('piezoStream — server lifecycle and protocol', () => {
     fs.writeFileSync(filePath, rec)
     fs.utimesSync(filePath, past, past)
     await client.waitFor(m => m.type === 'capSense2' && m.ts === 999, 3000)
+    expect(getLatestCapSenseSnapshot()).toBeNull() // The initial file is backlog.
+    fs.appendFileSync(filePath, buildOuterRecord(2, [{ type: 'capSense2', ts: 1000, left: channels, right: channels }]))
+    await client.waitFor(m => m.type === 'capSense2' && m.ts === 1000, 3000)
 
     const snap = getLatestCapSenseSnapshot()
     expect(snap).not.toBeNull()
     expect(snap?.type).toBe('capSense2')
-    expect(snap?.ts).toBe(999)
+    expect(snap?.ts).toBe(1000)
     expect(Array.isArray(snap?.left)).toBe(true)
     expect((snap?.left as number[])[0]).toBeCloseTo(14.5)
 
@@ -1870,10 +1893,13 @@ describe('piezoStream — server lifecycle and protocol', () => {
     const client = await connectClient(port)
     fs.writeFileSync(filePath, rec)
     await client.waitFor(m => m.type === 'capSense' && m.ts === 2200, 3000)
+    expect(getLatestCapSenseSnapshot()).toBeNull()
+    fs.appendFileSync(filePath, buildOuterRecord(2, [{ type: 'capSense', ts: 2201, left: 5, right: 7 }]))
+    await client.waitFor(m => m.type === 'capSense' && m.ts === 2201, 3000)
 
     const snap = getLatestCapSenseSnapshot()
     expect(snap?.type).toBe('capSense')
-    expect(snap?.ts).toBe(2200)
+    expect(snap?.ts).toBe(2201)
     expect(snap?.left).toEqual([5])
     expect(snap?.right).toEqual([7])
     expect(logSpy).toHaveBeenCalledWith(
