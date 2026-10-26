@@ -10,6 +10,10 @@ import { packagedWorkerPath } from '../../src/biometrics/backtest/location'
 import { tickBiometricRuntime } from '../../src/biometrics/profiles/runtime-host'
 import { consumeStageView } from '../../src/biometrics/profiles/stage-view'
 import { createNotificationStore } from '../../src/notifications/store'
+import { randomUUID } from 'node:crypto'
+import { createComfortStore, comfortEvent } from '../../src/comfort/store'
+import { defaultComfortState, type ComfortContext } from '../../src/comfort/policy'
+import { capturePreviewEvidence } from '../../src/comfort/report-evidence'
 
 const root = process.env.SLEEPYPOD_BROWSER_FIXTURE
 const bioPath = process.env.BIOMETRICS_DATABASE_URL
@@ -60,6 +64,29 @@ connection.close()
 `, bioPath], { timeout: 15_000, maxBuffer: 65536 })
     consumeStageView(config, db, 'left')
     assert.deepEqual(tickBiometricRuntime(config, db).errors, [])
+  }
+  else if (process.argv[2] === 'comfort-report') {
+    // Simulated production provenance exists only in this isolated browser database.
+    // It tests review behavior and is never evidence of an actual Preview night.
+    const store = createComfortStore(configSqlite)
+    const state = { ...defaultComfortState(), config: { mode: 'preview' as const, minimumF: 70, maximumF: 95 } }
+    const start = Date.now() - 86_400_000
+    const runId = randomUUID()
+    for (let minute = 0; minute <= 240; minute++) {
+      const now = start + minute * 60_000
+      const context: ComfortContext = { now,
+        window: { session: `synthetic-browser:${start}`, start, end: start + 8 * 3_600_000, baselineF: 75, segment: 'initial', alarmAt: null,
+          phases: { revision: 'b'.repeat(64), startF: 75, changes: [] } },
+        device: { observedAt: now, powered: true, waterAdequate: true, priming: false, vibrating: false, baseMoving: false, targetF: 75 },
+        presence: { observedAt: now, occupied: true, available: true, entry: { measuredAt: now, sourceKey: 'c'.repeat(64), state: 'present' } },
+        eitherAway: false, routinesPaused: false, alarmOverride: false, owner: 'schedule', targetKnown: true }
+      const preview = capturePreviewEvidence(state, context, 75, 'America/Los_Angeles', runId,
+        { environment: 'production', buildRevision: 'a'.repeat(40) })
+      assert(preview)
+      store.commit('left', state, { ...comfortEvent(now, 'preview', 'Synthetic browser proposal; not an actual night.'),
+        session: preview.session, eligible: true, proposedF: 74, reportedF: 75, deviceObservedAt: now, presenceObservedAt: now,
+        owner: 'schedule', preview })
+    }
   }
   else if (process.argv[2] === 'notify') {
     // Persist a synthetic service event through the production store; no public

@@ -1,3 +1,6 @@
+import { createPreviewReports } from './reports'
+import { readFileSync } from 'node:fs'
+import type { PreviewOrigin } from './report-evidence'
 import { and, eq } from 'drizzle-orm'
 import { biometricsDb, db, sqlite } from '@/src/db'
 import { alarmSchedules, deviceSettings, deviceState, powerSchedules, sideSettings, temperatureSchedules } from '@/src/db/schema'
@@ -93,9 +96,23 @@ export function readComfortContext(side: Side, state: ComfortState, now: number)
   }
 }
 
+function previewOrigin(): PreviewOrigin {
+  let buildRevision: string | null = null
+  try {
+    const manifest: unknown = JSON.parse(readFileSync('.git-info', 'utf-8'))
+    if (manifest && typeof manifest === 'object' && 'commitHash' in manifest
+      && typeof manifest.commitHash === 'string' && /^[a-f0-9]{7,40}$/.test(manifest.commitHash)) buildRevision = manifest.commitHash
+  }
+  catch { /* Missing build identity stays visible in the report. */ }
+  const environment = process.env.CI || process.env.NODE_ENV === 'test'
+    ? 'test'
+    : process.env.NODE_ENV === 'production' ? 'production' : 'development'
+  return { environment, buildRevision }
+}
+
 export function getComfortRuntime(): ComfortRuntime {
   return globals.__sp_comfortRuntime ??= new ComfortRuntime({
-    now: Date.now, store: createComfortStore(sqlite), withSideLock, readContext: readComfortContext,
+    now: Date.now, origin: previewOrigin(), store: createComfortStore(sqlite), withSideLock, readContext: readComfortContext,
     timezone: () => {
       const settings = db.select({ timezone: deviceSettings.timezone }).from(deviceSettings).get()
       if (!settings) throw new Error('Device timezone unavailable')
@@ -114,4 +131,9 @@ export async function startComfortPreview(): Promise<void> {
 }
 export async function stopComfortPreview(): Promise<void> {
   await globals.__sp_comfortRuntime?.stop()
+}
+
+/** Read/review endpoints do not start the Preview runtime or any hardware service. */
+export function getPreviewReports() {
+  return createPreviewReports(sqlite)
 }

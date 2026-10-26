@@ -1,3 +1,4 @@
+import { previewEvidenceSchema } from './report-contract'
 import { bedtimeSelectionSchema, bedtimeStatusSchema } from './bedtime'
 import { z } from 'zod'
 import { comfortSignalsSchema } from './signals'
@@ -56,6 +57,7 @@ export const comfortEventSchema = z.object({
   owner: z.enum(['manual', 'run-once', 'autopilot', 'schedule']).nullable(),
   signals: comfortSignalsSchema.nullable().optional(),
   timing: bedtimeStatusSchema.nullable().optional(),
+  preview: previewEvidenceSchema.optional(),
 })
 export type ComfortEvent = z.infer<typeof comfortEventSchema>
 
@@ -75,7 +77,7 @@ export const comfortStatusSchema = z.object({
     available: z.literal(false),
     reason: z.literal(COMFORT_ACTIVATION_REASON),
   }),
-  features: z.object({ sensorAware: z.boolean(), followBedtime: z.boolean() }),
+  features: z.object({ sensorAware: z.boolean(), followBedtime: z.boolean(), nightReports: z.boolean().optional() }),
   signals: comfortSignalsSchema.nullable().optional(),
   timing: bedtimeStatusSchema.nullable().optional(),
 })

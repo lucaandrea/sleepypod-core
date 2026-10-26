@@ -366,12 +366,24 @@ export const comfortFeedback = sqliteTable('comfort_feedback', {
   recordedAt: integer('recorded_at').notNull(), // Epoch milliseconds
 }, table => [uniqueIndex('uq_comfort_feedback_side_date').on(table.side, table.localDate)])
 
+/** Append-only owner reviews bind to an exact retained Preview report. */
+export const comfortReviews = sqliteTable('comfort_reviews', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  side: text('side', { enum: ['left', 'right'] }).notNull(),
+  reportId: text('report_id').notNull(),
+  createdAt: integer('created_at').notNull(),
+  review: text('review', { mode: 'json' }).notNull(),
+  snapshot: text('snapshot', { mode: 'json' }).notNull(),
+}, table => [index('idx_comfort_reviews_side_report').on(table.side, table.reportId, table.id)])
+
 export const comfortEvents = sqliteTable('comfort_events', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   side: text('side', { enum: ['left', 'right'] }).notNull(),
   observedAt: integer('observed_at').notNull(), // Epoch milliseconds
   event: text('event', { mode: 'json' }).notNull(),
-}, table => [index('idx_comfort_events_side_time').on(table.side, table.observedAt)])
+  reportId: text('report_id'),
+}, table => [index('idx_comfort_events_side_time').on(table.side, table.observedAt),
+  index('idx_comfort_events_side_report').on(table.side, table.reportId, table.id)])
 
 export const deviceState = sqliteTable('device_state', {
   // Explicit manual hardware cutoff, independent of temperature ownership (epoch ms).

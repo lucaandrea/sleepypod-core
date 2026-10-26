@@ -9,6 +9,9 @@ function rejectDemoWrite(): never {
 }
 
 export const comfort: DemoHandlers<'comfort'> = {
+  reports: ({ side }) => ({ apiVersion: 1, generatedAt: Date.now(), side, items: [], targetNights: 7, ownerConfirmedNights: 0, activationAvailable: false }),
+  report: rejectDemoWrite,
+  reviewReport: rejectDemoWrite,
   get: ({ side }) => ({
     apiVersion: 1,
     generatedAt: Date.now(),
@@ -22,7 +25,7 @@ export const comfort: DemoHandlers<'comfort'> = {
     history: [],
     runtime: 'stopped',
     activation: { available: false, reason: COMFORT_ACTIVATION_REASON },
-    features: { sensorAware: false, followBedtime: false },
+    features: { sensorAware: false, followBedtime: false, nightReports: false },
   }),
   configure: rejectDemoWrite,
   feedback: rejectDemoWrite,

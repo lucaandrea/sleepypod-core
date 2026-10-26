@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto'
+import { capturePreviewEvidence, type PreviewOrigin } from './report-evidence'
 import { BedEntryTracker, bedtimePreview, type BedtimeStatus } from './bedtime'
 import type { ComfortSignals } from './signals'
 import type { Side } from '@/src/hardware/types'
@@ -11,6 +13,7 @@ export class ComfortInputError extends Error {}
 
 export interface ComfortRuntimeDeps {
   now(): number
+  origin?: PreviewOrigin
   store: ComfortStore
   withSideLock<T>(side: Side, work: () => Promise<T>): Promise<T>
   readContext(side: Side, state: ComfortState, now: number): { context: ComfortContext, timezone: string }
@@ -22,6 +25,7 @@ export interface ComfortRuntimeDeps {
 
 /** Preview has no actuator dependency. Only the shared temperature authority may later admit active leases. */
 export class ComfortRuntime {
+  private readonly runId = randomUUID()
   private observations: Partial<Record<Side, Observation>> = {}
   private recorded: Partial<Record<Side, { at: number, key: string }>> = {}
   private faults: Partial<Record<Side, string>> = {}
@@ -61,7 +65,7 @@ export class ComfortRuntime {
       decision: fault || signalExpired || observation?.stateKey !== JSON.stringify(state) ? null : observation?.decision ?? null,
       runtime: this.running ? 'running' : 'stopped',
       activation: { available: false, reason: COMFORT_ACTIVATION_REASON },
-      features: { sensorAware: true, followBedtime: true },
+      features: { sensorAware: true, followBedtime: true, nightReports: true },
       timing: fault || signalExpired || observation?.stateKey !== JSON.stringify(state) ? null : observation?.timing ?? null,
       signals: fault || signalExpired || observation?.stateKey !== JSON.stringify(state) ? null : signals ?? null,
     }
@@ -143,7 +147,9 @@ export class ComfortRuntime {
             reason: COMFORT_ACTIVATION_REASON }
         }
         if (decision.pauseRequired) state = { ...state, pausedUntil: Math.max(state.pausedUntil, now + MANUAL_PAUSE_MS) }
-        const key = JSON.stringify([decision, context.window?.segment, context.owner, context.device.targetF,
+        const preview = capturePreviewEvidence(state, rawContext, decision.baselineF, timezone, this.runId,
+          this.deps.origin ?? { environment: 'unknown', buildRevision: null })
+        const key = JSON.stringify([preview, decision, context.window?.segment, context.owner, context.device.targetF,
           context.signals?.state, context.signals?.baselineDays, context.signals?.sampleAt, timing.status])
         const previous = this.recorded[side]
         const record = state.config.mode !== 'off' && (!previous || previous.key !== key || now - previous.at >= 60_000 || now < previous.at)
@@ -152,7 +158,7 @@ export class ComfortRuntime {
               ...comfortEvent(now, 'preview', learning.message ? `${decision.reason} ${learning.message}` : decision.reason),
               session: context.window?.session ?? null, proposedF: decision.proposedF, reportedF: context.device.targetF,
               eligible: decision.eligible, deviceObservedAt: context.device.observedAt,
-              presenceObservedAt: context.presence.observedAt, owner: context.owner, signals: context.signals ?? null, timing: timing.status,
+              presenceObservedAt: context.presence.observedAt, owner: context.owner, signals: context.signals ?? null, timing: timing.status, preview,
             }
           : undefined
         if (event || JSON.stringify(state) !== original) this.deps.store.commit(side, state, event)

@@ -9,6 +9,7 @@ import type { ComfortStatus } from '@/src/comfort/contract'
 import type { ComfortConfig, ComfortFeedback } from '@/src/comfort/policy'
 import { Card } from './primitives'
 import { ComfortSignals } from './ComfortSignals'
+import { PreviewNightReports } from './PreviewNightReports'
 
 const fieldClass = 'rounded-ctl border border-line bg-surface px-3 py-2 text-sm text-fg'
 
@@ -52,6 +53,7 @@ export function PersonalComfortCard() {
         />
       )}
       {(configuration.error || feedback.error) && <p className="mt-4 text-sm text-danger" role="alert">{configuration.error?.message ?? feedback.error?.message}</p>}
+      {query.data?.features.nightReports && <PreviewNightReports key={side} side={side} />}
       {feedback.isSuccess && <p className="mt-3 text-sm text-fg-2" role="status">Check-in saved.</p>}
     </Card>
   )

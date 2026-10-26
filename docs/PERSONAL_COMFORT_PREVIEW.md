@@ -91,8 +91,13 @@ saved active settings remain inert and display the qualification gate.
 ## Remaining release gates
 
 This is not deployment or qualification. The physical Pod still runs customized
-Free Sleep. The offline importer, compatibility API and corrected idle handoff
-trial are implemented separately; see [controller handoff](CONTROLLER_HANDOFF.md).
+Free Sleep. The offline importer and corrected idle handoff trial tooling are
+implemented separately; see [controller handoff](CONTROLLER_HANDOFF.md).
+The legacy `/api/native/v1` adapter has not shipped; native clients use the
+authenticated direct version 1 APIs and their capability flags.
+Per-night reporting and exact-source owner review are now implemented; see
+[Preview night reports](PREVIEW_NIGHT_REPORTS.md). No actual night is inferred
+from baseline data, test results or the passage of time.
 Remaining work includes actual shared-authority application receipts for active comfort, hardware qualification, seven real
 Preview nights with owner review, and bounded activation. A Preview proposal
 alone is not evidence of improved sleep or a completed night.

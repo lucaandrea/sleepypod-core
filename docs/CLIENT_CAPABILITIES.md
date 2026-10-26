@@ -38,8 +38,12 @@ legacy `/api/native/v1/` adapter has not shipped. `personalComfortPreview` now
 describes the production Preview service; it never issues actuator requests.
 `personalComfort` still reports active control unavailable. See
 [Personal comfort Preview](PERSONAL_COMFORT_PREVIEW.md) for its versioned API.
-Room context and music vibration also remain unavailable. MQTT
+Room context now has a separately negotiated direct version 1 API; see
+[Room context](ROOM_CONTEXT.md). Music vibration remains unavailable. MQTT
 connection alone does not imply that room inputs are connected or qualified.
+`features.nightReports` on the comfort response advertises per-night reports and
+owner review; see [Preview night reports](PREVIEW_NIGHT_REPORTS.md). These routes
+and optional bed-entry timing fields are not forwarded through a legacy adapter.
 Clients should decode the compatibility prefix as a nullable string and receipt
 and expiry support as booleans; these values are not permanent schema constants.
 Only enable a feature when this controller reports it.
