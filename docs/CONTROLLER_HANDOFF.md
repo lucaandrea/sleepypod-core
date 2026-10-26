@@ -24,8 +24,10 @@ flowchart LR
 2. Before stopping writers, run the importer's `--check-timezone` for the source
    settings timezone in its locked migration environment (see
    [offline migration](FREE_SLEEP_MIGRATION.md)). Then take the reviewed quiesced
-   migration backup and import it into a new data
-   directory. Review routines, current temporary overrides and alarm behavior.
+   migration backup and import it into a new data directory. The
+   [quiesced preparation command](QUIESCED_IMPORT.md) restores Free Sleep before
+   importing into a separate review folder and retains every translation warning.
+   Review routines, current temporary overrides and alarm behavior.
    Keep Core's adaptive comfort Off or Preview and house/base automations off.
    Imported calibration remains pending actual empty/occupied qualification.
 3. Put the already-probed Python modules and environments in their own directory.
