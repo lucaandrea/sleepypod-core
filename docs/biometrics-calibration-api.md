@@ -81,6 +81,11 @@ leaves evaluation evidence unchecked.
 
 Experiment creation requires an idempotency key. `getExperiment` and
 `listExperiments` preserve access to its frozen protocol and audit identity.
+If the creation reply is lost, retry the exact dataset ID, normalized protocol
+and key. A committed match returns the original experiment even after its
+dataset inputs are released; it does not reopen or restore those inputs. Reusing
+the key for a different request remains a conflict. A new key still requires
+valid, retained inputs, and malformed protocols or keys are always rejected.
 
 `releaseDataset` is explicit and idempotent. It refuses release while queued,
 running, cancellation-pending, or interrupted jobs still need the inputs.
