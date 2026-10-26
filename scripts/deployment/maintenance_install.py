@@ -136,6 +136,15 @@ def socket_present():
     return path.exists() or path.is_symlink()
 
 
+def helper_stopped(name, state):
+    """Sockets have no MainPID; service processes still require an explicit zero."""
+    if name not in UNITS or state.get('ActiveState') not in ('inactive', 'failed'):
+        return False
+    if name == maintenance_plan.SOCKET:
+        return state.get('MainPID') in (None, '0')
+    return state.get('MainPID') == '0'
+
+
 def verify_socket():
     info = Path(service_plan.MAINTENANCE_SOCKET).lstat()
     if (not stat.S_ISSOCK(info.st_mode) or info.st_uid != OWNER_UID
@@ -196,7 +205,7 @@ def validate_units(context, allow_missing=False):
         if path.exists() or path.is_symlink():
             if digest(owned_bytes(path)) != context['manifest']['units'][name]:
                 raise ValueError('Maintenance unit changed; preserve it for review: '+name)
-        elif not allow_missing or not handoff.stopped(state):
+        elif not allow_missing or not helper_stopped(name, state):
             raise ValueError('Maintenance unit is missing or its cached process is active: '+name)
         if state.get('DropInPaths') or state.get('FragmentPath') not in ('', str(path)):
             raise ValueError('Unexpected maintenance service override: '+name)
@@ -217,7 +226,7 @@ def install(directory, context):
     for name in UNITS:
         path = UNIT_DIRECTORY/name
         state = handoff.unit_state(name)
-        if path.exists() or path.is_symlink() or state.get('LoadState') != 'not-found' or not handoff.stopped(state):
+        if path.exists() or path.is_symlink() or state.get('LoadState') != 'not-found' or not helper_stopped(name, state):
             raise ValueError('Maintenance service already exists: '+name)
     if socket_present():
         raise ValueError('Maintenance socket path already exists')
@@ -228,7 +237,7 @@ def install(directory, context):
     for name in UNITS: publish_unit(UNIT_DIRECTORY/name, owned_bytes(directory/name, private=True))
     handoff.systemctl('daemon-reload')
     states = validate_units(context)
-    if any(not handoff.stopped(state) for state in states.values()) or states[maintenance_plan.SOCKET].get('UnitFileState') != 'disabled':
+    if any(not helper_stopped(name, state) for name, state in states.items()) or states[maintenance_plan.SOCKET].get('UnitFileState') != 'disabled':
         raise ValueError('Installed maintenance services did not remain stopped')
     require_retained_owner(context)
     write_phase(directory, journal, 'installed_stopped')
@@ -241,7 +250,7 @@ def enable(directory, context):
     if journal['phase'] != 'installed_stopped':
         raise ValueError('Enable only a fully installed, stopped maintenance plan')
     states = validate_units(context)
-    if any(not handoff.stopped(state) for state in states.values()) or states[maintenance_plan.SOCKET].get('UnitFileState') != 'disabled':
+    if any(not helper_stopped(name, state) for name, state in states.items()) or states[maintenance_plan.SOCKET].get('UnitFileState') != 'disabled':
         raise ValueError('Maintenance state changed before enablement')
     write_phase(directory, journal, 'enabling')
     handoff.systemctl('enable', '--now', maintenance_plan.SOCKET)
@@ -271,7 +280,7 @@ def rollback(directory, context):
     if loaded: handoff.systemctl('stop', *loaded)
     if (UNIT_DIRECTORY/maintenance_plan.SOCKET).exists(): handoff.systemctl('disable', maintenance_plan.SOCKET)
     states = validate_units(context, allow_missing=True)
-    if (any(not handoff.stopped(state) for state in states.values())
+    if (any(not helper_stopped(name, state) for name, state in states.items())
             or states[maintenance_plan.SOCKET].get('UnitFileState') == 'enabled' or socket_present()):
         raise ValueError('Maintenance processes did not stop; preserve units for recovery')
     for name in UNITS:
@@ -283,7 +292,7 @@ def rollback(directory, context):
             sync_directory(UNIT_DIRECTORY)
     handoff.systemctl('daemon-reload')
     final = validate_units(context, allow_missing=True)
-    if socket_present() or any(state['LoadState'] != 'not-found' or not handoff.stopped(state) for state in final.values()):
+    if socket_present() or any(state['LoadState'] != 'not-found' or not helper_stopped(name, state) for name, state in final.items()):
         raise ValueError('Maintenance removal could not be confirmed')
     require_retained_owner(context)
     write_phase(directory, journal, 'rolled_back')
