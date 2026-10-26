@@ -18,7 +18,7 @@ and temperature-control previews wrap within the available width. Swipes follow 
 routes and do not hijack controls or the 3D stage.
 
 Browser regression coverage checks secondary routes, owner sign-out, light/dark
-appearance, a 320px viewport at 200% text, keyboard navigation and the bed/tab-bar
+appearance, 305px and 320px viewports at 200% text with scrollbar space, keyboard navigation and the bed/tab-bar
 boundary. Offline WebGL and the 2D fallback remain covered. The fallback uses normal
 scroll flow, with its toolbar, both side controls and timeline in order rather
 than fixed overlapping regions. This is
