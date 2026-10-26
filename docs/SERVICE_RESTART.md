@@ -51,7 +51,9 @@ units. Validation runs again after writing the attempt receipt.
 
 The broker shares the selected plan's existing `handoff.lock` with migration,
 activation, and replacement. It opens that lock read-only and cannot rewrite
-the plan. It submits fixed `systemctl --no-block --job-mode=fail` commands; Core
+the plan. A handoff trial holds the lock throughout its transition, so restart
+requests are intentionally refused during that trial. It submits fixed
+`systemctl --no-block --job-mode=fail` commands; Core
 uses `try-restart`, so it cannot start an inactive controller during rollback.
 Sensor recovery may start an inactive module only while its verified Core parent
 is current. Root operator actions outside these tools still require operational
@@ -71,34 +73,74 @@ request metadata, not credentials or biometric measurements.
 
 ## Deployment and qualification
 
-`scripts/deployment/prepare_offline.py` includes the broker in the verified
-release. `maintenance_plan.py` renders the two separate units for review:
+`scripts/deployment/prepare_offline.py` includes the broker and declares
+`maintenanceProtocol: 1` in the runtime manifest. Existing bundles without that
+declaration are refused, even if a similarly named file is present. Provisioning
+checks the broker's hash and the build's source identity against the manifest.
+
+Add this optional field to the new Core service-plan configuration:
+
+```json
+"maintenanceSocket": "/run/sleepypod-maintenance/control.sock"
+```
+
+`service_plan.py` places the setting in the reviewed Core unit. Existing plans
+without the field render exactly as before. Do not edit the private credential
+environment: an overriding maintenance entry there is refused. Prepare and
+select this new stopped Core plan using the usual `handoff.py`/`replace_plan.py`
+workflow before provisioning its helper. Keep the previous plan and release.
+
+`maintenance_plan.py` renders the two separate units for review:
 
 ```sh
 python3 scripts/deployment/maintenance_plan.py \
   --controller-plan /persistent/sleepypod-unified/service-plan-REVISION \
   --release /persistent/sleepypod-unified/releases/REVISION \
-  --output /private/new-maintenance-plan
+  --output /persistent/sleepypod-unified/maintenance-plan-REVISION
 ```
 
-Rendering does not install or start services or change Core's environment.
-Installation must verify the release and selected controller plan, preserve the
-existing environment, refuse unrelated service files, and record rollback
-before installing the reviewed units. The selected plan's `handoff.lock` must
-already exist. Set only this additional environment entry when provisioning the
-matching Core release:
+Rendering does not install or start anything. With the new Core plan stopped
+and disabled, and retained Free Sleep active and enabled, run as root:
 
-```text
-SLEEPYPOD_MAINTENANCE_SOCKET=/run/sleepypod-maintenance/control.sock
+```sh
+python3 scripts/deployment/maintenance_install.py inspect --plan /persistent/sleepypod-unified/maintenance-plan-REVISION
+python3 scripts/deployment/maintenance_install.py install --plan /persistent/sleepypod-unified/maintenance-plan-REVISION
+python3 scripts/deployment/maintenance_install.py enable --plan /persistent/sleepypod-unified/maintenance-plan-REVISION
 ```
 
-Enable the reviewed socket independently of Core. Its service activates on a
-connection. The supervisor intentionally does not inherit Core's environment or
-owner key. Update its reviewed plan binding when changing controller plans;
-an old binding will refuse maintenance after unit replacement.
+`inspect` is read-only and shares the existing controller lock. `install`
+publishes only absent unit files, records its intent before writes, and leaves
+both stopped. `enable` selects only the maintenance socket at boot and starts
+its listener. The helper activates on a connection. It does not inherit Core's
+environment or owner key. These commands never start Core or stop Free Sleep.
 
-The owner's Pod still runs retained Free Sleep. The broker is not yet installed
-or live-qualified there. Tests use temporary sockets, synthetic process state,
+The installer verifies private root-owned plans, unchanged Core/legacy units,
+safe path ownership, and matching release identity. It shares the controller's
+existing `handoff.lock` and serializes its own operations. It does not rewrite
+the credential file or any controller, sensor, SSH or stock firmware unit.
+
+To recover an interrupted installation or undo enablement:
+
+```sh
+python3 scripts/deployment/maintenance_install.py rollback --plan /persistent/sleepypod-unified/maintenance-plan-REVISION
+```
+
+Rollback requires retained Free Sleep ownership too; if Core has been activated,
+first use its existing controller rollback procedure. A completed activation
+rollback is accepted. Cleanup uses the private installation journal and exact
+unit hashes, so it can remove a failed helper even when its runtime or credential
+file is unavailable. Changed units, overrides and unverified active processes
+are preserved for operator review. Interrupted enablement is reconciled through
+rollback rather than replaying the enable command.
+
+Rollback stops/disables/removes only the two matching maintenance units. It
+preserves plans, journals, releases, databases, credentials and broker attempt
+receipts. Repeated rollback is safe after verified removal. Use a newly rendered
+maintenance-plan directory for a later installation rather than erasing its
+journal. Before replacing a Core plan, roll back its bound helper while the old
+Core plan is stopped, then provision the matching helper for the new plan.
+
+The broker requires live qualification on each deployment. Tests use temporary sockets, synthetic process state,
 and substituted systemd effects; they cannot establish live restart behavior.
 `python3 scripts/deployment/probe_maintenance.py` provides an inert Linux probe
 when run as root on a host with the `dac` account. It uses the real Unix socket,

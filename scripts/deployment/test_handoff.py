@@ -66,6 +66,14 @@ class ServicePlanTests(unittest.TestCase):
             service_plan.prepare(CONFIG, self.root)
         self.assertEqual(list(self.root.iterdir()), [])
 
+    def test_optional_maintenance_socket_is_explicit_and_leaves_existing_plans_unchanged(self):
+        self.assertNotIn('SLEEPYPOD_MAINTENANCE_SOCKET', service_plan.render(CONFIG)['sleepypod.service'])
+        units = service_plan.render({**CONFIG, 'maintenanceSocket': service_plan.MAINTENANCE_SOCKET})
+        self.assertIn('Environment="SLEEPYPOD_MAINTENANCE_SOCKET=/run/sleepypod-maintenance/control.sock"', units['sleepypod.service'])
+        self.assertTrue(all('SLEEPYPOD_MAINTENANCE_SOCKET' not in text for name, text in units.items() if name != 'sleepypod.service'))
+        for socket in ('/tmp/control.sock', None, True, '/run/sleepypod-maintenance/control.sock\nUser=root'):
+            with self.assertRaises(ValueError): service_plan.render({**CONFIG, 'maintenanceSocket': socket})
+
     def test_rehashed_service_tampering_is_rejected(self):
         directory = self.root / 'plan'
         plan = service_plan.prepare(CONFIG, directory)

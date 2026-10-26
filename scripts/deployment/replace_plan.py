@@ -11,6 +11,7 @@ import stat
 import tempfile
 
 import handoff
+from maintenance_plan import SERVICE as MAINTENANCE_SERVICE, SOCKET as MAINTENANCE_SOCKET
 from service_plan import CORE_UNITS, LEGACY_UNITS, read_plan
 
 
@@ -44,6 +45,11 @@ def replace_plan(previous, directory):
     for name in ('data', 'environment', 'dacSocket', 'rawData'):
         if old_plan['config'][name] != plan['config'][name]:
             raise ValueError('A release replacement cannot change ' + name)
+    if 'maintenanceSocket' in old_plan['config'] or 'maintenanceSocket' in plan['config']:
+        for name in (MAINTENANCE_SOCKET, MAINTENANCE_SERVICE):
+            path = handoff.UNIT_DIRECTORY / name
+            if path.exists() or path.is_symlink() or handoff.unit_state(name).get('LoadState') != 'not-found':
+                raise ValueError('Roll back the bound maintenance helper before changing the controller plan')
     handoff.validate_installed(old_plan)
     handoff.validate_legacy(old_journal)
     for name in CORE_UNITS:

@@ -154,3 +154,8 @@ private Unix socket, current-process and reviewed-plan checks, expiring requests
 durable attempt receipts, and a shared migration lock. Rendering its service
 plan does not install or enable it. See [Service restart](SERVICE_RESTART.md)
 for provisioning and the remaining physical qualification.
+The deployment tool now supports inspect, stopped installation, socket enablement
+and rollback for that helper. Core opts in through its reviewed unit, so private
+credentials are never rewritten. Failed installs and lost enablement replies
+retain a recoverable journal; removal does not require a working release. The
+tooling does not replace the pending attended restart and recovery qualification.

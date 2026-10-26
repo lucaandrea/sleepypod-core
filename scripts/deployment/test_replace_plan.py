@@ -87,3 +87,18 @@ class ReplacementTests(unittest.TestCase):
                 replace_plan.replace_plan(self.directory, self.replacement)
         self.assertEqual((self.unit_directory / 'sleepypod.service').read_text(), 'external edit')
         self.assertEqual(self.calls, [])
+
+    def test_bound_maintenance_helper_must_be_removed_before_new_controller_plan(self):
+        self.prepare_replacement()
+        target = self.root/'with-maintenance'
+        service_plan.prepare({**CONFIG, 'release': '/persistent/sleepypod-unified/releases/def5678',
+                              'maintenanceSocket': service_plan.MAINTENANCE_SOCKET}, target)
+        names = (replace_plan.MAINTENANCE_SOCKET, replace_plan.MAINTENANCE_SERVICE)
+        for name in names: self.states[name] = {'LoadState': 'not-found'}
+        self.states[names[0]]['LoadState'] = 'loaded'
+        with self.assertRaisesRegex(ValueError, 'bound maintenance'):
+            replace_plan.replace_plan(self.directory, target)
+        self.assertFalse((target/'handoff.json').exists())
+        self.assertEqual(self.calls, [])
+        self.states[names[0]]['LoadState'] = 'not-found'
+        self.assertEqual(replace_plan.replace_plan(self.directory, target)['phase'], 'installed_not_started')
