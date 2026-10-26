@@ -120,16 +120,18 @@ both are on.
 ### Topics
 
 `<prefix>` defaults to `sleepypod`. `<device-id>` is the slugified hostname
-(override with `MQTT_DEVICE_ID`). State topics are retained; execution receipts are not.
+(override with `MQTT_DEVICE_ID`). Discovery and connection availability are retained; measurements and execution receipts are not.
+See [qualified home telemetry](HOME_TELEMETRY.md) for source timestamps, expiry, null fields and migration.
 
 | Topic | Direction | Payload |
 |---|---|---|
 | `<prefix>/<device-id>/availability` | pod → broker | `online` / `offline` (LWT) |
-| `<prefix>/<device-id>/state/device-status` | pod → broker | full deviceStatus JSON |
+| `<prefix>/<device-id>/state/device-status` | pod → broker | fresh reported DAC status; no optimistic overlay |
 | `<prefix>/<device-id>/state/<side>/climate` | pod → broker | per-side temp / mode |
 | `<prefix>/<device-id>/state/water-level` | pod → broker | `low` / `ok` / `unknown` |
-| `<prefix>/<device-id>/state/biometrics/<side>` | pod → broker | latest HR / HRV / BR |
+| `<prefix>/<device-id>/state/biometrics/<side>` | pod → broker | qualified live HR / beat-interval variability / BR |
 | `<prefix>/<device-id>/state/environment/ambient` | pod → broker | `{"ts": <epoch_ms>, "temperature": <number\|null>, "humidity": <number\|null>}` (°C, %) |
+| `<prefix>/<device-id>/state/occupancy/<side>` | pod → broker | calibrated occupied / classification, or unavailable |
 | `<prefix>/<device-id>/cmd/request` | broker → pod | Expiring control request; explicit opt-in required |
 | `<prefix>/<device-id>/receipt/<request-id>` | pod → broker | Non-retained execution receipt; physical effect unverified |
 

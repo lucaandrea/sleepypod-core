@@ -7,7 +7,7 @@
  * movement + level signal combination.
  */
 
-import { Service, Characteristic } from 'hap-nodejs'
+import { Service, Characteristic, HapStatusError } from 'hap-nodejs'
 import { getOccupancy } from '@/src/lib/occupancy'
 import type { Side } from '@/src/hardware/types'
 
@@ -21,14 +21,24 @@ export interface OccupancyAccessory {
 export function buildOccupancySensor(side: Side): OccupancyAccessory {
   const service = new Service.OccupancySensor(`Bed ${side} occupancy`, side)
 
-  const characteristicValue = (): number => (
-    getOccupancy(side).occupied
+  const characteristicValue = (): number => {
+    const occupancy = getOccupancy(side)
+    if (!occupancy.available) throw new HapStatusError(-70402)
+    return occupancy.occupied
       ? Characteristic.OccupancyDetected.OCCUPANCY_DETECTED
       : Characteristic.OccupancyDetected.OCCUPANCY_NOT_DETECTED
-  )
+  }
 
   const update = (): void => {
-    service.updateCharacteristic(Characteristic.OccupancyDetected, characteristicValue())
+    try {
+      service.updateCharacteristic(Characteristic.OccupancyDetected, characteristicValue())
+      service.updateCharacteristic(Characteristic.StatusFault, Characteristic.StatusFault.NO_FAULT)
+    }
+    catch {
+      service.getCharacteristic(Characteristic.OccupancyDetected)
+        .updateValue(new HapStatusError(-70402))
+      service.updateCharacteristic(Characteristic.StatusFault, Characteristic.StatusFault.GENERAL_FAULT)
+    }
   }
 
   service.getCharacteristic(Characteristic.OccupancyDetected).onGet(characteristicValue)

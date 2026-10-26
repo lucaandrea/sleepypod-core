@@ -88,3 +88,13 @@ generate 30-second requests. See [the protocol](MQTT_COMMANDS.md). This source
 change does not enable the broker on the owner's Pod or qualify hardware.
 Dedicated broker credentials/ACLs and sensor freshness for external automations
 remain separate integration work.
+
+## Qualified home telemetry
+
+MQTT now uses source timestamps and per-field availability, current mechanical
+proof for live vitals, and calibrated occupancy. Live environmental/pump caches
+reject replay backlogs. HomeKit ambient and occupancy sensors fault when missing
+or stale. Unsupported clog discovery is withdrawn. See [the contract and
+validation limits](HOME_TELEMETRY.md). This is source-level integration; broker
+provisioning, actual pairing, sensor qualification and household automations
+remain pending.

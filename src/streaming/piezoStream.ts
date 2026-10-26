@@ -44,6 +44,7 @@ import { authorized } from '@/src/auth/access'
  */
 
 import { RecentSensorFrames } from './recentSensorFrames'
+import { homeSensors } from '@/src/telemetry/sensorCache'
 import { WebSocketServer, WebSocket } from 'ws'
 import type { VerifyClientCallbackAsync } from 'ws'
 import { publishProspectiveFrame, failProspectiveFrames } from './prospectiveFrameTap'
@@ -1015,6 +1016,7 @@ async function startNatsSource(expectedServer: WebSocketServer): Promise<boolean
  * and stays in its loop.)
  */
 function dispatchSensorFrame(frame: Record<string, unknown>, backlog = false): void {
+  homeSensors.record(frame, backlog, Date.now())
   publishProspectiveFrame(frame, backlog, Date.now())
   streamState.recentFrames.add(frame)
   recordFirstSensorFrame()
@@ -1073,7 +1075,7 @@ function dispatchSensorFrame(frame: Record<string, unknown>, backlog = false): v
     const left = capSideChannels(rawLeft)
     const right = capSideChannels(rawRight)
     if (typeof ts === 'number' && Number.isFinite(ts)) {
-      streamState.latestCapSenseSnapshot = {
+      if (!backlog) streamState.latestCapSenseSnapshot = {
         type: frameType,
         ts,
         receivedAtMs: Date.now(),
@@ -1085,7 +1087,7 @@ function dispatchSensorFrame(frame: Record<string, unknown>, backlog = false): v
       if (left) recordCapFrame('left', left, ts, capSideStatus(rawLeft))
       if (right) recordCapFrame('right', right, ts, capSideStatus(rawRight))
     }
-    else {
+    else if (!backlog) {
       streamState.latestCapSenseSnapshot = null
     }
   }
@@ -1308,6 +1310,8 @@ export const __test__ = {
  * Called during graceful shutdown in instrumentation.ts.
  */
 export async function shutdownPiezoStreamServer(): Promise<void> {
+  homeSensors.clear()
+  streamState.latestCapSenseSnapshot = null
   failProspectiveFrames()
   // Null streamState.wss first so any in-flight source selection / NATS connect aborts
   // instead of attaching to a server that's going away.

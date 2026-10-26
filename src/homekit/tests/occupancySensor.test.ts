@@ -13,7 +13,7 @@ import { buildOccupancySensor } from '../accessories/occupancySensor'
 function result(occupied: boolean): OccupancyResult {
   return {
     occupied,
-    available: false,
+    available: true,
     classification: occupied ? 'person' : 'none',
     movement: { active: occupied, peakScore: occupied ? 660 : 12 },
     level: { active: false, deviation: null, threshold: null, ageMs: null, zoneDeviations: null, zones: null },
@@ -57,6 +57,18 @@ describe('occupancySensor accessory', () => {
     const { service, stop } = buildOccupancySensor('right')
     const value = await service.getCharacteristic(Characteristic.OccupancyDetected).handleGetRequest()
     expect(value).toBe(Characteristic.OccupancyDetected.OCCUPANCY_DETECTED)
+    stop()
+  })
+
+  it('faults when occupancy is unavailable instead of reporting an empty bed', async () => {
+    occupancyMock.mockReturnValue({ ...result(false), available: false })
+    const { service, stop } = buildOccupancySensor('left')
+    await expect(service.getCharacteristic(Characteristic.OccupancyDetected).handleGetRequest()).rejects.toBe(-70402)
+    expect(service.getCharacteristic(Characteristic.StatusFault).value).toBe(1)
+    occupancyMock.mockReturnValue(result(true))
+    vi.advanceTimersByTime(5000)
+    expect(await service.getCharacteristic(Characteristic.OccupancyDetected).handleGetRequest()).toBe(1)
+    expect(service.getCharacteristic(Characteristic.StatusFault).value).toBe(0)
     stop()
   })
 

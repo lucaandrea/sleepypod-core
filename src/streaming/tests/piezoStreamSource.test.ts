@@ -123,6 +123,7 @@ async function waitFor(pred: () => boolean, timeoutMs = 3000): Promise<void> {
 describe('startPiezoStreamServer — source selection', () => {
   afterEach(async () => {
     await shutdownPiezoStreamServer()
+    __test__.resetFrameIndex()
     vi.useRealTimers()
     natsMock.reachable = false
     natsMock.probeErrorOnce = false
@@ -295,7 +296,12 @@ describe('startPiezoStreamServer — source selection', () => {
       }),
     )
 
-    // The RAW loop starts only after the grace window; wait for its snapshot.
+    // The RAW loop ingests initial backlog; only subsequent frames are live.
+    await waitFor(() => __test__.frameIndex.some(entry => entry.ts === now))
+    expect(getLatestCapSenseSnapshot()).toBeNull()
+    fs.appendFileSync(path.join(tmpRawDir, 'sel.RAW'), buildOuterRecord(20, {
+      type: 'capSense', ts: now + 1, left: { out: 5, cen: 6, in: 7 }, right: { out: 8, cen: 9, in: 10 },
+    }))
     await waitFor(() => {
       const l = getLatestCapSenseSnapshot()?.left
       return Array.isArray(l) && l[0] === 5
@@ -322,6 +328,11 @@ describe('startPiezoStreamServer — source selection', () => {
       }),
     )
 
+    await waitFor(() => __test__.frameIndex.some(entry => entry.ts === now))
+    expect(getLatestCapSenseSnapshot()).toBeNull()
+    fs.appendFileSync(path.join(tmpRawDir, 'probe-error.RAW'), buildOuterRecord(20, {
+      type: 'capSense', ts: now + 1, left: { out: 15, cen: 16, in: 17 }, right: { out: 18, cen: 19, in: 20 },
+    }))
     await waitFor(() => {
       const left = getLatestCapSenseSnapshot()?.left
       return Array.isArray(left) && left[0] === 15
@@ -347,6 +358,11 @@ describe('startPiezoStreamServer — source selection', () => {
       }),
     )
 
+    await waitFor(() => __test__.frameIndex.some(entry => entry.ts === now))
+    expect(getLatestCapSenseSnapshot()).toBeNull()
+    fs.appendFileSync(path.join(tmpRawDir, 'connect-error.RAW'), buildOuterRecord(20, {
+      type: 'capSense', ts: now + 1, left: { out: 25, cen: 26, in: 27 }, right: { out: 28, cen: 29, in: 30 },
+    }))
     await waitFor(() => {
       const left = getLatestCapSenseSnapshot()?.left
       return Array.isArray(left) && left[0] === 25
@@ -366,7 +382,12 @@ describe('startPiezoStreamServer — source selection', () => {
     }))
     startPiezoStreamServer()
 
-    await waitFor(() => getLatestCapSenseSnapshot()?.ts === 123)
+    await waitFor(() => __test__.frameIndex.some(entry => entry.ts === 123))
+    expect(getLatestCapSenseSnapshot()).toBeNull()
+    fs.appendFileSync(path.join(tmpRawDir, 'confirmed-raw.RAW'), buildOuterRecord(20, {
+      type: 'capSense', ts: 123 + 1, left: 35, right: 36,
+    }))
+    await waitFor(() => getLatestCapSenseSnapshot()?.ts === 124)
     expect(natsReachable).toHaveBeenCalledTimes(1)
     expect(startNatsFrameSource).not.toHaveBeenCalled()
   })
@@ -461,7 +482,12 @@ describe('startPiezoStreamServer — source selection', () => {
     }))
     startPiezoStreamServer()
 
-    await waitFor(() => getLatestCapSenseSnapshot()?.ts === 789)
+    await waitFor(() => __test__.frameIndex.some(entry => entry.ts === 789))
+    expect(getLatestCapSenseSnapshot()).toBeNull()
+    fs.appendFileSync(path.join(tmpRawDir, 'override-raw.RAW'), buildOuterRecord(20, {
+      type: 'capSense', ts: 789 + 1, left: 10, right: 11,
+    }))
+    await waitFor(() => getLatestCapSenseSnapshot()?.ts === 790)
     expect(discoverSensorSource).not.toHaveBeenCalled()
     expect(natsReachable).not.toHaveBeenCalled()
     expect(startNatsFrameSource).not.toHaveBeenCalled()
