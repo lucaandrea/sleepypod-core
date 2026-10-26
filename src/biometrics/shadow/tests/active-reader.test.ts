@@ -74,6 +74,16 @@ it('requires read-only access and never writes through the capture connection', 
   expect(capture.poll()).toHaveLength(1)
   expect(() => readonly.prepare('DELETE FROM vitals').run()).toThrow(/readonly/)
 })
+it('withholds firmware-time live rows until the shadow candidate uses matching clock semantics', () => {
+  const { writer, reader, insert } = setup()
+  writer.prepare('UPDATE biometric_processing_runs SET input_identity=?').run(JSON.stringify({
+    sourceSide: 'right', timestampBasis: 'firmware_event_time_v1', rawIdentity: 'not_retained', sensorCalibration: 'not_consumed',
+  }))
+  const capture = reader()
+  insert()
+  expect(() => capture.poll()).toThrow()
+  expect(() => capture.poll()).toThrow() // A failed batch must not advance past the mismatch.
+})
 it('advances past other-side and out-of-window inserts without labelling them active', () => {
   const { reader, insert } = setup()
   const capture = reader()
