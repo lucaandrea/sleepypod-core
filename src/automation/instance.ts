@@ -11,6 +11,7 @@ import { eq } from 'drizzle-orm'
 import { db } from '@/src/db'
 import { automationRuns, automations, deviceSettings } from '@/src/db/schema'
 import { getTemperatureController } from '@/src/temperature/instance'
+import { publishAutomationNotification } from '@/src/notifications/instance'
 import { AutomationEngine } from './engine'
 import { BiometricsSignalReader } from './signals.biometrics'
 import { CompositeSignalReader, DeviceSignalReader, clockInTimezone } from './signals'
@@ -107,7 +108,7 @@ export async function getAutomationEngine(): Promise<AutomationEngine> {
         loadRules,
         recordRun,
         disableRule,
-        notify: (id, message) => console.log(`[automation notify] rule ${id}: ${message}`),
+        notify: publishAutomationNotification,
         log: msg => console.log(`[automation] ${msg}`),
       })
       // Resolve persisted consent before any timer can evaluate a rule.

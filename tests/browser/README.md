@@ -23,6 +23,11 @@ checks anonymous rejection and authenticated REST requests.
 
 Coverage:
 
+- Publish a synthetic service alert into the real SQLite inbox, receive it in the
+  foreground, mark it read, reload, and verify idempotence through REST. Reject
+  anonymous REST/tRPC and cross-origin cookie mutations. Capture desktop and
+  phone layouts without starting automation or hardware daemons.
+
 - Keep power-only bedtime routines visible, move a complete overnight routine,
   reload its persisted state, reject an edit with a stale revision, preserve the
   unsaved browser draft, and check the 390-pixel layout. These use disabled

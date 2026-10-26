@@ -11,7 +11,7 @@
  *   - Runaway guard: a rule exceeding N hardware actions/hour auto-disables.
  *   - Manual-override hold: touching the dial suspends autopilot on that side.
  *   - Run-once gate: never writes a side with an active run-once session.
- *   - Dry-run: notify-only; logs would-fire events without touching hardware.
+ *   - Dry-run: audit-only; logs would-fire events without delivering alerts or touching hardware.
  *
  * Every evaluation (i.e. every tick where a rule's trigger is active) writes one
  * row to automation_runs with outcome fired/skipped/clamped/dry_run/error — the
@@ -59,7 +59,7 @@ export interface AutomationEngineDeps {
   /** Persist enabled=false when the runaway guard trips. */
   disableRule: (automationId: number) => Promise<void>
   /** Side-effect for notify actions (e.g. push/log); never touches hardware. */
-  notify: (automationId: number, message: string) => void
+  notify: (automationId: number, message: string) => undefined | { notificationId: number, duplicate: boolean }
   log?: (msg: string) => void
 }
 
@@ -478,8 +478,9 @@ export class AutomationEngine {
     now: number,
   ): Promise<ActionResult[]> {
     if (action.kind === 'notify') {
-      this.deps.notify(rule.id, action.message)
-      return [{ kind: 'notify', notified: true }]
+      if (rule.dryRun) return [{ kind: 'notify', dryRun: true }]
+      const receipt = this.deps.notify(rule.id, action.message)
+      return [{ kind: 'notify', notified: true, ...receipt }]
     }
     const sides: Side[] = action.side ? [action.side] : (rule.side ? [rule.side] : ['left', 'right'])
     const results: ActionResult[] = []
@@ -538,6 +539,8 @@ interface ActionResult {
   kind: Action['kind']
   side?: Side
   notified?: boolean
+  notificationId?: number
+  duplicate?: boolean
   sent?: boolean
   dryRun?: boolean
   antiThrash?: boolean

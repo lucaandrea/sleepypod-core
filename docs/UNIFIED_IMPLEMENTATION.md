@@ -159,3 +159,14 @@ and rollback for that helper. Core opts in through its reviewed unit, so private
 credentials are never rewritten. Failed installs and lost enablement replies
 retain a recoverable journal; removal does not require a working release. The
 tooling does not replace the pending attended restart and recovery qualification.
+
+## Automation alert delivery
+
+Live notification actions now persist an owner-authenticated inbox and return a
+durable receipt. The shared web toolbar shows new alerts while the app is open,
+read/expired history, explicit acknowledgment and network failures. Dry-run rules
+record Activity proposals only. See [Automation notifications](AUTOMATION_NOTIFICATIONS.md)
+for the REST/tRPC native contract, retention, deduplication and restart behavior.
+Production-browser and real SQLite checks use synthetic alerts and do not operate
+hardware. Native integration, APNs/Web Push and live Pod qualification remain
+separate work; background push is explicitly unavailable in the API.
