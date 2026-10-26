@@ -4,6 +4,8 @@ import { AppShell } from '../AppShell'
 import { Sidebar } from '../Sidebar'
 import { TabBar } from '../TabBar'
 import { MobileToolbar } from '../MobileToolbar'
+import { MoreScreen } from '@/src/components/More/MoreScreen'
+import { RoutinesLink } from '@/src/components/TempScreen/RoutinesLink'
 import { activeNavId, langFromPath, pathWithoutLang } from '../navItems'
 
 const state = vi.hoisted(() => ({
@@ -32,9 +34,9 @@ beforeEach(() => {
 
 describe('responsive navigation', () => {
   it.each([
-    ['/fr/base', 'base'], ['/de/autopilot/7', 'autopilot'], ['/en/data', 'sleep'], ['/en/status', 'system'],
-    ['/en/debug', 'system'], ['/en/sensors', 'system'], ['/en/schedule', 'schedule'],
-    ['/en/settings', 'settings'], ['/en/schedule-other', 'temp'], [null, 'temp'],
+    ['/fr/base', 'tonight'], ['/de/autopilot/7', 'autopilot'], ['/en/data', 'sleep'], ['/en/status', 'more'],
+    ['/en/debug', 'more'], ['/en/sensors', 'more'], ['/en/schedule', 'tonight'],
+    ['/en/settings', 'more'], ['/en/more', 'more'], ['/en/home', 'home'], ['/en/schedule-other', 'tonight'], [null, 'tonight'],
   ])('resolves %s without matching unrelated prefixes', (path, expected) => {
     expect(activeNavId(path)).toBe(expected)
     expect(langFromPath(null)).toBe('en')
@@ -53,23 +55,24 @@ describe('responsive navigation', () => {
     expect(link.getAttribute('aria-current')).toBe('page')
     expect(screen.getByRole('link', { name: 'Docs' }).getAttribute('rel')).toBe('noopener noreferrer')
   })
-  it('keeps the three phone destinations stable as base availability changes', () => {
+  it('keeps the five phone destinations stable as base availability changes', () => {
     state.path = '/fr/schedule'
     const { rerender } = render(<TabBar />)
-    for (const name of ['Temp', 'Schedule', 'Sleep']) expect(screen.getByRole('link', { name })).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Schedule' }).getAttribute('aria-current')).toBe('page')
+    for (const name of ['Tonight', 'Sleep', 'Autopilot', 'Home', 'More']) expect(screen.getByRole('link', { name })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Tonight' }).getAttribute('aria-current')).toBe('page')
     state.base = { configured: true }
     rerender(<TabBar />)
-    expect(screen.getAllByRole('link')).toHaveLength(3)
+    expect(screen.getAllByRole('link')).toHaveLength(5)
   })
-  it('makes desktop secondary routes direct and only shows a configured base', () => {
+  it('nests routines and a configured base under Tonight on desktop', () => {
     state.path = '/en/base'
     const { rerender } = render(<Sidebar />)
     expect(screen.queryByRole('link', { name: 'Base' })).toBeNull()
     state.base = { configured: true }
     rerender(<Sidebar />)
     expect(screen.getByRole('link', { name: 'Base' }).getAttribute('aria-current')).toBe('page')
-    for (const name of ['Schedule', 'Autopilot', 'Home', 'System', 'Settings']) expect(screen.getByRole('link', { name })).toBeTruthy()
+    for (const name of ['Tonight', 'Sleep', 'Autopilot', 'Home', 'More', 'Routines & wake alarms']) expect(screen.getByRole('link', { name })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Tonight' }).getAttribute('aria-expanded')).toBe('true')
   })
   it('shows pod model and every issue in full, with build info behind the DEV chip', () => {
     Object.assign(state, { path: '/en/system', status: { podVersion: 'J00' }, water: { level: 'low' }, version: { commitHash: 'abcdef1234', branch: 'feat/ui-redesign' } })
@@ -108,10 +111,27 @@ describe('responsive navigation', () => {
     state.path = '/fr/data'
     const { rerender } = render(<TabBar />)
     expect(screen.getByRole('link', { name: 'Sleep' }).getAttribute('aria-current')).toBe('page')
-    expect(screen.getByRole('link', { name: 'Temp' }).getAttribute('href')).toBe('/fr')
+    expect(screen.getByRole('link', { name: 'Tonight' }).getAttribute('href')).toBe('/fr')
     state.active = false
     rerender(<TabBar />)
-    expect(screen.getAllByRole('link')).toHaveLength(3)
+    expect(screen.getAllByRole('link')).toHaveLength(5)
+  })
+  it('keeps More links localized and exposes base controls only when configured', () => {
+    state.path = '/fr/more'
+    const { rerender } = render(<MoreScreen />)
+    expect(screen.getByRole('heading', { name: 'More' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: /Routines & wake alarms/ }).getAttribute('href')).toBe('/fr/schedule')
+    expect(screen.getByRole('link', { name: /Browser connection/ }).getAttribute('href')).toBe('/fr/settings?section=connection')
+    expect(screen.queryByRole('link', { name: /Adjustable base/ })).toBeNull()
+    state.base = { configured: true }
+    rerender(<MoreScreen />)
+    expect(screen.getByRole('link', { name: /Adjustable base/ }).getAttribute('href')).toBe('/fr/base')
+    expect(screen.getByRole('link', { name: /Setup & documentation/ }).getAttribute('rel')).toBe('noopener noreferrer')
+  })
+  it('keeps the Tonight routine shortcut in the active language', () => {
+    state.path = '/de'
+    render(<RoutinesLink />)
+    expect(screen.getByRole('link', { name: 'Routines' }).getAttribute('href')).toBe('/de/schedule')
   })
   it('keeps phone settings reachable and announces a health warning', () => {
     state.path = '/fr/schedule'

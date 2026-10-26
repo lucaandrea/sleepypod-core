@@ -8,7 +8,7 @@ import { langFromPath } from './navItems'
 import { usePodHealth } from './usePodHealth'
 import { NotificationInbox } from './NotificationInbox'
 
-/** Secondary destinations stay within reach without crowding the three phone tabs. */
+/** Direct settings shortcut, also available from the More destination. */
 export function SettingsLink({ className, summary }: { className?: string, summary?: string }) {
   const lang = langFromPath(usePathname())
   return (
@@ -27,8 +27,8 @@ export function MobileToolbar() {
   const { footer } = usePodHealth()
   return (
     <div data-mobile-toolbar className="flex items-center justify-between min-[900px]:justify-end">
-      <span className="font-mono text-sm text-fg-2 min-[900px]:hidden">sleepypod</span>
-      <div className="flex items-center gap-1">
+      <span className="min-w-0 truncate font-mono text-sm text-fg-2 min-[900px]:hidden">sleepypod</span>
+      <div className="flex shrink-0 items-center gap-1">
         <NotificationInbox />
         <SettingsLink summary={footer.tone === 'warn' ? footer.summary : undefined} />
       </div>

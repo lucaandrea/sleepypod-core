@@ -35,7 +35,7 @@ import { STAGE, STAGE_SIDES, formatStageTemp, sideStatus, tempColor } from './st
 import type { StageSide } from './stageColors'
 import { useStageAutoReturn, useStageZones } from './stagePrefs'
 import { ViewSwitch } from './ViewSwitch'
-import { SettingsLink } from '@/src/components/AppShell/MobileToolbar'
+import { RoutinesLink } from '@/src/components/TempScreen/RoutinesLink'
 import type { StageLabelRefs, StageSceneState } from './stageScene'
 import { CAMERA } from './stageCamera'
 import { HOUR, clock, scheduledAt, sideActivity, stageCurves, stageWindow } from './stageTimelineLogic'
@@ -313,8 +313,9 @@ export function TempStage({ onExit }: { onExit: () => void }) {
     <div
       data-testid="temp-stage"
       data-no-swipe
-      className="fixed inset-0 z-30 select-none overflow-hidden bg-[#0b0b0c] font-sans text-[#ececec] min-[900px]:left-[224px] max-[899px]:bottom-[calc(60px+env(safe-area-inset-bottom,0px))]"
+      className="fixed inset-0 z-30 select-none overflow-hidden bg-[#0b0b0c] font-sans text-[#ececec] min-[900px]:left-[224px] max-[899px]:bottom-[var(--phone-nav-height,76px)]"
     >
+      <h1 className="sr-only">Tonight</h1>
       {mode !== '2d' && (
         <StageCanvas
           ref={canvas}
@@ -391,7 +392,7 @@ export function TempStage({ onExit }: { onExit: () => void }) {
                 </span>
               )}
           <ViewSwitch view="stage" onChange={v => v === 'cards' && onExit()} />
-          <SettingsLink />
+          <RoutinesLink />
           <button
             type="button"
             aria-pressed={isLinked}
