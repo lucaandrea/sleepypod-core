@@ -25,6 +25,7 @@ import { readThermalTruth, reportsPumpSpeed } from '@/src/lib/thermalTruth'
 import { getDataPath } from '@/src/lib/dataPathCollect'
 import { readHistory } from '@/src/lib/healthHistory'
 import { NODES, RESTARTABLE_UNITS, STAGES } from '@/src/lib/dataPath'
+import { requestBrokerRestart } from '@/src/server/maintenance'
 
 const execFileAsync = promisify(execFile)
 
@@ -611,6 +612,12 @@ export const healthRouter = router({
     .input(z.object({ unit: restartUnitEnum }))
     .output(z.object({ ok: z.boolean(), message: z.string() }))
     .mutation(async ({ input }) => {
+      const maintenanceSocket = process.env.SLEEPYPOD_MAINTENANCE_SOCKET
+      if (maintenanceSocket) {
+        // An unknown broker result must remain a transport error so clients
+        // require reconnection; returning ok:false would incorrectly allow retry.
+        return requestBrokerRestart(input.unit, maintenanceSocket)
+      }
       try {
         const core = input.unit === 'sleepypod.service'
         await execFileAsync('sudo', ['-n', 'systemctl', ...(core ? ['--no-block'] : []), 'restart', input.unit], { timeout: 20_000 })
@@ -619,6 +626,10 @@ export const healthRouter = router({
           : `Restarted ${input.unit}` }
       }
       catch (error) {
+        if (error instanceof Error && (('killed' in error && error.killed) || ('signal' in error && error.signal)
+          || ('code' in error && typeof error.code === 'number'))) {
+          throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Restart could not be confirmed. Reconnect and inspect service health.' })
+        }
         const reason = error instanceof Error ? error.message.split('\n')[0] : String(error)
         return { ok: false, message: `Couldn’t restart it from here (${reason}). Run on the pod: sudo systemctl restart ${input.unit}` }
       }
