@@ -340,6 +340,12 @@ an interval ending there belongs to the first. Intervals spanning the midpoint
 are excluded from both half-window groups without splitting or changing their
 aggregation; the report retains their excluded count.
 
+With all three numeric objectives and three configurations, the retained
+`numericSubgroupSummary` has up to 36 rows: four groups × three metrics × three
+pairwise comparisons. The bounded web projection accepts all 36; it must not
+truncate a valid multi-metric report to the 12 rows for a single metric. Metric
+identity, reference membership and missing scores remain separate in each row.
+
 Each group uses the same all-configuration common timestamp support as the main
 numeric comparison. References are weighted within a night, then nights receive
 equal weight. Objective evidence requires the configured minimum paired records
