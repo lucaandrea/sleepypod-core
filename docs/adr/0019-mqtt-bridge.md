@@ -1,5 +1,15 @@
 # ADR 0019: MQTT bridge for Home Assistant integration
 
+## Fork update: 25 October 2026
+
+The original design below is historical. HTTP and WebSocket owner authorization
+are now enforced at their transport boundaries. MQTT has its own broker trust
+boundary: dedicated credentials and topic ACLs are required. It defaults to
+telemetry only; `MQTT_COMMANDS_ENABLED=true` enables the expiring, durable
+control-request path. The raw actuator dispatcher is removed. The restricted
+internal adapter shares the app's control receipts and does not grant general
+router, base or priming access. See [current protocol](../MQTT_COMMANDS.md).
+
 ## Context
 
 The Pod runs a tRPC HTTP API on port 3000 and a WebSocket sensor stream on

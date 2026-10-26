@@ -8,6 +8,8 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import os from 'node:os'
+import { randomUUID } from 'node:crypto'
+import { mqttClimateCommandTemplate } from '../mqttCommands'
 
 // Hoisted state shared with the @/src/db mock factory — lets each test stub
 // the device_settings row that resolveConfig will read.
@@ -166,22 +168,8 @@ vi.mock('@/src/db', () => ({
   biometricsDb: { select: dbMock.select },
 }))
 
-// Hoisted device caller mock — lifecycle tests assert that messages route to
-// the right tRPC procedure based on the topic verb.
-const deviceMock = vi.hoisted(() => ({
-  setTemperature: vi.fn(async () => undefined),
-  setPower: vi.fn(async () => undefined),
-  setAlarm: vi.fn(async () => undefined),
-  clearAlarm: vi.fn(async () => undefined),
-  startPriming: vi.fn(async () => undefined),
-}))
-
-// Stub the heavy app-router import — mqttBridge only needs createCaller({}) to
-// resolve at module load. Lifecycle tests below additionally exercise command
-// dispatch and so need real-looking spies.
-vi.mock('@/src/server/routers/app', () => ({
-  appRouter: { createCaller: () => ({ device: deviceMock }) },
-}))
+const controlMock = vi.hoisted(() => ({ submit: vi.fn() }))
+vi.mock('@/src/controls/instance', () => ({ getControlService: () => controlMock }))
 
 // Hoisted onServerFrame mock — lifecycle tests need to capture the frame
 // listener so they can assert frame-driven publishes.
@@ -210,7 +198,7 @@ vi.mock('@/src/hardware/dacMonitor.instance', () => ({
 
 const bridgeModule = await import('../mqttBridge')
 const { __test__, getBridgeStatus, startMqttBridge, shutdownMqttBridge, testConnection } = bridgeModule
-const { resolveConfig, slugify, deviceId, parsePayload, state: bridgeState } = __test__
+const { resolveConfig, slugify, deviceId, state: bridgeState } = __test__
 
 const MQTT_ENV_KEYS = [
   'MQTT_ENABLED',
@@ -222,6 +210,7 @@ const MQTT_ENV_KEYS = [
   'MQTT_TLS',
   'MQTT_TLS_INSECURE',
   'MQTT_DEVICE_ID',
+  'MQTT_COMMANDS_ENABLED',
 ] as const
 
 function clearMqttEnv() {
@@ -246,11 +235,7 @@ beforeEach(() => {
   piezoMock.unsubscribe.mockClear()
   dacMock.getDacMonitorIfRunning.mockReset().mockReturnValue(null)
   dacMock.getLastStatus.mockReset().mockReturnValue(null)
-  deviceMock.setTemperature.mockClear()
-  deviceMock.setPower.mockClear()
-  deviceMock.setAlarm.mockClear()
-  deviceMock.clearAlarm.mockClear()
-  deviceMock.startPriming.mockClear()
+  controlMock.submit.mockReset()
 })
 
 afterEach(() => {
@@ -260,6 +245,7 @@ afterEach(() => {
 // Drive the bridge through startMqttBridge() with a controllable fake client.
 // Returns the fake so the test can emit() events / inspect spies.
 async function startBridgeWithFake(opts: {
+  commands?: boolean
   config?: Partial<{ enabled: boolean, url: string | null, topicPrefix: string, haDiscovery: boolean, tlsEnabled: boolean, tlsInsecure: boolean, username: string | null, password: string | null }>
 } = {}): Promise<FakeClient> {
   // Reset bridge module state between tests since startMqttBridge() short-
@@ -273,6 +259,8 @@ async function startBridgeWithFake(opts: {
   bridgeState.messagesPublished = 0
   bridgeState.lastPublishAt = null
 
+  if (opts.commands === false) Reflect.deleteProperty(process.env, 'MQTT_COMMANDS_ENABLED')
+  else process.env.MQTT_COMMANDS_ENABLED = 'true'
   dbMock.state.row = {
     mqttEnabled: opts.config?.enabled ?? true,
     mqttUrl: opts.config?.url ?? 'mqtt://broker.local:1883',
@@ -556,39 +544,6 @@ describe('mqttBridge — deviceId', () => {
   })
 })
 
-describe('mqttBridge — parsePayload', () => {
-  it('parses a valid JSON object', () => {
-    const buf = Buffer.from(JSON.stringify({ side: 'left', powered: true }))
-    expect(parsePayload(buf)).toEqual({ side: 'left', powered: true })
-  })
-
-  it('returns {} for an empty buffer', () => {
-    expect(parsePayload(Buffer.alloc(0))).toEqual({})
-  })
-
-  it('returns {} for whitespace-only payloads', () => {
-    expect(parsePayload(Buffer.from('   \n  '))).toEqual({})
-  })
-
-  // A retained payload republished by some brokers carries a UTF-8 BOM, which
-  // JSON.parse rejects but String.trim() strips — the trim is load-bearing.
-  it('parses a payload wrapped in BOM / non-breaking whitespace', () => {
-    expect(parsePayload(Buffer.from('﻿{"side":"left"} '))).toEqual({ side: 'left' })
-  })
-
-  it('returns {} for malformed JSON', () => {
-    expect(parsePayload(Buffer.from('{not json'))).toEqual({})
-    expect(parsePayload(Buffer.from('{"a":'))).toEqual({})
-  })
-
-  it('returns {} for JSON primitive values (string / number / boolean / null)', () => {
-    expect(parsePayload(Buffer.from('"hello"'))).toEqual({})
-    expect(parsePayload(Buffer.from('42'))).toEqual({})
-    expect(parsePayload(Buffer.from('true'))).toEqual({})
-    expect(parsePayload(Buffer.from('null'))).toEqual({})
-  })
-})
-
 describe('mqttBridge — getBridgeStatus', () => {
   it('reports stopped state and null fields when the bridge has never started', () => {
     bridgeState.client = null
@@ -732,7 +687,7 @@ describe('mqttBridge — startMqttBridge connect flow', () => {
     expect(bridgeState.runState).toBe('connected')
     expect(bridgeState.lastError).toBeNull()
     expect(log).toHaveBeenCalledWith(
-      `[mqtt] connected to mqtt://broker.local:1883 (deviceId=${deviceId()}, prefix=sleepypod)`,
+      `[mqtt] connected (deviceId=${deviceId()}, prefix=sleepypod)`,
     )
 
     // First publish is availability=online retained.
@@ -745,7 +700,7 @@ describe('mqttBridge — startMqttBridge connect flow', () => {
 
     // Subscription is to <prefix>/<deviceId>/cmd/+
     expect(fake.subscribe).toHaveBeenCalledWith(
-      expect.stringMatching(/cmd\/\+$/),
+      expect.stringMatching(/cmd\/request$/),
       { qos: 0 },
       expect.any(Function),
     )
@@ -777,7 +732,7 @@ describe('mqttBridge — startMqttBridge connect flow', () => {
     fake.emit('connect')
 
     expect(fake.subscribe).toHaveBeenCalledWith(
-      expect.stringMatching(/^custom-prefix\/.+\/cmd\/\+$/),
+      expect.stringMatching(/^custom-prefix\/.+\/cmd\/request$/),
       { qos: 0 },
       expect.any(Function),
     )
@@ -890,10 +845,12 @@ describe('mqttBridge — HA discovery payload content', () => {
       temperature_state_template: '{{ value_json.targetTemperature }}',
       mode_state_topic: `sleepypod/testpod/state/${side}/climate`,
       mode_state_template: '{{ value_json.mode }}',
-      temperature_command_topic: 'sleepypod/testpod/cmd/set-temperature',
-      temperature_command_template: `{ "side": "${side}", "temperature": {{ value | int }} }`,
-      mode_command_topic: 'sleepypod/testpod/cmd/set-power',
-      mode_command_template: `{ "side": "${side}", "powered": {{ "true" if value == "heat" else "false" }} }`,
+      temperature_command_topic: 'sleepypod/testpod/cmd/request',
+      temperature_command_template: mqttClimateCommandTemplate(side, 'temperature'),
+      mode_command_topic: 'sleepypod/testpod/cmd/request',
+      mode_command_template: mqttClimateCommandTemplate(side, 'power'),
+      retain: false,
+      qos: 0,
       modes: ['off', 'heat'],
       min_temp: 55,
       max_temp: 110,
@@ -998,85 +955,125 @@ describe('mqttBridge — HA discovery payload content', () => {
   })
 })
 
-describe('mqttBridge — message dispatch', () => {
-  it('routes set-temperature payload to caller.device.setTemperature', async () => {
-    const fake = await startBridgeWithFake()
+describe('mqttBridge — durable message dispatch', () => {
+  const request = () => ({ requestId: randomUUID(), issuedAt: Date.now(), expiresAt: Date.now() + 30000,
+    action: { kind: 'temperature', side: 'left', temperature: 70 } })
+  const packet = { retain: false, dup: false }
+
+  it('defaults to telemetry only, omits command discovery, and ignores every command', async () => {
+    const fake = await startBridgeWithFake({ commands: false, config: { haDiscovery: true } })
     fake.connected = true
     fake.emit('connect')
-
-    const cmdTopic = `sleepypod/${deviceId()}/cmd/set-temperature`
-    fake.emit('message', cmdTopic, Buffer.from(JSON.stringify({ side: 'left', temperature: 70 })))
-
-    await new Promise(r => setTimeout(r, 0))
-    expect(deviceMock.setTemperature).toHaveBeenCalledWith({ side: 'left', temperature: 70 })
-
+    expect(fake.subscribe).not.toHaveBeenCalled()
+    expect(getBridgeStatus().commandsEnabled).toBe(false)
+    const climate = JSON.parse(fake.publish.mock.calls.find(([topic]) => String(topic).includes('/climate/'))?.[1] ?? 'null')
+    expect(climate).not.toHaveProperty('temperature_command_topic')
+    expect(climate).not.toHaveProperty('mode_command_topic')
+    fake.emit('message', `sleepypod/${deviceId()}/cmd/request`, Buffer.from(JSON.stringify(request())), packet)
+    await new Promise(resolve => setTimeout(resolve, 0))
+    expect(controlMock.submit).not.toHaveBeenCalled()
     await shutdownMqttBridge()
   })
 
-  it('routes set-power, set-alarm, clear-alarm, start-priming verbs', async () => {
+  it('submits through the durable service and publishes a non-retained receipt', async () => {
     const fake = await startBridgeWithFake()
     fake.connected = true
     fake.emit('connect')
-
-    const id = deviceId()
-    fake.emit('message', `sleepypod/${id}/cmd/set-power`, Buffer.from(JSON.stringify({ side: 'left', powered: true })))
-    await vi.waitFor(() => expect(deviceMock.setPower).toHaveBeenCalled())
-
-    fake.emit('message', `sleepypod/${id}/cmd/set-alarm`, Buffer.from(JSON.stringify({ side: 'left' })))
-    await vi.waitFor(() => expect(deviceMock.setAlarm).toHaveBeenCalled())
-
-    fake.emit('message', `sleepypod/${id}/cmd/clear-alarm`, Buffer.from(JSON.stringify({ side: 'left' })))
-    await vi.waitFor(() => expect(deviceMock.clearAlarm).toHaveBeenCalled())
-
-    fake.emit('message', `sleepypod/${id}/cmd/start-priming`, Buffer.from(''))
-    await vi.waitFor(() => expect(deviceMock.startPriming).toHaveBeenCalledWith({}))
-
+    const input = request()
+    const receipt = { requestId: input.requestId, state: 'unknown', physicalVerification: 'unverified' }
+    controlMock.submit.mockResolvedValue(receipt)
+    fake.emit('message', `sleepypod/${deviceId()}/cmd/request`, Buffer.from(JSON.stringify(input)), packet)
+    await vi.waitFor(() => expect(controlMock.submit).toHaveBeenCalledWith(input))
+    await vi.waitFor(() => expect(fake.publish).toHaveBeenCalledWith(`sleepypod/${deviceId()}/receipt/${input.requestId}`,
+      JSON.stringify(receipt), { qos: 0, retain: false }, expect.any(Function)))
     await shutdownMqttBridge()
   })
 
-  it('ignores topics outside the cmd/ prefix', async () => {
+  it.each(['set-temperature', 'set-power', 'set-alarm', 'clear-alarm', 'start-priming', 'bogus'])('never dispatches legacy %s payloads', async (verb) => {
+    const fake = await startBridgeWithFake()
+    fake.connected = true
+    fake.emit('connect')
+    fake.emit('message', `sleepypod/${deviceId()}/cmd/${verb}`, Buffer.from('{}'), packet)
+    await new Promise(resolve => setTimeout(resolve, 0))
+    expect(controlMock.submit).not.toHaveBeenCalled()
+    await shutdownMqttBridge()
+  })
+
+  it.each([undefined, { retain: true, dup: false }, { retain: false, dup: true }])('rejects retained, duplicate or missing packet metadata (%j)', async (flags) => {
+    const fake = await startBridgeWithFake()
+    fake.connected = true
+    fake.emit('connect')
+    fake.emit('message', `sleepypod/${deviceId()}/cmd/request`, Buffer.from(JSON.stringify(request())), flags)
+    await new Promise(resolve => setTimeout(resolve, 0))
+    expect(controlMock.submit).not.toHaveBeenCalled()
+    await shutdownMqttBridge()
+  })
+
+  it('does not accept old-client callbacks or late completion after replacement', async () => {
+    const pending = Promise.withResolvers<any>()
+    controlMock.submit.mockReturnValue(pending.promise)
+    const old = await startBridgeWithFake()
+    old.connected = true
+    old.emit('connect')
+    const input = request()
+    old.emit('message', `sleepypod/${deviceId()}/cmd/request`, Buffer.from(JSON.stringify(input)), packet)
+    await vi.waitFor(() => expect(controlMock.submit).toHaveBeenCalledOnce())
+    await shutdownMqttBridge()
+    const current = await startBridgeWithFake({ commands: false })
+    current.connected = true
+    current.emit('connect')
+    old.connected = true
+    old.emit('connect')
+    old.emit('message', `sleepypod/${deviceId()}/cmd/request`, Buffer.from(JSON.stringify(request())), packet)
+    pending.resolve({ requestId: input.requestId })
+    await new Promise(resolve => setTimeout(resolve, 0))
+    expect(controlMock.submit).toHaveBeenCalledOnce()
+    expect(current.publish.mock.calls.some(([topic]) => String(topic).includes('/receipt/'))).toBe(false)
+    expect(getBridgeStatus().commandsEnabled).toBe(false)
+    await shutdownMqttBridge()
+  })
+
+  it('cancels a command awaiting the lazy control import when shutdown begins', async () => {
+    const fake = await startBridgeWithFake()
+    fake.connected = true
+    fake.emit('connect')
+    fake.emit('message', `sleepypod/${deviceId()}/cmd/request`, Buffer.from(JSON.stringify(request())), packet)
+    await shutdownMqttBridge()
+    await new Promise(resolve => setTimeout(resolve, 0))
+    expect(controlMock.submit).not.toHaveBeenCalled()
+  })
+
+  it('leaves commands disabled if the MQTT client cannot be constructed', async () => {
+    mqttMock.state.throwOnConnect = new Error('url contains a private credential')
+    await startBridgeWithFake()
+    expect(getBridgeStatus()).toMatchObject({ runState: 'errored', commandsEnabled: false,
+      lastError: 'Unable to create MQTT connection' })
+    await shutdownMqttBridge()
+  })
+
+  it('does not revive a startup canceled while reading settings', async () => {
+    bridgeState.runState = 'stopped'
+    bridgeState.client = null
+    const settings = Promise.withResolvers<any[]>()
+    dbMock.select.mockImplementationOnce(() => ({ from: () => ({ limit: () => settings.promise }) }) as any)
+    const starting = startMqttBridge()
+    await shutdownMqttBridge()
+    settings.resolve([{ mqttEnabled: true, mqttUrl: 'mqtt://x' }])
+    await starting
+    expect(mqttMock.connect).not.toHaveBeenCalled()
+    expect(getBridgeStatus().runState).toBe('stopped')
+  })
+
+  it('sanitizes service errors without echoing a payload or credential', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    controlMock.submit.mockRejectedValue(new Error('private-service-detail'))
     const fake = await startBridgeWithFake()
     fake.connected = true
     fake.emit('connect')
-
-    fake.emit('message', `sleepypod/${deviceId()}/state/device-status`, Buffer.from('{}'))
-
-    await new Promise(r => setTimeout(r, 0))
-    expect(deviceMock.setTemperature).not.toHaveBeenCalled()
-    expect(deviceMock.setPower).not.toHaveBeenCalled()
-    expect(warn).not.toHaveBeenCalledWith(
-      expect.stringContaining('[mqtt] unknown command verb:'),
-    )
-
+    fake.emit('message', `sleepypod/${deviceId()}/cmd/request`, Buffer.from(JSON.stringify(request())), packet)
+    await vi.waitFor(() => expect(warn).toHaveBeenCalledWith('[mqtt] command rejected or receipt unavailable; do not retry with a new request ID'))
+    expect(JSON.stringify(warn.mock.calls)).not.toContain('private-service-detail')
     warn.mockRestore()
-    await shutdownMqttBridge()
-  })
-
-  it('logs unknown verbs without throwing', async () => {
-    const fake = await startBridgeWithFake()
-    fake.connected = true
-    fake.emit('connect')
-
-    fake.emit('message', `sleepypod/${deviceId()}/cmd/unknown-verb`, Buffer.from('{}'))
-
-    await new Promise(r => setTimeout(r, 0))
-    expect(deviceMock.setTemperature).not.toHaveBeenCalled()
-
-    await shutdownMqttBridge()
-  })
-
-  it('catches caller errors and logs without crashing the handler', async () => {
-    deviceMock.setTemperature.mockRejectedValueOnce(new Error('zod rejected'))
-    const fake = await startBridgeWithFake()
-    fake.connected = true
-    fake.emit('connect')
-
-    fake.emit('message', `sleepypod/${deviceId()}/cmd/set-temperature`, Buffer.from('{}'))
-    await new Promise(r => setTimeout(r, 0))
-
-    expect(deviceMock.setTemperature).toHaveBeenCalled()
-
     await shutdownMqttBridge()
   })
 })
@@ -1942,10 +1939,12 @@ describe('mqttBridge — HA discovery payload contents (mutation coverage)', () 
       temperature_state_template: '{{ value_json.targetTemperature }}',
       mode_state_topic: climateTopic,
       mode_state_template: '{{ value_json.mode }}',
-      temperature_command_topic: `sleepypod/${ID}/cmd/set-temperature`,
-      temperature_command_template: `{ "side": "${side}", "temperature": {{ value | int }} }`,
-      mode_command_topic: `sleepypod/${ID}/cmd/set-power`,
-      mode_command_template: `{ "side": "${side}", "powered": {{ "true" if value == "heat" else "false" }} }`,
+      temperature_command_topic: `sleepypod/${ID}/cmd/request`,
+      temperature_command_template: mqttClimateCommandTemplate(side, 'temperature'),
+      mode_command_topic: `sleepypod/${ID}/cmd/request`,
+      mode_command_template: mqttClimateCommandTemplate(side, 'power'),
+      retain: false,
+      qos: 0,
       modes: ['off', 'heat'],
       min_temp: 55,
       max_temp: 110,
@@ -2227,6 +2226,7 @@ describe('mqttBridge — connect-option + lifecycle mutation coverage', () => {
   })
 
   it('logs the subscribe-failure message when subscribe errors', async () => {
+    process.env.MQTT_COMMANDS_ENABLED = 'true'
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     const fake = createFakeClient()
     fake.subscribe = vi.fn((_t: string, _o: any, cb?: (err: Error | null) => void) => {
@@ -2243,7 +2243,7 @@ describe('mqttBridge — connect-option + lifecycle mutation coverage', () => {
     fake.connected = true
     fake.emit('connect')
 
-    expect(warn).toHaveBeenCalledWith('[mqtt] subscribe cmd/* failed:', 'sub failed')
+    expect(warn).toHaveBeenCalledWith('[mqtt] command subscription failed')
     warn.mockRestore()
     await shutdownMqttBridge()
   })
@@ -2261,36 +2261,6 @@ describe('mqttBridge — connect-option + lifecycle mutation coverage', () => {
 })
 
 describe('mqttBridge — command-dispatch + error-log mutation coverage', () => {
-  it('warns with the unknown-verb message for an unrecognised command', async () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    const fake = await startBridgeWithFake()
-    fake.connected = true
-    fake.emit('connect')
-
-    fake.emit('message', `sleepypod/${deviceId()}/cmd/bogus`, Buffer.from('{}'))
-    await new Promise(r => setTimeout(r, 0))
-
-    expect(warn).toHaveBeenCalledWith('[mqtt] unknown command verb: bogus')
-    warn.mockRestore()
-    await shutdownMqttBridge()
-  })
-
-  it('warns with the command-failed message when a handler rejects', async () => {
-    deviceMock.setTemperature.mockRejectedValueOnce(new Error('zod nope'))
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    const fake = await startBridgeWithFake()
-    fake.connected = true
-    fake.emit('connect')
-
-    fake.emit('message', `sleepypod/${deviceId()}/cmd/set-temperature`, Buffer.from('{}'))
-    await new Promise(r => setTimeout(r, 0))
-    await new Promise(r => setTimeout(r, 0))
-
-    expect(warn).toHaveBeenCalledWith('[mqtt] command set-temperature failed:', 'zod nope')
-    warn.mockRestore()
-    await shutdownMqttBridge()
-  })
-
   it('warns with the pump-rpm-failure message when the flow query throws', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     dbMock.state.throwOnBedTemp = true

@@ -102,6 +102,7 @@ the bridge resolves config in this order: `device_settings` row > env var > buil
 | UI field | Env var | Default |
 |---|---|---|
 | Enable bridge | `MQTT_ENABLED` | `false` |
+| Accept commands (host configuration only) | `MQTT_COMMANDS_ENABLED` | `false` |
 | Broker URL | `MQTT_URL` | _(unset — bridge stays dormant)_ |
 | Username | `MQTT_USERNAME` | _(none)_ |
 | Password | `MQTT_PASSWORD` | _(none)_ |
@@ -119,7 +120,7 @@ both are on.
 ### Topics
 
 `<prefix>` defaults to `sleepypod`. `<device-id>` is the slugified hostname
-(override with `MQTT_DEVICE_ID`). All state topics are retained.
+(override with `MQTT_DEVICE_ID`). State topics are retained; execution receipts are not.
 
 | Topic | Direction | Payload |
 |---|---|---|
@@ -129,26 +130,15 @@ both are on.
 | `<prefix>/<device-id>/state/water-level` | pod → broker | `low` / `ok` / `unknown` |
 | `<prefix>/<device-id>/state/biometrics/<side>` | pod → broker | latest HR / HRV / BR |
 | `<prefix>/<device-id>/state/environment/ambient` | pod → broker | `{"ts": <epoch_ms>, "temperature": <number\|null>, "humidity": <number\|null>}` (°C, %) |
-| `<prefix>/<device-id>/cmd/set-temperature` | broker → pod | `{"side","temperature","duration?"}` |
-| `<prefix>/<device-id>/cmd/set-power` | broker → pod | `{"side","powered","temperature?"}` |
-| `<prefix>/<device-id>/cmd/set-alarm` | broker → pod | `{"side","vibrationIntensity","vibrationPattern","duration"}` |
-| `<prefix>/<device-id>/cmd/clear-alarm` | broker → pod | `{"side"}` |
-| `<prefix>/<device-id>/cmd/start-priming` | broker → pod | `{}` |
+| `<prefix>/<device-id>/cmd/request` | broker → pod | Expiring control request; explicit opt-in required |
+| `<prefix>/<device-id>/receipt/<request-id>` | pod → broker | Non-retained execution receipt; physical effect unverified |
 
-Commands route through the same tRPC procedures the iOS app calls, so Zod
-input schemas validate every payload — the bridge cannot accidentally
-diverge from the app's safety envelope.
+Enabling the bridge now enables telemetry only. Command reception separately
+requires `MQTT_COMMANDS_ENABLED=true`, dedicated broker credentials and topic
+ACLs. The old raw actuator topics are no longer supported. Commands reuse the
+app's durable control authority, deadlines and hardware guards; they cannot
+invoke priming or base movement through MQTT.
 
-### Example: turn off the left side from any MQTT client
-
-```bash
-mosquitto_pub -h broker.lan \
-  -t 'sleepypod/eight-pod/cmd/set-power' \
-  -m '{"side":"left","powered":false}'
-```
-
-State mirrors back on `sleepypod/eight-pod/state/left/climate` within ~1 s.
-
-See **[ADR 0019](adr/0019-mqtt-bridge.md)** for the design rationale —
-why client-not-broker, the credential storage decision, the tRPC dispatch
-model, and what's deferred until `protectedProcedure` lands.
+See [MQTT command delivery](MQTT_COMMANDS.md) for the full envelope, Home
+Assistant discovery behavior, receipt lookup, migration and validation limits.
+The original [ADR 0019](adr/0019-mqtt-bridge.md) describes the earlier design.
