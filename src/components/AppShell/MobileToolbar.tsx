@@ -6,6 +6,7 @@ import { Settings } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { langFromPath } from './navItems'
 import { usePodHealth } from './usePodHealth'
+import { NotificationInbox } from './NotificationInbox'
 
 /** Secondary destinations stay within reach without crowding the three phone tabs. */
 export function SettingsLink({ className, summary }: { className?: string, summary?: string }) {
@@ -25,9 +26,12 @@ export function SettingsLink({ className, summary }: { className?: string, summa
 export function MobileToolbar() {
   const { footer } = usePodHealth()
   return (
-    <div data-mobile-toolbar className="flex items-center justify-between min-[900px]:hidden">
-      <span className="font-mono text-sm text-fg-2">sleepypod</span>
-      <SettingsLink summary={footer.tone === 'warn' ? footer.summary : undefined} />
+    <div data-mobile-toolbar className="flex items-center justify-between min-[900px]:justify-end">
+      <span className="font-mono text-sm text-fg-2 min-[900px]:hidden">sleepypod</span>
+      <div className="flex items-center gap-1">
+        <NotificationInbox />
+        <SettingsLink summary={footer.tone === 'warn' ? footer.summary : undefined} />
+      </div>
     </div>
   )
 }

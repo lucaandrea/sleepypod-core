@@ -9,6 +9,7 @@ import { executeNextBacktest } from '../../src/biometrics/backtest/runner'
 import { packagedWorkerPath } from '../../src/biometrics/backtest/location'
 import { tickBiometricRuntime } from '../../src/biometrics/profiles/runtime-host'
 import { consumeStageView } from '../../src/biometrics/profiles/stage-view'
+import { createNotificationStore } from '../../src/notifications/store'
 
 const root = process.env.SLEEPYPOD_BROWSER_FIXTURE
 const bioPath = process.env.BIOMETRICS_DATABASE_URL
@@ -59,6 +60,12 @@ connection.close()
 `, bioPath], { timeout: 15_000, maxBuffer: 65536 })
     consumeStageView(config, db, 'left')
     assert.deepEqual(tickBiometricRuntime(config, db).errors, [])
+  }
+  else if (process.argv[2] === 'notify') {
+    // Persist a synthetic service event through the production store; no public
+    // API can forge an alert and no automation or hardware daemon is started.
+    const store = createNotificationStore(configSqlite)
+    store.publish({ sourceId: 9876, title: 'Browser fixture alert', message: 'Synthetic bedroom humidity notification.' })
   }
   else throw new Error('Unknown browser fixture action')
 }

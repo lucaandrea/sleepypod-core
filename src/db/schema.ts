@@ -2,6 +2,21 @@ import { sql } from 'drizzle-orm'
 import { index, integer, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
 import type { DayOfWeek } from '@/src/lib/scheduleTime'
 
+/** Owner-visible automation alerts. Acknowledgment is separate from delivery. */
+export const notificationInbox = sqliteTable('notification_inbox', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  sourceId: integer('source_id').notNull(),
+  title: text('title').notNull(),
+  message: text('message').notNull(),
+  fingerprint: text('fingerprint').notNull(),
+  createdAt: integer('created_at').notNull(),
+  expiresAt: integer('expires_at').notNull(),
+  acknowledgedAt: integer('acknowledged_at'),
+}, table => [
+  index('notification_inbox_fingerprint_created').on(table.fingerprint, table.createdAt),
+  index('notification_inbox_created').on(table.createdAt),
+])
+
 // Kept across restarts: an interrupted actuator request must never be replayed.
 export const controlReceipts = sqliteTable('control_receipts', {
   requestId: text('request_id').primaryKey(),

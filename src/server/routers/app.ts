@@ -26,6 +26,7 @@ import { biometricShadowRouter } from './biometricShadow'
 import { capabilitiesRouter } from './capabilities'
 import { comfortRouter } from './comfort'
 import { controlsRouter } from './controls'
+import { notificationsRouter } from './notifications'
 
 export const appRouter = router({
   healthcheck: publicProcedure
@@ -46,6 +47,7 @@ export const appRouter = router({
   capabilities: capabilitiesRouter,
   comfort: comfortRouter,
   controls: controlsRouter,
+  notifications: notificationsRouter,
   environment: environmentRouter,
   raw: rawRouter,
   calibration: calibrationRouter,

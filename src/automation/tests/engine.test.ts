@@ -44,7 +44,7 @@ interface Harness {
   disabled: number[]
 }
 
-function makeHarness(rules: AutomationRule[], lock: AutomationEngineDeps['withSideLock'] = async (_side, fn) => fn()): Harness {
+function makeHarness(rules: AutomationRule[], lock: AutomationEngineDeps['withSideLock'] = async (_side, fn) => fn(), notify?: AutomationEngineDeps['notify']): Harness {
   // Base clock is a realistic epoch so a `tick` trigger's first evaluation is
   // due (production `now` is always >> any everyMin window from epoch 0).
   let nowMs = 1_700_000_000_000
@@ -76,7 +76,7 @@ function makeHarness(rules: AutomationRule[], lock: AutomationEngineDeps['withSi
     recordRun: async (id, outcome, detail) => { runs.push({ id, outcome, detail: detail as RunDetail }) },
     disableRule: async (id) => { disabled.push(id) },
     hasActiveRunOnceSession: async () => runOnce,
-    notify: (id, message) => notifies.push({ id, message }),
+    notify: notify ?? ((id, message) => { notifies.push({ id, message }) }),
   }
 
   const { engine, control } = engineFixture(deps)
@@ -164,7 +164,7 @@ describe('AutomationEngine — outcomes & audit log', () => {
 })
 
 describe('AutomationEngine — dry-run', () => {
-  it('emits notify but never touches hardware, logging dry_run', async () => {
+  it('records notify proposals without delivering alerts or touching hardware', async () => {
     const actions: Action[] = [
       { kind: 'notify', message: 'would warm' },
       { kind: 'setTemperature', temp: lit(72) },
@@ -173,7 +173,7 @@ describe('AutomationEngine — dry-run', () => {
     await h.engine.reload()
     await h.engine.tick()
     expect(h.hwCalls).toHaveLength(0)
-    expect(h.notifies).toHaveLength(1)
+    expect(h.notifies).toHaveLength(0)
     expect(h.runs[0].outcome).toBe('dry_run')
   })
 })
@@ -557,6 +557,20 @@ describe('AutomationEngine — window-bounded eval', () => {
 })
 
 describe('AutomationEngine — action error', () => {
+  it('records a durable receipt and reports failed persistence as an error rather than delivery', async () => {
+    const publish = vi.fn().mockReturnValueOnce({ notificationId: 42, duplicate: false }).mockImplementationOnce(() => {
+      throw new Error('Inbox unavailable')
+    })
+    const harness = makeHarness([rule({ actions: [{ kind: 'notify', message: 'Room changed' }] })], undefined, publish)
+    await harness.engine.reload()
+    await harness.engine.tick()
+    expect(harness.runs[0]).toMatchObject({ outcome: 'fired', detail: { actions: [{ notified: true, notificationId: 42, duplicate: false }] } })
+    harness.advance(60_000)
+    await harness.engine.tick()
+    expect(harness.runs[1]).toMatchObject({ outcome: 'error', detail: { reason: 'eval-threw', message: 'Inbox unavailable' } })
+    expect(harness.hwCalls).toEqual([])
+  })
+
   it('records an error outcome when a hardware write throws', async () => {
     const runs: { id: number, outcome: RunOutcome, detail: RunDetail }[] = []
     const deps: AutomationEngineDeps = {

@@ -21,6 +21,8 @@ vi.mock('@/src/temperature/instance', () => ({ getTemperatureController: () => c
 const startMock = vi.fn(async () => {})
 const stopMock = vi.fn()
 const setGlobalEnabledMock = vi.fn()
+const notifyMock = vi.fn(() => ({ notificationId: 42, duplicate: false }))
+vi.mock('@/src/notifications/instance', () => ({ publishAutomationNotification: notifyMock }))
 let capturedDeps: any = null
 
 vi.mock('../engine', () => {
@@ -310,6 +312,7 @@ describe('automation/instance — injected dependency closures', () => {
 
     const log = vi.spyOn(console, 'log').mockImplementation(() => {})
     capturedDeps.notify(9, 'hello')
+    expect(notifyMock).toHaveBeenCalledWith(9, 'hello')
     capturedDeps.log('a message')
     expect(log).toHaveBeenCalled()
     log.mockRestore()
