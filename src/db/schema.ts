@@ -2,6 +2,21 @@ import { sql } from 'drizzle-orm'
 import { index, integer, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
 import type { DayOfWeek } from '@/src/lib/scheduleTime'
 
+// Attempted commands are separate from proposals and firmware-reported sensor state.
+export const temperatureApplications = sqliteTable('temperature_applications', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  attemptId: text('attempt_id').notNull(),
+  side: text('side', { enum: ['left', 'right'] }).notNull(),
+  attemptedAt: integer('attempted_at').notNull(),
+  finishedAt: integer('finished_at'),
+  outcome: text('outcome', { enum: ['attempting', 'acknowledged', 'unknown'] }).notNull(),
+  request: text('request').notNull(),
+}, table => [
+  uniqueIndex('temperature_applications_attempt').on(table.attemptId),
+  index('temperature_applications_side_id').on(table.side, table.id),
+  index('temperature_applications_retention').on(table.attemptedAt),
+])
+
 export const roomContextSettings = sqliteTable('room_context_settings', {
   id: integer('id').primaryKey(), revision: integer('revision').notNull(), config: text('config').notNull(),
 })

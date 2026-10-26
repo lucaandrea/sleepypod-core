@@ -477,7 +477,7 @@ describe('db schema definitions', () => {
       'alarmOverrides', 'alarmOccurrences', 'journalEntries', 'bedtimeRoutines', 'controlReceipts', 'biometricProfileRevisions', 'biometricProfileBindings', 'sideStageModels', 'stageModelLibrary',
       'biometricActivationEvents', 'biometricConfigOutbox',
       'comfortEvents', 'comfortFeedback', 'comfortStates', 'comfortReviews',
-      'notificationInbox',
+      'notificationInbox', 'temperatureApplications',
       'roomContextSettings', 'roomContextLatest', 'roomContextHistory',
     ].sort())
   })

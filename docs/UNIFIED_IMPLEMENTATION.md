@@ -47,7 +47,10 @@ Production Preview wiring, the reversible offline importer, room-context input a
 foreground notification delivery now exist in source, as documented below. Native
 clients use negotiated direct version 1 APIs; the legacy compatibility adapter has
 not shipped. Broker provisioning, actual home integration, hardware qualification
-and active comfort application receipts remain required. Active must include the
+and the active comfort admission/application adapter remain required. Shared
+[temperature application receipts](TEMPERATURE_APPLICATIONS.md) now record
+attempts and acknowledgments separately from proposals and physical observations.
+Active must include the
 global Autopilot opt-in in every lease guard; Off/Preview must never submit leases.
 Per-night reporting and exact-source owner review are now implemented in
 [Preview night reports](PREVIEW_NIGHT_REPORTS.md), with separate real-night gates.
