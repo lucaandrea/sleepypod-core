@@ -28,7 +28,7 @@ import { withSideLock } from '@/src/hardware/sideLock'
 import { timeToDate, nowInTimezone } from './timeUtils'
 import { activeSleeperSides, type BedState, mirrorSideFor, scheduleSourceSide, singleSleeperSideFor } from '@/src/lib/singleSleeper'
 import { WakeWindows, slotBefore } from './wakeWindow'
-import { ALARM_HOLD_AFTER_MIN, alarmWarmupMinutes } from '@/src/temperature/baseline'
+import { alarmTemperatureTargets } from '@/src/temperature/baseline'
 
 const HEARTBEAT_INTERVAL_MS_DEFAULT = 60_000
 const HEARTBEAT_STALE_MS_DEFAULT = 90_000
@@ -573,24 +573,19 @@ export class JobManager {
     await this.powerOffAfterAlarm(sched)
   }
 
-  /**
-   * When `side` is in (or within) an alarm's warm-up, the time that alarm's
-   * temperature span ends (its time plus vibration, plus ALARM_HOLD_AFTER_MIN,
-   * the same window alarmTemperatureTargets holds the temperature for, so a
-   * snooze re-fires into a bed that is still on), else null.
-   */
+  /** Use arbitration's bounded alarm window even after cron advances to next week. */
   private async alarmWarmupEnd(side: 'left' | 'right'): Promise<number | null> {
     if (!activeSleeperSides(await this.awayModes()).includes(side)) return null
     const alarms = await db.select().from(alarmSchedules)
       .where(and(eq(alarmSchedules.side, side), eq(alarmSchedules.enabled, true)))
-    const now = Date.now()
-    let end: number | null = null
-    for (const alarm of alarms) {
-      const at = this.scheduler.getNextInvocation(`alarm-${alarm.id}`)?.getTime()
-      if (at === undefined || at - now > alarmWarmupMinutes(alarm.wakeWindow) * 60_000) continue
-      end = Math.max(end ?? 0, at + alarm.duration * 1000 + ALARM_HOLD_AFTER_MIN * 60_000)
-    }
-    return end
+    const targets = alarmTemperatureTargets(
+      alarms.filter(alarm => this.scheduler.getNextInvocation(`alarm-${alarm.id}`)).map(alarm => ({
+        id: `alarm:${alarm.id}`, dayOfWeek: alarm.dayOfWeek, time: alarm.time,
+        temperature: alarm.alarmTemperature, wakeWindow: alarm.wakeWindow, duration: alarm.duration,
+      })),
+      this.scheduler.getTimezone(), Date.now(),
+    )
+    return targets.reduce<number | null>((end, target) => Math.max(end ?? 0, target.expiresAt), null)
   }
 
   /**
