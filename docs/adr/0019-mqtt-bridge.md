@@ -10,6 +10,14 @@ control-request path. The raw actuator dispatcher is removed. The restricted
 internal adapter shares the app's control receipts and does not grant general
 router, base or priming access. See [current protocol](../MQTT_COMMANDS.md).
 
+The TLS flag now **requires** an explicitly secure URL; it never rewrites a URL
+or port. Enabled partial updates, test probes and bridge startup enforce this
+requirement. An unreadable settings database stops connection attempts rather
+than silently dropping saved policy. Test probes do not reuse stored broker
+passwords. See [current configuration semantics](../integrations.md#configuration).
+The original transport statement below that the flag switches protocols was
+inaccurate; MQTT.js selects transport from the supplied URL.
+
 ## Context
 
 The Pod runs a tRPC HTTP API on port 3000 and a WebSocket sensor stream on

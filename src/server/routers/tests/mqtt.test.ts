@@ -39,7 +39,9 @@ const { mqttRouter } = await import('@/src/server/routers/mqtt')
 const caller = mqttRouter.createCaller({})
 
 beforeEach(() => {
-  bridgeMock.resolveConfig.mockReset()
+  bridgeMock.resolveConfig.mockReset().mockImplementation(async (overrides: Record<string, unknown> = {}) => ({
+    config: { enabled: overrides.mqttEnabled ?? true, url: overrides.mqttUrl ?? 'mqtts://saved:8883', tlsEnabled: overrides.mqttTlsEnabled ?? false },
+  }))
   bridgeMock.testConnection.mockReset()
   bridgeMock.getBridgeStatus.mockReset()
   bridgeMock.startMqttBridge.mockReset().mockResolvedValue(undefined)
@@ -195,7 +197,7 @@ describe('mqtt.updateSettings — field discrimination', () => {
   it('writes every field when each is present in the input', async () => {
     await caller.updateSettings({
       enabled: true,
-      url: 'mqtt://broker:1883',
+      url: 'mqtts://broker:8883',
       username: 'u',
       password: 'p',
       topicPrefix: 'sp',
@@ -206,7 +208,7 @@ describe('mqtt.updateSettings — field discrimination', () => {
     const updates = dbMock.setSpy.mock.calls[0][0]
     expect(updates).toMatchObject({
       mqttEnabled: true,
-      mqttUrl: 'mqtt://broker:1883',
+      mqttUrl: 'mqtts://broker:8883',
       mqttUsername: 'u',
       mqttPassword: 'p',
       mqttTopicPrefix: 'sp',
@@ -327,7 +329,7 @@ describe('mqtt.testConnection', () => {
     bridgeMock.testConnection.mockResolvedValue({ ok: true })
 
     const result = await caller.testConnection({
-      url: 'mqtt://broker:1883',
+      url: 'mqtts://broker:8883',
       username: 'u',
       password: 'p',
       tlsEnabled: true,
@@ -336,7 +338,7 @@ describe('mqtt.testConnection', () => {
     expect(result).toEqual({ ok: true })
     expect(bridgeMock.testConnection).toHaveBeenCalledTimes(1)
     expect(bridgeMock.testConnection).toHaveBeenCalledWith({
-      url: 'mqtt://broker:1883',
+      url: 'mqtts://broker:8883',
       username: 'u',
       password: 'p',
       tlsEnabled: true,
@@ -355,5 +357,31 @@ describe('mqtt.testConnection', () => {
       password: null,
       tlsEnabled: false,
     })
+  })
+})
+
+describe('MQTT settings transport validation', () => {
+  it('rejects an enabled plaintext/TLS mismatch without writing or restarting', async () => {
+    bridgeMock.resolveConfig.mockResolvedValue({ config: { enabled: true, url: 'mqtt://broker:1883', tlsEnabled: true } })
+    await expect(caller.updateSettings({ url: 'mqtt://broker:1883', tlsEnabled: true })).rejects.toMatchObject({ code: 'BAD_REQUEST', message: expect.stringContaining('TLS requires') })
+    expect(dbMock.update).not.toHaveBeenCalled()
+    expect(bridgeMock.shutdownMqttBridge).not.toHaveBeenCalled()
+  })
+  it('validates a partial update against its resolved inherited fields', async () => {
+    bridgeMock.resolveConfig.mockResolvedValue({ config: { enabled: true, url: 'mqtt://inherited', tlsEnabled: true } })
+    await expect(caller.updateSettings({ tlsEnabled: true })).rejects.toMatchObject({ code: 'BAD_REQUEST' })
+    expect(bridgeMock.resolveConfig).toHaveBeenCalledWith(expect.objectContaining({ mqttTlsEnabled: true }))
+    expect(dbMock.update).not.toHaveBeenCalled()
+  })
+  it('permits disabling an invalid existing configuration', async () => {
+    bridgeMock.resolveConfig.mockResolvedValue({ config: { enabled: false, url: 'mqtt://broker', tlsEnabled: true } })
+    await expect(caller.updateSettings({ enabled: false })).resolves.toEqual({ success: true })
+    expect(dbMock.setSpy).toHaveBeenCalledWith(expect.objectContaining({ mqttEnabled: false }))
+  })
+  it('rejects an enabled reset whose environment URL is unencrypted', async () => {
+    bridgeMock.resolveConfig.mockResolvedValue({ config: { enabled: true, url: 'mqtt://environment', tlsEnabled: true } })
+    await expect(caller.updateSettings({ url: null })).rejects.toMatchObject({ code: 'BAD_REQUEST' })
+    expect(bridgeMock.resolveConfig).toHaveBeenCalledWith(expect.objectContaining({ mqttUrl: null }))
+    expect(dbMock.update).not.toHaveBeenCalled()
   })
 })
