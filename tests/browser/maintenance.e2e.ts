@@ -44,6 +44,7 @@ test('Device restart uses the maintenance contract and distinguishes denial, acc
   await restart.click()
   const receipt = page.getByText('Restart requested. Reconnect to check its status.', { exact: true })
   await expect(receipt).toBeVisible()
+  await expect(restart).toBeDisabled()
   await expect(page.getByText('Restart permission denied by the test fixture.', { exact: true })).toHaveCount(0)
   await receipt.scrollIntoViewIfNeeded()
   await page.screenshot({ path: testInfo.outputPath('maintenance-desktop.png') })
@@ -53,9 +54,12 @@ test('Device restart uses the maintenance contract and distinguishes denial, acc
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
 
   outcome = 'lost'
+  await Promise.all([page.waitForEvent('load'), page.getByRole('button', { name: 'Reconnect', exact: true }).click()])
+  await expect(restart).toBeEnabled()
   await restart.click()
   await expect(page.getByText('Restart could not be confirmed. Reconnect to check the service before trying again.', { exact: true })).toBeVisible()
   await expect(receipt).toHaveCount(0)
+  await expect(restart).toBeDisabled()
   expect(calls).toHaveLength(3)
   expect(calls.every(call => call.path === '/api/trpc/health.restartService')).toBe(true)
 })

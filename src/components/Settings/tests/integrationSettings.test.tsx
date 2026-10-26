@@ -7,7 +7,7 @@ const mock = vi.hoisted(() => ({ data: {} as Record<string, unknown>, loading: f
 vi.mock('@/src/utils/trpc', () => {
   const endpoint = (name: string) => ({
     useQuery: () => ({ data: mock.data[name], isLoading: mock.loading }),
-    useMutation: (opts?: { onSuccess?: () => void, onError?: (e: Error) => void }) => ({
+    useMutation: (opts?: { onSuccess?: (value: unknown) => void, onError?: (e: Error) => void }) => ({
       mutate: (input: unknown, callOpts?: { onError?: (e: Error) => void }) => {
         mock.calls(name, input)
         if (mock.error) {
@@ -15,7 +15,7 @@ vi.mock('@/src/utils/trpc', () => {
           callOpts?.onError?.(mock.error)
         }
         else {
-          opts?.onSuccess?.()
+          opts?.onSuccess?.(mock.data[name])
         }
       },
       error: mock.error, data: mock.data[name], isPending: mock.pending, isSuccess: mock.success,
@@ -31,7 +31,7 @@ vi.mock('@/src/utils/trpc', () => {
 })
 beforeEach(() => {
   vi.clearAllMocks()
-  mock.data = {}
+  mock.data = { restart: { ok: true, message: 'Restart requested. Reconnect to check its status.' } }
   mock.loading = false
   mock.error = null
   mock.pending = false
@@ -158,12 +158,30 @@ it('distinguishes a denied restart from a queued restart and prevents duplicate 
   const { rerender } = render(<DeviceSettingsForm device={device} />)
   expect(screen.getByText('Restart permission denied')).toBeTruthy()
   mock.data.restart = { ok: true, message: 'Restart requested. Reconnect to check its status.' }
+  vi.spyOn(window, 'confirm').mockReturnValue(true)
+  fireEvent.click(screen.getByRole('button', { name: 'Restart service' }))
   rerender(<DeviceSettingsForm device={device} />)
   expect(screen.queryByText('Restart permission denied')).toBeNull()
   expect(screen.getByRole('status').textContent).toContain('Restart requested.')
+  const acceptedCalls = mock.calls.mock.calls.length
+  fireEvent.click(screen.getByRole('button', { name: 'Restart service' }))
+  expect(mock.calls).toHaveBeenCalledTimes(acceptedCalls)
+  expect(screen.getByRole('button', { name: 'Restart service' }).hasAttribute('disabled')).toBe(true)
   mock.pending = true
   rerender(<DeviceSettingsForm device={device} />)
   expect(screen.getByRole('button', { name: 'Requesting restart…' }).hasAttribute('disabled')).toBe(true)
+})
+
+it('requires reconnecting after an unknown restart outcome before allowing another request', () => {
+  mock.error = new Error('Connection closed')
+  mock.data = {}
+  vi.spyOn(window, 'confirm').mockReturnValue(true)
+  render(<DeviceSettingsForm device={device} />)
+  fireEvent.click(screen.getByRole('button', { name: 'Restart service' }))
+  expect(screen.getByRole('button', { name: 'Restart service' }).hasAttribute('disabled')).toBe(true)
+  expect(screen.getByText('Restart could not be confirmed. Reconnect to check the service before trying again.')).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: 'Restart service' }))
+  expect(mock.calls).toHaveBeenCalledTimes(1)
 })
 
 it('saves the pod-wide time format from the Device section and follows server changes', () => {

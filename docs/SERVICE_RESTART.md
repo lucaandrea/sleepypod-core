@@ -22,7 +22,8 @@ The response remains `{ ok: boolean, message: string }`:
   No automatic retry or fallback to the updater is permitted.
 
 The web action requires confirmation, blocks duplicates while pending and shows
-the returned outcome. Demo responses explicitly identify simulated actions.
+the returned outcome. After acceptance or an unknown outcome, the page requires
+using Reconnect before another request. Demo responses explicitly identify simulated actions.
 Router tests substitute the process runner; browser tests intercept mutations,
 including the former updater route. They do not restart a real service.
 
