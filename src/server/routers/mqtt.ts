@@ -171,6 +171,7 @@ export const mqttRouter = router({
     .output(z.object({
       runState: z.enum(['stopped', 'starting', 'connected', 'reconnecting', 'errored']),
       connected: z.boolean(),
+      commandsEnabled: z.boolean(),
       lastError: z.string().nullable(),
       deviceId: z.string(),
       topicPrefix: z.string().nullable(),

@@ -78,3 +78,13 @@ See [Mechanical data quality](MECHANICAL_DATA_QUALITY.md) for the new observed
 quiet-span journal, pre-dispatch exclusions, bounded vital-output quarantine and
 automation eligibility. This is software validation; the working Free Sleep
 controller remains the rollback owner until the attended migration gates pass.
+
+## MQTT command delivery
+
+MQTT now defaults to telemetry only. Explicitly enabled commands reuse the
+durable control service with UUID deduplication, deadlines at the hardware write
+boundary, non-retained receipts and bounded ingress. Home Assistant templates
+generate 30-second requests. See [the protocol](MQTT_COMMANDS.md). This source
+change does not enable the broker on the owner's Pod or qualify hardware.
+Dedicated broker credentials/ACLs and sensor freshness for external automations
+remain separate integration work.

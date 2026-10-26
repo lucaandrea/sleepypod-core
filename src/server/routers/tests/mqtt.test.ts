@@ -298,6 +298,7 @@ describe('mqtt.getStatus', () => {
     bridgeMock.getBridgeStatus.mockReturnValue({
       runState: 'connected',
       connected: true,
+      commandsEnabled: false,
       lastError: null,
       deviceId: 'sleepypod-test',
       topicPrefix: 'sp',
@@ -311,6 +312,7 @@ describe('mqtt.getStatus', () => {
     expect(result).toEqual({
       runState: 'connected',
       connected: true,
+      commandsEnabled: false,
       lastError: null,
       deviceId: 'sleepypod-test',
       topicPrefix: 'sp',

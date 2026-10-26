@@ -20,21 +20,16 @@
  *   <prefix>/<device-id>/state/water-level           — low | ok | unknown
  *   <prefix>/<device-id>/state/biometrics/<side>     — latest HR/HRV/BR summary
  *   <prefix>/<device-id>/state/environment/ambient   — ambient temp (°C) + humidity (%)
- *   <prefix>/<device-id>/cmd/set-temperature         — JSON {side, temperature, duration?}
- *   <prefix>/<device-id>/cmd/set-power               — JSON {side, powered, temperature?}
- *   <prefix>/<device-id>/cmd/set-alarm               — JSON {side, vibrationIntensity, vibrationPattern, duration}
- *   <prefix>/<device-id>/cmd/clear-alarm             — JSON {side}
- *   <prefix>/<device-id>/cmd/start-priming           — JSON {} (or empty payload)
+ *   <prefix>/<device-id>/cmd/request               — expiring v1 control request
+ *   <prefix>/<device-id>/receipt/<request-id>      — non-retained control receipt
  *
- * Commands route through the existing tRPC procedures via createCaller, so the
- * Zod input schemas are the single source of truth for argument validation —
- * the bridge never reimplements business logic.
- *
- * TODO: depends on the `mqtt` npm package owned by sleepypod-core-28
- * (frontend agent). The @ts-ignore on the import resolves once that lands.
+ * Command reception requires MQTT_COMMANDS_ENABLED=true, broker topic ACLs and
+ * the durable control service. Legacy unversioned actuator topics are ignored.
  */
 
 import os from 'node:os'
+import type { ControlRequest } from '@/src/controls/contract'
+import { MqttCommandGateway, mqttClimateCommandTemplate, type MqttPacketFlags } from './mqttCommands'
 import mqtt, { type IClientOptions, type IClientPublishOptions, type MqttClient } from 'mqtt'
 import { eq, desc } from 'drizzle-orm'
 import { db, biometricsDb } from '@/src/db'
@@ -169,9 +164,12 @@ interface BridgeState {
   resolved: ResolvedMqttConfig | null
   messagesPublished: number
   lastPublishAt: Date | null
+  commandsEnabled: boolean
+  generation: number
 }
 
-const state: BridgeState = {
+const globals = globalThis as typeof globalThis & { __sp_mqttBridge?: BridgeState }
+const state: BridgeState = globals.__sp_mqttBridge ??= {
   client: null,
   runState: 'stopped',
   lastError: null,
@@ -180,6 +178,8 @@ const state: BridgeState = {
   resolved: null,
   messagesPublished: 0,
   lastPublishAt: null,
+  commandsEnabled: false,
+  generation: 0,
 }
 
 export interface BridgeStatus {
@@ -190,6 +190,7 @@ export interface BridgeStatus {
   topicPrefix: string | null
   messagesPublished: number
   lastPublishAt: string | null
+  commandsEnabled: boolean
 }
 
 export function getBridgeStatus(): BridgeStatus {
@@ -201,6 +202,7 @@ export function getBridgeStatus(): BridgeStatus {
     topicPrefix: state.resolved?.topicPrefix ?? null,
     messagesPublished: state.messagesPublished,
     lastPublishAt: state.lastPublishAt?.toISOString() ?? null,
+    commandsEnabled: state.commandsEnabled,
   }
 }
 
@@ -275,10 +277,16 @@ function publishHaDiscovery(): void {
     temperature_state_template: '{{ value_json.targetTemperature }}',
     mode_state_topic: topic('state', side, 'climate'),
     mode_state_template: '{{ value_json.mode }}',
-    temperature_command_topic: topic('cmd', 'set-temperature'),
-    temperature_command_template: `{ "side": "${side}", "temperature": {{ value | int }} }`,
-    mode_command_topic: topic('cmd', 'set-power'),
-    mode_command_template: `{ "side": "${side}", "powered": {{ "true" if value == "heat" else "false" }} }`,
+    ...(state.commandsEnabled
+      ? {
+          temperature_command_topic: topic('cmd', 'request'),
+          temperature_command_template: mqttClimateCommandTemplate(side, 'temperature'),
+          mode_command_topic: topic('cmd', 'request'),
+          mode_command_template: mqttClimateCommandTemplate(side, 'power'),
+          retain: false,
+          qos: 0,
+        }
+      : {}),
     modes: ['off', 'heat'],
     min_temp: 55,
     max_temp: 110,
@@ -573,68 +581,11 @@ async function publishState(): Promise<void> {
 // Command dispatch
 // ---------------------------------------------------------------------------
 
-// TODO: empty context is fine while every procedure is publicProcedure. Once
-// protectedProcedure lands (see ADR 0019 follow-ups), this becomes a privilege
-// escalation channel — MQTT commands would bypass auth. Replace with a
-// dedicated bridge context that asserts least-privilege.
-//
-// Lazy import breaks a circular module init: appRouter -> mqttRouter ->
-// mqttBridge -> appRouter triggers an ESM TDZ in the production bundle.
-type AppCaller = Awaited<ReturnType<typeof loadCaller>>
-let cachedCaller: AppCaller | null = null
-async function loadCaller() {
-  const { appRouter } = await import('@/src/server/routers/app')
-  return appRouter.createCaller({})
-}
-async function getCaller(): Promise<AppCaller> {
-  if (!cachedCaller) cachedCaller = await loadCaller()
-  return cachedCaller
-}
-
-interface CommandPayload {
-  side?: unknown
-  temperature?: unknown
-  duration?: unknown
-  powered?: unknown
-  vibrationIntensity?: unknown
-  vibrationPattern?: unknown
-}
-
-function parsePayload(buf: Buffer): CommandPayload {
-  const text = buf.toString('utf-8').trim()
-  if (text.length === 0) return {}
-  try {
-    const parsed = JSON.parse(text)
-    return typeof parsed === 'object' && parsed !== null ? parsed as CommandPayload : {}
-  }
-  catch {
-    return {}
-  }
-}
-
-async function handleCommand(verb: string, payload: CommandPayload): Promise<void> {
-  // Each branch hands the payload straight to the tRPC procedure — its Zod
-  // schema rejects malformed input. No client-side validation duplicated here.
-  const caller = await getCaller()
-  switch (verb) {
-    case 'set-temperature':
-      await caller.device.setTemperature(payload as never)
-      return
-    case 'set-power':
-      await caller.device.setPower(payload as never)
-      return
-    case 'set-alarm':
-      await caller.device.setAlarm(payload as never)
-      return
-    case 'clear-alarm':
-      await caller.device.clearAlarm(payload as never)
-      return
-    case 'start-priming':
-      await caller.device.startPriming({})
-      return
-    default:
-      console.warn(`[mqtt] unknown command verb: ${verb}`)
-  }
+// Lazy import avoids the router -> MQTT settings -> bridge initialization cycle.
+async function submitControl(request: ControlRequest, current: () => boolean) {
+  const { getControlService } = await import('@/src/controls/instance')
+  if (!current()) throw new Error('command_connection_closed')
+  return getControlService().submit(request)
 }
 
 // ---------------------------------------------------------------------------
@@ -704,10 +655,13 @@ export async function testConnection(input: TestConnectionInput): Promise<TestCo
 export async function startMqttBridge(): Promise<void> {
   if (state.runState !== 'stopped') return
 
+  const generation = ++state.generation
   state.runState = 'starting'
+  state.commandsEnabled = false
   state.lastError = null
 
   const { config } = await resolveConfig()
+  if (state.generation !== generation) return
   state.resolved = config
 
   if (!config.enabled) {
@@ -729,6 +683,8 @@ export async function startMqttBridge(): Promise<void> {
     reconnectPeriod: RECONNECT_PERIOD_MS,
     connectTimeout: CONNECT_TIMEOUT_MS,
     keepalive: 30,
+    clean: true,
+    resubscribe: false,
     will: {
       topic: availabilityTopic,
       payload: Buffer.from('offline'),
@@ -743,59 +699,84 @@ export async function startMqttBridge(): Promise<void> {
     ...(config.tlsEnabled && config.tlsInsecure ? { rejectUnauthorized: false } : {}),
   }
 
-  const client: MqttClient = mqtt.connect(config.url, opts)
+  let client: MqttClient
+  try {
+    client = mqtt.connect(config.url, opts)
+  }
+  catch {
+    state.runState = 'errored'
+    state.lastError = 'Unable to create MQTT connection'
+    return
+  }
   state.client = client
+  state.commandsEnabled = envBool(process.env.MQTT_COMMANDS_ENABLED) === true
+
+  const current = () => state.client === client && state.generation === generation
+  const commands = new MqttCommandGateway(async (request) => {
+    if (!current() || !client.connected || !state.commandsEnabled) throw new Error('command_connection_closed')
+    return submitControl(request, () => current() && client.connected && state.commandsEnabled)
+  })
 
   client.on('connect', () => {
+    if (!current()) return
     state.runState = 'connected'
     state.lastError = null
-    console.log(`[mqtt] connected to ${config.url} (deviceId=${id}, prefix=${config.topicPrefix})`)
+    console.log(`[mqtt] connected (deviceId=${id}, prefix=${config.topicPrefix})`)
     safePublish(availabilityTopic, 'online', RETAINED_QOS_0)
     publishHaDiscovery()
-    client.subscribe(topic('cmd', '+'), { qos: 0 }, (err: Error | null) => {
-      if (err) console.warn('[mqtt] subscribe cmd/* failed:', err.message)
-    })
+    if (state.commandsEnabled) {
+      client.subscribe(topic('cmd', 'request'), { qos: 0 }, (err: Error | null) => {
+        if (err && current()) console.warn('[mqtt] command subscription failed')
+      })
+    }
     void publishState()
   })
 
   client.on('reconnect', () => {
+    if (!current()) return
     state.runState = 'reconnecting'
     console.log('[mqtt] reconnecting…')
   })
 
   client.on('error', (err: Error) => {
+    if (!current()) return
     state.lastError = err.message
     console.warn('[mqtt] client error:', err.message)
   })
 
   client.on('close', () => {
+    if (!current()) return
     if (state.runState === 'connected') state.runState = 'reconnecting'
   })
 
-  client.on('message', (incomingTopic: string, payload: Buffer) => {
-    const cmdPrefix = topic('cmd') + '/'
-    if (!incomingTopic.startsWith(cmdPrefix)) return
-    const verb = incomingTopic.slice(cmdPrefix.length)
-    const parsed = parsePayload(payload)
-    void handleCommand(verb, parsed).catch((err) => {
-      console.warn(`[mqtt] command ${verb} failed:`, err instanceof Error ? err.message : err)
+  client.on('message', (incomingTopic: string, payload: Buffer, packet: MqttPacketFlags) => {
+    if (!current() || !client.connected || !state.commandsEnabled || incomingTopic !== topic('cmd', 'request')) return
+    void commands.receive(payload, packet).then((receipt) => {
+      if (current() && client.connected) {
+        safePublish(topic('receipt', receipt.requestId), JSON.stringify(receipt), VOLATILE_QOS_0)
+      }
+    }).catch(() => {
+      // Broker URLs, payloads and raw service errors may contain credentials.
+      console.warn('[mqtt] command rejected or receipt unavailable; do not retry with a new request ID')
     })
   })
 
   state.publishTimer = setInterval(() => {
-    void publishState()
+    if (current()) void publishState()
   }, STATE_PUBLISH_INTERVAL_MS)
 
   // React to live status frames so HA sees temperature changes immediately
   // rather than waiting for the periodic re-publish.
   state.unsubscribeFrame = onServerFrame((frame) => {
-    if (frame.type !== 'deviceStatus') return
+    if (!current() || frame.type !== 'deviceStatus') return
     if (!state.client?.connected) return
     safePublish(topic('state', 'device-status'), JSON.stringify(frame), RETAINED_QOS_0)
   })
 }
 
 export async function shutdownMqttBridge(): Promise<void> {
+  state.generation++
+  state.commandsEnabled = false
   if (state.runState === 'stopped' && !state.client) return
   console.log('[mqtt] shutting down…')
 
@@ -846,6 +827,5 @@ export const __test__ = {
   resolveConfig,
   deviceId,
   slugify,
-  parsePayload,
   state,
 }

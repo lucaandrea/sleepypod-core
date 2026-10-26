@@ -74,6 +74,13 @@ export function MqttSettingsForm() {
           <span className="font-mono text-fg">{relativeTime(status?.lastPublishAt ?? null)}</span>
         </span>
       </div>
+      <p className="text-sm text-fg-2" role="status">
+        {!status
+          ? 'MQTT control availability has not been verified.'
+          : status.commandsEnabled
+            ? 'MQTT control is enabled. Commands expire and return a receipt; physical effects remain unverified.'
+            : 'Telemetry only. MQTT cannot change the Pod. Command control requires a separate host configuration.'}
+      </p>
       {status?.lastError && <InlineError className="break-words text-xs">{status.lastError}</InlineError>}
 
       {settingsQuery.error && (
@@ -171,10 +178,10 @@ function SettingsFields({ data, onSaved }: { data: MqttSettings, onSaved: () => 
 
   return (
     <>
-      <SettingRow label="MQTT bridge" sub="Publishes status + biometrics, accepts commands">
+      <SettingRow label="MQTT bridge" sub="Publishes status and biometrics to your broker">
         <Toggle on={enabled} onChange={setEnabled} disabled={isPending} label="Toggle MQTT bridge" />
       </SettingRow>
-      <SettingRow label="Home Assistant discovery" sub="Publishes climate/switch/sensor entities">
+      <SettingRow label="Home Assistant discovery" sub="Publishes climate and sensor entities">
         <Toggle on={haDiscovery} onChange={setHaDiscovery} disabled={isPending} label="Toggle Home Assistant discovery" />
       </SettingRow>
 
