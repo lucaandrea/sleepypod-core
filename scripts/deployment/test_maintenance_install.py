@@ -55,8 +55,12 @@ class ProvisioningTests(unittest.TestCase):
         self.credentials.write_bytes(b'SLEEPYPOD_AUTH_TOKEN=fixture-key-not-used\n')
 
     def state(self, name, active='inactive', pid='0', enabled='static', loaded='loaded'):
-        return {'LoadState': loaded, 'ActiveState': active, 'MainPID': pid, 'UnitFileState': enabled,
-                'FragmentPath': str(self.units/name) if loaded == 'loaded' else '', 'DropInPaths': ''}
+        result = {'LoadState': loaded, 'ActiveState': active, 'UnitFileState': enabled,
+                  'FragmentPath': str(self.units/name) if loaded == 'loaded' else '', 'DropInPaths': ''}
+        # Real systemd socket units have no MainPID, including when not found.
+        if name != maintenance_plan.SOCKET:
+            result['MainPID'] = pid
+        return result
 
     def unit_state(self, name):
         return copy.deepcopy(self.states.get(name, self.state(name, loaded='not-found', enabled='')))
@@ -83,7 +87,10 @@ class ProvisioningTests(unittest.TestCase):
             self.socket.chmod(0o660)
         elif action == 'stop':
             self.assertTrue(set(names) <= set(provision.UNITS))
-            for name in names: self.states[name].update(ActiveState='inactive', MainPID='0')
+            for name in names:
+                self.states[name]['ActiveState'] = 'inactive'
+                if name != maintenance_plan.SOCKET:
+                    self.states[name]['MainPID'] = '0'
             self.close_socket()
         elif action == 'disable':
             self.assertEqual(names, [maintenance_plan.SOCKET])
@@ -121,6 +128,15 @@ class ProvisioningTests(unittest.TestCase):
             self.states[name].update(changes)
             with self.assertRaises(ValueError): provision.install(self.directory, self.context)
             self.states[name] = original
+        self.assertFalse(provision.journal_path(self.directory).exists())
+        self.assertEqual(self.calls, [])
+
+    def test_missing_service_pid_is_not_treated_like_a_stopped_socket(self):
+        state = self.state(maintenance_plan.SERVICE, loaded='not-found', enabled='')
+        state.pop('MainPID')
+        self.states[maintenance_plan.SERVICE] = state
+        with self.assertRaisesRegex(ValueError, 'already exists'):
+            provision.install(self.directory, self.context)
         self.assertFalse(provision.journal_path(self.directory).exists())
         self.assertEqual(self.calls, [])
 
