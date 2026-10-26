@@ -2,7 +2,9 @@
 
 This fork starts from stable v3.4.0 (`f8948b04586542fab1817aadc72b65a9c2988f8c`).
 It remains AGPL-3.0; the existing license and upstream attribution are retained.
-The separately implemented native companion is in https://github.com/lucaandrea/free-sleep.
+The active native companion is in https://github.com/lucaandrea/sleepypod-ios.
+The original Free Sleep native app remains in its separate repository; it is not
+the current UI reference. See [navigation](UNIFIED_NAVIGATION.md).
 
 ## Implemented locally
 

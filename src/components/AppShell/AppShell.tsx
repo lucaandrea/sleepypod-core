@@ -23,7 +23,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <main
           onTouchStart={onTouchStart}
           onTouchEnd={onTouchEnd}
-          className="@container flex min-w-0 flex-1 flex-col gap-3.5 px-5 pb-[calc(96px+env(safe-area-inset-bottom,0px))] pt-[calc(env(safe-area-inset-top,0px)+20px)] min-[900px]:gap-[18px] min-[900px]:px-8 min-[900px]:py-7"
+          className="@container flex min-w-0 flex-1 flex-col gap-3.5 px-5 pb-[calc(var(--phone-nav-height,76px)+20px)] pt-[calc(env(safe-area-inset-top,0px)+20px)] min-[900px]:gap-[18px] min-[900px]:px-8 min-[900px]:py-7"
         >
           <MobileToolbar />
           {process.env.NEXT_PUBLIC_DEMO === '1' && (

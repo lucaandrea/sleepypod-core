@@ -301,7 +301,7 @@ function SettingsIndex({ onOpen, className }: { onOpen: (id: SectionId) => void,
           href={DOCS_URL}
           target="_blank"
           rel="noopener noreferrer"
-          className="flex w-full items-center gap-3 px-0.5 py-3.5 text-[15px] text-fg no-underline hover:bg-active hover:no-underline"
+          className="flex w-full flex-wrap items-center gap-3 px-0.5 py-3.5 text-[15px] text-fg no-underline hover:bg-active hover:no-underline"
         >
           <BookOpen size={17} className="text-icon" />
           <span className="flex-1">Docs</span>
