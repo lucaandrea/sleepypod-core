@@ -98,7 +98,9 @@ authenticated direct version 1 APIs and their capability flags.
 Per-night reporting and exact-source owner review are now implemented; see
 [Preview night reports](PREVIEW_NIGHT_REPORTS.md). No actual night is inferred
 from baseline data, test results or the passage of time.
-Remaining work includes actual shared-authority application receipts for active comfort, hardware qualification, seven real
+The shared authority now journals [temperature applications](TEMPERATURE_APPLICATIONS.md),
+including uncertain results; Preview still never calls it. Remaining work includes
+the active policy admission/application adapter, hardware qualification, seven real
 Preview nights with owner review, and bounded activation. A Preview proposal
 alone is not evidence of improved sleep or a completed night.
 

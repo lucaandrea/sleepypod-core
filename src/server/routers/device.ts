@@ -1,7 +1,8 @@
 import { z } from 'zod'
 import { TRPCError } from '@trpc/server'
 import { publicProcedure, router } from '@/src/server/trpc'
-import { db } from '@/src/db'
+import { db, sqlite } from '@/src/db'
+import { readTemperatureApplications, temperatureApplicationQuerySchema, temperatureApplicationsSchema } from '@/src/temperature/applications'
 import { deviceState } from '@/src/db/schema'
 import { assertPumpStallNotBlocked, withHardwareClient } from '@/src/server/helpers'
 import { getPrimeCompletedAt, dismissPrimeNotification } from '@/src/hardware/primeNotification'
@@ -114,6 +115,11 @@ const pendingTemps = new Map<string, PendingTemp>()
  * polling, consider caching device state from database instead.
  */
 export const deviceRouter = router({
+  temperatureApplications: publicProcedure
+    .meta({ openapi: { method: 'GET', path: '/v1/device/temperature/applications', tags: ['Device'] } })
+    .input(temperatureApplicationQuerySchema)
+    .output(temperatureApplicationsSchema)
+    .query(({ input }) => readTemperatureApplications(sqlite, input.side, input.beforeId)),
   /**
    * Get current device status directly from hardware.
    *

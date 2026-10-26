@@ -15,6 +15,7 @@ import { TemperatureController, type TemperatureRequest } from './controller'
 import { readAlarmContext } from '@/src/alarms/store'
 import { effectiveAlarmTargets } from '@/src/alarms/model'
 import { pauseComfortAfterManual } from '@/src/comfort/manual'
+import { createTemperatureApplicationRecorder } from './applications'
 
 const invalidSessions: Record<Side, Map<number, string>> = { left: new Map(), right: new Map() }
 
@@ -119,6 +120,7 @@ export function getTemperatureController(): TemperatureController {
   if (!globalState.__sp_temperatureController) {
     globalState.__sp_temperatureController = new TemperatureController({
       now: Date.now,
+      recordApplication: createTemperatureApplicationRecorder(sqlite),
       onManualControl: pauseComfortAfterManual,
       withSideLock,
       readHold: (side) => {

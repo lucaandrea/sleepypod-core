@@ -1,4 +1,5 @@
 import { MAX_TEMP, MIN_TEMP, type Side } from '@/src/hardware/types'
+import type { RecordTemperatureApplication, TemperatureApplicationInput } from './applications'
 
 export class TemperatureBlockedError extends Error {
   constructor() {
@@ -56,6 +57,7 @@ export interface TemperatureControllerDeps {
   connect: () => Promise<void>
   /** Hardware write + state mirror; the caller already owns the side lock. */
   apply: (side: Side, temperature: number, durationSec?: number) => Promise<void>
+  recordApplication?: RecordTemperatureApplication
   powerOff: (side: Side) => Promise<void>
   publish: (side: Side, status: TemperatureControlStatus) => void
   /** Persist the personal-policy pause. Must not throw or block manual shutdown on storage failure. */
@@ -114,6 +116,15 @@ export class TemperatureController {
   }
 
   constructor(private deps: TemperatureControllerDeps) {}
+
+  /** Keep the selected owner with the attempt; arbitration status alone is not delivery evidence. */
+  private recordApplication(side: Side, targetF: number, durationSec: number | undefined,
+    request: TemperatureRequest | null, reason: TemperatureApplicationInput['reason'], apply: () => Promise<void>): Promise<void> {
+    return this.deps.recordApplication
+      ? this.deps.recordApplication({ side, targetF, durationSec: durationSec ?? null,
+          source: request?.source ?? null, requestId: request?.id ?? null, reason }, apply)
+      : apply()
+  }
 
   private isPowered(side: Side): boolean {
     const deadline = this.deps.readHardwareDeadline(side)
@@ -227,7 +238,8 @@ export class TemperatureController {
     })
     try {
       this.deps.writeHardwareDeadline(side, durationSec === undefined ? null : now + durationSec * 1_000)
-      await this.deps.apply(side, temperature, durationSec)
+      await this.recordApplication(side, temperature, durationSec, this.deps.readHold(side), 'manual',
+        () => this.deps.apply(side, temperature, durationSec))
       this.applied[side] = temperature
       this.appliedDeadline[side] = this.deps.readHardwareDeadline(side)
       this.poweredOff[side] = false
@@ -278,8 +290,8 @@ export class TemperatureController {
       return this.status(side)
     }
     try {
-      if (duration === undefined) await this.deps.apply(side, temperature)
-      else await this.deps.apply(side, temperature, duration)
+      await this.recordApplication(side, temperature, duration, selected, 'power_on',
+        () => duration === undefined ? this.deps.apply(side, temperature) : this.deps.apply(side, temperature, duration))
     }
     catch (error) {
       this.invalidate(side)
@@ -424,8 +436,8 @@ export class TemperatureController {
           await this.powerOffLocked(side)
           return this.status(side)
         }
-        if (duration === undefined) await this.deps.apply(side, target)
-        else await this.deps.apply(side, target, duration)
+        await this.recordApplication(side, target, duration, selected, 'keepalive',
+          () => duration === undefined ? this.deps.apply(side, target) : this.deps.apply(side, target, duration))
         this.applied[side] = target
         this.appliedDeadline[side] = this.hardwareDeadline(side, selected)
       }
@@ -446,8 +458,9 @@ export class TemperatureController {
           await this.powerOffLocked(side)
           return this.status(side)
         }
-        if (duration === undefined) await this.deps.apply(side, selected.temperature)
-        else await this.deps.apply(side, selected.temperature, duration)
+        const target = selected.temperature
+        await this.recordApplication(side, target, duration, selected, force ? 'keepalive' : 'reconcile',
+          () => duration === undefined ? this.deps.apply(side, target) : this.deps.apply(side, target, duration))
         this.applied[side] = selected.temperature
         this.appliedDeadline[side] = this.hardwareDeadline(side, selected)
       }
