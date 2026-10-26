@@ -1,3 +1,4 @@
+import hashlib
 import json
 from pathlib import Path
 import sqlite3
@@ -116,6 +117,13 @@ class ActivationTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.run_activation()
         self.assertEqual(self.calls, [('daemon-reload',)])
+
+    def test_incomplete_candidate_is_rejected_before_service_changes(self):
+        with patch.object(activation_checks, 'candidate_ready', side_effect=ValueError('Imported history is missing')):
+            with self.assertRaisesRegex(ValueError, 'Imported history'):
+                self.run_activation()
+        self.assertEqual(self.calls, [('daemon-reload',)])
+        self.assertFalse((self.directory / 'activation.json').exists())
 
     def test_configuration_change_after_stop_restores_without_starting_core(self):
         with patch.object(activation_checks, 'unchanged_source', side_effect=[{'settings': 'digest'}, ValueError('changed')]):
@@ -263,12 +271,24 @@ class ReadOnlyChecksTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'separate'):
             activation_checks.unchanged_source(self.data, self.data / 'legacy')
 
-    def test_candidate_guard_uses_real_schema_and_is_read_only(self):
+    def prepare_candidate(self):
+        """Create actual current schemas and an importer-produced standalone history snapshot."""
         from scripts.migration import free_sleep as migration
+        from scripts.migration import imported_history
         root = Path(__file__).resolve().parents[2]
         for name, migrations in (('sleepypod.db', 'migrations'), ('biometrics.db', 'biometrics-migrations')):
             migration.create_database(self.data / name, root / 'src/db' / migrations).close()
-        (self.data / 'migration-report.json').write_text('{"format":"sleepypod-free-sleep-import/1"}')
+        self.source = self.data / 'legacy/free-sleep.db'
+        self.history = self.data / imported_history.FILENAME
+        original = sqlite3.connect(self.source)
+        original.executescript(imported_history.SCHEMA)
+        original.execute("INSERT INTO vitals VALUES (1,'left',1700000000,60,30,12)")
+        original.commit()
+        original.close()
+        metadata = imported_history.prepare(self.source, self.history, 'America/Los_Angeles', 1700000000000)
+        self.report = {'format': 'sleepypod-free-sleep-import/1', 'importedHistory': metadata,
+                       'databaseHashes': {self.history.name: hashlib.sha256(self.history.read_bytes()).hexdigest()}}
+        self.save_report()
         database = sqlite3.connect(self.data / 'sleepypod.db')
         self.addCleanup(database.close)
         database.execute('INSERT INTO device_settings(id,mqtt_enabled) VALUES (1,0)')
@@ -276,9 +296,16 @@ class ReadOnlyChecksTests(unittest.TestCase):
             database.execute('INSERT INTO side_settings(side,name) VALUES (?,?)', (side, side))
             database.execute('INSERT INTO comfort_states(side,state) VALUES (?,?)', (side, '{"config":{"mode":"preview"}}'))
         database.commit()
-        before = (self.data / 'sleepypod.db').read_bytes()
+        return database
+
+    def save_report(self):
+        (self.data / 'migration-report.json').write_text(json.dumps(self.report))
+
+    def test_candidate_guard_uses_real_schema_and_is_read_only(self):
+        database = self.prepare_candidate()
+        before = {str(path.relative_to(self.data)): path.read_bytes() for path in self.data.rglob('*') if path.is_file()}
         activation_checks.candidate_ready(self.data)
-        self.assertEqual(before, (self.data / 'sleepypod.db').read_bytes())
+        self.assertEqual(before, {str(path.relative_to(self.data)): path.read_bytes() for path in self.data.rglob('*') if path.is_file()})
         for field in ('autopilot_enabled', 'mqtt_enabled', 'homekit_enabled', 'prime_pod_daily', 'reboot_daily', 'pump_stall_protection_enabled', 'pump_stall_auto_recovery_enabled'):
             with self.subTest(field=field):
                 database.execute('UPDATE device_settings SET ' + field + '=1')
@@ -311,6 +338,80 @@ class ReadOnlyChecksTests(unittest.TestCase):
         database.execute('UPDATE comfort_states SET state=? WHERE side=?', ('{"config":{"mode":"active"}}', 'left'))
         database.commit()
         with self.assertRaisesRegex(ValueError, 'Off or Preview'):
+            activation_checks.candidate_ready(self.data)
+
+    def test_missing_history_never_passes_candidate_check(self):
+        self.prepare_candidate()
+        self.history.unlink()
+        with self.assertRaisesRegex(ValueError, 'history'):
+            activation_checks.candidate_ready(self.data)
+        self.assertFalse(self.history.exists())
+
+    def test_missing_original_history_never_passes_candidate_check(self):
+        self.prepare_candidate()
+        self.source.unlink()
+        with self.assertRaisesRegex(ValueError, 'history'):
+            activation_checks.candidate_ready(self.data)
+        self.assertFalse(self.source.exists())
+
+    def test_older_report_without_history_evidence_requires_reimport(self):
+        self.prepare_candidate()
+        self.report = {'format': 'sleepypod-free-sleep-import/1'}
+        self.save_report()
+        with self.assertRaisesRegex(ValueError, 'history'):
+            activation_checks.candidate_ready(self.data)
+
+    def test_changed_or_replaced_history_and_original_are_rejected(self):
+        self.prepare_candidate()
+        for path in (self.history, self.source):
+            with self.subTest(path=path.name):
+                original = path.read_bytes()
+                database = sqlite3.connect(path)
+                database.execute('UPDATE vitals SET heart_rate=80')
+                database.commit()
+                database.close()
+                with self.assertRaisesRegex(ValueError, 'history'):
+                    activation_checks.candidate_ready(self.data)
+                path.write_bytes(original)
+
+    def test_history_symlink_and_incomplete_sidecars_are_rejected(self):
+        self.prepare_candidate()
+        saved = self.root / 'saved-history.db'
+        self.history.rename(saved)
+        self.history.symlink_to(saved)
+        with self.assertRaisesRegex(ValueError, 'history'):
+            activation_checks.candidate_ready(self.data)
+        self.history.unlink()
+        saved.rename(self.history)
+        for suffix in ('-wal', '-shm', '-journal'):
+            sidecar = self.history.with_name(self.history.name + suffix)
+            sidecar.write_bytes(b'')
+            with self.subTest(suffix=suffix), self.assertRaisesRegex(ValueError, 'history'):
+                activation_checks.candidate_ready(self.data)
+            sidecar.unlink()
+        activation_checks.candidate_ready(self.data)
+
+    def test_history_metadata_must_match_the_import_report(self):
+        self.prepare_candidate()
+        self.report['importedHistory']['timeZone'] = 'UTC'
+        self.save_report()
+        with self.assertRaisesRegex(ValueError, 'history'):
+            activation_checks.candidate_ready(self.data)
+
+    def test_malformed_history_hash_and_corrupt_sqlite_are_rejected(self):
+        self.prepare_candidate()
+        expected = self.report['databaseHashes'][self.history.name]
+        for digest in (None, '', 'invalid', '0' * 64, []):
+            with self.subTest(digest=digest):
+                self.report['databaseHashes'][self.history.name] = digest
+                self.save_report()
+                with self.assertRaisesRegex(ValueError, 'history'):
+                    activation_checks.candidate_ready(self.data)
+        self.report['databaseHashes'][self.history.name] = expected
+        self.history.write_bytes(b'not a SQLite file')
+        self.report['databaseHashes'][self.history.name] = hashlib.sha256(self.history.read_bytes()).hexdigest()
+        self.save_report()
+        with self.assertRaisesRegex(ValueError, 'history'):
             activation_checks.candidate_ready(self.data)
 
     def test_future_receipt_or_different_revision_is_rejected(self):

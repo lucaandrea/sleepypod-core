@@ -91,6 +91,13 @@ credential archives outside Core's runtime data. Do not point a service at the
 preparation folder or copy over an open SQLite database. Use the documented
 [controller handoff](CONTROLLER_HANDOFF.md) only after that review.
 
+The activation preflight requires the separate history database and its
+byte-preserved original. It checks the import checksum, stored provenance,
+SQLite integrity and absence of history sidecars. A partial two-database copy,
+substituted snapshot or old report without history evidence is refused before
+Free Sleep is stopped. The live history that Free Sleep continues writing is
+not compared against this dated snapshot.
+
 Free Sleep resumes writing after capture. The candidate is a dated snapshot,
 not synchronization; activation must recheck original configuration, and a new
 quiesced capture is needed if the owner wants later history included. This

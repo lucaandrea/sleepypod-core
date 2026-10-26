@@ -8,6 +8,7 @@ import unittest
 from unittest.mock import patch
 
 import handoff
+import activation_checks
 import prepare_data
 import service_plan
 from test_handoff import CONFIG
@@ -132,6 +133,7 @@ class QuiescedImportTests(unittest.TestCase):
         self.assert_restored()
         self.assertEqual(before, {str(path.relative_to(self.legacy)): path.read_bytes() for path in self.legacy.rglob('*') if path.is_file()})
         self.assertTrue((self.output / 'candidate/free-sleep-history.db').is_file())
+        activation_checks.candidate_ready(self.output / 'candidate')
         with sqlite3.connect(self.output / 'candidate/sleepypod.db') as database:
             self.assertEqual(database.execute('SELECT COUNT(*) FROM comfort_activations').fetchone(), (0,))
         self.assertEqual((self.output / 'preparation.json').stat().st_mode & 0o777, 0o600)

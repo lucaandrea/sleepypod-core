@@ -3,6 +3,7 @@ from contextlib import closing
 import hashlib
 import json
 import math
+import re
 import sqlite3
 import stat
 
@@ -15,6 +16,53 @@ SOURCE_FILES = {
     'analytics/comfort.json': False,
     'analytics/journal.json': False,
 }
+
+HISTORY_DATABASE = 'free-sleep-history.db'
+
+
+def database_checksum(path):
+    """Hash snapshots in bounded memory on the Pod rather than loading a full history file."""
+    checksum = hashlib.sha256()
+    with path.open('rb') as source:
+        for chunk in iter(lambda: source.read(1024 * 1024), b''):
+            checksum.update(chunk)
+    return checksum.hexdigest()
+
+
+def require_imported_history(data, report):
+    """Reject partial or mismatched promotions before any retained service is stopped."""
+    metadata = report.get('importedHistory')
+    hashes = report.get('databaseHashes')
+    if (not isinstance(metadata, dict) or metadata.get('format') != 'sleepypod-imported-history/1'
+            or metadata.get('source') != 'free-sleep' or not isinstance(hashes, dict)):
+        raise ValueError('Imported history evidence is missing; reimport before activation')
+    expected = hashes.get(HISTORY_DATABASE)
+    source_hash = metadata.get('sourceSha256')
+    if any(not isinstance(value, str) or not re.fullmatch('[a-f0-9]{64}', value)
+           for value in (expected, source_hash)):
+        raise ValueError('Imported history checksums are missing or invalid')
+    history = data / HISTORY_DATABASE
+    original = data / 'legacy/free-sleep.db'
+    if (data.is_symlink() or (data / 'legacy').is_symlink()
+            or any(path.is_symlink() or not path.is_file() for path in (history, original))):
+        raise ValueError('Expected regular imported history and preserved original database files')
+    for suffix in ('-wal', '-shm', '-journal'):
+        sidecar = history.with_name(history.name + suffix)
+        if sidecar.exists() or sidecar.is_symlink():
+            raise ValueError('Imported history must be a complete standalone snapshot without SQLite sidecars')
+    if database_checksum(history) != expected or database_checksum(original) != source_hash:
+        raise ValueError('Imported history differs from its report or preserved original database')
+    try:
+        with closing(sqlite3.connect(history.resolve().as_uri() + '?mode=ro&immutable=1', uri=True)) as database:
+            if (database.execute('PRAGMA integrity_check').fetchall() != [('ok',)]
+                    or database.execute('PRAGMA foreign_key_check').fetchall()
+                    or database.execute('PRAGMA journal_mode').fetchone() != ('delete',)):
+                raise ValueError('Imported history integrity or standalone snapshot check failed')
+            rows = database.execute('SELECT id, document FROM imported_history_metadata').fetchall()
+            if len(rows) != 1 or rows[0][0] != 1 or json.loads(rows[0][1]) != metadata:
+                raise ValueError('Imported history metadata differs from its report')
+    except (sqlite3.Error, json.JSONDecodeError, TypeError) as error:
+        raise ValueError('Imported history database or metadata cannot be read') from error
 
 
 def source_digest(root, filename, required):
@@ -71,8 +119,9 @@ def require_trial(journal, revision, now):
 def candidate_ready(data):
     """Keep first activation passive apart from the explicitly imported daily routines."""
     report = json.loads((data / 'migration-report.json').read_text())
-    if report.get('format') != 'sleepypod-free-sleep-import/1':
+    if not isinstance(report, dict) or report.get('format') != 'sleepypod-free-sleep-import/1':
         raise ValueError('Expected a separately imported candidate')
+    require_imported_history(data, report)
     for filename in ('sleepypod.db', 'biometrics.db'):
         path = data / filename
         if path.is_symlink() or not path.is_file():

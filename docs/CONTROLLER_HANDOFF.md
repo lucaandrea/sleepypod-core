@@ -28,6 +28,8 @@ flowchart LR
    [quiesced preparation command](QUIESCED_IMPORT.md) restores Free Sleep before
    importing into a separate review folder and retains every translation warning.
    Review routines, current temporary overrides and alarm behavior.
+   Promote all three databases, the migration report and its preserved `legacy/`
+   data together. The imported history snapshot is required for activation.
    Keep Core's adaptive comfort Off or Preview and house/base automations off.
    Imported calibration remains pending actual empty/occupied qualification.
 3. Put the already-probed Python modules and environments in their own directory.
@@ -180,8 +182,15 @@ are retained in Free Sleep's directory and are not compared byte-for-byte while
 its stream is writing. Take an updated quiesced archive if metrics accumulated
 since the original backup must also be included in the migration archive.
 
-Both Core databases must pass integrity and foreign-key checks. Initial
-activation requires Off/Preview personal comfort, disabled general automation,
+All three databases must pass integrity and foreign-key checks. The separate
+`free-sleep-history.db` must match its import checksum, contain the report's
+exact history metadata, and refer to the preserved `legacy/free-sleep.db`
+checksum. It must be a standalone snapshot without SQLite sidecars. Missing,
+changed or partial history copies fail before stopping Free Sleep; older reports
+without history evidence require a new import. These checks only read the
+candidate and never repair or synthesize missing history.
+
+Initial activation requires Off/Preview personal comfort, disabled general automation,
 base schedules, HomeKit/MQTT, presence-based power, always-on behavior, active
 run-once sessions, automatic priming/reboot and unqualified pump stall protection
 and recovery. Review and
