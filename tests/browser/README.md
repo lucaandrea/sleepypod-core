@@ -23,6 +23,12 @@ checks anonymous rejection and authenticated REST requests.
 
 Coverage:
 
+- Import a separate synthetic Free Sleep archive, inspect original presence,
+  paginate tied-timestamp vitals, switch sides and source-local date ranges,
+  and retain byte-identical source/query databases. Reject anonymous REST/tRPC
+  and stale snapshot IDs; verify private no-store headers and phone layouts.
+  Imported history remains distinct from current metrics and Preview evidence.
+
 - Publish a synthetic service alert into the real SQLite inbox, receive it in the
   foreground, mark it read, reload, and verify idempotence through REST. Reject
   anonymous REST/tRPC and cross-origin cookie mutations. Capture desktop and

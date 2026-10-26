@@ -14,6 +14,7 @@ import { randomUUID } from 'node:crypto'
 import { createComfortStore, comfortEvent } from '../../src/comfort/store'
 import { defaultComfortState, type ComfortContext } from '../../src/comfort/policy'
 import { capturePreviewEvidence } from '../../src/comfort/report-evidence'
+import { createHistoryFixture } from '../fixtures/importedHistory'
 
 const root = process.env.SLEEPYPOD_BROWSER_FIXTURE
 const bioPath = process.env.BIOMETRICS_DATABASE_URL
@@ -30,6 +31,9 @@ try {
     for (let minute = 0; minute < 10; minute++) {
       db.insert(schema.vitals).values({ side: 'left', timestamp: new Date(start + minute * 60_000), heartRate: 60, breathingRate: 14, hrv: 30 }).run()
     }
+  }
+  else if (process.argv[2] === 'imported-history') {
+    createHistoryFixture(root)
   }
   else if (process.argv[2] === 'replay') {
     const before = sqlite.prepare('SELECT * FROM vitals ORDER BY id').all()

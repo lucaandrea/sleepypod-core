@@ -132,6 +132,17 @@ class ImportTests(unittest.TestCase):
             self.assertEqual(database.execute('SELECT COUNT(*) FROM vitals').fetchone()[0], 0)
             self.assertEqual(database.execute('SELECT status,quality_score FROM calibration_profiles').fetchall(), [('pending', None), ('pending', None)])
         self.assertEqual(report['legacyMetricRows'], {'vitals': 1, 'movement': 1, 'sleep_records': 1})
+        self.assertEqual(set(report['databaseHashes']), {'sleepypod.db', 'biometrics.db', 'free-sleep-history.db'})
+        history_path = self.output / 'free-sleep-history.db'
+        self.assertEqual(report['databaseHashes']['free-sleep-history.db'], migration.checksum(history_path))
+        with closing(sqlite3.connect(history_path)) as database:
+            self.assertEqual(database.execute('PRAGMA journal_mode').fetchone()[0], 'delete')
+            self.assertEqual(database.execute('SELECT side,timestamp,heart_rate FROM vitals').fetchall(), [('left', 1792890000, 55)])
+            metadata = json.loads(database.execute('SELECT document FROM imported_history_metadata').fetchone()[0])
+            self.assertEqual(metadata, report['importedHistory'])
+            self.assertEqual(metadata['sourceSha256'], hashlib.sha256(self.database_bytes).hexdigest())
+            self.assertEqual(metadata['timeZone'], self.settings['timeZone'])
+            self.assertEqual(metadata['sides']['left']['presence']['readableRecords'], 1)
         self.assertEqual((self.output / 'legacy/free-sleep.db').read_bytes(), self.database_bytes)
         self.assertEqual(migration.read_json(self.output / 'legacy/analytics/journal.json'), self.journal)
         self.assertEqual(migration.read_json(self.output / 'legacy/analytics/comfort.json'), self.comfort)
@@ -148,6 +159,15 @@ class ImportTests(unittest.TestCase):
         self.assertNotIn('fixture-only-not-real', json.dumps(report))
         for item in [self.output, *self.output.rglob('*')]:
             self.assertEqual(item.stat().st_mode & 0o777, 0o700 if item.is_dir() else 0o600)
+
+    def test_history_failure_removes_candidate_and_preserves_backup(self):
+        self.build_backup()
+        before = {item.name: item.read_bytes() for item in self.backup.iterdir()}
+        with patch.object(migration.imported_history, 'prepare', side_effect=OSError('Synthetic full disk')):
+            with self.assertRaisesRegex(OSError, 'Synthetic full disk'):
+                migration.stage_backup(self.backup, self.output, NOW)
+        self.assert_clean_failure()
+        self.assertEqual(before, {item.name: item.read_bytes() for item in self.backup.iterdir()})
 
     def test_snooze_settings_survive_import_in_rows_and_owned_routines(self):
         self.settings['left']['taps']['tripleTap'] = {

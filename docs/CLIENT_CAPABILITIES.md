@@ -48,6 +48,13 @@ Clients should decode the compatibility prefix as a nullable string and receipt
 and expiry support as booleans; these values are not permanent schema constants.
 Only enable a feature when this controller reports it.
 
+`importedHistory` advertises the direct read-only history API at
+`endpoints.importedHistory`. Read that endpoint's status before offering records:
+software readiness does not mean a snapshot exists. Legacy presence and
+five-minute vitals remain a separate, unqualified source and never count as
+Preview nights. See [Imported history](IMPORTED_HISTORY.md) for pagination,
+units and the remaining native journal/Health/coaching boundaries.
+
 Durable command receipts and expiry are implemented **only** for the versioned
 control endpoint advertised by `endpoints.controls`, with
 `controlSemantics.receiptScope = "versioned_controls_only"`. Legacy actuator

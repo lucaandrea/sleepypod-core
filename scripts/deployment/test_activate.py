@@ -1,4 +1,3 @@
-import importlib.util
 import json
 from pathlib import Path
 import sqlite3
@@ -265,10 +264,8 @@ class ReadOnlyChecksTests(unittest.TestCase):
             activation_checks.unchanged_source(self.data, self.data / 'legacy')
 
     def test_candidate_guard_uses_real_schema_and_is_read_only(self):
+        from scripts.migration import free_sleep as migration
         root = Path(__file__).resolve().parents[2]
-        spec = importlib.util.spec_from_file_location('activation_migration', root / 'scripts/migration/free_sleep.py')
-        migration = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(migration)
         for name, migrations in (('sleepypod.db', 'migrations'), ('biometrics.db', 'biometrics-migrations')):
             migration.create_database(self.data / name, root / 'src/db' / migrations).close()
         (self.data / 'migration-report.json').write_text('{"format":"sleepypod-free-sleep-import/1"}')
