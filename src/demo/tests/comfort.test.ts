@@ -14,6 +14,7 @@ describe('personal comfort in the demo', () => {
 
   it.each([
     ['comfort.configure', { side: 'left', config: { mode: 'preview', minimumF: 70, maximumF: 95 } }],
+    ['comfort.mode', { side: 'left', mode: 'preview' }],
     ['comfort.feedback', { side: 'left', feedback: { date: '2026-10-25', comfort: 'warm' } }],
   ] as const)('rejects %s without claiming a successful save', async (route, input) => {
     await expect(resolveDemoCall(route, input)).rejects.toThrow('requires a live, authenticated Pod')

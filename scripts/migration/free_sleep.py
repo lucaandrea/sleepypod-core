@@ -14,6 +14,7 @@ import shutil
 import sqlite3
 import tarfile
 import tempfile
+from uuid import uuid4
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 if __package__:
@@ -300,7 +301,7 @@ def minutes(value):
     return int(value[:2]) * 60 + int(value[3:])
 
 
-def map_comfort(legacy, database, report, now):
+def map_comfort(legacy, database, report, now, zone):
     filename = legacy / 'analytics/comfort.json'
     document = read_json(filename) if filename.exists() else {}
     require(isinstance(document, dict) and (not document or set(document) == set(SIDES)), 'Invalid comfort document')
@@ -354,8 +355,14 @@ def map_comfort(legacy, database, report, now):
         number(entry['restfulness'], 1, 5, 'restfulness', integer=True)
         for field in ('caffeine', 'alcohol', 'exercise'):
             boolean(entry[field], field)
-        require(isinstance(entry.get('notes', ''), str) and len(entry.get('notes', '')) <= 500, 'Invalid journal notes')
+        require(isinstance(entry.get('notes', ''), str) and len(entry.get('notes', '').encode('utf-16-le')) // 2 <= 500, 'Invalid journal notes')
         seen.add((side, recorded_date))
+        fields = {key: entry[key] for key in ('restfulness', 'comfort', 'caffeine', 'alcohol', 'exercise')}
+        fields['notes'] = entry.get('notes', '').strip()
+        record = {'side': side, 'date': recorded_date, 'fields': fields, 'timeZone': zone,
+                  'origin': 'free-sleep', 'createdAt': None, 'updatedAt': None, 'importedAt': now}
+        database.execute('INSERT INTO journal_entries(side,local_date,revision,record) VALUES (?,?,?,?)',
+                         (side, recorded_date, str(uuid4()), json_text(record)))
         database.execute('INSERT INTO comfort_feedback(side,local_date,comfort,recorded_at) VALUES (?,?,?,?)',
                          (side, recorded_date, entry['comfort'], now))
     report['journalEntries'] = len(entries)
@@ -427,12 +434,12 @@ def stage_backup(backup, output, now=None):
             with closing(create_database(staging / 'biometrics.db', ROOT / 'src/db/biometrics-migrations')) as biometrics:
                 map_settings(settings, database, report, now)
                 map_schedules(read_json(legacy / 'lowdb/schedulesDB.json'), database, report)
-                map_comfort(legacy, database, report, now)
+                map_comfort(legacy, database, report, now, settings['timeZone'])
                 preserve_biometrics(legacy, biometrics, report, now)
                 report['importedHistory'] = imported_history.prepare(
                     legacy / 'free-sleep.db', staging / imported_history.FILENAME, settings['timeZone'], now)
                 report['importedRows'] = {table: database.execute(f'SELECT COUNT(*) FROM {table}').fetchone()[0]
-                    for table in ('power_schedules', 'temperature_schedules', 'alarm_schedules', 'tap_gestures', 'comfort_states', 'comfort_feedback')}
+                    for table in ('power_schedules', 'temperature_schedules', 'alarm_schedules', 'tap_gestures', 'comfort_states', 'comfort_feedback', 'journal_entries')}
                 for connection in (database, biometrics):
                     connection.commit()
                     require(connection.execute('PRAGMA integrity_check').fetchone()[0] == 'ok', 'Imported SQLite integrity failure')

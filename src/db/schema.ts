@@ -366,6 +366,14 @@ export const comfortFeedback = sqliteTable('comfort_feedback', {
   recordedAt: integer('recorded_at').notNull(), // Epoch milliseconds
 }, table => [uniqueIndex('uq_comfort_feedback_side_date').on(table.side, table.localDate)])
 
+/** Deleted check-ins retain only a revision, preventing a stale client from resurrecting private notes. */
+export const journalEntries = sqliteTable('journal_entries', {
+  side: text('side', { enum: ['left', 'right'] }).notNull(),
+  localDate: text('local_date').notNull(),
+  revision: text('revision').notNull(),
+  record: text('record', { mode: 'json' }),
+}, table => [uniqueIndex('uq_journal_entries_side_date').on(table.side, table.localDate)])
+
 /** Append-only owner reviews bind to an exact retained Preview report. */
 export const comfortReviews = sqliteTable('comfort_reviews', {
   id: integer('id').primaryKey({ autoIncrement: true }),

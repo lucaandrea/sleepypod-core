@@ -25,8 +25,9 @@ export const comfort: DemoHandlers<'comfort'> = {
     history: [],
     runtime: 'stopped',
     activation: { available: false, reason: COMFORT_ACTIVATION_REASON },
-    features: { sensorAware: false, followBedtime: false, nightReports: false },
+    features: { sensorAware: false, followBedtime: false, nightReports: false, modeOnly: false },
   }),
   configure: rejectDemoWrite,
+  mode: rejectDemoWrite,
   feedback: rejectDemoWrite,
 }

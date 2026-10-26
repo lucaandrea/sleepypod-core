@@ -8,6 +8,8 @@ import {
   historySnapshotSchema, type HistoryKind, type HistoryPage, type HistoryPageInput, type HistorySnapshot,
 } from './contract'
 import { historyIntervals } from './intervals'
+import { readJournalPresence, type JournalPresence } from '@/src/journal/presence'
+import type { Side } from '@/src/hardware/types'
 
 type HistoryFailure = 'not_imported' | 'unavailable' | 'changed' | 'invalid_cursor' | 'not_found'
 export class HistoryError extends Error {
@@ -125,6 +127,16 @@ export class ImportedHistoryReader {
       const failure = error instanceof HistoryError ? error : new HistoryError('unavailable', 'Imported history could not be read.')
       return { apiVersion: 1 as const, status: failure.reason === 'not_imported' ? 'not_imported' as const : 'unavailable' as const,
         snapshot: null, message: failure.message, semantics: HISTORY_SEMANTICS }
+    }
+  }
+
+  /** Analysis remains source-separated and uses the archive's original wake-date zone. */
+  journalPresence(side: Side, from: string, through: string): JournalPresence {
+    try {
+      return this.read((database, snapshot) => readJournalPresence(database, side, from, through, snapshot.timeZone))
+    }
+    catch (error) {
+      return { status: error instanceof HistoryError && error.reason === 'not_imported' ? 'not_imported' : 'unavailable', timeZone: null, minutes: new Map() }
     }
   }
 

@@ -12,6 +12,7 @@ import sys
 import tarfile
 import tempfile
 import unittest
+from uuid import UUID
 from unittest.mock import patch
 
 import free_sleep as migration
@@ -126,6 +127,15 @@ class ImportTests(unittest.TestCase):
             for field in ('feedbackThrough', 'learnedSession', 'pausedUntil', 'offsetF', 'lastAppliedAt', 'lastTargetF', 'lastSegment'):
                 self.assertEqual(state[field], self.comfort['left'][field])
             self.assertEqual(database.execute('SELECT local_date,comfort FROM comfort_feedback').fetchall(), [('2026-10-24', 'warm')])
+            journal = database.execute('SELECT side,local_date,revision,record FROM journal_entries').fetchone()
+            self.assertEqual(journal[:2], ('left', '2026-10-24'))
+            self.assertEqual(str(UUID(journal[2])), journal[2])
+            record = json.loads(journal[3])
+            self.assertEqual(record, {'side': 'left', 'date': '2026-10-24',
+                                     'fields': {key: value for key, value in self.journal[0].items() if key not in ('side', 'date')},
+                                     'timeZone': 'America/Los_Angeles', 'origin': 'free-sleep',
+                                     'createdAt': None, 'updatedAt': None, 'importedAt': NOW})
+            self.assertEqual(report['importedRows']['journal_entries'], 1)
             self.assertEqual(database.execute('SELECT COUNT(*) FROM comfort_events').fetchone()[0], 0)
             self.assertEqual(database.execute('SELECT SUM(is_powered) FROM device_state').fetchone()[0], 0)
         with closing(sqlite3.connect(self.output / 'biometrics.db')) as database:

@@ -128,7 +128,7 @@ Free Sleep's analytics endpoints. It does **not** install a blanket
 | Historical bed episodes, vitals and movement | Adopt this API and keep provenance/units/unknown values intact. Current Core nights remain a separate source. |
 | Apple Health history and export | Native HealthKit retains its consent, source identities, duplicate prevention and accessible historical queries. These history GETs do not authorize Health writes; no legacy `health/export` route is supplied. |
 | AI coaching | Native local/cloud model selection and explicit sharing remain the intended path. No legacy `ai/coach` forwarding route is supplied. Reports must label imported observations and their limitations. |
-| Morning journal | Core comfort feedback currently carries date and comfort only. Restfulness, habits and notes remain preserved under `legacy/analytics/journal.json`; a full journal API/UI remains separate work. |
+| Morning journal | Full restfulness, comfort, habits and notes now have a revision-checked local API and web editor, with complete offline import. Native adoption uses the [journal contract](MORNING_JOURNAL.md); the original JSON remains preserved. |
 
 ## Validation and remaining gates
 

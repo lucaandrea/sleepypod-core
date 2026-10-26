@@ -1,3 +1,4 @@
+import { synchronizeJournalComfort } from '@/src/journal/store'
 import { previewReportId } from './report-evidence'
 import type Database from 'better-sqlite3'
 import type { Side } from '@/src/hardware/types'
@@ -42,6 +43,7 @@ export function createComfortStore(database: Database.Database): ComfortStore {
       database.transaction(() => {
         database.prepare(`INSERT INTO comfort_feedback (side, local_date, comfort, recorded_at) VALUES (?, ?, ?, ?)
           ON CONFLICT(side, local_date) DO UPDATE SET comfort = excluded.comfort, recorded_at = excluded.recorded_at`).run(side, report.date, report.comfort, event.at)
+        synchronizeJournalComfort(database, side, report.date, report.comfort, event.at)
         database.prepare('INSERT INTO comfort_events (side, observed_at, event) VALUES (?, ?, ?)').run(side, event.at, encoded)
       })()
     },
@@ -57,7 +59,4 @@ export function createComfortStore(database: Database.Database): ComfortStore {
   }
 }
 
-export function comfortEvent(at: number, kind: ComfortEvent['kind'], message: string): ComfortEvent {
-  return { at, kind, message, session: null, proposedF: null, reportedF: null, eligible: false,
-    deviceObservedAt: null, presenceObservedAt: null, owner: null }
-}
+export { comfortEvent } from './event'
