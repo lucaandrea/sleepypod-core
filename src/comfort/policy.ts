@@ -1,5 +1,6 @@
 import type { BedEntrySample, BedtimeSelection, BedtimeStatus } from './bedtime'
 import type { ComfortSignals } from './signals'
+import type { ComfortApplication } from './application-contract'
 
 /** Personal comfort policy ported from the owner's Free Sleep thermal/policy.ts.
  * Pure decisions only: persistence and hardware belong to the shared controller.
@@ -29,6 +30,7 @@ export interface ComfortState {
   lastTargetF: number | null
   lastSegment: string
   bedtime?: BedtimeSelection
+  application?: ComfortApplication
 }
 
 /** The schedule adapter must resolve one unambiguous, timezone-aware power window. */
@@ -116,6 +118,9 @@ export function decideComfort(state: ComfortState, context: ComfortContext): Com
   })
   if (!Number.isFinite(now) || !validState(state)) return stop('Comfort settings or clock are invalid.')
   if (state.config.mode === 'off') return stop('Adaptive comfort is off.')
+  if (state.config.mode === 'active' && state.application && state.application.outcome !== 'acknowledged') {
+    return stop('A previous comfort command is unconfirmed. Review its application evidence before enabling further adjustments.')
+  }
   if (state.pausedUntil > now) return stop('Paused for six hours after a manual control. Your routine continues.')
   if (context.owner === 'manual' || context.owner === 'run-once') return stop('Your manual control or run-once routine has priority.')
   if (context.eitherAway !== false) return stop('Paused while either side is in away mode.')

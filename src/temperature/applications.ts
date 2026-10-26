@@ -14,7 +14,13 @@ export const temperatureApplicationInputSchema = z.object({
   requestId: z.string().min(1).max(2000).nullable(),
 }).strict()
 export type TemperatureApplicationInput = z.infer<typeof temperatureApplicationInputSchema>
-export type RecordTemperatureApplication = (input: TemperatureApplicationInput, apply: () => Promise<void>) => Promise<void>
+export interface TemperatureApplicationReceipt {
+  attemptId: string
+  attemptedAt: number
+  finishedAt: number | null
+  outcome: 'acknowledged' | 'unknown'
+}
+export type RecordTemperatureApplication = (input: TemperatureApplicationInput, apply: () => Promise<void>) => Promise<TemperatureApplicationReceipt>
 
 export const temperatureApplicationSchema = temperatureApplicationInputSchema.extend({
   id: positiveId, attemptId: z.string().uuid(), attemptedAt: timestamp, finishedAt: timestamp.nullable(),
@@ -49,14 +55,16 @@ export function createTemperatureApplicationRecorder(database: Database.Database
         VALUES (?, ?, ?, 'attempting', ?)`).run(attemptId, request.side, attemptedAt, JSON.stringify(request))
     })()
     const unknown = () => {
+      let finishedAt: number | null = null
       // The durable attempting row stays unresolved if storage also prevents this update.
       try {
         const observedAt = now()
-        const finishedAt = Number.isSafeInteger(observedAt) && observedAt >= attemptedAt && observedAt <= 8_640_000_000_000_000 ? observedAt : null
+        finishedAt = Number.isSafeInteger(observedAt) && observedAt >= attemptedAt && observedAt <= 8_640_000_000_000_000 ? observedAt : null
         database.prepare(`UPDATE temperature_applications SET outcome = 'unknown', finished_at = ?
           WHERE attempt_id = ? AND outcome = 'attempting'`).run(finishedAt, attemptId)
       }
       catch { /* Never replace the control error with an audit-storage error. */ }
+      return { attemptId, attemptedAt, finishedAt, outcome: 'unknown' as const }
     }
     try {
       await apply()
@@ -71,12 +79,14 @@ export function createTemperatureApplicationRecorder(database: Database.Database
       const result = database.prepare(`UPDATE temperature_applications SET outcome = 'acknowledged', finished_at = ?
         WHERE attempt_id = ? AND outcome = 'attempting'`).run(finishedAt, attemptId)
       if (result.changes !== 1) throw new Error('Temperature application receipt was not retained')
+      return { attemptId, attemptedAt, finishedAt, outcome: 'acknowledged' }
     }
     catch {
-      unknown()
+      const result = unknown()
       // The write itself succeeded. Do not roll back the owner's hold or provoke
       // another command just because recording its result failed.
       console.warn('[temperature] Application result could not be durably confirmed; inspect temperature application history.')
+      return result
     }
   }
 }
