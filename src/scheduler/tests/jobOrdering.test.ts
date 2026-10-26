@@ -85,6 +85,7 @@ import * as dbModule from '@/src/db'
 import { JobManager } from '../jobManager'
 import { withSideLock } from '@/src/hardware/sideLock'
 import { fahrenheitToLevel } from '@/src/hardware/types'
+import { alarmSchedules, powerSchedules } from '@/src/db/schema'
 const { sqlite } = dbModule as typeof dbModule & { sqlite: BetterSqlite3.Database }
 
 function resetSchema(): void {
@@ -306,6 +307,77 @@ describe('JobManager — job ordering and gating', () => {
 
   afterEach(async () => {
     await manager.shutdown()
+  })
+
+  function registerWakeBoundary(offTime: string, registration: 'alarm-first' | 'power-first' = 'power-first') {
+    insertDeviceSettings()
+    seedSidePowered('left', true)
+    insertPowerSchedule({ side: 'left', dayOfWeek: 'monday', onTime: '21:00', offTime, offDayOffset: 1, onTemperature: 82 })
+    insertAlarmSchedule({ side: 'left', dayOfWeek: 'tuesday', time: '07:00', alarmTemperature: 82 })
+    const alarm = dbModule.db.select().from(alarmSchedules).get()!
+    const power = dbModule.db.select().from(powerSchedules).get()!
+    if (registration === 'alarm-first') {
+      manager.upsertAlarmJob(alarm)
+      manager.upsertPowerJob(power)
+    }
+    else {
+      manager.upsertPowerJob(power)
+      manager.upsertAlarmJob(alarm)
+    }
+    return alarm
+  }
+
+  it.each(['alarm-first', 'power-first'] as const)('keeps the same-time alarm hold with %s registration', async (registration) => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-10-27T06:59:59-07:00'))
+    try {
+      const alarm = registerWakeBoundary('07:00', registration)
+
+      // Run the real node-schedule callbacks; only hardware transport is mocked.
+      await vi.advanceTimersByTimeAsync(1002)
+      expect(setAlarm).toHaveBeenCalledTimes(1)
+      expect(manager.getScheduler().getNextInvocation(`alarm-${alarm.id}`)?.getTime())
+        .toBe(new Date('2026-11-03T07:00:00-08:00').getTime())
+      expect(setPower).not.toHaveBeenCalledWith('left', false)
+      const deadline = new Date('2026-10-27T07:15:30-07:00')
+      expect(manager.getScheduler().getNextInvocation('power-off-after-alarm-left')?.getTime()).toBe(deadline.getTime())
+      expect(readSide('left')?.is_powered).toBe(1)
+      await vi.advanceTimersByTimeAsync(deadline.getTime() - Date.now() - 1)
+      expect(setPower).not.toHaveBeenCalledWith('left', false)
+      await vi.advanceTimersByTimeAsync(1)
+      expect(setPower).toHaveBeenCalledExactlyOnceWith('left', false)
+      expect(readSide('left')?.is_powered).toBe(0)
+    }
+    finally {
+      await manager.shutdown()
+      vi.useRealTimers()
+    }
+  })
+
+  it.each(['active', 'disabled', 'cancelled'] as const)('checks the %s alarm when power-off follows five minutes later', async (state) => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-10-27T06:59:59-07:00'))
+    try {
+      const alarm = registerWakeBoundary('07:05')
+      await vi.advanceTimersByTimeAsync(1002)
+      expect(setAlarm).toHaveBeenCalledTimes(1)
+      if (state === 'disabled') sqlite.prepare('UPDATE alarm_schedules SET enabled = 0 WHERE id = ?').run(alarm.id)
+      if (state === 'cancelled') manager.cancelAlarmJob(alarm.id)
+      await vi.advanceTimersByTimeAsync(new Date('2026-10-27T07:05:00-07:00').getTime() - Date.now() + 1)
+      if (state === 'active') {
+        expect(setPower).not.toHaveBeenCalledWith('left', false)
+        expect(manager.getScheduler().getNextInvocation('power-off-after-alarm-left')?.getTime())
+          .toBe(new Date('2026-10-27T07:15:30-07:00').getTime())
+      }
+      else {
+        expect(setPower).toHaveBeenCalledExactlyOnceWith('left', false)
+        expect(manager.getScheduler().getJob('power-off-after-alarm-left')).toBeUndefined()
+      }
+    }
+    finally {
+      await manager.shutdown()
+      vi.useRealTimers()
+    }
   })
 
   describe('temperature gating by isPowered', () => {

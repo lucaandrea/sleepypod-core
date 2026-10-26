@@ -114,6 +114,7 @@ import { withSideLock } from '@/src/hardware/sideLock'
 import { JobManager } from '../jobManager'
 import { JobType } from '../types'
 import { ALARM_HOLD_AFTER_MIN } from '@/src/temperature/baseline'
+import { DAYS_OF_WEEK } from '@/src/lib/scheduleTime'
 
 /**
  * Count reload cycles by spying on Scheduler.cancelRecurringJobs, which is
@@ -1930,7 +1931,10 @@ describe('JobManager residual mutation contracts', () => {
 
   describe('power-off during an alarm warm-up', () => {
     const power = { ...row, id: 31, side: 'left' as const, dayOfWeek: 'monday' as const, onTime: '22:00', offTime: '07:30', offDayOffset: 0, endAction: 'turn_off' as const, onTemperature: 80 }
-    const alarmRow = { id: 5, side: 'left', enabled: true, duration: 120, wakeWindow: 0 }
+    const alarmRow = {
+      id: 5, side: 'left' as const, enabled: true, duration: 120, wakeWindow: 0,
+      dayOfWeek: 'thursday' as const, time: '11:40', alarmTemperature: 80,
+    }
 
     beforeEach(() => {
       vi.spyOn(manager as any, 'awayModes').mockResolvedValue({})
@@ -1940,8 +1944,13 @@ describe('JobManager residual mutation contracts', () => {
       vi.spyOn(console, 'log').mockImplementation(() => {})
     })
 
+    const futureAlarm = (minutes: number, overrides: Partial<typeof alarmRow> = {}) => {
+      const at = new Date(Date.now() + minutes * 60_000)
+      return { ...alarmRow, dayOfWeek: DAYS_OF_WEEK[at.getUTCDay()], time: at.toISOString().slice(11, 16), ...overrides }
+    }
+
     const alarmIn = (minutes: number, wakeWindow = 0) => {
-      vi.spyOn(db, 'select').mockReturnValueOnce({ from: () => queryRows([{ ...alarmRow, wakeWindow }]) } as any)
+      vi.spyOn(db, 'select').mockReturnValueOnce({ from: () => queryRows([futureAlarm(minutes, { wakeWindow })]) } as any)
       vi.spyOn(manager.getScheduler(), 'getNextInvocation').mockImplementation(id =>
         id === 'alarm-5' ? new Date(Date.now() + minutes * 60_000) : null)
     }
@@ -2047,9 +2056,9 @@ describe('JobManager residual mutation contracts', () => {
     it('holds power until the last overlapping alarm finishes, regardless of row order', async () => {
       const captured = captureOneTimeJobs()
       vi.spyOn(db, 'select').mockReturnValueOnce({ from: () => queryRows([
-        { ...alarmRow, id: 5, duration: 120 },
-        { ...alarmRow, id: 6, duration: 180 },
-        { ...alarmRow, id: 7, duration: 60 },
+        futureAlarm(10, { id: 5, duration: 120 }),
+        futureAlarm(20, { id: 6, duration: 180 }),
+        futureAlarm(10, { id: 7, duration: 60 }),
       ]) } as any)
       vi.spyOn(manager.getScheduler(), 'getNextInvocation').mockImplementation(id =>
         new Date(Date.now() + (id === 'alarm-6' ? 20 : 10) * 60_000))
@@ -2069,7 +2078,7 @@ describe('JobManager residual mutation contracts', () => {
     })
 
     it('ignores alarms with no upcoming run', async () => {
-      vi.spyOn(db, 'select').mockReturnValueOnce({ from: () => queryRows([alarmRow]) } as any)
+      vi.spyOn(db, 'select').mockReturnValueOnce({ from: () => queryRows([futureAlarm(10)]) } as any)
       vi.spyOn(manager.getScheduler(), 'getNextInvocation').mockReturnValue(null)
       await manager.runPowerOffJob(power)
       expect(control.powerOffLocked).toHaveBeenCalledWith('left')

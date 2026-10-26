@@ -66,6 +66,22 @@ before upgrading; older servers cannot safely own the new schema.
 
 ## Runtime and evidence boundaries
 
+Scheduled power-off uses the same alarm window as temperature arbitration:
+warm-up begins 30 minutes before the alarm (or earlier for a longer wake
+window), and the hold ends 15 minutes after its configured vibration duration.
+For a 07:00 alarm lasting 30 seconds, a scheduled 07:00 or 07:05 power-off is
+deferred until 07:15:30. This remains true after the recurring alarm callback
+has advanced its next invocation to the following week. Disabled or cancelled
+alarm jobs cannot create a new hold. Explicit power-on still invalidates a
+previously deferred shutdown.
+
+Real `node-schedule` callbacks with fake time, migrated in-memory SQLite and
+mocked hardware cover both same-time registration orders, the exact hold
+deadline, a later power-off, and disabled/cancelled alarm jobs. These are
+software regression checks, not physical vibration or temperature evidence.
+The warm-up and hold differ from Free Sleep's alarm behavior and still require
+owner review before migration.
+
 Pending snoozes retain their configuration and count through the existing
 atomic alarm-state file. Persistence remains best-effort: disk-write failure is
 logged, so this is not a power-loss durability claim. A restarted controller
