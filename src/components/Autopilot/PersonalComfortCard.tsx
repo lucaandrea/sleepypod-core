@@ -87,7 +87,7 @@ export function PersonalComfortDetails({ data, pending, onConfigure, onMode, onF
   return (
     <div className="mt-5 space-y-5">
       <div className="rounded-ctl border border-line bg-active p-4 text-sm">
-        <p className="font-medium">{state?.config.mode === 'preview' ? 'Preview only' : state?.config.mode === 'active' ? data.activation.available ? 'Active personal comfort' : 'Activation withheld' : 'Personal comfort off'}</p>
+        <p className="font-medium">{state?.config.mode === 'preview' ? 'Preview only' : state?.config.mode === 'active' ? data.activation.current ? 'Active personal comfort' : 'Activation withheld' : 'Personal comfort off'}</p>
         <p className="mt-1 text-fg-2">{state?.config.mode === 'active' ? 'Bounded thermal adjustments use your existing routine. Manual controls and live safety guards retain priority.' : 'Preview does not adjust the bed. Your existing routines and rules continue.'}</p>
         <p className="mt-2">{data.fault ?? data.decision?.reason ?? (data.evaluatedAt === null ? 'No evaluation recorded yet.' : 'Waiting for a current evaluation.')}</p>
         {data.evaluatedAt !== null && (

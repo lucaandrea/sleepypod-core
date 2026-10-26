@@ -76,7 +76,9 @@ export const comfortStatusSchema = z.object({
   history: z.array(comfortEventSchema),
   runtime: z.enum(['running', 'stopped']),
   activation: z.object({
-    available: z.boolean(),
+    // Legacy native clients require false: direct mode/configure activation stays unavailable.
+    available: z.literal(false),
+    current: z.boolean().optional(),
     reason: z.string(),
   }),
   features: z.object({ sensorAware: z.boolean(), followBedtime: z.boolean(), nightReports: z.boolean().optional(), modeOnly: z.boolean().optional(), ownerActivation: z.boolean().optional() }),

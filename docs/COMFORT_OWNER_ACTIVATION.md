@@ -97,6 +97,14 @@ REST endpoints under `/api/v1/comfort/owner` are `GET /`, `POST /prepare`,
 Read endpoints never start hardware services. Capability discovery advertises the
 review workflow separately from an actually admitted personal comfort policy.
 
+For existing native clients, `GET /api/v1/comfort` preserves
+`activation.available: false`: the legacy mode/configure endpoints still cannot
+activate. The additive `activation.current` field describes an admitted owner
+grant; the new owner endpoint exposes its own `active` and `canActivate` fields.
+Older clients ignore these additions and can still read status, stop, configure
+Off/Preview and save check-ins. The independently maintained native app can adopt
+the owner review endpoints without changing this compatibility contract.
+
 ## Remaining physical and feature gates
 
 No attended hardware test or real Preview night is established by this source

@@ -75,7 +75,7 @@ export function ComfortOwnerReview({ side }: { side: Side }) {
                 <div key={value} className="flex flex-wrap items-center justify-between gap-2 rounded-ctl border border-line p-3 text-sm">
                   <div>
                     <p>{qualificationLabels[value]}</p>
-                    <p className="mt-1 text-xs text-fg-2">{record ? `${current ? record.outcome === 'confirmed' ? 'Owner confirmed' : 'Needs retest' : 'Earlier configuration; repeat'} · ${time(record.at)}` : 'Not yet qualified'}</p>
+                    <p className="mt-1 text-xs text-fg-2">{record ? `${!data.identity ? 'Waiting for fresh controller identity' : current ? record.outcome === 'confirmed' ? 'Owner confirmed' : 'Needs retest' : 'Earlier configuration; repeat'} · ${time(record.at)}` : 'Not yet qualified'}</p>
                   </div>
                   {record?.outcome === 'confirmed' && <Button variant="ghost" disabled={pending} onClick={() => retest.mutate({ side, kind: value, expectedId: record.id })}>Needs retest</Button>}
                 </div>

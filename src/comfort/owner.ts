@@ -103,7 +103,7 @@ export function createComfortOwner(deps: ComfortOwnerDeps) {
     if (!deps.autopilotEnabled()) reasons.push('Global Autopilot is off. Review its existing rules before enabling it; activation will not change that switch.')
     if (state.config.followBedtime) reasons.push('Bed-entry phase shifting remains Preview-only. Disable it and collect matching nights before thermal activation.')
     if (state.config.mode !== 'preview' && state.config.mode !== 'active') reasons.push('Start Preview before preparing activation.')
-    for (const kind of qualificationKindSchema.options) {
+    for (const kind of current ? qualificationKindSchema.options : []) {
       if (!matching.some(record => record.kind === kind && record.outcome === 'confirmed')) reasons.push(`${qualificationLabels[kind]} needs attended confirmation for this configuration.`)
     }
     if (nights.length < 7) reasons.push(`${nights.length} of 7 matching reviewed nights. Each requires four hours of eligible observation intervals on this Pod, build, calibration, routine and policy.`)

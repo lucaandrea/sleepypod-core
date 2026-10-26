@@ -51,9 +51,12 @@ it('connects owner review, runtime learning and the single authority without cre
     expect(store.read('left')).toMatchObject({ lastTargetF: 74, lastAppliedAt: fixture.now(), application: { outcome: 'acknowledged' } })
     expect(store.history('left')[0]).toMatchObject({ kind: 'active' })
     expect(store.history('left')[0].preview).toBeUndefined()
+    // Existing native v1 validation requires available=false; current conveys the new owner grant.
+    expect(runtime.status('left').activation).toMatchObject({ available: false, current: true })
     await runtime.setMode('left', 'off')
     expect(owner.admission('left', store.read('left'))).toBeNull()
     expect(runtime.status('left').activation.available).toBe(false)
+    expect(runtime.status('left').activation.current).toBe(false)
     await runtime.stop()
   }
   finally { fixture.database.close() }

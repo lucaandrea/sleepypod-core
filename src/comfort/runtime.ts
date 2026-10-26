@@ -75,7 +75,7 @@ export class ComfortRuntime {
       evaluatedAt: observed?.at ?? null,
       decision,
       runtime: this.running ? 'running' : 'stopped',
-      activation: { available: active, reason: active ? 'Owner activation is current. Every adjustment still rechecks live guards.' : COMFORT_ACTIVATION_REASON },
+      activation: { available: false, current: active, reason: active ? 'Owner activation is current. Every adjustment still rechecks live guards.' : COMFORT_ACTIVATION_REASON },
       features: { sensorAware: true, followBedtime: true, nightReports: true, modeOnly: true, ...(this.deps.activation ? { ownerActivation: true } : {}) },
       timing: fault || signalExpired || observation?.stateKey !== JSON.stringify(state) ? null : observation?.timing ?? null,
       signals: fault || signalExpired || observation?.stateKey !== JSON.stringify(state) ? null : signals ?? null,
