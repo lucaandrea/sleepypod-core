@@ -133,6 +133,13 @@ def install_units(directory, helpers):
     handoff.systemctl('daemon-reload')
 
 
+def stop_helpers():
+    """A socket has no process ID; verify services and sockets by their own rules."""
+    handoff.systemctl('stop', *HELPERS)
+    if not all(maintenance_install.helper_stopped(name, handoff.unit_state(name)) for name in HELPERS):
+        raise RuntimeError('Maintenance services did not stop')
+
+
 def start_and_verify(plan, token, revision, seconds):
     handoff.systemctl('start', service_plan.CORE_UNIT)
     observation = activate.settle(token, revision, seconds, handoff.core_observation, time.sleep, time.monotonic)
@@ -149,7 +156,7 @@ def restore(directory, details, record, seconds=120):
     """Restore the previous Core, never starting the retained Free Sleep controller."""
     validate_units(details['oldUnits'], details['newUnits'])
     checkpoint(directory, record, 'restoring')
-    handoff.stop_units(HELPERS)
+    stop_helpers()
     handoff.stop_units(service_plan.CORE_UNITS)
     data = Path(details['old']['config']['data'])
     backup = directory/'data-backup'
@@ -213,7 +220,7 @@ def upgrade(directory, old_directory, new_directory, old_helpers, new_helpers, s
               'configurationBefore': configuration(data)}
     checkpoint(directory, record, 'prepared')
     try:
-        handoff.stop_units(HELPERS)
+        stop_helpers()
         handoff.stop_units(service_plan.CORE_UNITS)
         checkpoint(directory, record, 'quiesced')
         record['configurationBefore'] = configuration(data)

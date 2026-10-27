@@ -92,7 +92,10 @@ class UpgradeTests(unittest.TestCase):
     def control(self, *arguments):
         self.calls.append(arguments)
         if arguments[0] == 'stop':
-            for name in arguments[1:]: self.states[name].update(ActiveState='inactive', MainPID='0')
+            for name in arguments[1:]:
+                self.states[name].update(ActiveState='inactive', MainPID='0')
+                if name == maintenance_plan.SOCKET:
+                    self.states[name].pop('MainPID', None)
 
     def start(self, plan, _token, _revision, _seconds):
         self.calls.append(('start', service_plan.CORE_UNIT))
