@@ -1,6 +1,8 @@
 import type { BedEntrySample, BedtimeSelection, BedtimeStatus } from './bedtime'
 import type { ComfortSignals } from './signals'
 import type { ComfortApplication } from './application-contract'
+import type { BedroomComfortGuidance } from '@/src/bedroom/contract'
+import { currentBedroomGuidance } from '@/src/bedroom/fusion'
 
 /** Personal comfort policy ported from the owner's Free Sleep thermal/policy.ts.
  * Pure decisions only: persistence and hardware belong to the shared controller.
@@ -17,6 +19,7 @@ export interface ComfortConfig {
   maximumF: number
   sensorAware?: boolean
   followBedtime?: boolean
+  roomAware?: boolean
 }
 
 /** Field names preserve the Free Sleep learner's migration cursors. Times are epoch milliseconds. */
@@ -71,6 +74,7 @@ export interface ComfortContext {
   /** True only after comparing reported target with the routine or our own recorded acknowledgment. */
   targetKnown: boolean
   signals?: ComfortSignals
+  bedroom?: BedroomComfortGuidance
   timing?: BedtimeStatus
 }
 
@@ -103,6 +107,7 @@ function validState(state: ComfortState): boolean {
   return ['off', 'preview', 'active'].includes(config.mode)
     && (config.sensorAware === undefined || typeof config.sensorAware === 'boolean')
     && (config.followBedtime === undefined || typeof config.followBedtime === 'boolean')
+    && (config.roomAware === undefined || typeof config.roomAware === 'boolean')
     && Number.isInteger(config.minimumF) && Number.isInteger(config.maximumF)
     && config.minimumF >= 55 && config.maximumF <= 110 && config.minimumF <= config.maximumF
     && Number.isInteger(state.offsetF) && Math.abs(state.offsetF) <= 3
@@ -157,9 +162,16 @@ export function decideComfort(state: ComfortState, context: ComfortContext): Com
   if (state.config.followBedtime && (!state.config.sensorAware || context.timing?.state !== 'ready')) {
     return stop(context.timing?.reason ?? 'Waiting for qualified bed-entry timing.')
   }
+  if (state.config.roomAware && !currentBedroomGuidance(context.bedroom, now)) {
+    return stop(context.bedroom?.state === 'ready'
+      ? 'Bedroom readings expired before this check.'
+      : context.bedroom?.reason ?? 'Waiting for qualified bedroom temperature and humidity.')
+  }
   const scheduledBaselineF = window.scheduledBaselineF ?? baselineF
   if (!Number.isFinite(scheduledBaselineF) || scheduledBaselineF < state.config.minimumF || scheduledBaselineF > state.config.maximumF) return stop('Original routine target is outside your comfort limits.')
-  const desiredF = Math.max(state.config.minimumF, Math.min(state.config.maximumF, baselineF + state.offsetF))
+  // Room context shares the learner's total three-degree budget and existing command authority.
+  const offsetF = Math.max(-3, Math.min(3, state.offsetF + (state.config.roomAware ? context.bedroom?.offsetF ?? 0 : 0)))
+  const desiredF = Math.max(state.config.minimumF, Math.min(state.config.maximumF, baselineF + offsetF))
   const proposedF = Math.max(device.targetF - 1, Math.min(device.targetF + 1, desiredF))
   if (proposedF < state.config.minimumF || proposedF > state.config.maximumF || Math.abs(proposedF - scheduledBaselineF) > 3) {
     return stop('Waiting for the routine target to enter your Autopilot limits.')
@@ -175,7 +187,9 @@ export function decideComfort(state: ComfortState, context: ComfortContext): Com
     eligible: true, baselineF, proposedF, retainPreviousLease: false, pauseRequired: false,
     reason: state.config.mode === 'preview'
       ? 'Preview only. Personal comfort will not change temperatures.'
-      : 'Following your routine with the learned comfort adjustment.',
+      : state.config.roomAware
+        ? `Following your routine and learned comfort. ${context.bedroom?.reason ?? ''}`
+        : 'Following your routine with the learned comfort adjustment.',
   }
 }
 

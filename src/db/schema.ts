@@ -38,6 +38,21 @@ export const temperatureApplications = sqliteTable('temperature_applications', {
 export const roomContextSettings = sqliteTable('room_context_settings', {
   id: integer('id').primaryKey(), revision: integer('revision').notNull(), config: text('config').notNull(),
 })
+
+// Bedroom sources retain physical-device identity; separate integrations cannot cast duplicate votes.
+export const bedroomSettings = sqliteTable('bedroom_settings', {
+  id: integer('id').primaryKey(), revision: integer('revision').notNull(), config: text('config').notNull(),
+})
+export const bedroomLatest = sqliteTable('bedroom_latest', {
+  sourceId: text('source_id').primaryKey(), revision: integer('revision').notNull(),
+  observedAt: integer('observed_at').notNull(), receivedAt: integer('received_at').notNull(),
+  lastMeasuredAt: integer('last_measured_at'), report: text('report').notNull(),
+})
+export const bedroomHistory = sqliteTable('bedroom_history', {
+  id: integer('id').primaryKey({ autoIncrement: true }), revision: integer('revision').notNull(),
+  sourceId: text('source_id').notNull(), receivedAt: integer('received_at').notNull(),
+  source: text('source').notNull(), report: text('report').notNull(),
+}, table => [index('bedroom_history_received').on(table.receivedAt), index('bedroom_history_source').on(table.sourceId, table.id)])
 export const roomContextLatest = sqliteTable('room_context_latest', {
   metric: text('metric').primaryKey(), revision: integer('revision').notNull(),
   measuredAt: integer('measured_at'), lastMeasuredAt: integer('last_measured_at'),

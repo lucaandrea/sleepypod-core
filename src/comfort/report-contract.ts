@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { bedroomGuidanceSchema } from '@/src/bedroom/contract'
 
 export const reportIdSchema = z.string().regex(/^[a-f0-9]{64}$/)
 const timestamp = z.number().int().nonnegative().max(8_640_000_000_000_000)
@@ -18,8 +19,9 @@ export const previewEvidenceSchema = z.object({
   hardwareIdentity: reportIdSchema.nullable().optional(),
   session: z.string().min(1).max(500), start: timestamp, end: timestamp, timezone,
   scheduleRevision: reportIdSchema,
+  bedroom: bedroomGuidanceSchema.nullable().optional(),
   policy: z.object({ minimumF: z.number().min(55).max(110), maximumF: z.number().min(55).max(110),
-    sensorAware: z.boolean(), followBedtime: z.boolean(), offsetF: z.number().int().min(-3).max(3) }).strict(),
+    sensorAware: z.boolean(), followBedtime: z.boolean(), roomAware: z.boolean().optional(), offsetF: z.number().int().min(-3).max(3) }).strict(),
   scheduledBaselineF: z.number().min(55).max(110),
   decisionBaselineF: z.number().min(55).max(110).nullable(),
   presence: z.enum(['occupied', 'empty', 'unavailable']),

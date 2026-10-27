@@ -21,7 +21,8 @@ export const qualificationInstructions: Record<QualificationKind, string> = {
 export const ownerIdentitySchema = z.object({
   hardware: reportIdSchema, calibration: reportIdSchema, schedule: reportIdSchema,
   build: z.string().regex(/^[a-f0-9]{7,40}$/),
-  policy: z.object({ minimumF: z.number().int(), maximumF: z.number().int(), sensorAware: z.boolean(), followBedtime: z.boolean() }).strict(),
+  bedroomConfiguration: reportIdSchema.nullable().optional(),
+  policy: z.object({ minimumF: z.number().int(), maximumF: z.number().int(), sensorAware: z.boolean(), followBedtime: z.boolean(), roomAware: z.boolean().optional() }).strict(),
 }).strict()
 export type OwnerIdentity = z.infer<typeof ownerIdentitySchema>
 

@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useState, type FormEvent } from 'react'
 import { trpc } from '@/src/utils/trpc'
 import { Button, SegmentedControl } from '@/src/components/ds'
@@ -132,6 +133,33 @@ export function PersonalComfortDetails({ data, pending, onConfigure, onMode, onF
               </strong>
               . This is a proposal, not a hardware action.
             </p>
+          )}
+          {data.features.roomAware && (
+            <div className="space-y-3">
+              <label className="flex items-start gap-3 text-sm">
+                <input
+                  type="checkbox"
+                  className="mt-1 size-4 accent-primary"
+                  checked={state.config.roomAware === true}
+                  disabled={pending || Boolean(data.fault)}
+                  onChange={event => onConfigure({ ...state.config, mode: state.config.mode === 'preview' ? 'preview' : 'off', roomAware: event.target.checked })}
+                />
+                <span>
+                  Include bedroom climate
+                  <span className="mt-1 block text-xs text-fg-2">Qualified temperature and humidity can add up to 1°F within the total 3°F comfort offset. Stale or conflicting inputs hold adjustments. Your wake-up warming and vibration keep priority.</span>
+                </span>
+              </label>
+              {state.config.roomAware && (
+                <div aria-label="Bedroom comfort contribution" className="rounded-ctl border border-line p-3 text-sm">
+                  <p>
+                    {data.bedroom?.state === 'ready' && data.bedroom.expiresAt !== null && data.bedroom.expiresAt <= data.generatedAt
+                      ? 'Bedroom readings expired. Waiting for new readings.'
+                      : data.bedroom?.reason ?? 'Waiting for a current bedroom evaluation.'}
+                  </p>
+                  <Link href="/home" className="mt-2 inline-block text-xs text-cool underline">Review bedroom devices and freshness</Link>
+                </div>
+              )}
+            </div>
           )}
           {data.features.sensorAware && (
             <div className="space-y-3">

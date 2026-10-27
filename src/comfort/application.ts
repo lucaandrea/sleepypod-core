@@ -131,6 +131,7 @@ export class ComfortApplicationAdapter {
     return { id: same && state.application ? state.application.requestId : randomUUID(), side, generation,
       createdAt: same && state.application ? state.application.createdAt : now,
       at: now, expiresAt: Math.min(now + LEASE_MS, admission.expiresAt, context.window.end,
+        state.config.roomAware ? context.bedroom?.expiresAt ?? now : Infinity,
         waitingForReport ? (state.application?.finishedAt ?? now) + LEASE_MS : Infinity),
       monotonicStart: monotonic, monotonicDeadline: monotonic + LEASE_MS,
       admissionRevision: admission.revision, config: JSON.stringify(state.config), offsetF: state.offsetF,

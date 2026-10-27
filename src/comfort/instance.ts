@@ -24,6 +24,7 @@ import { comfortRoutineAt, comfortScheduleRevision } from './routines'
 import { ComfortRuntime } from './runtime'
 import { createComfortStore } from './store'
 import { ComfortSignalReader } from './signal-reader'
+import { getBedroom } from '@/src/bedroom/instance'
 
 const globals = globalThis as typeof globalThis & { __sp_comfortRuntime?: ComfortRuntime, __sp_comfortSignals?: ComfortSignalReader, __sp_comfortOwner?: ReturnType<typeof createComfortOwner>, __sp_comfortApplication?: ComfortApplicationAdapter }
 function signalsReader() {
@@ -105,6 +106,7 @@ export function readComfortContext(side: Side, state: ComfortState, now: number,
       targetKnown: targetF !== null && (targetF === window?.baselineF || targetF === control?.targetTemperature
         || (state.lastSegment === window?.segment && state.lastTargetF === targetF && state.lastAppliedAt > 0 && state.lastAppliedAt <= now)),
       signals: state.config.sensorAware ? signalsReader().read(side, timezone, now) : undefined,
+      bedroom: state.config.roomAware ? getBedroom().guidance() : undefined,
     },
   }
 }
@@ -177,7 +179,8 @@ export function getComfortOwner() {
       if (origin.environment !== 'production' || !origin.hardwareIdentity || !origin.buildRevision || !calibration || !schedule) return null
       return ownerIdentitySchema.parse({ hardware: origin.hardwareIdentity, build: origin.buildRevision, calibration, schedule,
         policy: { minimumF: state.config.minimumF, maximumF: state.config.maximumF,
-          sensorAware: state.config.sensorAware === true, followBedtime: state.config.followBedtime === true } })
+          sensorAware: state.config.sensorAware === true, followBedtime: state.config.followBedtime === true, roomAware: state.config.roomAware === true },
+        bedroomConfiguration: state.config.roomAware ? getBedroom().configurationDigest() : null })
     },
   })
 }

@@ -58,7 +58,7 @@ export async function summarizePreview(id: string, rows: PreviewSourceRow[], now
       && evidence.runId === previous.evidence.runId && evidence.presenceSourceKey === previous.evidence.presenceSourceKey
       && qualified(evidence) && qualified(previous.evidence)) occupiedObservationMs += row.at - previous.at
     previous = { ...row, evidence }
-    configs.add(JSON.stringify([evidence.scheduleRevision, evidence.policy]))
+    configs.add(JSON.stringify([evidence.scheduleRevision, evidence.policy, evidence.bedroom?.configuration ?? null]))
     runs.add(evidence.runId)
     if (evidence.presence === 'occupied') occupiedCount++
     if (evidence.sensorReady) sensorReadyCount++

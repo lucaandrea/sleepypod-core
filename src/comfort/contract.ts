@@ -3,6 +3,7 @@ import { bedtimeSelectionSchema, bedtimeStatusSchema } from './bedtime'
 import { z } from 'zod'
 import { comfortApplicationSchema } from './application-contract'
 import { comfortSignalsSchema } from './signals'
+import { bedroomGuidanceSchema } from '@/src/bedroom/contract'
 
 export const COMFORT_ACTIVATION_REASON = 'Hardware qualification and reviewed Preview nights are pending.' as const
 
@@ -17,6 +18,7 @@ export const comfortConfigSchema = z.object({
   maximumF: z.number().int().min(55).max(110),
   sensorAware: z.boolean().optional(),
   followBedtime: z.boolean().optional(),
+  roomAware: z.boolean().optional(),
 }).strict().refine(config => config.minimumF <= config.maximumF, 'Minimum must not exceed maximum')
 
 export const comfortStateSchema = z.object({
@@ -58,6 +60,7 @@ export const comfortEventSchema = z.object({
   presenceObservedAt: timestamp.nullable(),
   owner: z.enum(['manual', 'run-once', 'autopilot', 'schedule']).nullable(),
   signals: comfortSignalsSchema.nullable().optional(),
+  bedroom: bedroomGuidanceSchema.nullable().optional(),
   timing: bedtimeStatusSchema.nullable().optional(),
   preview: previewEvidenceSchema.optional(),
 })
@@ -81,8 +84,9 @@ export const comfortStatusSchema = z.object({
     current: z.boolean().optional(),
     reason: z.string(),
   }),
-  features: z.object({ sensorAware: z.boolean(), followBedtime: z.boolean(), nightReports: z.boolean().optional(), modeOnly: z.boolean().optional(), ownerActivation: z.boolean().optional() }),
+  features: z.object({ roomAware: z.boolean().optional(), sensorAware: z.boolean(), followBedtime: z.boolean(), nightReports: z.boolean().optional(), modeOnly: z.boolean().optional(), ownerActivation: z.boolean().optional() }),
   signals: comfortSignalsSchema.nullable().optional(),
+  bedroom: bedroomGuidanceSchema.nullable().optional(),
   timing: bedtimeStatusSchema.nullable().optional(),
 })
 export type ComfortStatus = z.infer<typeof comfortStatusSchema>

@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { vi } from 'vitest'
+import type { BedroomComfortGuidance } from '@/src/bedroom/contract'
 import { withSideLock } from '@/src/hardware/sideLock'
 import { createComfortOwner } from '../owner'
 import { createComfortStore, comfortEvent } from '../store'
@@ -32,7 +33,7 @@ export function ownerFixture() {
   const deps = { database, store, now: () => now, running: () => running, autopilotEnabled: () => enabled, withSideLock, revokeLease,
     identity: (_side: unknown, state: ComfortState) => identifiable
       ? { ...identity, policy: { minimumF: state.config.minimumF, maximumF: state.config.maximumF,
-          sensorAware: state.config.sensorAware === true, followBedtime: state.config.followBedtime === true } }
+          sensorAware: state.config.sensorAware === true, followBedtime: state.config.followBedtime === true, roomAware: state.config.roomAware === true } }
       : null,
     context: () => context }
   const owner = createComfortOwner(deps)
@@ -74,7 +75,7 @@ export function ownerFixture() {
       VALUES ('left', 1, ?, ?, 'acknowledged', ?)`).run(now - 1000, now - 1000, now - 1000)
     await qualify('offline_routine')
   }
-  async function night(daysAgo: number, change: { eligible?: boolean, hardware?: string | null, build?: string, policy?: Partial<OwnerIdentity['policy']> } = {}) {
+  async function night(daysAgo: number, change: { eligible?: boolean, hardware?: string | null, build?: string, policy?: Partial<OwnerIdentity['policy']>, bedroom?: BedroomComfortGuidance } = {}) {
     const start = now - daysAgo * DAY
     const state = { ...defaultComfortState(), config: { ...identity.policy, ...change.policy, mode: 'preview' as const } }
     const runId = randomUUID()
@@ -82,6 +83,7 @@ export function ownerFixture() {
     for (let minute = 0; minute <= 240; minute++) {
       const at = start + minute * 60_000
       const input: ComfortContext = { ...context, now: at,
+        bedroom: change.bedroom ? { ...change.bedroom, expiresAt: at + 60000 } : undefined,
         window: { start, end: start + 8 * 3_600_000, session: `synthetic:${start}`, segment: 'first', baselineF: 75, alarmAt: null,
           phases: { revision: identity.schedule, startF: 75, changes: [] } },
         device: { ...context.device, observedAt: at, powered: true, targetF: 75 },
