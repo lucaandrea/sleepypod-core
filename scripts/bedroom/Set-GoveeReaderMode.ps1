@@ -13,7 +13,7 @@ foreach ($taskName in $tasks) { Get-ScheduledTask -TaskName $taskName -ErrorActi
 function Write-Atomic {
     param([string]$Path,[string]$Contents)
     [IO.File]::WriteAllText("$Path.pending",$Contents,$utf8)
-    if (Test-Path $Path) { [IO.File]::Replace("$Path.pending",$Path,$null) }
+    if (Test-Path $Path) { [IO.File]::Replace("$Path.pending",$Path,"$Path.previous") }
     else { [IO.File]::Move("$Path.pending",$Path) }
 }
 # Preserve both configurations before transferring the four monitor sources to the new reader.
