@@ -1,8 +1,9 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Droplets, Radio, Thermometer, Wind } from 'lucide-react'
 import { trpc } from '@/src/utils/trpc'
+import { useBedroomClock } from '@/src/hooks/useBedroomClock'
 import { bedroomProviderHint, bedroomReadingCurrent, bedroomReportedReading, bedroomValueLabel } from '@/src/bedroom/presentation'
 import { BEDROOM_METRICS, type BedroomConfig, type BedroomObservation } from '@/src/bedroom/contract'
 
@@ -82,11 +83,7 @@ function SourceSettings({ initial, revision, refresh }: { initial: BedroomConfig
 /** Data ages in the browser too: a successful old request cannot keep a disconnected room looking live. */
 export function BedroomSensors() {
   const query = trpc.bedroom.status.useQuery({}, { refetchInterval: 5000, refetchIntervalInBackground: false, retry: false, staleTime: 0 })
-  const [now, setNow] = useState(Date.now)
-  useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 1000)
-    return () => clearInterval(timer)
-  }, [])
+  const now = useBedroomClock()
   const data = query.data
   const connectionFresh = !query.isError && data !== undefined && now >= query.dataUpdatedAt && now - query.dataUpdatedAt < 15000
   const devices = new Map<string, BedroomObservation[]>()

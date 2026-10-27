@@ -15,16 +15,17 @@ function snapshot() {
   return { apiVersion: 1 as const, generatedAt: now, revision: 1, config: bedroomConfigSchema.parse({ enabled: true, roomName: 'Bedroom', sources: [source] }),
     observations: [observation], aggregates: combineBedroomSensors([observation], now), guidance: bedroomComfortGuidance([], now) }
 }
-const fixture = vi.hoisted(() => ({ data: undefined as unknown as ReturnType<typeof snapshot>, isError: false,
+const fixture = vi.hoisted(() => ({ data: undefined as unknown as ReturnType<typeof snapshot>, isError: false, dataUpdatedAt: 0,
   refetch: vi.fn(), save: vi.fn() }))
 vi.mock('@/src/utils/trpc', () => ({ trpc: { bedroom: {
-  status: { useQuery: () => ({ data: fixture.data, isError: fixture.isError, dataUpdatedAt: now, refetch: fixture.refetch }) },
+  status: { useQuery: () => ({ data: fixture.data, isError: fixture.isError, dataUpdatedAt: fixture.dataUpdatedAt, refetch: fixture.refetch }) },
   configure: { useMutation: () => ({ mutateAsync: fixture.save, isPending: false }) },
 } } }))
 beforeEach(() => {
   vi.useFakeTimers()
   vi.setSystemTime(now)
   fixture.data = snapshot()
+  fixture.dataUpdatedAt = now
   fixture.isError = false
   fixture.save.mockReset()
   fixture.refetch.mockReset()
@@ -35,6 +36,17 @@ afterEach(() => {
 })
 
 describe('bedroom device view', () => {
+  it.each([BedroomSensors, BedroomSummary])('uses the current render clock for between-tick receipts without hiding rollback', (Component) => {
+    const view = render(<Component />)
+    vi.setSystemTime(now + 100)
+    fixture.dataUpdatedAt = now + 100
+    view.rerender(<Component />)
+    expect(screen.queryByText(/Connection needs refresh|Temperature unavailable/)).toBeNull()
+    vi.setSystemTime(now + 99)
+    view.rerender(<Component />)
+    expect(screen.queryByText(/^76°F$/)).toBeNull()
+    expect(screen.queryByText(/Current 76°F/)).toBeNull()
+  })
   it('names each device and distinguishes a device query from a measurement timestamp', () => {
     render(<BedroomSensors />)
     const device = screen.getByRole('article')

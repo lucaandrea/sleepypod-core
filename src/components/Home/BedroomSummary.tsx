@@ -1,18 +1,14 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useState } from 'react'
 import { trpc } from '@/src/utils/trpc'
+import { useBedroomClock } from '@/src/hooks/useBedroomClock'
 import { bedroomReadingCurrent, bedroomReportedReading, bedroomValueLabel } from '@/src/bedroom/presentation'
 
 /** Shared context for the temperature and routine screens; it never rewrites a saved routine. */
 export function BedroomSummary() {
   const query = trpc.bedroom.status.useQuery({}, { refetchInterval: 5000, refetchIntervalInBackground: false, retry: false })
-  const [now, setNow] = useState(Date.now)
-  useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 1000)
-    return () => clearInterval(timer)
-  }, [])
+  const now = useBedroomClock()
   const data = query.data
   if (!data?.config.sources.length) return null
   const current = (expiresAt: number | null) => bedroomReadingCurrent(data.generatedAt, query.dataUpdatedAt, expiresAt, now, query.isError)
