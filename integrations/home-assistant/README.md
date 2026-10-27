@@ -15,6 +15,11 @@ sequence as well as the normal conditions, so **Run actions** cannot skip it.
 | [Humidity review](blueprints/humidity_review.yaml) | Show one local review notification when a fresh measurement is outside the chosen band; withdraw it when recovered or expired. |
 | [Air-quality review](blueprints/air_quality_review.yaml) | The same review behavior for PM2.5. Does not command a purifier. |
 
+For HomePod temperature/humidity ingestion, see the separate
+[Apple Home sensor-export setup](HOMEPOD_SENSOR_EXPORT.md). Its two reporting
+blueprints use a virtual helper and cached-only MQTT reports; they do not run
+house scenes or Pod actuators.
+
 The four scene templates call only the selected `scene.turn_on`. They do not
 publish MQTT commands, change temperature, move the base, vibrate, prime or power
 the Pod. Keep Pod climate and actuators out of those scenes. Use a scene containing
