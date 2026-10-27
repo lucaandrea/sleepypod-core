@@ -31,7 +31,43 @@ try {
     }
     $task = Get-ScheduledTask -TaskName 'FreeSleep-BedroomCache'
     if ($task.Principal.UserId -notin @('SYSTEM','S-1-5-18') -or $task.Triggers.Count -ne 2) { throw 'Incorrect persistent task' }
-    Write-Output 'Windows PowerShell installation, mapping, key ownership, ACL and task checks passed.'
+    $keyHash = (Get-FileHash $key -Algorithm SHA256).Hash
+    $publicKey = [IO.File]::ReadAllText("$key.pub")
+    $installer = Join-Path $PSScriptRoot 'Install-HomebridgeCache.ps1'
+    $arguments = @{Revision=('a'*40);PublisherSha256=$fixtureHash;PodAddress='127.0.0.1';PodPort=9;PinnedHostKeyBase64=$pin}
+    function Assert-Rejected {
+        param([string]$Expected)
+        try { & $installer @arguments -ResumeIncomplete; throw 'Expected installation rejection' }
+        catch { if ($_.Exception.Message -notlike "*$Expected*") { throw } }
+    }
+    Assert-Rejected 'Publisher already exists'
+    # Reproduce the old ACL failure: a generated pair, but no config or task yet.
+    Unregister-ScheduledTask -TaskName 'FreeSleep-BedroomCache' -Confirm:$false -ErrorAction SilentlyContinue
+    foreach ($name in @('config.json','known_hosts','status.json')) {
+        Remove-Item (Join-Path $folder $name) -Force -ErrorAction SilentlyContinue
+    }
+    [IO.File]::WriteAllText((Join-Path $folder 'unexpected.txt'),'preserve me')
+    Assert-Rejected 'contents differ'
+    Remove-Item (Join-Path $folder 'unexpected.txt') -Force
+    [IO.File]::WriteAllText("$key.pub",$publicKey.Replace('ssh-ed25519 ','ssh-ed25519 B'))
+    Assert-Rejected 'key pair could not be verified'
+    [IO.File]::WriteAllText("$key.pub",$publicKey)
+    & $installer @arguments -ResumeIncomplete
+    Stop-ScheduledTask -TaskName 'FreeSleep-BedroomCache'
+    if ((Get-FileHash $key -Algorithm SHA256).Hash -ne $keyHash -or [IO.File]::ReadAllText("$key.pub") -ne $publicKey) {
+        throw 'Recovery must preserve both original key files'
+    }
+    $config = Get-Content (Join-Path $folder 'config.json') -Raw | ConvertFrom-Json
+    if ($config.sources.Count -ne 7) { throw 'Recovery did not restore the source mapping' }
+    $task = Get-ScheduledTask -TaskName 'FreeSleep-BedroomCache'
+    if ($task.Triggers.Count -ne 2) { throw 'Recovery did not restore the persistent task' }
+    $acl = Get-Acl $key
+    if ($acl.Owner -notmatch 'SYSTEM') { throw 'Recovery did not retain SYSTEM ownership' }
+    foreach ($entry in $acl.Access) {
+        $sid = $entry.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value
+        if ($sid -notin @('S-1-5-18','S-1-5-32-544')) { throw 'Recovery broadened private-key access' }
+    }
+    Write-Output 'Fresh installation, guarded recovery, key preservation, mapping, ownership, ACL and task checks passed.'
 } finally {
     $task = Get-ScheduledTask -TaskName 'FreeSleep-BedroomCache' -ErrorAction SilentlyContinue
     if ($task) { Stop-ScheduledTask -TaskName $task.TaskName; Unregister-ScheduledTask -TaskName $task.TaskName -Confirm:$false }

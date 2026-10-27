@@ -20,6 +20,15 @@ SHA-256. It requires exactly one H5106, H712C and H7161 on the inspected bridge;
 ambiguous devices stop setup. It preserves Homebridge configuration and pairings.
 The SYSTEM task starts at boot, retries failures, and uses no owner credentials.
 
+If installation stopped after key generation but before writing configuration,
+use `-ResumeIncomplete` with the same pinned publisher and host parameters. It
+requires exactly the four expected setup/key files, rejects links or unknown
+files and any existing scheduled task, verifies the publisher checksum, and
+derives the public key to confirm the pair before continuing. Both key files are
+preserved byte-for-byte. An installation that progressed further must be
+inspected rather than overwritten. The Windows CI test covers this interrupted
+state, mismatched keys, unexpected files and refusal to replace a complete task.
+
 Authorize the generated public key only after inspecting the mapping. The
 `authorized_keys` entry must contain `restrict`, an exact `from` host restriction,
 and a `command` invoking Python with `-I`, the reviewed receiver and its private
