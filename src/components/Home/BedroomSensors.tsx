@@ -3,19 +3,12 @@
 import { useEffect, useState } from 'react'
 import { Droplets, Radio, Thermometer, Wind } from 'lucide-react'
 import { trpc } from '@/src/utils/trpc'
-import { bedroomReadingCurrent } from '@/src/bedroom/presentation'
+import { bedroomProviderHint, bedroomReadingCurrent, bedroomReportedReading, bedroomValueLabel } from '@/src/bedroom/presentation'
 import { BEDROOM_METRICS, type BedroomConfig, type BedroomObservation } from '@/src/bedroom/contract'
 
 const providerNames = { home_assistant: 'Home Assistant', homebridge: 'Homebridge', apple_home: 'Apple Home' }
 const statusNames = { fresh: 'Current', cached: 'Saved value · freshness unknown', stale: 'Reading expired', waiting: 'Waiting for a new reading', unavailable: 'Device unavailable', disabled: 'Input disabled' }
 const button = 'rounded-ctl border border-line-2 px-4 py-2 text-sm text-fg disabled:opacity-50'
-
-function valueLabel(metric: keyof typeof BEDROOM_METRICS, value: number | null, unit: string) {
-  if (value === null) return '—'
-  if (metric === 'power') return value === 1 ? 'On' : 'Off'
-  if (metric === 'airQuality') return ['Unknown', 'Excellent', 'Good', 'Fair', 'Inferior', 'Poor'][value] ?? 'Unknown'
-  return `${value.toLocaleString(undefined, { maximumFractionDigits: 1 })}${unit === '°F' || unit === '%' ? '' : ' '}${unit}`
-}
 
 function SourceSettings({ initial, revision, refresh }: { initial: BedroomConfig, revision: number, refresh: () => Promise<unknown> }) {
   const [draft, setDraft] = useState(initial)
@@ -129,7 +122,7 @@ export function BedroomSensors() {
                 <div key={metric} className="rounded-ctl border border-line p-4">
                   <Icon size={19} className="mb-4 text-cool" aria-hidden />
                   <h3 className="text-sm text-fg-2">{BEDROOM_METRICS[metric].label}</h3>
-                  <p className="mt-2 text-2xl tabular-nums">{valueLabel(metric, fresh ? aggregate.value : null, BEDROOM_METRICS[metric].unit)}</p>
+                  <p className="mt-2 text-2xl tabular-nums">{bedroomValueLabel(metric, fresh ? aggregate.value : null, BEDROOM_METRICS[metric].unit)}</p>
                   <p className="mt-2 text-xs text-fg-2">{!connectionFresh ? 'Waiting for a fresh update' : aggregate?.status === 'disagreement' ? 'Sources disagree · adjustment withheld' : fresh ? `${aggregate.sourceIds.length} qualified source${aggregate.sourceIds.length === 1 ? '' : 's'}` : 'No qualified current reading'}</p>
                 </div>
               )
@@ -149,15 +142,28 @@ export function BedroomSensors() {
               {' '}
               {observations[0].source.location === 'room' ? 'Bedroom' : `${observations[0].source.location === 'left' ? 'Left' : 'Right'} bedside`}
             </p>
+            {observations.every(item => item.status === 'waiting' && item.observedAt === null) && (
+              <p className="mt-3 text-xs text-fg-2">{bedroomProviderHint[observations[0].source.provider]}</p>
+            )}
             {observations.map((item) => {
               const fresh = connectionFresh && item.status === 'fresh' && data !== undefined && bedroomReadingCurrent(data.generatedAt, query.dataUpdatedAt, item.expiresAt, now)
               const observedAt = item.measuredAt ?? item.observedAt
+              const previous = !fresh && data ? bedroomReportedReading(item, data.generatedAt) : null
               return (
                 <div key={item.source.id} className="mt-4 border-t border-line pt-3">
                   <div className="flex items-center justify-between gap-3">
                     <span className="text-sm text-fg-2">{item.source.label}</span>
-                    <span className="text-lg tabular-nums">{valueLabel(item.source.metric, fresh ? item.value : null, item.unit)}</span>
+                    <span className="text-lg tabular-nums">{bedroomValueLabel(item.source.metric, fresh ? item.value : null, item.unit)}</span>
                   </div>
+                  {previous && (
+                    <p className="mt-2 text-sm text-fg-2">
+                      Last reported:
+                      {' '}
+                      {bedroomValueLabel(item.source.metric, previous.value, item.unit)}
+                      {' · '}
+                      {item.timeBasis === 'cached' ? 'cached, freshness unknown' : 'not current'}
+                    </p>
+                  )}
                   <p className="mt-1 text-xs text-fg-2">
                     {!connectionFresh ? 'Connection needs refresh' : item.status === 'fresh' && !fresh ? 'Reading expired' : statusNames[item.status]}
                     {' '}
@@ -169,7 +175,7 @@ export function BedroomSensors() {
                     <p className="mt-1 text-xs text-fg-2">
                       {item.measuredAt !== null ? 'Measured' : 'Reported'}
                       {' '}
-                      {new Date(observedAt).toLocaleTimeString()}
+                      {new Date(observedAt).toLocaleString()}
                     </p>
                   )}
                 </div>

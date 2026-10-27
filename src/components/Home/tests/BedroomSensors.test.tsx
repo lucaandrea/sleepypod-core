@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { bedroomConfigSchema, bedroomSourceSchema, type BedroomObservation } from '@/src/bedroom/contract'
 import { bedroomComfortGuidance, combineBedroomSensors } from '@/src/bedroom/fusion'
 import { BedroomSensors } from '../BedroomSensors'
+import { BedroomSummary } from '../BedroomSummary'
 
 const now = 1793067000000
 function snapshot() {
@@ -58,11 +59,41 @@ describe('bedroom device view', () => {
     expect(screen.queryByText('76°F')).toBeNull()
     expect(screen.getByRole('alert').textContent).toContain('could not be refreshed')
     fixture.isError = false
-    fixture.data.observations[0] = { ...fixture.data.observations[0], status: 'cached', value: null, controlEligible: false }
+    fixture.data.observations[0] = { ...fixture.data.observations[0], status: 'cached', timeBasis: 'cached', value: null, controlEligible: false }
     fixture.data.aggregates = combineBedroomSensors(fixture.data.observations, now)
     view.rerender(<BedroomSensors />)
     expect(screen.queryByText('76°F')).toBeNull()
-    expect(screen.getByText(/freshness unknown/)).toBeTruthy()
+    expect(screen.getByText(/Last reported: 76°F · cached, freshness unknown/)).toBeTruthy()
+    expect(screen.queryByText(/qualified source/)).toBeNull()
+  })
+  it('retains a cached power value of zero without presenting it as current', () => {
+    fixture.data.observations[0] = { ...fixture.data.observations[0],
+      source: { ...fixture.data.observations[0].source, metric: 'power', label: 'Power', unit: 'on/off' },
+      unit: 'on/off', status: 'cached', timeBasis: 'cached', value: null, lastValue: 0, controlEligible: false }
+    fixture.data.aggregates = []
+    render(<BedroomSensors />)
+    expect(screen.getByText(/Last reported: Off · cached, freshness unknown/)).toBeTruthy()
+    expect(screen.queryByText('Off')).toBeNull()
+  })
+  it('explains why a discovered Apple Home device still has no readings', () => {
+    fixture.data.observations[0] = { ...fixture.data.observations[0], status: 'waiting', value: null, lastValue: null,
+      observedAt: null, receivedAt: null, measuredAt: null, expiresAt: null, controlEligible: false }
+    fixture.data.aggregates = []
+    render(<BedroomSensors />)
+    expect(screen.getByText(/Waiting for an Apple Home sensor export/)).toBeTruthy()
+    expect(screen.queryByText(/Last reported:/)).toBeNull()
+  })
+  it('shows individual display-only readings in the routine context without making them control aggregates', () => {
+    fixture.data.observations[0].source.useForControl = false
+    fixture.data.observations[0].controlEligible = false
+    fixture.data.aggregates = combineBedroomSensors(fixture.data.observations, now)
+    const view = render(<BedroomSummary />)
+    expect(screen.getByText(/Temperature unavailable/)).toBeTruthy()
+    expect(screen.getByText(/Bedside sensor · Temperature: Current 76°F · Display only/)).toBeTruthy()
+    fixture.data.observations[0] = { ...fixture.data.observations[0], status: 'cached', timeBasis: 'cached', value: null }
+    view.rerender(<BedroomSummary />)
+    expect(screen.queryByText(/Current 76°F/)).toBeNull()
+    expect(screen.getByText(/Last reported 76°F · cached, freshness unknown/)).toBeTruthy()
   })
   it('preserves a settings draft and requires a reload when the saved source revision changes', () => {
     const view = render(<BedroomSensors />)
