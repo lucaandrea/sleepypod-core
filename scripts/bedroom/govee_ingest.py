@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Forced command for a separate H5106 read-only identity; no caller-selected source or clock basis."""
+"""Profile-scoped forced Govee receiver; no caller-selected source or clock basis."""
 import argparse
 import json
 import math
@@ -40,9 +40,10 @@ def air_quality(pm25):
     return 1 if pm25 <= 12 else 2 if pm25 <= 35 else 3 if pm25 <= 75 else 4 if pm25 <= 115 else 5
 
 
-def qualified_reading(payload, now):
+def receipt_reading(payload, now, extra_fields=frozenset()):
+    """Validate the receipt clock before model-specific fields are interpreted."""
     if (not isinstance(payload, dict)
-            or set(payload) != {'version', 'requestIssuedAt', 'observedAt', 'reading'}
+            or set(payload) != {'version', 'requestIssuedAt', 'observedAt', 'reading'} | extra_fields
             or type(payload['version']) is not int or payload['version'] != 1
             or type(payload['observedAt']) is not int or payload['observedAt'] <= 0
             or payload['observedAt'] - now > 1000
@@ -54,12 +55,21 @@ def qualified_reading(payload, now):
     if reading is None:
         if payload['requestIssuedAt'] is not None:
             raise ValueError('Unavailable receipt must not claim a successful request')
-        return observed_at, {metric: None for metric in ('temperature', 'humidity', 'pm25', 'airQuality')}
+        return observed_at, None
     requested_at = payload['requestIssuedAt']
     if (type(requested_at) is not int or requested_at <= 0
             or not 0 <= payload['observedAt'] - requested_at <= READ_WINDOW_MS
-            or not isinstance(reading, dict) or set(reading) != {'temperatureC', 'humidity', 'pm25'}):
+            or not isinstance(reading, dict)):
         raise ValueError('Unqualified device read')
+    return observed_at, reading
+
+
+def qualified_reading(payload, now):
+    observed_at, reading = receipt_reading(payload, now)
+    if reading is None:
+        return observed_at, {metric: None for metric in ('temperature', 'humidity', 'pm25', 'airQuality')}
+    if set(reading) != {'temperatureC', 'humidity', 'pm25'}:
+        raise ValueError('Invalid monitor reading')
     for metric, maximum in (('temperatureC', 60), ('humidity', 100), ('pm25', 2000)):
         value = reading[metric]
         if type(value) not in (int, float) or not math.isfinite(value) or not 0 <= value <= maximum:
@@ -68,16 +78,39 @@ def qualified_reading(payload, now):
                          'pm25': reading['pm25'], 'airQuality': air_quality(reading['pm25'])}
 
 
+def qualified_power(payload, now):
+    """Appliance power is the only metric permitted by this separate identity."""
+    observed_at, reading = receipt_reading(payload, now, {'model'})
+    if payload['model'] not in ('H712C', 'H7161'):
+        raise ValueError('Unqualified appliance model')
+    if reading is None:
+        return observed_at, {'power': None}
+    if set(reading) != {'power'} or type(reading['power']) is not int or reading['power'] not in (0, 1):
+        raise ValueError('Invalid appliance power')
+    return observed_at, {'power': reading['power']}
+
+
 class NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, *_arguments, **_keywords):
         raise ValueError('Controller redirect rejected')
 
 
-def deliver(payload, config):
-    observed_at, values = qualified_reading(payload, int(time.time() * 1000))
+def deliver(payload, config, profile='monitor'):
+    now = int(time.time() * 1000)
+    if profile == 'monitor':
+        observed_at, values = qualified_reading(payload, now)
+        model = 'H5106'
+    elif profile == 'appliance-power':
+        observed_at, values = qualified_power(payload, now)
+        if set(config['devices']) != {'H712C', 'H7161'}:
+            raise ValueError('Invalid appliance allowlist')
+        model = payload['model']
+        config = {**config['devices'][model], 'environment': config['environment']}
+    else:
+        raise ValueError('Unsupported receiver profile')
     if (set(config['sources']) != set(values) or set(config['externalIds']) != set(values)
             or not isinstance(config['deviceId'], str) or not config['deviceId']
-            or len(set(config['sources'].values())) != 4
+            or len(set(config['sources'].values())) != len(values)
             or not all(isinstance(value, str) and value for value in config['sources'].values())):
         raise ValueError('Invalid server-owned sensor mapping')
     environment = private_file(Path(config['environment'])).splitlines()
@@ -94,10 +127,11 @@ def deliver(payload, config):
     for metric, value in values.items():
         source_id = config['sources'][metric]
         source = sources.get(source_id)
-        if (not source or source['model'] != 'H5106' or source['metric'] != metric
+        if (not source or source['model'] != model or source['metric'] != metric
                 or source['provider'] != 'homebridge'
                 or source['deviceId'] != config['deviceId'] or source['externalId'] != config['externalIds'][metric]
-                or source['unit'] != {'temperature': '°C', 'humidity': '%', 'pm25': 'µg/m³', 'airQuality': 'category'}[metric]):
+                or source['unit'] != {'temperature': '°C', 'humidity': '%', 'pm25': 'µg/m³',
+                                     'airQuality': 'category', 'power': 'on/off'}[metric]):
             raise ValueError('Configured sensor identity changed')
         reports.append({'schemaVersion': 1, 'revision': status['revision'], 'sourceId': source_id,
                         'available': value is not None, 'value': value, 'observedAt': observed_at,
@@ -113,6 +147,7 @@ def deliver(payload, config):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--config', required=True, type=Path)
+    parser.add_argument('--profile', choices=('monitor', 'appliance-power'), default='monitor')
     arguments = parser.parse_args()
     signal.alarm(15)
     try:
@@ -121,7 +156,7 @@ def main():
         contents = sys.stdin.buffer.read(MAX_BYTES + 1)
         if len(contents) > MAX_BYTES:
             raise ValueError('Read receipt too large')
-        result = deliver(strict_json(contents), strict_json(private_file(arguments.config)))
+        result = deliver(strict_json(contents), strict_json(private_file(arguments.config)), arguments.profile)
         print(json.dumps(result))
     except Exception:
         print(json.dumps({'accepted': 0, 'error': 'device_read_rejected'}))

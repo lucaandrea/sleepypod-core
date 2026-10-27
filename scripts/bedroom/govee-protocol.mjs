@@ -30,8 +30,9 @@ export function decodeH5106Reply(payload, packet, request, deviceId, receivedAt)
 
 /** One pending read per connection; disconnect, timeout and consumption invalidate it. */
 export class GoveeReadSession {
-  constructor(deviceId) {
+  constructor(deviceId, decodeReply = decodeH5106Reply) {
     this.deviceId = deviceId
+    this.decodeReply = decodeReply
     this.pending = null
     this.connected = false
     this.lastIssuedAt = 0
@@ -69,7 +70,7 @@ export class GoveeReadSession {
 
   receive(payload, packet, receivedAt) {
     if (!this.connected) return null
-    const reading = decodeH5106Reply(payload, packet, this.pending, this.deviceId, receivedAt)
+    const reading = this.decodeReply(payload, packet, this.pending, this.deviceId, receivedAt)
     if (!reading) return null
     const requestIssuedAt = this.pending.issuedAt
     this.pending = null

@@ -2,10 +2,10 @@ import { GoveeReadSession, unavailableGoveeReport } from './govee-protocol.mjs'
 
 export const READ_INTERVAL_MS = 30000
 
-/** The only outbound device command is a status read; source loss withdraws all four measurements. */
-export function startGoveeReadLoop({ client, deviceId, deviceTopic, accountTopic, statusVersion }, report,
-  { now = Date.now, repeat = setInterval, cancel = clearInterval } = {}) {
-  const session = new GoveeReadSession(deviceId)
+/** The only outbound device command is a status read; source loss withdraws this device's observations. */
+export function startGoveeReadLoop({ client, deviceId, deviceTopic, accountTopic, statusVersion, decodeReply }, report,
+  { now = Date.now, repeat = setInterval, cancel = clearInterval, closeClientOnStop = true } = {}) {
+  const session = new GoveeReadSession(deviceId, decodeReply)
   let generation = 0
   let stopped = false
   let withdrawn = false
@@ -87,7 +87,7 @@ export function startGoveeReadLoop({ client, deviceId, deviceTopic, accountTopic
       session.disconnect()
       cancel(timer)
       await withdraw()
-      client.end(true)
+      if (closeClientOnStop) client.end(true)
     },
   }
 }
