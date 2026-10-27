@@ -89,6 +89,30 @@ function fixture(filename = ':memory:', initialize = true) {
 }
 
 describe('personal comfort execution adapter (synthetic qualification, mocked hardware)', () => {
+  it('rechecks bedroom expiry after a queued write', async () => {
+    const test = fixture()
+    const saved = test.store.read('left')
+    test.store.commit('left', { ...saved, config: { ...saved.config, roomAware: true } })
+    test.context.bedroom = { state: 'ready', offsetF: -1, reason: 'Synthetic room.', sourceIds: ['temperature', 'humidity'],
+      expiresAt: test.context.now + 2000, configuration: 'f'.repeat(64) }
+    test.beforeApply(async () => {
+      test.advance(2000)
+    })
+    await expect(test.adapter.reconcile('left')).rejects.toThrow('Current control conditions')
+    expect(test.commands.filter(command => command.target === 74)).toEqual([])
+  })
+  it('withdraws an expired bedroom lease during the correction cooldown', async () => {
+    const test = fixture()
+    const saved = test.store.read('left')
+    test.store.commit('left', { ...saved, config: { ...saved.config, roomAware: true } })
+    test.context.bedroom = { state: 'ready', offsetF: -1, reason: 'Synthetic room.', sourceIds: ['temperature', 'humidity'],
+      expiresAt: test.context.now + 2000, configuration: 'f'.repeat(64) }
+    await test.adapter.reconcile('left')
+    expect(test.commands.some(command => command.target === 74)).toBe(true)
+    test.advance(2000)
+    await test.adapter.reconcile('left')
+    expect(test.controller.status('left').source).not.toBe('autopilot')
+  })
   it('persists only winning one-degree applications and retains the correction clock across keepalives and restarts', async () => {
     const test = fixture()
     await test.adapter.reconcile('left')

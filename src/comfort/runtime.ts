@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto'
+import type { BedroomComfortGuidance } from '@/src/bedroom/contract'
+import { currentBedroomGuidance } from '@/src/bedroom/fusion'
 import { capturePreviewEvidence, type PreviewOrigin } from './report-evidence'
 import { BedEntryTracker, bedtimePreview, type BedtimeStatus } from './bedtime'
 import type { ComfortSignals } from './signals'
@@ -8,7 +10,7 @@ import { comfortLocalDate, decideComfort, learnComfort, MANUAL_PAUSE_MS, type Co
 import { comfortEvent, type ComfortStore } from './store'
 
 const STORAGE_FAULT = 'Personal comfort is withheld because its current inputs, settings or observation journal are unavailable.'
-interface Observation { at: number, decision: ComfortDecision, stateKey: string, signals: ComfortSignals | null, timing: BedtimeStatus }
+interface Observation { at: number, decision: ComfortDecision, stateKey: string, signals: ComfortSignals | null, timing: BedtimeStatus, bedroom: BedroomComfortGuidance | null }
 export class ComfortInputError extends Error {}
 
 export interface ComfortRuntimeDeps {
@@ -64,9 +66,10 @@ export class ComfortRuntime {
     const observation = observed && observed.at <= now && now - observed.at < 10_000 ? observed : undefined
     const signals = observation?.signals
     const signalExpired = signals?.expiresAt !== null && signals?.expiresAt !== undefined && now >= signals.expiresAt
+    const bedroomExpired = state?.config.roomAware && observation?.bedroom?.state === 'ready' && !currentBedroomGuidance(observation.bedroom, now)
     const fault = this.faults[side] ?? (this.deps.pendingPause(side) !== null ? STORAGE_FAULT : null)
     const active = state !== null && this.deps.activation?.admitted(side, state) === true
-    let decision = fault || signalExpired || observation?.stateKey !== JSON.stringify(state) ? null : observation?.decision ?? null
+    let decision = fault || signalExpired || bedroomExpired || observation?.stateKey !== JSON.stringify(state) ? null : observation?.decision ?? null
     if (decision && state?.config.mode === 'active' && !active) {
       decision = { ...decision, eligible: false, proposedF: null, retainPreviousLease: false, reason: COMFORT_ACTIVATION_REASON }
     }
@@ -76,9 +79,10 @@ export class ComfortRuntime {
       decision,
       runtime: this.running ? 'running' : 'stopped',
       activation: { available: false, current: active, reason: active ? 'Owner activation is current. Every adjustment still rechecks live guards.' : COMFORT_ACTIVATION_REASON },
-      features: { sensorAware: true, followBedtime: true, nightReports: true, modeOnly: true, ...(this.deps.activation ? { ownerActivation: true } : {}) },
+      features: { roomAware: true, sensorAware: true, followBedtime: true, nightReports: true, modeOnly: true, ...(this.deps.activation ? { ownerActivation: true } : {}) },
       timing: fault || signalExpired || observation?.stateKey !== JSON.stringify(state) ? null : observation?.timing ?? null,
       signals: fault || signalExpired || observation?.stateKey !== JSON.stringify(state) ? null : signals ?? null,
+      bedroom: fault || observation?.stateKey !== JSON.stringify(state) ? null : observation?.bedroom ?? null,
     }
   }
 
@@ -187,12 +191,12 @@ export class ComfortRuntime {
               ...comfortEvent(now, state.config.mode === 'active' ? 'active' : 'preview', learning.message ? `${decision.reason} ${learning.message}` : decision.reason),
               session: context.window?.session ?? null, proposedF: decision.proposedF, reportedF: context.device.targetF,
               eligible: decision.eligible, deviceObservedAt: context.device.observedAt,
-              presenceObservedAt: context.presence.observedAt, owner: context.owner, signals: context.signals ?? null, timing: timing.status, preview,
+              presenceObservedAt: context.presence.observedAt, owner: context.owner, signals: context.signals ?? null, timing: timing.status, bedroom: context.bedroom ?? null, preview,
             }
           : undefined
         if (event || JSON.stringify(state) !== original) this.deps.store.commit(side, state, event, decision.pauseRequired)
         if (record) this.recorded[side] = { at: now, key }
-        this.observations[side] = { at: now, decision, stateKey: JSON.stringify(state), signals: context.signals ?? null, timing: timing.status }
+        this.observations[side] = { at: now, decision, stateKey: JSON.stringify(state), signals: context.signals ?? null, timing: timing.status, bedroom: context.bedroom ?? null }
         this.faults[side] = undefined
       }
       catch {

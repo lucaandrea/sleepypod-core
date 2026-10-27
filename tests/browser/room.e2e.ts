@@ -11,6 +11,7 @@ test('room mapping is authenticated, versioned, initially disabled and does not 
   const initial = await (await request.get('/api/v1/home/context', { headers })).json()
   expect(initial).toMatchObject({ apiVersion: 1, revision: 0, config: { enabled: false, mappings: [] }, connected: false, observations: [] })
   await page.goto('/en/home')
+  await page.getByText('Existing single-source MQTT mappings', { exact: true }).click()
   await expect(page.getByText(/No room sensors mapped/)).toBeVisible()
   await page.getByText('Sensor mapping and setup', { exact: true }).click()
   await page.getByRole('checkbox', { name: 'Map room temperature' }).check()
@@ -33,6 +34,7 @@ test('room mapping is authenticated, versioned, initially disabled and does not 
   await expect(page.getByText('Broker disconnected', { exact: true })).toBeVisible()
   await expect(page.getByText('Home Assistant publisher · revision 2')).toBeVisible()
   await page.reload()
+  await page.getByText('Existing single-source MQTT mappings', { exact: true }).click()
   await expect(page.getByText('Broker disconnected', { exact: true })).toBeVisible()
   expect(await (await request.get('/api/v1/home/context/history', { headers })).json()).toMatchObject({ items: [] })
   const broker = await roomBroker()
@@ -68,6 +70,7 @@ test('room drafts survive a failed refresh and a conflicting change from another
   const headers = { Authorization: `Bearer ${process.env.SLEEPYPOD_AUTH_TOKEN}` }
   const initial = await (await request.get('/api/v1/home/context', { headers })).json()
   await page.goto('/en/home')
+  await page.getByText('Existing single-source MQTT mappings', { exact: true }).click()
   await page.getByText('Sensor mapping and setup', { exact: true }).click()
   await page.getByLabel('Room name', { exact: true }).fill('Unsaved bedroom draft')
   const statusPath = /\/api\/trpc\/[^?]*roomContext.status/
@@ -76,7 +79,7 @@ test('room drafts survive a failed refresh and a conflicting change from another
   await expect(page.getByLabel('Room name', { exact: true })).toHaveValue('Unsaved bedroom draft')
   await request.put('/api/v1/home/context/configuration', { headers, data: { expectedRevision: initial.revision, config: { ...initial.config, roomName: 'Another owner client' } } })
   await page.unroute(statusPath)
-  await page.getByRole('button', { name: 'Retry', exact: true }).click()
+  await page.getByRole('alert').filter({ hasText: /^Room data could not be refreshed\. Readings are withheld\./ }).getByRole('button', { name: 'Retry', exact: true }).click()
   await expect(page.getByText(/The stored mapping changed/)).toBeVisible()
   await expect(page.getByLabel('Room name', { exact: true })).toHaveValue('Unsaved bedroom draft')
   await page.getByRole('button', { name: 'Save room sensors' }).click()

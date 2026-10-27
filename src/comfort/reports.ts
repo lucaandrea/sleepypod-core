@@ -1,6 +1,7 @@
 import type Database from 'better-sqlite3'
 import type { NightProof, OwnerIdentity } from './owner-contract'
 import type { Side } from '@/src/hardware/types'
+import { currentBedroomGuidance } from '@/src/bedroom/fusion'
 import {
   previewReportDetailSchema, previewReportListSchema, previewReviewInputSchema, previewReviewSchema,
   previewSummarySchema, reportIdSchema, type PreviewReportItem, type PreviewReview, type PreviewReviewInput,
@@ -68,6 +69,10 @@ export function createPreviewReports(database: Database.Database, clock = Date.n
             && value.policy.sensorAware === identity.policy.sensorAware && value.policy.followBedtime === identity.policy.followBedtime
             && value.presence === 'occupied' && value.deviceFresh && value.mechanicallyQuiet && !value.manualPaused
             && (!identity.policy.sensorAware || value.sensorReady)
+            && (value.policy.roomAware === true) === (identity.policy.roomAware === true)
+            && (!identity.policy.roomAware || (identity.bedroomConfiguration != null
+              && value.bedroom?.configuration === identity.bedroomConfiguration
+              && currentBedroomGuidance(value.bedroom, observation.at)))
         }
         for (let index = 1; index < result.observations.length; index++) {
           const previous = result.observations[index - 1]

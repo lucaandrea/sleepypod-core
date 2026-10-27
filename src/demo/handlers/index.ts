@@ -1,4 +1,5 @@
 import { base } from './base'
+import { bedroom } from './bedroom'
 import { archivePush } from './archivePush'
 import { automations } from './automations'
 import { biometrics } from './biometrics'
@@ -31,6 +32,7 @@ import { waterLevel } from './waterLevel'
 
 export const demoRouters = {
   base,
+  bedroom,
   archivePush,
   automations,
   biometrics,

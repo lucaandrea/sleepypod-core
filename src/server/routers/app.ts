@@ -28,6 +28,7 @@ import { comfortRouter } from './comfort'
 import { controlsRouter } from './controls'
 import { notificationsRouter } from './notifications'
 import { roomContextRouter } from './roomContext'
+import { bedroomRouter } from './bedroom'
 import { nextAlarmRouter } from './nextAlarm'
 import { journalRouter } from './journal'
 import { importedHistoryRouter } from './importedHistory'
@@ -53,6 +54,7 @@ export const appRouter = router({
   controls: controlsRouter,
   notifications: notificationsRouter,
   roomContext: roomContextRouter,
+  bedroom: bedroomRouter,
   importedHistory: importedHistoryRouter,
   journal: journalRouter,
   nextAlarm: nextAlarmRouter,

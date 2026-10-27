@@ -2,12 +2,14 @@ import Link from 'next/link'
 import { House, MoonStar, Sunrise, Wind } from 'lucide-react'
 import { PageHeader } from '@/src/components/ds'
 import { RoomContext } from '@/src/components/Home/RoomContext'
+import { BedroomSensors } from '@/src/components/Home/BedroomSensors'
 
 export default async function HomePage({ params }: { params: Promise<{ lang: string }> }) {
   const { lang } = await params
   return (
     <>
       <PageHeader title="Home" />
+      <BedroomSensors />
       <section className="rounded-card border border-line bg-surface p-4">
         <House className="mb-5 text-cool" size={36} aria-hidden />
         <h2 className="text-base font-medium">Connect your room</h2>
@@ -17,7 +19,10 @@ export default async function HomePage({ params }: { params: Promise<{ lang: str
           <Link href={`/${lang}/settings?section=homekit`} className="rounded-ctl border border-line-2 px-4 py-3 text-fg">Apple Home bridge</Link>
         </div>
       </section>
-      <RoomContext />
+      <details className="rounded-card border border-line p-4">
+        <summary className="cursor-pointer text-sm text-fg-2">Existing single-source MQTT mappings</summary>
+        <div className="mt-4"><RoomContext /></div>
+      </details>
       <div className="grid gap-4 sm:grid-cols-3">
         {[{ icon: MoonStar, title: 'Wind down', text: 'Lighting and shades follow your evening.' }, { icon: Sunrise, title: 'Wake together', text: 'Coordinate your alarm with a Home scene.' }, { icon: Wind, title: 'Room comfort', text: 'Understand humidity, temperature and air quality.' }].map(item => (
           <section key={item.title} className="rounded-card border border-line bg-surface p-4">

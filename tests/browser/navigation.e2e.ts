@@ -23,6 +23,8 @@ test('SleepyPod phone navigation reaches secondary controls and owner sign-out',
   await page.screenshot({ path: test.info().outputPath('phone-settings-light.png'), fullPage: true })
 
   await page.getByRole('main').getByRole('link', { name: 'Home', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'Bedroom', exact: true })).toBeVisible()
+  await page.getByText('Existing single-source MQTT mappings', { exact: true }).click()
   await expect(page.getByText('Sensor mapping and setup', { exact: true })).toBeVisible()
   await expect(page.getByText('MQTT not connected', { exact: true })).toBeVisible()
   await page.goto('/en/more')

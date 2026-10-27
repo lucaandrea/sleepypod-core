@@ -25,6 +25,7 @@ vi.mock('@/src/components/Schedule/SchedulePage', () => ({ SchedulePage: (props:
 } }))
 vi.mock('@/src/components/Sleep/SleepSections', () => ({ SleepSections: () => <div>Sleep page</div> }))
 vi.mock('@/src/components/System/SystemScreen', () => ({ SystemScreen: () => <div>System page</div> }))
+vi.mock('@/src/components/Home/BedroomSummary', () => ({ BedroomSummary: () => <aside>Bedroom context</aside> }))
 
 it('renders redesigned entry pages and passes rule route parameters', async () => {
   const { default: Autopilot } = await import('../autopilot/page')

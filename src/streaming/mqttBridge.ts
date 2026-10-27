@@ -29,6 +29,8 @@
 
 import os from 'node:os'
 import { getRoomContext, getRoomContextIfRunning } from '@/src/home-context/instance'
+import { getBedroom, getBedroomIfRunning } from '@/src/bedroom/instance'
+import { receiveBedroomMqtt } from '@/src/bedroom/mqtt'
 import type { ControlRequest } from '@/src/controls/contract'
 import { MqttCommandGateway, type MqttPacketFlags } from './mqttCommands'
 import mqtt, { type IClientOptions, type IClientPublishOptions, type MqttClient } from 'mqtt'
@@ -449,6 +451,10 @@ export async function startMqttBridge(): Promise<void> {
       if (!current() || !client.connected || connection !== connectionGeneration) return
       getRoomContext().connection(!err && granted?.some(item => item.qos !== 128) === true, topic('room', 'report'))
     })
+    client.subscribe(topic('bedroom', 'report'), { qos: 0 }, (err, granted) => {
+      if (!current() || !client.connected || connection !== connectionGeneration) return
+      getBedroom().connection(!err && granted?.some(item => item.qos !== 128) === true, topic('bedroom', 'report'))
+    })
     if (state.commandsEnabled) {
       client.subscribe(topic('cmd', 'request'), { qos: 0 }, (err: Error | null) => {
         if (err && current()) console.warn('[mqtt] command subscription failed')
@@ -461,6 +467,7 @@ export async function startMqttBridge(): Promise<void> {
     if (!current()) return
     connectionGeneration++
     getRoomContext().connection(false)
+    getBedroomIfRunning()?.connection(false)
     state.runState = 'reconnecting'
     console.log('[mqtt] reconnecting…')
   })
@@ -475,11 +482,16 @@ export async function startMqttBridge(): Promise<void> {
     if (!current()) return
     connectionGeneration++
     getRoomContext().connection(false)
+    getBedroomIfRunning()?.connection(false)
     if (state.runState === 'connected') state.runState = 'reconnecting'
   })
 
   client.on('message', (incomingTopic: string, payload: Buffer, packet: MqttPacketFlags) => {
     if (!current() || !client.connected) return
+    if (incomingTopic === topic('bedroom', 'report')) {
+      receiveBedroomMqtt(getBedroom(), payload, packet)
+      return
+    }
     if (incomingTopic === topic('room', 'report')) {
       try {
         getRoomContext().receive(payload, packet)
@@ -514,6 +526,7 @@ export async function startMqttBridge(): Promise<void> {
 
 export async function shutdownMqttBridge(): Promise<void> {
   getRoomContextIfRunning()?.connection(false)
+  getBedroomIfRunning()?.connection(false)
   state.generation++
   state.commandsEnabled = false
   if (state.runState === 'stopped' && !state.client) return
