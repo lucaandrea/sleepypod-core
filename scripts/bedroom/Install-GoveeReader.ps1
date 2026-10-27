@@ -3,6 +3,8 @@ param(
     [Parameter(Mandatory=$true)][ValidatePattern('^[a-f0-9]{64}$')][string]$ReaderSha256,
     [Parameter(Mandatory=$true)][ValidatePattern('^[a-f0-9]{64}$')][string]$ProtocolSha256,
     [Parameter(Mandatory=$true)][ValidatePattern('^[a-f0-9]{64}$')][string]$ReadLoopSha256,
+    [ValidatePattern('^[a-f0-9]{64}$')][string]$PowerProtocolSha256,
+    [ValidateSet('Monitor','AppliancePower')][string]$ReaderProfile = 'Monitor',
     [string]$HomebridgeRoot = (Join-Path $env:USERPROFILE '.homebridge'),
     [string]$PluginRoot = (Join-Path $env:APPDATA 'npm\node_modules\@homebridge-plugins\homebridge-govee')
 )
@@ -22,15 +24,25 @@ $accessories = @(foreach ($file in Get-ChildItem (Join-Path $HomebridgeRoot 'acc
     # PowerShell 5.1 can preserve a JSON array as one pipeline item. Enumerate devices explicitly.
     foreach ($accessory in (Get-Content $file.FullName -Raw | ConvertFrom-Json)) { $accessory }
 })
-$monitors = @($accessories | Where-Object {$_.context.gvModel -eq 'H5106'})
-if ($monitors.Count -ne 1 -or $monitors[0].context.gvDeviceId -isnot [string] -or
-    !$monitors[0].context.gvDeviceId -or $monitors[0].context.awsTopic -isnot [string] -or !$monitors[0].context.awsTopic) {
-    throw 'Expected exactly one configured H5106; inspect the physical-device mapping'
+$powerProfile = $ReaderProfile -eq 'AppliancePower'
+if ($powerProfile -and !$PowerProtocolSha256) { throw 'Appliance power requires its pinned decoder checksum' }
+$models = if ($powerProfile) { @('H712C','H7161') } else { @('H5106') }
+$devices = @(foreach ($model in $models) {
+    $deviceMatches = @($accessories | Where-Object {$_.context.gvModel -eq $model})
+    if ($deviceMatches.Count -ne 1 -or $deviceMatches[0].context.gvDeviceId -isnot [string] -or
+        !$deviceMatches[0].context.gvDeviceId -or $deviceMatches[0].context.awsTopic -isnot [string] -or !$deviceMatches[0].context.awsTopic) {
+        throw "Expected exactly one configured $model; inspect the physical-device mapping"
+    }
+    [ordered]@{model=$model;deviceId=$deviceMatches[0].context.gvDeviceId}
+})
+if (@($devices.deviceId | Select-Object -Unique).Count -ne $devices.Count) {
+    throw 'Device identities must be distinct'
 }
 $node = (Get-Command node.exe -ErrorAction Stop).Source
 $keygen = Join-Path $env:WINDIR 'System32\OpenSSH\ssh-keygen.exe'
 if (!(Test-Path $keygen)) { throw 'Windows OpenSSH Client is required' }
-$folder = Join-Path $parent 'govee-readings'
+$readerFolder = if ($powerProfile) { 'govee-appliance-power' } else { 'govee-readings' }
+$folder = Join-Path $parent $readerFolder
 if (Test-Path $folder) {
     if ((Get-Item $folder).Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Unexpected reader directory link' }
 } else { New-Item -ItemType Directory -Path $folder | Out-Null }
@@ -39,6 +51,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Could not restrict reader directory' }
 $release = Join-Path $folder "releases\$Revision"
 New-Item -ItemType Directory -Path $release -Force | Out-Null
 $hashes = @{'govee-reader.mjs'=$ReaderSha256;'govee-protocol.mjs'=$ProtocolSha256;'govee-read-loop.mjs'=$ReadLoopSha256}
+if ($powerProfile) { $hashes['govee-power-protocol.mjs']=$PowerProtocolSha256 }
 foreach ($filename in $hashes.Keys) {
     $target = Join-Path $release $filename
     if (!(Test-Path $target)) {
@@ -54,8 +67,7 @@ if ((Test-Path $key) -ne (Test-Path "$key.pub")) { throw 'Incomplete identity; p
 $generator = @'
 import {spawnSync} from "node:child_process";
 import {readFileSync,existsSync} from "node:fs";
-const [keygen,key] = process.argv.slice(2);
-const comment="sleepypod-govee-read-only";
+const [keygen,key,comment] = process.argv.slice(2);
 if (existsSync(key)) {
     const derived=spawnSync(keygen,["-y","-P","","-f",key],{encoding:"utf8",timeout:5000});
     const expected=readFileSync(key+".pub","utf8").trim().split(/\s+/);
@@ -69,7 +81,8 @@ if (existsSync(key)) {
 $utf8 = New-Object Text.UTF8Encoding($false)
 $generatorPath = Join-Path $folder 'verify-identity.mjs'
 [IO.File]::WriteAllText($generatorPath,$generator,$utf8)
-& $node $generatorPath $keygen $key
+$keyComment = if ($powerProfile) { 'sleepypod-govee-power-read-only' } else { 'sleepypod-govee-read-only' }
+& $node $generatorPath $keygen $key $keyComment
 if ($LASTEXITCODE -ne 0) { throw 'Reader identity verification failed; no existing key was replaced' }
 & icacls.exe $key /inheritance:r /grant:r '*S-1-5-18:F' '*S-1-5-32-544:F' | Out-Null
 if ($LASTEXITCODE -ne 0) { throw 'Could not restrict sensor key' }
@@ -81,17 +94,22 @@ if ($identity.User.Value -notin @('S-1-5-18','S-1-5-32-544')) {
 }
 $configPath = Join-Path $folder 'config.json'
 $configuration = [ordered]@{mode='observe';homebridgeRoot=$HomebridgeRoot;pluginRoot=$PluginRoot;
-    deviceId=$monitors[0].context.gvDeviceId;statusFile=(Join-Path $folder 'status.json');
+    statusFile=(Join-Path $folder 'status.json');
     sshExecutable=$cacheConfig.sshExecutable;podHost=$cacheConfig.podHost;podPort=$cacheConfig.podPort;
     podUser='root';keyFile=$key;knownHosts=$cacheConfig.knownHosts}
+if ($powerProfile) { $configuration['profile']='appliance-power'; $configuration['devices']=$devices }
+else { $configuration['deviceId']=$devices[0].deviceId }
 if (Test-Path $configPath) {
     $existing = Get-Content $configPath -Raw | ConvertFrom-Json
     if (@($existing.PSObject.Properties).Count -ne $configuration.Count) { throw 'Existing reader configuration differs; preserve it' }
     foreach ($name in $configuration.Keys) {
-        if ($existing.$name -ne $configuration[$name]) { throw 'Existing reader configuration differs; preserve it' }
+        if ((ConvertTo-Json -InputObject $existing.$name -Depth 10 -Compress) -cne
+            (ConvertTo-Json -InputObject $configuration[$name] -Depth 10 -Compress)) {
+            throw 'Existing reader configuration differs; preserve it'
+        }
     }
-} else { [IO.File]::WriteAllText($configPath,($configuration | ConvertTo-Json -Depth 4),$utf8) }
-$taskName = 'FreeSleep-GoveeReadings'
+} else { [IO.File]::WriteAllText($configPath,($configuration | ConvertTo-Json -Depth 10),$utf8) }
+$taskName = if ($powerProfile) { 'FreeSleep-GoveeAppliancePower' } else { 'FreeSleep-GoveeReadings' }
 $arguments = "`"$(Join-Path $release 'govee-reader.mjs')`" `"$configPath`""
 $task = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
 if ($task) {
@@ -104,7 +122,7 @@ if ($task) {
     $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
         -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
     Register-ScheduledTask -TaskName $taskName -Action $action -Trigger @($startup,$retry) -Settings $settings `
-        -User 'SYSTEM' -RunLevel Highest -Description 'Status-only H5106 reads; initially observation-only, no Pod publication.' | Out-Null
+        -User 'SYSTEM' -RunLevel Highest -Description "Status-only $ReaderProfile reads; initially observation-only, no Pod publication." | Out-Null
 }
 Start-ScheduledTask -TaskName $taskName
 Write-Output 'Reader installed in observation-only mode. The existing cache publisher was not modified.'

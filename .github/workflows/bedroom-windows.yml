@@ -23,3 +23,6 @@ jobs:
       - name: Validate the isolated sensor-reader installation
         shell: powershell
         run: ./scripts/bedroom/Test-GoveeInstaller.ps1
+      - name: Test appliance power installation and handoff
+        shell: powershell
+        run: ./scripts/bedroom/Test-GoveeInstaller.ps1 -ReaderProfile AppliancePower

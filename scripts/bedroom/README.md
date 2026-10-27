@@ -8,10 +8,13 @@ stays on the Pod. Existing Apple Home pairings are preserved.
 ```mermaid
 flowchart LR
   Govee[H5106 status reply] --> Reader[Lenovo: correlated status reader]
-  HAP[Homebridge cached appliance state] --> Cache[Lenovo: cache publisher]
+  Appliances[H712C / H7161 status reply] --> Power[Lenovo: power reader]
+  HAP[Homebridge cached fan setting] --> Cache[Lenovo: cache publisher]
   Reader -->|Dedicated SSH identity| Qualified[govee_ingest.py]
+  Power -->|Separate power-only identity| PowerReceiver[govee_ingest.py --profile appliance-power]
   Cache -->|Existing cache-only identity| Cached[cache_ingest.py]
   Qualified --> API[Authenticated local bedroom API]
+  PowerReceiver --> API
   Cached --> API
   API --> Apps[Web / iOS / ESP32]
 ```
@@ -47,6 +50,50 @@ still means unknown. Label this derived category in the source configuration.
 Protocol references: [Govee AWS connection](https://github.com/homebridge-plugins/homebridge-govee/blob/v11.39.1/lib/connection/aws.js)
 and [H5106 monitor decoding](https://github.com/homebridge-plugins/homebridge-govee/blob/v11.39.1/lib/device/sensor-monitor.js).
 Synthetic test frames contain only the required layout and test values.
+
+## Qualified appliance power
+
+The `appliance-power` reader profile supports **H712C power** and **H7161 power**.
+It shares one cloud connection between two independent status sessions, each
+with its own pending transaction, timeout and publication queue. It requires
+the matching model and device, a successful `state.result=1`, numeric `onOff`
+of 0 or 1, and the qualified status-frame envelope (11 frames for H712C,
+17 for H7161; canonical 20-byte frames with valid XOR checksums). Unknown
+firmware layouts withdraw the value instead of guessing. The same eight-second
+read and fifteen-second forwarding limits apply.
+
+These are reported power states, not proof that a motor or diffuser physically
+operated. The H712C's manual fan setting can be present even when another work
+mode is selected; this profile does **not** promote it to current fan speed.
+The cache publisher continues to label that setting as cached/display-only.
+Protocol references are the installed provider's
+[AWS status requests](https://github.com/homebridge-plugins/homebridge-govee/blob/v11.39.1/lib/connection/aws.js),
+[H7126/H712C adapter](https://github.com/homebridge-plugins/homebridge-govee/blob/v11.39.1/lib/device/purifier-H7126.js)
+and [H7161 adapter](https://github.com/homebridge-plugins/homebridge-govee/blob/v11.39.1/lib/device/diffuser-H7161.js).
+
+Install with the same installer and pinned runtime hashes plus
+`-ReaderProfile AppliancePower -PowerProtocolSha256 <sha256>`. It creates a separate
+`govee-appliance-power` directory, SYSTEM task `FreeSleep-GoveeAppliancePower`
+and `sleepypod-govee-power-read-only` key. The running H5106 task is untouched.
+Authorize that new key only for `govee_ingest.py --profile appliance-power`,
+using a root-only receiver configuration whose `devices` map contains exactly
+`H712C` and `H7161`. Each device entry owns its internal `deviceId`,
+`sources: {"power": "..."}` and `externalIds: {"power": "..."}`. The shared
+`environment` path remains on the Pod. This key cannot submit monitor readings,
+fan speed, arbitrary source IDs or commands; the monitor and cache keys retain
+their narrower existing scopes.
+
+Require recent successful observations from **both** appliances before running
+`Set-GoveeReaderMode.ps1 -ReaderProfile AppliancePower -Mode Publish`. It transfers
+only `govee-h712c-power` and `govee-h7161-power` out of the cache publisher,
+preserving the fan setting. Verify each API observation, independent expiry,
+recovery, and rejected shell commands. Existing active comfort policies and
+hardware controls are outside this operation.
+
+Rollback this profile with `-ReaderProfile AppliancePower -Mode Observe`. If both
+profiles must be rolled back, restore appliance power **first**, then the
+monitor profile: each handoff refuses externally changed configuration rather
+than overwriting another publisher's source ownership.
 
 ## Installation and handoff
 

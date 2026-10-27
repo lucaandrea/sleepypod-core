@@ -13,8 +13,25 @@ function concreteTopic(value) {
   return typeof value === 'string' && value.length > 0 && value.length <= 256 && !/[+#\0]/.test(value)
 }
 
-/** Resolve one actual monitor and the already-authenticated account, without logging credential values. */
-export async function loadGoveeProvider(config) {
+/** Resolve exact model/device pairs; ambiguous devices or wildcard topics cannot enter the reader. */
+export function resolveDeviceRoutes(accessories, devices, capabilities) {
+  if (!Array.isArray(devices) || devices.length < 1 || devices.length > 3
+    || new Set(devices.map(device => device.model)).size !== devices.length
+    || new Set(devices.map(device => device.deviceId)).size !== devices.length) throw new Error('Invalid device selection')
+  return devices.map(({ model, deviceId }) => {
+    if (!['H5106', 'H712C', 'H7161'].includes(model) || typeof deviceId !== 'string' || !deviceId) {
+      throw new Error('Unsupported device selection')
+    }
+    const matches = accessories.filter(accessory => accessory.context?.gvModel === model
+      && accessory.context.gvDeviceId === deviceId)
+    if (matches.length !== 1 || !concreteTopic(matches[0].context.awsTopic)) throw new Error('Device routing unavailable')
+    return { model, deviceId, deviceTopic: matches[0].context.awsTopic,
+      statusVersion: capabilities(model).awsStatusCmdVersion }
+  })
+}
+
+/** Use one account connection for the explicitly selected devices; credentials remain private. */
+export async function loadGoveeProviders(config, devices) {
   const packageFile = path.join(config.pluginRoot, 'package.json')
   const plugin = JSON.parse(await readFile(packageFile, 'utf8'))
   if (plugin.version !== SUPPORTED_PLUGIN_VERSION) throw new Error('Govee plugin version requires qualification')
@@ -34,21 +51,23 @@ export async function loadGoveeProvider(config) {
   const accessories = (await Promise.all((await readdir(accessoryRoot))
     .filter(filename => filename.startsWith('cachedAccessories.'))
     .map(async filename => JSON.parse(await readFile(path.join(accessoryRoot, filename), 'utf8'))))).flat()
-  const monitors = accessories.filter(accessory => accessory.context?.gvModel === 'H5106'
-    && accessory.context.gvDeviceId === config.deviceId)
-  if (monitors.length !== 1 || !concreteTopic(monitors[0].context.awsTopic)) throw new Error('Monitor routing unavailable')
+  const routes = resolveDeviceRoutes(accessories, devices, getDeviceCapabilities)
   const identity = await pfxToCertAndKey(path.join(config.homebridgeRoot, 'persist/govee.pfx'), fields[5])
   const client = device({ privateKey: Buffer.from(identity.key), clientCert: Buffer.from(identity.cert),
     caCert: await readFile(path.join(config.pluginRoot, 'lib/connection/cert/AmazonRootCA1.pem')),
     clientId: `AP/${fields[3]}/hbsleepypod${randomBytes(8).toString('hex')}`,
     host: fields[4], enableMetrics: false, clean: true, keepalive: 30,
   })
-  return { client, deviceId: config.deviceId, deviceTopic: monitors[0].context.awsTopic,
-    accountTopic: fields[0], statusVersion: getDeviceCapabilities('H5106').awsStatusCmdVersion }
+  return { client, accountTopic: fields[0], devices: routes }
+}
+
+export async function loadGoveeProvider(config) {
+  const provider = await loadGoveeProviders(config, [{ model: 'H5106', deviceId: config.deviceId }])
+  return { client: provider.client, accountTopic: provider.accountTopic, ...provider.devices[0] }
 }
 
 /** A dedicated forced-command key can submit only these receipts, never a remote shell command. */
-export function publishRead(config, receipt) {
+export function publishRead(config, receipt, expectedCount = 4) {
   return new Promise((resolve, reject) => {
     const child = spawn(config.sshExecutable, ['-T', '-o', 'BatchMode=yes', '-o', 'IdentitiesOnly=yes',
       '-o', 'StrictHostKeyChecking=yes', '-o', 'ConnectTimeout=5', '-o', 'LogLevel=ERROR',
@@ -70,7 +89,7 @@ export function publishRead(config, receipt) {
       clearTimeout(deadline)
       try {
         const result = JSON.parse(output)
-        if (code !== 0 || result.deviceReadOnly !== true || result.submitted !== 4 || result.accepted !== 4) {
+        if (code !== 0 || result.deviceReadOnly !== true || result.submitted !== expectedCount || result.accepted !== expectedCount) {
           throw new Error('Receipt not accepted')
         }
         resolve(result)
@@ -106,9 +125,7 @@ export function receiptQueue(send, onStatus, now = Date.now) {
   }
 }
 
-async function main() {
-  const config = JSON.parse(await readFile(process.argv[2], 'utf8'))
-  if (!['observe', 'publish'].includes(config.mode)) throw new Error('Expected an explicit reader mode')
+async function runMonitor(config) {
   const once = process.argv.includes('--once')
   let loop
   let completed = false
@@ -144,6 +161,76 @@ async function main() {
     console.error('No qualified device reply arrived.')
     process.exit(1)
   }, 20000)
+}
+
+/** Independent per-device queues preserve both power reports while sharing one cloud connection. */
+async function runAppliancePower(config) {
+  const { POWER_MODELS, decodeAppliancePowerReply } = await import('./govee-power-protocol.mjs')
+  if (!Array.isArray(config.devices) || config.devices.length !== POWER_MODELS.length
+    || POWER_MODELS.some(model => !config.devices.some(device => device.model === model))) {
+    throw new Error('Expected both qualified appliance models')
+  }
+  const provider = await loadGoveeProviders(config, config.devices)
+  const states = {}
+  const qualified = new Set()
+  const loops = []
+  let writes = Promise.resolve()
+  let completed = false
+  const once = process.argv.includes('--once')
+  const stop = async () => {
+    await Promise.all(loops.map(loop => loop.stop()))
+    provider.client.end(true)
+    await writes
+  }
+  for (const device of provider.devices) {
+    const status = (value) => {
+      if (value.receipt?.reading) qualified.add(device.model)
+      states[device.model] = { checkedAt: new Date().toISOString(),
+        lastQualifiedRead: value.receipt?.reading ? value.receipt : states[device.model]?.lastQualifiedRead ?? null, ...value }
+      writes = writes.then(async () => {
+        const contents = JSON.stringify({ mode: config.mode, profile: config.profile,
+          checkedAt: new Date().toISOString(), devices: states })
+        await writeFile(config.statusFile + '.tmp', contents, { mode: 0o600 })
+        await rename(config.statusFile + '.tmp', config.statusFile)
+      })
+      if (once && qualified.size === POWER_MODELS.length && !completed) {
+        completed = true
+        console.log(JSON.stringify({ observed: true, published: config.mode === 'publish', measurements: 2 }))
+        setTimeout(async () => {
+          await stop()
+          process.exit(0)
+        }, 0)
+      }
+      return writes
+    }
+    const queue = receiptQueue(receipt => config.mode === 'publish'
+      ? publishRead(config, receipt, 1)
+      : Promise.resolve({ observedOnly: true }), status)
+    loops.push(startGoveeReadLoop({ ...device, client: provider.client, accountTopic: provider.accountTopic,
+      decodeReply: (...arguments_) => decodeAppliancePowerReply(...arguments_, device.model) },
+    receipt => queue({ ...receipt, model: device.model }), { closeClientOnStop: false }))
+  }
+  for (const event of ['SIGINT', 'SIGTERM']) process.once(event, async () => {
+    const deadline = setTimeout(() => process.exit(1), 18000)
+    await stop()
+    clearTimeout(deadline)
+    process.exit(0)
+  })
+  if (once) setTimeout(async () => {
+    if (completed) return
+    completed = true
+    await stop()
+    console.error('Not all appliances returned a qualified status.')
+    process.exit(1)
+  }, 20000)
+}
+
+async function main() {
+  const config = JSON.parse(await readFile(process.argv[2], 'utf8'))
+  if (!['observe', 'publish'].includes(config.mode)) throw new Error('Expected an explicit reader mode')
+  if (config.profile === 'appliance-power') await runAppliancePower(config)
+  else if (config.profile === undefined || config.profile === 'monitor') await runMonitor(config)
+  else throw new Error('Unsupported reader profile')
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
