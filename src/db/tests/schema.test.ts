@@ -480,6 +480,7 @@ describe('db schema definitions', () => {
       'comfortActivations', 'comfortOwnerReviews', 'comfortQualifications', 'comfortResolutions',
       'notificationInbox', 'temperatureApplications',
       'roomContextSettings', 'roomContextLatest', 'roomContextHistory',
+      'bedroomSettings', 'bedroomLatest', 'bedroomHistory',
     ].sort())
   })
 })
