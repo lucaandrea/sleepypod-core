@@ -55,8 +55,14 @@ $utf8 = New-Object Text.UTF8Encoding($false)
 [IO.File]::WriteAllText($generatorPath, $generator, $utf8)
 & $node $generatorPath $keygen $key
 if ($LASTEXITCODE -ne 0 -or !(Test-Path "$key.pub")) { throw 'Publisher key generation failed' }
-& icacls.exe $key /inheritance:r /grant:r '*S-1-5-18:F' '*S-1-5-32-544:F' /setowner '*S-1-5-18' | Out-Null
+& icacls.exe $key /inheritance:r /grant:r '*S-1-5-18:F' '*S-1-5-32-544:F' | Out-Null
 if ($LASTEXITCODE -ne 0) { throw 'Could not restrict publisher private key' }
+& icacls.exe $key /setowner '*S-1-5-18' | Out-Null
+if ($LASTEXITCODE -ne 0) { throw 'Could not assign the private key to the SYSTEM task' }
+if ($identity.User.Value -notin @('S-1-5-18','S-1-5-32-544')) {
+    & icacls.exe $key /remove:g "*$($identity.User.Value)" | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw 'Could not remove the creating user from the service key ACL' }
+}
 $knownHosts = Join-Path $folder 'known_hosts'
 [IO.File]::WriteAllText($knownHosts, "[$PodAddress]:$PodPort $hostKey`n", $utf8)
 $configPath = Join-Path $folder 'config.json'
