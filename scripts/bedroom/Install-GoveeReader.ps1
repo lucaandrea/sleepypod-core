@@ -18,11 +18,13 @@ if ($cacheConfig.podUser -ne 'root' -or !(Test-Path $cacheConfig.knownHosts) -or
 }
 $plugin = Get-Content (Join-Path $PluginRoot 'package.json') -Raw | ConvertFrom-Json
 if ($plugin.version -ne '11.39.1') { throw 'This plugin version needs separate source qualification' }
-$accessories = @(Get-ChildItem (Join-Path $HomebridgeRoot 'accessories\cachedAccessories.*') -File | ForEach-Object {
-    Get-Content $_.FullName -Raw | ConvertFrom-Json
+$accessories = @(foreach ($file in Get-ChildItem (Join-Path $HomebridgeRoot 'accessories\cachedAccessories.*') -File) {
+    # PowerShell 5.1 can preserve a JSON array as one pipeline item. Enumerate devices explicitly.
+    foreach ($accessory in (Get-Content $file.FullName -Raw | ConvertFrom-Json)) { $accessory }
 })
 $monitors = @($accessories | Where-Object {$_.context.gvModel -eq 'H5106'})
-if ($monitors.Count -ne 1 -or !$monitors[0].context.gvDeviceId -or !$monitors[0].context.awsTopic) {
+if ($monitors.Count -ne 1 -or $monitors[0].context.gvDeviceId -isnot [string] -or
+    !$monitors[0].context.gvDeviceId -or $monitors[0].context.awsTopic -isnot [string] -or !$monitors[0].context.awsTopic) {
     throw 'Expected exactly one configured H5106; inspect the physical-device mapping'
 }
 $node = (Get-Command node.exe -ErrorAction Stop).Source

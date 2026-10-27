@@ -11,7 +11,7 @@ $fixture=Join-Path $fixtureRoot 'govee-reader.mjs'
 [IO.File]::WriteAllText($fixture,'setInterval(()=>{},1000)',$utf8)
 [IO.File]::WriteAllText((Join-Path $plugin 'package.json'),' {"version":"11.39.1"}',$utf8)
 [IO.File]::WriteAllText((Join-Path $homebridge 'accessories\cachedAccessories.fixture'),
-    '[{"context":{"gvModel":"H5106","gvDeviceId":"test-monitor","awsTopic":"test/device"}}]',$utf8)
+    '[{"context":{"gvModel":"H712C","gvDeviceId":"test-purifier","awsTopic":"test/purifier"}},{"context":{"gvModel":"H5106","gvDeviceId":"test-monitor","awsTopic":"test/device"}},{"context":{"gvModel":"H7161","gvDeviceId":"test-diffuser","awsTopic":"test/diffuser"}}]',$utf8)
 $known=Join-Path $folder 'known_hosts'
 [IO.File]::WriteAllText($known,'test-only-host-pin',$utf8)
 $cache=[ordered]@{podHost='127.0.0.1';podPort=9;podUser='root';knownHosts=$known;
@@ -46,7 +46,7 @@ try {
     $keyHash=(Get-FileHash $key -Algorithm SHA256).Hash
     $configPath=Join-Path $readerRoot 'config.json'
     $configuration=Get-Content $configPath -Raw | ConvertFrom-Json
-    if ($configuration.mode -ne 'observe' -or $configuration.deviceId -ne 'test-monitor' -or
+    if ($configuration.mode -ne 'observe' -or $configuration.deviceId -isnot [string] -or $configuration.deviceId -ne 'test-monitor' -or
         $configuration.homebridgeRoot -ne $homebridge) { throw 'Unexpected observation configuration' }
     if ((Get-FileHash $cachePath -Algorithm SHA256).Hash -ne $cacheHash) { throw 'Existing cache publisher changed' }
     $acl=Get-Acl $key
