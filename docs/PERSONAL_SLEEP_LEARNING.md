@@ -11,9 +11,11 @@ explicit draft action to remove later phases before reviewing the whole routine.
 The night view previously selected the longest recording. It now totals the
 union of all recorded intervals, grouping morning fragments with the prior
 evening until local noon. Overlaps count once; gaps do not count. This is
-**recorded bed time**, not proof of sleep. Stages and physiological summaries
-that still cover only the longest segment are labelled accordingly. No historical
-records are rewritten or padded to match an expected duration.
+**recorded bed time**, not proof of sleep. The native night view now requests
+stages for every available recording and includes vitals and Watch comparisons
+across those intervals. Stage epochs are clipped to their recording boundaries;
+missing segments remain unknown and failed classification requests are reported.
+No historical records are rewritten or padded to match an expected duration.
 
 MQTT tests may reuse the saved password only when URL, username and TLS mode
 exactly match the saved configuration. A new destination requires an explicitly
@@ -111,3 +113,24 @@ verify side/timezone/source alignment, compare on held-out nights, and review
 withheld decisions. Keep user-selected targets and wake alarms reliable while
 collecting evidence. A successful software test, broker connection or model
 fit is not overnight or physical-hardware acceptance.
+
+## Two separate collection requirements
+
+Sleep-stage validation needs Watch stage intervals that overlap the same side's
+Pod recordings. A successful Health import, recent Watch heart-rate samples, or
+a sleep chart populated by this app does not establish that overlap. Keep
+Watch references separate from this app's own Health exports. The direct native
+import shows a destination and side review before writing the permitted Watch
+samples; importing does not activate a model or change the bed's controls.
+
+The thermal model instead needs matched Pod/room observations and morning
+warm/comfortable/cold check-ins. Historical Watch stages alone cannot supply
+those temperature measurements or comfort labels. The current contextual model
+is advisory even after its holdout gate passes; it is separate from the bounded
+feedback learner used by personal comfort's temperature policy.
+
+Personal comfort activation additionally requires the attended observations and
+seven source-backed reviewed nights described in
+[Owner qualification and thermal activation](COMFORT_OWNER_ACTIVATION.md).
+Do not report a running sensor service as proof of fresh measurements, a valid
+sleep stage, or a successful physical temperature or wake response.
