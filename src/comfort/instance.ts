@@ -15,6 +15,7 @@ import { withSideLock } from '@/src/hardware/sideLock'
 import type { Side } from '@/src/hardware/types'
 import { getOccupancy } from '@/src/lib/occupancy'
 import { scheduleSourceSide } from '@/src/lib/singleSleeper'
+import { readSleeperPresence } from '@/src/lib/sleeperPresence'
 import { getTemperatureControllerIfRunning } from '@/src/temperature/instance'
 import { readAlarmContext } from '@/src/alarms/store'
 import { effectiveAlarmTargets, validAlarmOverride } from '@/src/alarms/model'
@@ -53,7 +54,7 @@ function readComfortSchedules(side: Side) {
 
 /** Read existing sensors and arbitration only; status evaluation never opens a hardware connection. */
 export function readComfortContext(side: Side, state: ComfortState, now: number, includeArbitration = true): { context: ComfortContext, timezone: string } {
-  const { sides, source, timezone, schedules } = readComfortSchedules(side)
+  const { settings, sides, source, timezone, schedules } = readComfortSchedules(side)
   const key = JSON.stringify([Math.floor(now / 60_000), schedules])
   const cached = routineCache[side]
   const window = cached?.key === key ? cached.window : comfortRoutineAt(schedules, now)
@@ -63,8 +64,7 @@ export function readComfortContext(side: Side, state: ComfortState, now: number,
   const status = monitor?.getFreshStatus(DEVICE_MAX_AGE_MS)
   const reported = side === 'left' ? status?.leftSide : status?.rightSide
   const deviceObservedAt = status ? observedTimestamp(monitor?.getLastPollAt(), now) : null
-  const occupancy = getOccupancy(side)
-  const presenceObservedAt = occupancy.level.ageMs === null ? null : observedTimestamp(now - occupancy.level.ageMs, now)
+  const presence = readSleeperPresence(side, { ...settings, ...Object.fromEntries(sides.map(row => [row.side, row])) }, now, getOccupancy)
   const states = db.select().from(deviceState).all()
   const mirror = states.find(row => row.side === side)
   const base = getBaseControllerIfRunning()?.status()
@@ -94,16 +94,7 @@ export function readComfortContext(side: Side, state: ComfortState, now: number,
         baseMoving: baseFresh && typeof base?.moving === 'boolean' ? base.moving || base.busy : null,
         targetF,
       },
-      presence: { observedAt: presenceObservedAt, available: occupancy.available, occupied: occupancy.classification === 'person',
-        entry: occupancy.level.sampleAt !== undefined && occupancy.level.sourceKey
-          ? {
-              measuredAt: occupancy.level.sampleAt, sourceKey: occupancy.level.sourceKey,
-              state: occupancy.level.active && occupancy.classification === 'person'
-                ? 'present'
-                : !occupancy.level.active && occupancy.classification === 'none' ? 'absent' : 'unknown',
-            }
-          : undefined,
-      },
+      presence,
       eitherAway: sides.length !== 2 || sides.some(row => row.awayMode),
       routinesPaused: source === null,
       alarmOverride,
@@ -180,8 +171,9 @@ export function getComfortOwner() {
     context: (side, state, now) => readComfortContext(side, state, now, false).context,
     identity: (side, state) => {
       const origin = previewOrigin()
-      const calibration = getOccupancy(side).level.sourceKey
-      const schedule = comfortScheduleRevision(readComfortSchedules(side).schedules)
+      const { settings, sides, schedules } = readComfortSchedules(side)
+      const calibration = readSleeperPresence(side, { ...settings, ...Object.fromEntries(sides.map(row => [row.side, row])) }, Date.now(), getOccupancy).entry?.sourceKey
+      const schedule = comfortScheduleRevision(schedules)
       if (origin.environment !== 'production' || !origin.hardwareIdentity || !origin.buildRevision || !calibration || !schedule) return null
       return ownerIdentitySchema.parse({ hardware: origin.hardwareIdentity, build: origin.buildRevision, calibration, schedule,
         policy: { minimumF: state.config.minimumF, maximumF: state.config.maximumF,

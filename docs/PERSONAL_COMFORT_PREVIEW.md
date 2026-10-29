@@ -65,6 +65,21 @@ saved active settings remain inert and display the qualification gate.
 
 ## Input and storage behavior
 
+In a sole-sleeper arrangement, live comfort presence now follows the same logical
+sleeper as the Python recording services: either calibrated zone may supply a
+person observation. Both zones must be available, from the same fresh frame and
+with valid calibration identities before the combined observation is eligible.
+An empty reading from one half alone cannot establish absence. Residual movement
+cannot fabricate a calibrated entry transition. Physical-zone diagnostics retain
+their original measurements; this does not identify a person biometrically.
+
+The combined qualification identity includes both calibration sources and the
+logical home side. Changing either source withholds the old qualification. Two
+active sleepers continue to use separate per-side observations. This adapter does
+not change recorded history, saved routines, temperature bounds or activation
+consent. Left/right/middle observations on the actual mattress still need attended
+validation; synthetic tests establish routing behavior only.
+
 - Uses the existing scheduler's weekday and DST semantics. A Saturday 22:00
   start does **not** imply a Sunday 07:00 end unless that end event exists.
   Overlapping starts, equal boundaries, missing ends and windows over 26 hours

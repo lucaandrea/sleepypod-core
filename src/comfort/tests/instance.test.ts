@@ -53,6 +53,18 @@ afterEach(() => {
 })
 
 describe('live comfort input adapter', () => {
+  it('uses both calibrated zones for a sole sleeper and invalidates one-zone entry evidence', () => {
+    fixture.database?.prepare('UPDATE device_settings SET bed_mode = \'solo-left\', unused_zone_mode = \'follow\'').run()
+    fixture.occupancy.mockImplementation((side: string) => ({
+      level: { active: side === 'right', ageMs: 100, sampleAt: now - 500, sourceKey: (side === 'left' ? 'a' : 'b').repeat(64) },
+      available: true, classification: side === 'right' ? 'person' : 'none',
+    }))
+    const presence = readComfortContext('left', defaultComfortState(), now).context.presence
+    expect(presence).toMatchObject({ occupied: true, available: true, entry: { state: 'present', measuredAt: now - 500 } })
+    expect(presence.entry?.sourceKey).not.toBe('a'.repeat(64))
+    expect(fixture.occupancy.mock.calls.map(call => call[0])).toEqual(['left', 'right'])
+  })
+
   it('binds bed-entry evidence to calibrated level samples, never residual movement alone', () => {
     const level = { active: true, ageMs: 200, sampleAt: now - 2000, sourceKey: 'a'.repeat(64) }
     fixture.occupancy.mockReturnValue({ level, available: true, classification: 'person' })
