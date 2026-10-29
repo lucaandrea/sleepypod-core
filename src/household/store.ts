@@ -25,6 +25,7 @@ interface AccountRow {
   display_name: string
   role: 'owner' | 'member'
   state: string
+  assigned_side: 'left' | 'right' | null
   session_revision: number
 }
 interface DeviceRow {
@@ -126,12 +127,13 @@ export class HouseholdStore {
     // Assignment activation will be a separate, reviewed transaction. A member's
     // invitation is never interpreted as consent to move the existing sleeper.
     const soloOwner = household.mode === 'solo-anywhere' && account.role === 'owner'
+    const assignedSide = household.mode === 'assigned' ? account.assigned_side : null
     return householdSessionSchema.parse({
       apiVersion: 1, featureVersion: 1, podId: household.pod_id, householdId: household.id,
       accountId: account.id, selfSleeperId: account.sleeper_id, role: account.role, membership: 'active',
       sessionRevision: account.session_revision, householdRevision: household.revision, assignmentRevision: household.assignment_revision,
       arrangement: { mode: household.mode, effectiveAt: new Date(household.effective_at).toISOString() },
-      self: { displayName: account.display_name, zones: soloOwner ? ['left', 'right'] : [], assignment: soloOwner ? 'solo' : 'unassigned' },
+      self: { displayName: account.display_name, zones: soloOwner ? ['left', 'right'] : assignedSide ? [assignedSide] : [], assignment: soloOwner ? 'solo' : assignedSide ?? 'unassigned' },
       capabilities: { manageInvitations: account.role === 'owner', manageOwnDevices: true,
         personalPreferences: true, personalRoutineDrafts: true, activateArrangement: false,
         personalControls: false, personalHistory: false, healthImport: false, cloudAnalysis: false },

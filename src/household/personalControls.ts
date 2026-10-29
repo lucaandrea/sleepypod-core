@@ -5,7 +5,7 @@ import { z } from 'zod'
 import { householdControlReceipts } from '@/src/db/schema'
 import { ControlService } from '@/src/controls/service'
 import { ControlConflictError, type ControlStore } from '@/src/controls/store'
-import { withinDispatchGuard } from '@/src/controls/context'
+import { getControlDispatchCount, withinDispatchGuard } from '@/src/controls/context'
 import type { ControlAction } from '@/src/controls/contract'
 import type { HouseholdCredential } from './store'
 import { HouseholdError } from './store'
@@ -147,7 +147,8 @@ export class PersonalControlService {
     return this.receipt(row, principal)
   }
 
-  async submit(credential: HouseholdCredential, input: unknown) {
+  async submit(credential: HouseholdCredential, input: unknown, assertRequestCurrent: () => void = () => {}) {
+    assertRequestCurrent()
     const request = personalControlRequestSchema.parse(input)
     const principal = this.dependencies.authenticate(credential)
     const serialized = JSON.stringify(request)
@@ -167,6 +168,9 @@ export class PersonalControlService {
     }
     const fingerprint = JSON.stringify(authority)
     const assertCurrent = () => {
+      // A valid device key does not imply that the browser still has that
+      // account selected. HTTP callers recheck the persisted browser binding.
+      assertRequestCurrent()
       const current = this.dependencies.authenticate(credential)
       if (current.accountId !== principal.accountId || current.podId !== principal.podId
         || current.householdId !== principal.householdId || current.sleeperId !== principal.sleeperId
@@ -175,10 +179,16 @@ export class PersonalControlService {
       }
     }
     const controller = this.controller(principal, request, authority.zones, () => withinDispatchGuard(assertCurrent, async () => {
+      let skippedZone = false
       for (const side of authority.zones) {
         assertCurrent()
+        const before = getControlDispatchCount()
         await this.dependencies.execute(this.resolvedAction(request, side))
+        skippedZone ||= getControlDispatchCount() === before
       }
+      // Debouncing may resolve a superseded command without a write. A write
+      // to one zone must never count as acknowledgment of the entire bed.
+      if (skippedZone && getControlDispatchCount() > 0) throw new Error('Incomplete personal command')
     }))
     this.active.set(request.requestId, controller)
     try {
@@ -186,6 +196,7 @@ export class PersonalControlService {
         action: this.resolvedAction(request, authority.zones[0]) })
       // Re-authenticate after asynchronous work: never return a private response
       // to a device that was revoked while its command waited in the transport.
+      assertRequestCurrent()
       const current = this.dependencies.authenticate(credential)
       const row = this.row(request.requestId)
       if (!row) throw new Error('Personal receipt unavailable')

@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { ControlConflictError } from '@/src/controls/store'
 import type Database from 'better-sqlite3'
 import { authorized, sameOrigin, SESSION_COOKIE } from '@/src/auth/access'
 import { bindBrowserScope, hasBrowserScope, BrowserScopeConflict } from '@/src/auth/browserScope'
@@ -6,6 +7,7 @@ import { deviceSecretSchema, householdSetupSchema } from './contract'
 import type { HouseholdStore } from './store'
 import { HouseholdError } from './store'
 import { issuePersonalSession, personalCookie, personalCredential } from './browserSession'
+import type { PersonalRuntime } from './personalRuntime'
 const MAX_BODY_BYTES = 128 * 1024
 const privacyHeaders = { 'Cache-Control': 'private, no-store', 'Vary': 'Authorization, Cookie', 'X-Content-Type-Options': 'nosniff' }
 async function jsonBody(request: Request): Promise<unknown> {
@@ -38,10 +40,12 @@ export interface HouseholdHttpDependencies {
   store: HouseholdStore
   verifySoloConfiguration: (side: 'left' | 'right') => boolean
   allowPublicAttempt?: () => boolean
+  personalRuntime?: PersonalRuntime
 }
 /** This namespace authorizes every route itself; personal credentials never enter legacy APIs. */
 export async function householdHttp(request: Request, dependencies: HouseholdHttpDependencies): Promise<Response> {
   const { store } = dependencies
+  const present = (session: ReturnType<HouseholdStore['session']>) => dependencies.personalRuntime?.session(session) ?? session
   const url = new URL(request.url)
   const path = url.pathname.replace(/\/$/, '')
   const method = request.method
@@ -69,7 +73,7 @@ export async function householdHttp(request: Request, dependencies: HouseholdHtt
         throw new HouseholdError('not_ready', 409, 'First confirm the existing solo/follow bed arrangement. Setup does not change it.')
       return store.withBrowserTransaction((database) => {
         const session = store.setup(input)
-        return reply(session, 200, cookieForSecret(input.deviceSecret, database))
+        return reply(present(session), 200, cookieForSecret(input.deviceSecret, database))
       })
     }
     if (path === '/api/v1/household/join' && method === 'POST') {
@@ -81,7 +85,7 @@ export async function householdHttp(request: Request, dependencies: HouseholdHtt
       }).deviceSecret
       return store.withBrowserTransaction((database) => {
         const session = store.join(input)
-        return reply(session, 200, cookieForSecret(secret, database))
+        return reply(present(session), 200, cookieForSecret(secret, database))
       })
     }
     if (path === '/api/v1/household/session' && method === 'POST') {
@@ -90,7 +94,7 @@ export async function householdHttp(request: Request, dependencies: HouseholdHtt
       if (dependencies.allowPublicAttempt && !dependencies.allowPublicAttempt())
         throw new HouseholdError('rate_limited', 429, 'Wait a minute before reconnecting.')
       const { token } = z.object({ token: deviceSecretSchema }).strict().parse(await jsonBody(request))
-      return reply(store.session(token), 200, cookieForSecret(token))
+      return reply(present(store.session(token)), 200, cookieForSecret(token))
     }
     if (path === '/api/v1/household/session' && method === 'DELETE') {
       if (!sameOrigin(request.headers))
@@ -111,8 +115,25 @@ export async function householdHttp(request: Request, dependencies: HouseholdHtt
     const browserMutation = !request.headers.has('authorization') && !['GET', 'HEAD'].includes(method)
     if ((browserMutation || expectedSleeper !== null) && expectedSleeper !== store.session(credential).selfSleeperId)
       throw new HouseholdError('conflict', 409, 'The browser account changed. Reload before continuing.')
+    const assertRequestCurrent = () => {
+      const current = personalCredential(request)
+      if (JSON.stringify(current) !== JSON.stringify(credential)
+        || (expectedSleeper !== null && store.session(current).selfSleeperId !== expectedSleeper))
+        throw new HouseholdError('conflict', 409, 'The browser account changed. Reload before continuing.')
+    }
     if (path === '/api/v1/household/session' && method === 'GET')
-      return reply(store.session(credential))
+      return reply(present(store.session(credential)))
+    if (dependencies.personalRuntime) {
+      if (path === '/api/v1/me/bed' && method === 'GET')
+        return reply(await dependencies.personalRuntime.bed(credential, assertRequestCurrent))
+      if (path === '/api/v1/me/controls' && method === 'POST')
+        return reply(await dependencies.personalRuntime.submit(credential, mutationBody, assertRequestCurrent))
+      const receiptPath = path.match(/^\/api\/v1\/me\/controls\/([^/]+)$/)
+      if (receiptPath && method === 'GET') {
+        const receipt = dependencies.personalRuntime.receipt(credential, receiptPath[1], assertRequestCurrent)
+        return receipt ? reply(receipt) : reply({ error: { code: 'not_ready', message: 'No personal command receipt is available.' } }, 404)
+      }
+    }
     if (path === '/api/v1/household/invitations') {
       if (method === 'GET')
         return reply(store.invitations(credential))
@@ -144,11 +165,13 @@ export async function householdHttp(request: Request, dependencies: HouseholdHtt
   catch (error) {
     if (error instanceof BrowserScopeConflict)
       return reply({ error: { code: 'conflict', message: error.message } }, 409)
+    if (error instanceof ControlConflictError)
+      return reply({ error: { code: 'conflict', message: 'This request ID already identifies a different personal command.' } }, 409)
     if (error instanceof HouseholdError)
       return reply({ error: { code: error.code, message: error.message } }, error.status)
     if (error instanceof z.ZodError)
       return reply({ error: { code: 'invalid_request', message: 'Check the fields and reload the current account context.' } }, 400)
     // Do not echo SQLite, validation inputs, secrets or another person's records.
-    return reply({ error: { code: 'not_ready', message: 'The personal workspace is unavailable. No hardware command was sent.' } }, 503)
+    return reply({ error: { code: 'not_ready', message: 'The operation could not be confirmed. Reconnect and check its saved result before retrying.' } }, 503)
   }
 }

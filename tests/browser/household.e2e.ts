@@ -114,6 +114,20 @@ test('real personal API keeps two browser accounts separate and routine drafts i
     await expect(page.getByLabel('Preferred overnight target')).toHaveValue('70')
     expect(await (await request.get('/api/routines?side=left', { headers: ownerHeaders })).json()).toEqual(beforeRoutines)
     const memberHeaders = { Authorization: `Bearer ${memberKey}` }
+    // Exercise the real Next GET/POST exports. A disabled runtime still returns
+    // its contract and rejects commands deliberately, rather than a missing 405 route.
+    const bedResponse = await request.get('/api/v1/me/bed', { headers: memberHeaders })
+    expect(bedResponse.status()).toBe(200)
+    const personalBed = await bedResponse.json()
+    expect(personalBed).toMatchObject({ availability: 'runtime_disabled', zones: [], routing: { temperature: [], scheduledVibration: [] } })
+    const now = Date.now(), requestId = randomUUID()
+    const controlResponse = await request.post('/api/v1/me/controls', { headers: memberHeaders, data: {
+      version: 1, requestId, scope: personalBed.scope, issuedAt: now, expiresAt: now + 30_000,
+      action: { kind: 'temperature', temperatureF: 70, holdMinutes: 30 },
+    } })
+    expect(controlResponse.status()).toBe(409)
+    expect(await controlResponse.json()).toMatchObject({ error: { code: 'not_ready' } })
+    expect((await request.get(`/api/v1/me/controls/${requestId}`, { headers: memberHeaders })).status()).toBe(404)
     for (const path of ['/api/settings', '/api/biometrics/sleep?side=left', '/api/trpc/settings.get', '/api/db-backup', '/api/v1/controls']) expect((await request.get(path, { headers: memberHeaders })).status()).toBe(401)
     expect((await request.get('/api/system/databases/rows?db=sleepypod&table=household_personal_settings', { headers: ownerHeaders })).status()).toBe(403)
     expect((await request.get('/api/db-backup', { headers: ownerHeaders })).status()).toBe(403)

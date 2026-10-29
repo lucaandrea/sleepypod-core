@@ -1382,6 +1382,7 @@ exports[`complete Drizzle schema contracts > pins every main-database table, col
       "display_name | sql:text | logical:string/SQLiteText | not-null | default:none | not-primary-key | not-unique | not-autoincrement | enum:none",
       "role | sql:text | logical:string/SQLiteText | not-null | default:none | not-primary-key | not-unique | not-autoincrement | enum:owner,member",
       "state | sql:text | logical:string/SQLiteText | not-null | default:active | not-primary-key | not-unique | not-autoincrement | enum:active,revoked",
+      "assigned_side | sql:text | logical:string/SQLiteText | nullable | default:none | not-primary-key | not-unique | not-autoincrement | enum:left,right",
       "session_revision | sql:integer | logical:number/SQLiteInteger | not-null | default:1 | not-primary-key | not-unique | not-autoincrement | enum:none",
       "created_at | sql:integer | logical:number/SQLiteInteger | not-null | default:none | not-primary-key | not-unique | not-autoincrement | enum:none",
     ],
@@ -1389,7 +1390,9 @@ exports[`complete Drizzle schema contracts > pins every main-database table, col
     "foreignKeys": [
       "household_accounts_household_id_households_id_fk | columns:household_id | references:households(id) | on-delete:none | on-update:none",
     ],
-    "indexes": [],
+    "indexes": [
+      "idx_household_assigned_side | unique | columns:household_id,assigned_side | where:none",
+    ],
     "name": "household_accounts",
     "primaryKeys": [],
     "uniqueConstraints": [],
