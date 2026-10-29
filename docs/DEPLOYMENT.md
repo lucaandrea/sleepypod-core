@@ -149,6 +149,25 @@ proof of installation success. The separately staged, isolated offline runtime
 still uses its reviewed deployment and rollback workflow; this change neither
 grants it updater privileges nor activates it.
 
+### Updating sensors in an isolated runtime
+
+`scripts/deployment/stage_sensors.py` prepares a separate versioned sensor source
+directory from the staged release's checksum-verified source archive. It reuses
+the previous virtual environments only when every running module's `uv.lock` and
+`pyproject.toml` match exactly. A dependency change requires a separately prepared
+locked environment and is refused by this source-only workflow.
+
+Run the existing dependency probe against the candidate as the `dac` account
+before changing services. Render a new service plan that selects both the new
+release and candidate modules directory. `upgrade.py` verifies the complete
+sensor source and environment links before stopping the controller. Its existing
+quiesced backup, restore rehearsal and startup verification then switch the Core
+and sensor unit files together. Failure restores the previous units and data;
+the previous sensor files and environments were never modified.
+
+Keep reused environment directories as rollback dependencies. Staging does not
+start a daemon, claim a hardware check, or carry qualifications to the new build.
+
 ```bash
 # From SSH on the pod:
 sp-update              # latest release (pre-built)
