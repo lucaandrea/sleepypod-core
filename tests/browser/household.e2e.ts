@@ -189,6 +189,15 @@ test('real personal API keeps two browser accounts separate and routine drafts i
     await expect(secondOwnerTab.getByRole('heading', { name: 'Hello, Example owner.' })).not.toBeVisible()
     await expect(secondOwnerTab.getByRole('status')).toContainText('account changed in another tab')
     await secondOwnerTab.close()
+    expect(await memberPage.evaluate(browserLogin, { key: memberKey })).toBe(200)
+    await memberPage.route('**/api/v1/me/routines', async (route) => {
+      const response = await route.fetch()
+      await route.fulfill({ response, json: { ...await response.json(), status: 'scheduled' } })
+    })
+    await memberPage.reload()
+    await expect(memberPage.getByRole('status')).toContainText('preparation workspace can edit drafts only')
+    await expect(memberPage.getByLabel('Preferred overnight target')).not.toBeVisible()
+    await expect(memberPage.getByRole('button', { name: 'Save this night as a draft' })).not.toBeVisible()
   }
   finally {
     await memberContext.close()

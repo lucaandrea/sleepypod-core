@@ -142,6 +142,10 @@ async function refresh() {
     return
   if (results[0].sleeperId !== currentSession.selfSleeperId || results[1].sleeperId !== currentSession.selfSleeperId)
     throw new Error('The personal account changed. Reconnect before continuing.')
+  if (results[1].status !== 'draft_only') {
+    clearPersonalView()
+    throw new Error('Update the personal app before editing an active routine. This preparation workspace can edit drafts only.')
+  }
   session = currentSession;
   [preferences, routines] = results
   element('connect').hidden = true
