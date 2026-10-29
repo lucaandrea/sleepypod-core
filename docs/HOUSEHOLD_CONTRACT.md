@@ -199,6 +199,46 @@ Preparation grants no authority to execute a stale action later.
 - Changing assignment or sensor interpretation withholds incompatible adaptation
   and qualification. Do not silently reuse Luca's learned policy for Marissa.
 
+## Dated attribution foundation (internal, not activated)
+
+`src/household/personHistory.ts` adds a durable ownership boundary for the next
+integration gate. It is not called by signup, HTTP routes, the live sensor
+collector or the assignment controller. `personalHistory`, live controls and
+assignment activation remain unavailable in the preparation session. This is
+tested storage and query behavior, not a claim that two-sleeper operation is ready.
+
+- A reviewed epoch binds a stable source dataset and half-open UTC interval to
+  distinct sleeper identities and recorded zones. `solo_merged` admits only the
+  logical merged source; an empty-side duplicate cannot add another night's time.
+- Separate owner-reviewed legacy intervals preserve original recorded sides.
+  Signup never claims the earlier records. A new member cannot inherit them.
+- Transitions close the preceding epoch and insert its replacement in one
+  transaction. Compare-and-swap revisions and retained review receipts reject
+  stale or changed retries. No admitted record may be moved across the boundary.
+- Complete observations must fit wholly within one epoch. Gaps, overlapping
+  epochs, transition-spanning measurements, future/open records and unknown zones
+  are withheld. Attribution means reviewed arrangement, not biometric identity.
+- Immutable minimal record snapshots keep stable person-record UUIDs across side
+  moves. A changed source is quarantined rather than silently relabelled or
+  overwritten. Overlapping presence records cannot double the person's duration.
+- Reads derive self from the current personal credential, including device
+  revocation checks. Household owner status grants no partner-history access.
+  Bounded, signed cursors bind identity, revisions, filters and an ingestion
+  watermark. New records wait for refresh; corrections invalidate prior pages.
+  Cursors expire on the history singleton's restart. Results sort by observation
+  time, so a late legacy import does not displace newer nights.
+- Presence, movement and Pod vitals retain distinct semantics. Presence is not
+  estimated sleep; the Pod variability metric is not Watch HRV. No Health import,
+  model training, raw export or cloud analysis is enabled by this layer.
+
+Before exposing it, implement the reviewed assignment coordinator and source
+adapters with stable dataset identities, explicit timestamp conversion and full
+measurement-window provenance. Bind consent and current physical configuration
+to the review receipt; never expose `appendReviewedEpoch` directly as an HTTP
+mutation. Finish personal HTTP/native views and legacy-owner privacy gates before
+dual activation. Invalidated source corrections need a separate reviewed repair
+flow; this implementation deliberately cannot reclaim reserved source intervals.
+
 ## One-morning wake coordination
 
 Reuse the existing exact-occurrence Pod override, skip and restore semantics.

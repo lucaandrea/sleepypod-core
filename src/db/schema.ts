@@ -778,3 +778,47 @@ export const householdBrowserScopes = sqliteTable('household_browser_scopes', {
   sessionHash: text('session_hash').notNull(),
   expiresAt: integer('expires_at').notNull(),
 })
+
+// Reviewed source intervals describe attribution, not physical sensor identity.
+// They never change the hardware arrangement or claim old rows during signup.
+export const householdHistoryState = sqliteTable('household_history_state', {
+  householdId: text('household_id').primaryKey().references(() => households.id),
+  attributionRevision: integer('attribution_revision').notNull().default(1),
+})
+
+export const householdAttributionEpochs = sqliteTable('household_attribution_epochs', {
+  id: text('id').primaryKey(),
+  householdId: text('household_id').notNull().references(() => households.id),
+  datasetId: text('dataset_id').notNull(),
+  startsAt: integer('starts_at').notNull(),
+  endsAt: integer('ends_at'),
+  mode: text('mode', { enum: ['solo_merged', 'assigned'] }).notNull(),
+  assignments: text('assignments').notNull(),
+  basis: text('basis', { enum: ['legacy_owner_review', 'verified_arrangement'] }).notNull(),
+  reviewReceiptId: text('review_receipt_id').notNull().unique(),
+  reviewedBy: text('reviewed_by').notNull().references(() => householdAccounts.id),
+  requestHash: text('request_hash').notNull(),
+  createdAt: integer('created_at').notNull(),
+  revokedAt: integer('revoked_at'),
+}, table => [index('idx_household_attribution_time').on(table.householdId, table.datasetId, table.startsAt)])
+
+export const householdPersonRecords = sqliteTable('household_person_records', {
+  sequence: integer('sequence').primaryKey({ autoIncrement: true }),
+  id: text('id').notNull().unique(),
+  householdId: text('household_id').notNull().references(() => households.id),
+  sleeperId: text('sleeper_id').notNull().references(() => householdAccounts.sleeperId),
+  epochId: text('epoch_id').notNull().references(() => householdAttributionEpochs.id),
+  datasetId: text('dataset_id').notNull(),
+  sourceKind: text('source_kind', { enum: ['presence', 'vitals', 'movement'] }).notNull(),
+  sourceRecordKey: text('source_record_key').notNull(),
+  contentHash: text('content_hash').notNull(),
+  recordedSide: text('recorded_side', { enum: ['left', 'right'] }).notNull(),
+  startsAt: integer('starts_at').notNull(),
+  endsAt: integer('ends_at').notNull(),
+  payload: text('payload').notNull(),
+  createdAt: integer('created_at').notNull(),
+  invalidatedAt: integer('invalidated_at'),
+}, table => [
+  uniqueIndex('idx_household_source_record').on(table.datasetId, table.sourceKind, table.sourceRecordKey),
+  index('idx_household_person_history').on(table.householdId, table.sleeperId, table.startsAt),
+])
