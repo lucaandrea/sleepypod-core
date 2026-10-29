@@ -1,9 +1,11 @@
-import { authConfigured, authorized, issueSession, sameOrigin, SESSION_COOKIE, SESSION_SECONDS, validOwnerToken } from '@/src/auth/access'
+import { authConfigured, authorized, issueSession, sameOrigin, SESSION_COOKIE, SESSION_SECONDS, PERSONAL_SESSION_COOKIE, validOwnerToken } from '@/src/auth/access'
+import { bindBrowserScope, hasBrowserScope, personalBrowserScopeActive, browserScopeRevision, BrowserScopeConflict } from '@/src/auth/browserScope'
 
 export const dynamic = 'force-dynamic'
 
 export function GET(request: Request) {
-  return Response.json({ configured: authConfigured(), authenticated: authorized(request.headers) }, {
+  const personalSessionActive = hasBrowserScope(request.headers) ? personalBrowserScopeActive(request.headers) : (request.headers.get('cookie') ?? '').split(';').some(value => value.trim().startsWith(`${PERSONAL_SESSION_COOKIE}=`))
+  return Response.json({ configured: authConfigured(), authenticated: authorized(request.headers), personalSessionActive, browserScopeRevision: browserScopeRevision(request.headers) }, {
     headers: { 'Cache-Control': 'no-store' },
   })
 }
@@ -17,6 +19,7 @@ export async function POST(request: Request) {
   if (!reader) return new Response(null, { status: 400 })
   let body = ''
   const decoder = new TextDecoder()
+  let exitPersonalSession = false
   try {
     while (true) {
       const chunk = await reader.read()
@@ -30,17 +33,34 @@ export async function POST(request: Request) {
         return new Response(null, { status: 413 })
       }
     }
-    const value = JSON.parse(body) as { token?: unknown }
+    const value = JSON.parse(body) as { token?: unknown, exitPersonalSession?: unknown }
     if (!validOwnerToken(value?.token)) return Response.json({ error: 'Invalid connection key' }, { status: 401 })
+    exitPersonalSession = value.exitPersonalSession === true
   }
   catch { return new Response(null, { status: 400 }) }
-  return Response.json({ authenticated: true }, {
-    headers: { 'Cache-Control': 'no-store', 'Set-Cookie': sessionCookie(request, issueSession(), SESSION_SECONDS) },
-  })
+  const headers = new Headers({ 'Cache-Control': 'no-store' })
+  const preparation = process.env.SLEEPYPOD_HOUSEHOLD_PREPARATION === '1'
+  const session = issueSession(Date.now(), preparation || exitPersonalSession || hasBrowserScope(request.headers))
+  if (exitPersonalSession || (!personalBrowserScopeActive(request.headers) && (preparation || hasBrowserScope(request.headers)))) {
+    try {
+      headers.append('Set-Cookie', bindBrowserScope(request, 'owner', session))
+    }
+    catch (error) { return Response.json({ error: 'Browser account state changed or is unavailable. Reconnect explicitly.' }, { status: error instanceof BrowserScopeConflict ? 409 : 503 }) }
+  }
+  headers.append('Set-Cookie', sessionCookie(request, session, SESSION_SECONDS))
+  // Deliberately reconnecting the owner also leaves the personal browser scope.
+  if (exitPersonalSession) headers.append('Set-Cookie', `${PERSONAL_SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0`)
+  return Response.json({ authenticated: true }, { headers })
 }
 
 export function DELETE(request: Request) {
   if (!sameOrigin(request.headers)) return new Response(null, { status: 403 })
+  if (hasBrowserScope(request.headers)) {
+    try {
+      bindBrowserScope(request, 'signed_out', '')
+    }
+    catch (error) { return new Response(null, { status: error instanceof BrowserScopeConflict ? 409 : 503 }) }
+  }
   return new Response(null, { status: 204, headers: { 'Set-Cookie': sessionCookie(request, '', 0), 'Cache-Control': 'no-store' } })
 }
 

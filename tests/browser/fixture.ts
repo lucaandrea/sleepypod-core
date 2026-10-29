@@ -98,6 +98,21 @@ connection.close()
     const store = createNotificationStore(configSqlite)
     store.publish({ sourceId: 9876, title: 'Browser fixture alert', message: 'Synthetic bedroom humidity notification.' })
   }
+  else if (process.argv[2] === 'household-prepare') {
+    configSqlite.prepare('INSERT OR IGNORE INTO device_settings (id) VALUES (1)').run()
+    const original = configSqlite.prepare('SELECT bed_mode, unused_zone_mode FROM device_settings WHERE id = 1').get()
+    configSqlite.prepare('UPDATE device_settings SET bed_mode = \'solo-left\', unused_zone_mode = \'follow\' WHERE id = 1').run()
+    console.log(JSON.stringify(original))
+  }
+  else if (process.argv[2] === 'household-cleanup') {
+    const original = JSON.parse(process.argv[3]) as { bed_mode: string, unused_zone_mode: string }
+    assert(['two', 'solo-left', 'solo-right'].includes(original.bed_mode))
+    assert(['off', 'follow', 'independent'].includes(original.unused_zone_mode))
+    configSqlite.transaction(() => {
+      for (const table of ['household_invitations', 'household_mutation_receipts', 'household_personal_settings', 'household_devices', 'household_accounts', 'households']) configSqlite.prepare(`DELETE FROM ${table}`).run()
+      configSqlite.prepare('UPDATE device_settings SET bed_mode = ?, unused_zone_mode = ? WHERE id = 1').run(original.bed_mode, original.unused_zone_mode)
+    })()
+  }
   else throw new Error('Unknown browser fixture action')
 }
 finally {

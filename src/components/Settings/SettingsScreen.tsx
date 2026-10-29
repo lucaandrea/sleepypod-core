@@ -123,6 +123,12 @@ function SectionBody({ section, side, onSideChange }: {
           <>
             <OwnerSessionControls />
             <Card>
+              <h2 className="text-lg font-medium">Personal household preparation</h2>
+              <p className="mt-2 text-sm text-fg-2">Prepare separate profiles and private routine drafts. Joining does not activate a second sleeper or move your existing routine.</p>
+              <Link href="/household/index.html" prefetch={false} className="mt-3 block text-sm text-link">Open personal preparation</Link>
+              <a href="/guide/marissa.html" className="mt-2 block text-sm text-link">Marissa’s interactive practice guide</a>
+            </Card>
+            <Card>
               <p className="text-sm text-fg-2">Built on SleepyPod Core, with Pod 4 compatibility, personal comfort and owner access.</p>
               <a href="https://github.com/lucaandrea/sleepypod-core" className="text-sm text-link" target="_blank" rel="noopener noreferrer">Controller source & AGPL license</a>
             </Card>

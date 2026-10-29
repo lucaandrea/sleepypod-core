@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test'
+import { test, expect } from './ownerTest'
 
 test('bedroom devices retain provenance, reject unauthenticated writes and appear on web and tablet', async ({ page, request, playwright }, testInfo) => {
   const headers = { Authorization: `Bearer ${process.env.SLEEPYPOD_AUTH_TOKEN}` }

@@ -706,3 +706,75 @@ export const alarmOccurrences = sqliteTable('alarm_occurrences', {
   uniqueIndex('idx_alarm_occurrences_identity').on(table.side, table.scheduleId, table.originalAt),
   index('idx_alarm_occurrences_retention').on(table.attemptedAt),
 ])
+
+// Identity is independent of a physical side. Initial membership prepares a
+// private workspace; it does not activate another sleeper or rewrite schedules.
+export const households = sqliteTable('households', {
+  id: text('id').primaryKey(),
+  podId: text('pod_id').notNull().unique(),
+  setupRequestId: text('setup_request_id').notNull().unique(),
+  revision: integer('revision').notNull().default(1),
+  assignmentRevision: integer('assignment_revision').notNull().default(1),
+  mode: text('mode', { enum: ['solo-anywhere', 'assigned'] }).notNull(),
+  sourceSide: text('source_side', { enum: ['left', 'right'] }).notNull(),
+  effectiveAt: integer('effective_at').notNull(),
+})
+
+export const householdAccounts = sqliteTable('household_accounts', {
+  id: text('id').primaryKey(),
+  householdId: text('household_id').notNull().references(() => households.id),
+  sleeperId: text('sleeper_id').notNull().unique(),
+  displayName: text('display_name').notNull(),
+  role: text('role', { enum: ['owner', 'member'] }).notNull(),
+  state: text('state', { enum: ['active', 'revoked'] }).notNull().default('active'),
+  sessionRevision: integer('session_revision').notNull().default(1),
+  createdAt: integer('created_at').notNull(),
+})
+
+export const householdDevices = sqliteTable('household_devices', {
+  id: text('id').primaryKey(),
+  accountId: text('account_id').notNull().references(() => householdAccounts.id),
+  tokenHash: text('token_hash').notNull().unique(),
+  name: text('name').notNull(),
+  createdAt: integer('created_at').notNull(),
+  revokedAt: integer('revoked_at'),
+})
+
+export const householdInvitations = sqliteTable('household_invitations', {
+  id: text('id').primaryKey(),
+  householdId: text('household_id').notNull().references(() => households.id),
+  issuerId: text('issuer_id').notNull().references(() => householdAccounts.id),
+  kind: text('kind', { enum: ['new_person', 'own_device'] }).notNull(),
+  tokenHash: text('token_hash').notNull().unique(),
+  requestHash: text('request_hash').notNull(),
+  targetAccountId: text('target_account_id').references(() => householdAccounts.id),
+  claimedDeviceId: text('claimed_device_id').references(() => householdDevices.id),
+  expiresAt: integer('expires_at').notNull(),
+  revokedAt: integer('revoked_at'),
+})
+
+export const householdPersonalSettings = sqliteTable('household_personal_settings', {
+  accountId: text('account_id').primaryKey().references(() => householdAccounts.id),
+  preferences: text('preferences').notNull(),
+  preferencesRevision: integer('preferences_revision').notNull().default(1),
+  routines: text('routines').notNull(),
+  routinesRevision: integer('routines_revision').notNull().default(1),
+})
+
+export const householdMutationReceipts = sqliteTable('household_mutation_receipts', {
+  requestId: text('request_id').primaryKey(),
+  accountId: text('account_id').notNull().references(() => householdAccounts.id),
+  kind: text('kind').notNull(),
+  requestHash: text('request_hash').notNull(),
+  result: text('result').notNull(),
+  createdAt: integer('created_at').notNull(),
+})
+
+// Persist the latest browser identity independently of response arrival order.
+// Only hashes are retained; this table cannot recreate a browser credential.
+export const householdBrowserScopes = sqliteTable('household_browser_scopes', {
+  keyHash: text('key_hash').primaryKey(),
+  kind: text('kind', { enum: ['owner', 'personal', 'signed_out'] }).notNull(),
+  sessionHash: text('session_hash').notNull(),
+  expiresAt: integer('expires_at').notNull(),
+})

@@ -5,6 +5,7 @@ import path from 'node:path'
 import { Readable } from 'node:stream'
 import Database from 'better-sqlite3'
 import { backupMarkerPath, DB_FILES, type DbKey } from '@/src/lib/dbInspect'
+import { householdBackupRestricted } from '@/src/household/privacy'
 
 // Staging on /persistent, not /tmp: /tmp is a RAM-backed tmpfs on the pod and
 // the biometrics copy alone can be tens of MB.
@@ -32,6 +33,7 @@ async function backupSqlite(dbPath: string, outPath: string): Promise<void> {
 export async function GET(request: Request) {
   const denied = requireAccess(request)
   if (denied) return denied
+  if (householdBackupRestricted(DB_FILES.sleepypod.path)) return Response.json({ error: 'Whole-database downloads are unavailable for personal households. Use an encrypted administrator backup and person-scoped exports.' }, { status: 403, headers: { 'Cache-Control': 'private, no-store' } })
   if (inflight) {
     return Response.json({ error: 'A backup is already in progress, retry shortly' }, { status: 429, headers: { 'Retry-After': '30' } })
   }

@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test'
+import { test, expect } from './ownerTest'
 const headers = () => ({ Authorization: `Bearer ${process.env.SLEEPYPOD_AUTH_TOKEN}` })
 const read = '/api/v1/alarm/next?side=left'
 const change = '/api/v1/alarm/override'

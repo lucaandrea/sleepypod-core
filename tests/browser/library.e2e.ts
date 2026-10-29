@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test'
+import { test, expect } from './ownerTest'
 
 test('library activation reviews day moves and preserves overnight ownership', async ({ page, request, playwright }, testInfo) => {
   const headers = { Authorization: `Bearer ${process.env.SLEEPYPOD_AUTH_TOKEN}` }

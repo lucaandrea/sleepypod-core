@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test'
+import { test, expect } from './ownerTest'
 
 test('MQTT TLS requirement is enforced in the form and authenticated partial updates', async ({ page, request, playwright }, testInfo) => {
   const headers = { Authorization: `Bearer ${process.env.SLEEPYPOD_AUTH_TOKEN}` }

@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test'
+import { test, expect } from './ownerTest'
 
 test('personal models require authentication and separate upload, preview and activation', async ({ page, request, playwright }, testInfo) => {
   const headers = { Authorization: `Bearer ${process.env.SLEEPYPOD_AUTH_TOKEN}` }

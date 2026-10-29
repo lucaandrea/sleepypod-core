@@ -61,6 +61,7 @@ export const capabilitiesSchema = z.object({
     importedHistory: featureSchema,
     morningJournal: featureSchema,
     nextAlarmOverride: featureSchema,
+    householdPreparation: featureSchema.optional(),
   }),
   baseScope: z.literal('whole_bed'),
   controlSemantics: z.object({
@@ -82,6 +83,7 @@ export interface CapabilitySnapshot {
   comfortPreviewRunning?: boolean
   comfortActive?: boolean
   roomContextFresh?: boolean
+  householdPreparationEnabled?: boolean
 }
 
 /** Preserve a valid old timestamp, but never label malformed or future data fresh. */
@@ -139,6 +141,7 @@ export function buildCapabilities(snapshot: CapabilitySnapshot): ControllerCapab
       importedHistory: feature('ready', 'read_only_history_api_check_snapshot_availability'),
       morningJournal: feature('ready', 'local_revision_checked_journal'),
       nextAlarmOverride: feature('ready', 'persisted_single_occurrence_skip_time_restore', true),
+      householdPreparation: feature(snapshot.householdPreparationEnabled ? 'ready' : 'not_ready', snapshot.householdPreparationEnabled ? 'personal_workspace_drafts_only' : 'household_preparation_disabled'),
     },
     baseScope: 'whole_bed',
     controlSemantics: { acknowledgment: 'accepted_not_physically_verified', durableCommandReceipts: true, commandExpiry: true, receiptScope: 'versioned_controls_only', maxLifetimeMs: 60000 },

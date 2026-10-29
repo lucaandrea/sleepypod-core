@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test'
+import { test, expect } from './ownerTest'
 import { roomBroker } from './roomBroker'
 
 test('room mapping is authenticated, versioned, initially disabled and does not invent connected sensors', async ({ page, request, playwright }, testInfo) => {

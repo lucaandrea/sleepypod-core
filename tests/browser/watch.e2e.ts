@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test'
+import { test, expect } from './ownerTest'
 
 test('Watch upload keeps breathing and SDNN separate and deduplicates a repeated export', async ({ page, request, playwright }, testInfo) => {
   const headers = { Authorization: `Bearer ${process.env.SLEEPYPOD_AUTH_TOKEN}` }

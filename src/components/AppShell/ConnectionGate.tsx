@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 
 /** Keep device queries and streaming components unmounted until the owner has connected. */
 export function ConnectionGate({ children }: { children: ReactNode }) {
@@ -8,32 +8,55 @@ export function ConnectionGate({ children }: { children: ReactNode }) {
   const [token, setToken] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const accountGeneration = useRef(0)
+  const personalSessionActive = useRef(false)
   const demo = process.env.NEXT_PUBLIC_DEMO === '1'
 
   useEffect(() => {
     if (demo) return
     let alive = true
     const refresh = async () => {
+      const generation = accountGeneration.current
       try {
         const response = await fetch('/api/auth/session', { cache: 'no-store' })
         if (!response.ok) throw new Error('Controller unavailable')
-        const result = await response.json() as { configured: boolean, authenticated: boolean }
-        if (alive) setState(result.authenticated ? 'connected' : result.configured ? 'locked' : 'unconfigured')
+        const result = await response.json() as { configured: boolean, authenticated: boolean, personalSessionActive?: boolean }
+        if (alive && generation === accountGeneration.current) {
+          personalSessionActive.current = result.personalSessionActive === true
+          setState(result.authenticated ? 'connected' : result.configured ? 'locked' : 'unconfigured')
+        }
       }
       catch {
-        if (alive) {
+        if (alive && generation === accountGeneration.current) {
           setState('locked')
           setError('Could not reach the controller. Check your connection.')
         }
       }
     }
     void refresh()
+    const personalConnectionChanged = () => {
+      accountGeneration.current += 1
+      personalSessionActive.current = true
+      // Unmount private caches and subscriptions immediately when another tab
+      // switches into a personal account; the next focus also rechecks cookies.
+      setToken('')
+      setState('locked')
+      setError('A personal account was opened in this browser. Reconnect explicitly to use owner controls.')
+    }
+    const changedInStorage = (event: StorageEvent) => {
+      if (event.key === 'sleepypod-account-change') personalConnectionChanged()
+    }
+    const channel = typeof BroadcastChannel === 'undefined' ? null : new BroadcastChannel('sleepypod-account')
+    if (channel) channel.onmessage = personalConnectionChanged
+    window.addEventListener('storage', changedInStorage)
     const interval = setInterval(() => refresh(), 30_000)
     window.addEventListener('focus', refresh)
     return () => {
       alive = false
       clearInterval(interval)
       window.removeEventListener('focus', refresh)
+      window.removeEventListener('storage', changedInStorage)
+      channel?.close()
     }
   }, [demo])
 
@@ -41,12 +64,27 @@ export function ConnectionGate({ children }: { children: ReactNode }) {
     event.preventDefault()
     setBusy(true)
     setError('')
+    const generation = accountGeneration.current
     try {
+      const currentResponse = await fetch('/api/auth/session', { cache: 'no-store' })
+      if (!currentResponse.ok) throw new Error('Could not read the current browser account.')
+      const current = await currentResponse.json() as { browserScopeRevision?: string | null }
+      if (generation !== accountGeneration.current) throw new Error('The browser account changed. Reconnect explicitly.')
       const response = await fetch('/api/auth/session', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token }),
+        method: 'POST', headers: { 'Content-Type': 'application/json', ...(current.browserScopeRevision ? { 'X-Sleepypod-Browser-Revision': current.browserScopeRevision } : {}) }, body: JSON.stringify({ token, exitPersonalSession: personalSessionActive.current }),
       })
       if (!response.ok) throw new Error(response.status === 401 ? 'That connection key was not accepted.' : 'Could not connect to the controller.')
+      if (generation !== accountGeneration.current) throw new Error('The browser account changed while connecting. Try again explicitly.')
       setToken('')
+      try {
+        localStorage.setItem('sleepypod-account-change', `${Date.now()}:owner`)
+      }
+      catch { /* Cookie/focus checks still apply when storage is unavailable. */ }
+      if (typeof BroadcastChannel !== 'undefined') {
+        const channel = new BroadcastChannel('sleepypod-account')
+        channel.postMessage('owner-account-changed')
+        channel.close()
+      }
       setState('connected')
     }
     catch (failure) { setError(failure instanceof Error ? failure.message : 'Connection failed.') }
