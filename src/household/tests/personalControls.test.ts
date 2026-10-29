@@ -60,6 +60,49 @@ afterEach(() => {
 })
 
 describe('person-scoped command authority', () => {
+  it.each(['left', 'right'] as const)('does not acknowledge both zones when %s was superseded without a write', async (skippedSide) => {
+    execute.mockImplementation(async (action) => {
+      if ('side' in action && action.side !== skippedSide) beforeControlWrite()
+    })
+    const input = request()
+    expect(await controller.submit(ownerKey, input)).toMatchObject({ state: 'unknown', dispatchCount: 1 })
+    expect(await controller.submit(ownerKey, input)).toMatchObject({ state: 'unknown', replayAllowed: false })
+    expect(execute).toHaveBeenCalledTimes(2)
+  })
+
+  it('reports no dispatch if both zones were superseded without a write', async () => {
+    execute.mockImplementation(async () => {})
+    expect(await controller.submit(ownerKey, request())).toMatchObject({ state: 'not_dispatched', dispatchCount: 0 })
+  })
+
+  it('rechecks browser request authority before a queued write and before returning its private receipt', async () => {
+    let browserCurrent = true
+    const assertRequestCurrent = () => {
+      if (!browserCurrent) throw new HouseholdError('authentication_required', 401, 'Browser changed')
+    }
+    execute.mockImplementationOnce(async () => {
+      browserCurrent = false
+      beforeControlWrite()
+    })
+    const input = request()
+    await expect(controller.submit(ownerKey, input, assertRequestCurrent)).rejects.toThrow('Browser changed')
+    expect(controller.get(ownerKey, input.requestId)).toMatchObject({ state: 'rejected', dispatchCount: 0 })
+    expect(execute).toHaveBeenCalledTimes(1)
+  })
+
+  it('withholds the private response after a browser change even when the earlier write was acknowledged', async () => {
+    let browserCurrent = true
+    const input = request()
+    execute.mockImplementation(async () => {
+      beforeControlWrite()
+      browserCurrent = false
+    })
+    await expect(controller.submit(ownerKey, input, () => {
+      if (!browserCurrent) throw new HouseholdError('authentication_required', 401, 'Browser changed')
+    })).rejects.toThrow('Browser changed')
+    expect(controller.get(ownerKey, input.requestId)).toMatchObject({ state: 'unknown', dispatchCount: 1 })
+  })
+
   it('targets both approved solo zones and isolates its durable receipt from legacy lookup', async () => {
     const input = request()
     const receipt = personalControlReceiptSchema.parse(await controller.submit(ownerKey, input))

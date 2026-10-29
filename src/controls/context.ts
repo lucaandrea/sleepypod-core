@@ -70,6 +70,11 @@ export function assertControlCurrent(): void {
   assertDispatchGuards()
 }
 
+/** Count only writes belonging to this request, never another queued caller. */
+export function getControlDispatchCount(): number {
+  return storage.getStore()?.dispatchCount ?? 0
+}
+
 /** Persist the dispatch barrier before a byte can leave this process. */
 export function beforeControlWrite(): void {
   assertDispatchGuards()

@@ -727,9 +727,10 @@ export const householdAccounts = sqliteTable('household_accounts', {
   displayName: text('display_name').notNull(),
   role: text('role', { enum: ['owner', 'member'] }).notNull(),
   state: text('state', { enum: ['active', 'revoked'] }).notNull().default('active'),
+  assignedSide: text('assigned_side', { enum: ['left', 'right'] }),
   sessionRevision: integer('session_revision').notNull().default(1),
   createdAt: integer('created_at').notNull(),
-})
+}, table => [uniqueIndex('idx_household_assigned_side').on(table.householdId, table.assignedSide)])
 
 export const householdDevices = sqliteTable('household_devices', {
   id: text('id').primaryKey(),

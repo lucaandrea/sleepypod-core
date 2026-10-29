@@ -84,8 +84,10 @@ existing owner capabilities advertise `features.householdPreparation` with reaso
   are excluded from legacy database browsing. Whole-database HTTP downloads are
   disabled when preparation is enabled or household data exists; encrypted
   administrator backups remain a separate operational responsibility.
-- `activateArrangement`, `personalControls`, `personalHistory`, `healthImport` and
-  `cloudAnalysis` remain false. Preferences and drafts are not sent to hardware.
+- `activateArrangement`, `personalHistory`, `healthImport` and `cloudAnalysis`
+  remain false. `personalControls` remains false unless the separately gated
+  [personal runtime](PERSONAL_CONTROL_API_V1.md) is enabled and the current
+  arrangement is consistent. Preferences and drafts are not sent to hardware.
 
 The web preparation document is `/household/index.html`; the standalone interactive
 tutorial is `/guide/marissa.html`. These are static documents outside the owner
@@ -208,38 +210,15 @@ Preparation grants no authority to execute a stale action later.
 
 ## Dated attribution foundation (internal, not activated)
 
-### Personal command boundary (internal, not exposed)
+### Personal command boundary (implemented, disabled by default)
 
-`src/household/controlContract.ts` and `personalControls.ts` define and test the
-next command boundary. They do not provide an HTTP route or grant assignment
-authority. Preparation capabilities remain false. A separate reviewed assignment
-coordinator must supply fresh credential and physical-configuration checks before
-this service can be connected to an application endpoint.
-
-- A request pins Pod, household, sleeper, session revision, assignment revision
-  and configuration revision. It carries no arbitrary side or other-person ID.
-  The authority resolves all permitted zones: both for a confirmed sole sleeper,
-  one for an assigned member. An invitation alone grants no zone.
-- Temperature, power and vibration cancellation are supported by this boundary.
-  Shared base motion, immediate vibration tests and deferred alarm publication
-  remain separate operations. Do not infer their permission from a personal key.
-- Dedicated `household_control_receipts` persist full-sync intent before writes.
-  Legacy owner receipt and database-browser routes cannot read these records.
-  A partially dispatched two-zone request is `unknown`, never fully acknowledged.
-- Recheck credentials and the entire assignment/configuration before each zone
-  and each actual DAC write. Reconnection cannot turn an old request into a
-  command for the new occupant. Thermal operations also check the current request
-  before persisting a hold, pausing adaptation, resuming, or clearing an old hold.
-- Exact duplicate requests return the original person's historical receipt even
-  after a side move. They never resume or replay. Changed payloads with the same
-  ID fail; a different account cannot discover the receipt. Revocation during an
-  asynchronous write prevents returning a private response to that device.
-- Keep one service instance per process. Assignment activation must also revoke
-  old schedules, snoozes and long-lived temperature leases under the existing
-  side locks; a per-request dispatch guard does not provide that coordinator.
-
-The in-memory authority used by tests is explicitly a fixture, not a runtime
-assignment implementation. This gate must not be advertised as released controls.
+The public bed, command and receipt routes now use fresh database authority and
+browser-scope validation. Their frozen contracts, synthetic fixtures, lifecycle
+rules and remaining release gates are in [Personal control API v1](PERSONAL_CONTROL_API_V1.md).
+They remain disabled on the live Pod. The reviewed assignment coordinator,
+personal routine publication and complete legacy/shared privacy boundary are
+still required before activating two-person operation. There is no shipping
+endpoint to assign Marissa or move Luca automatically.
 
 ### Dated observations
 

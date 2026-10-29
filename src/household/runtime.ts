@@ -1,9 +1,13 @@
 import { sqlite } from '@/src/db'
 import { HouseholdStore } from './store'
 import { householdHttp } from './http'
+import { PersonalRuntime } from './personalRuntime'
+import { assertControlCurrent } from '@/src/controls/context'
+import { getTemperatureControllerIfRunning } from '@/src/temperature/instance'
 const shared = globalThis as typeof globalThis & {
   __sleepypodHousehold?: {
     store: HouseholdStore
+    personalRuntime?: PersonalRuntime
     publicAttempts: number
     windowStarted: number
   }
@@ -15,8 +19,30 @@ export async function handleHouseholdRequest(request: Request) {
   if (!preparationEnabled())
     return Response.json({ error: { code: 'not_ready', message: 'Personal household preparation is not enabled on this controller.' } }, { status: 503, headers: { 'Cache-Control': 'private, no-store' } })
   const runtime = shared.__sleepypodHousehold ??= { store: new HouseholdStore(sqlite), publicAttempts: 0, windowStarted: Date.now() }
+  runtime.personalRuntime ??= new PersonalRuntime({ database: sqlite, identities: runtime.store,
+    enabled: () => process.env.SLEEPYPOD_PERSONAL_RUNTIME === '1',
+    observe: async () => {
+      const { getDacMonitorIfRunning } = await import('@/src/hardware/dacMonitor.instance')
+      const monitor = getDacMonitorIfRunning()
+      const cached = monitor?.getFreshStatus(2_000)
+      const cachedAt = monitor?.getLastPollAt()
+      if (cached && cachedAt) return { status: cached, observedAt: cachedAt }
+      const { getSharedHardwareClient } = await import('@/src/hardware/sharedClient')
+      const client = getSharedHardwareClient()
+      const observedAt = Date.now()
+      await client.connect()
+      return { status: await client.getDeviceStatus(), observedAt }
+    },
+    requestedTarget: side => getTemperatureControllerIfRunning()?.status(side).targetTemperature ?? null,
+    execute: async (action) => {
+      const { executeControlAction } = await import('@/src/controls/instance')
+      assertControlCurrent()
+      return executeControlAction(action)
+    },
+  })
   return householdHttp(request, {
     store: runtime.store,
+    personalRuntime: runtime.personalRuntime,
     verifySoloConfiguration: (side) => {
       const row = sqlite.prepare('SELECT bed_mode, unused_zone_mode FROM device_settings LIMIT 1').get() as {
         bed_mode: string

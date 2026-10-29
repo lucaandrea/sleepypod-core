@@ -1,60 +1,16 @@
-import { createHash } from 'node:crypto'
-import { eq, and, inArray } from 'drizzle-orm'
+import type { z } from 'zod'
+import { eq } from 'drizzle-orm'
 import { TRPCError } from '@trpc/server'
-import { z } from 'zod'
-import { db } from '@/src/db'
+import { db, sqlite } from '@/src/db'
 import { bedtimeRoutines, temperatureSchedules, powerSchedules, alarmSchedules } from '@/src/db/schema'
-import { compileBedtimeRoutine, normalizeBedtimeDraft, validateBedtimeWeek, routineChangesSchema, type RoutineSide, type RoutineSnapshot } from '@/src/lib/bedtimeRoutines'
+import { routineChangesSchema, type RoutineSide } from '@/src/lib/bedtimeRoutines'
+import { readBedtimeRoutineState, replaceBedtimeRoutineBatch, routineRowIdsSchema as rowIdsSchema, routineTables as tables, type RoutineStore as Store, type RoutineDelta } from './bedtimeRoutineTransaction'
 
-type Store = Pick<typeof db, 'select' | 'insert' | 'delete'>
-const rowIdsSchema = z.object({ temperature: z.array(z.number().int().positive()), power: z.array(z.number().int().positive()).length(1), alarm: z.array(z.number().int().positive()).max(1) }).strict()
-const tables = { temperature: temperatureSchedules, power: powerSchedules, alarm: alarmSchedules }
 type Kind = keyof typeof tables
-
-function canonical(value: unknown): string {
-  return JSON.stringify(value, (_key, item) => item && typeof item === 'object' && !Array.isArray(item)
-    ? Object.fromEntries(Object.keys(item).sort().map(key => [key, item[key]]))
-    : item)
-}
-
-/** Verify ownership and compiled rows before exposing or replacing a persisted routine. */
-function readSide(store: Store, side: RoutineSide) {
-  const metadata = store.select().from(bedtimeRoutines).where(eq(bedtimeRoutines.side, side)).all()
-  const existing = {
-    temperature: store.select().from(temperatureSchedules).where(eq(temperatureSchedules.side, side)).all(),
-    power: store.select().from(powerSchedules).where(eq(powerSchedules.side, side)).all(),
-    alarm: store.select().from(alarmSchedules).where(eq(alarmSchedules.side, side)).all(),
-  }
-  const claimed = { temperature: new Set<number>(), power: new Set<number>(), alarm: new Set<number>() }
-  const records = metadata.map((entry) => {
-    const draft = normalizeBedtimeDraft(JSON.parse(entry.configuration))
-    const ids = rowIdsSchema.parse(JSON.parse(entry.scheduleIds))
-    const expected = compileBedtimeRoutine(side, { dayOfWeek: entry.dayOfWeek, draft })
-    const actual: Record<Kind, unknown[]> = { temperature: [], power: [], alarm: [] }
-    for (const kind of Object.keys(tables) as Kind[]) {
-      if (ids[kind].length !== expected[kind].length) throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'Routine ownership is incomplete. Restore or review the imported candidate.' })
-      for (const [index, id] of ids[kind].entries()) {
-        const row = existing[kind].find(candidate => candidate.id === id)
-        const wanted = expected[kind][index]
-        const values = row && Object.fromEntries(Object.keys(wanted).map(key => [key, (row as unknown as Record<string, unknown>)[key]]))
-        if (!row || claimed[kind].has(id) || canonical(values) !== canonical(wanted)) {
-          throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'Routine rows changed outside the bedtime editor. Review the controller data before saving.' })
-        }
-        claimed[kind].add(id)
-        actual[kind].push(row)
-      }
-    }
-    const revision = createHash('sha256').update(canonical({ entry, actual })).digest('hex')
-    return { ids, snapshot: { dayOfWeek: entry.dayOfWeek, draft, revision } satisfies RoutineSnapshot }
-  })
-  const hasCalendarRows = (Object.keys(tables) as Kind[]).some(kind => existing[kind].some(row => !claimed[kind].has(row.id)))
-  if (metadata.length && hasCalendarRows) throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'Calendar schedules and bedtime routines are mixed on this side. Review the migration before editing.' })
-  return { records, canCreate: !hasCalendarRows }
-}
 
 export function getBedtimeRoutines(side: RoutineSide) {
   return db.transaction((transaction) => {
-    const state = readSide(transaction, side)
+    const state = readBedtimeRoutineState(transaction, side)
     return { version: 1 as const, side, canCreate: state.canCreate, routines: state.records.map(record => record.snapshot) }
   })
 }
@@ -62,64 +18,13 @@ export function getBedtimeRoutines(side: RoutineSide) {
 /** Compare every original revision before any write; one conflict rolls back the entire save. */
 export async function replaceBedtimeRoutines(input: z.infer<typeof routineChangesSchema>) {
   const parsed = routineChangesSchema.parse(input)
-  const removed = { temperature: [] as number[], power: [] as number[], alarm: [] as number[] }
-  const created = {
-    temperature: [] as (typeof temperatureSchedules.$inferSelect)[],
-    power: [] as (typeof powerSchedules.$inferSelect)[],
-    alarm: [] as (typeof alarmSchedules.$inferSelect)[],
-  }
-  const result = db.transaction((transaction) => {
-    const current = readSide(transaction, parsed.side)
-    if (!current.canCreate) throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'Existing calendar schedules must be migrated before creating bedtime routines.' })
-    for (const change of parsed.changes) {
-      const found = current.records.find(record => record.snapshot.dayOfWeek === change.dayOfWeek)
-      if ((found?.snapshot.revision ?? null) !== change.expectedRevision) {
-        throw new TRPCError({ code: 'CONFLICT', message: `The ${change.dayOfWeek} routine changed. Reload the routines before saving your draft.` })
-      }
-    }
-    const changedDays = new Set(parsed.changes.map(change => change.dayOfWeek))
-    // Older clients omit these fields. Never let an edit or move erase custom
-    // snooze settings they cannot represent; default-only legacy writes still work.
-    const hasCustomSnooze = current.records.some(({ snapshot }) => changedDays.has(snapshot.dayOfWeek)
-      && snapshot.draft.alarm && ((snapshot.draft.alarm.snoozeDuration ?? 300) !== 300 || (snapshot.draft.alarm.snoozeTaper ?? 0) !== 0))
-    const omitsSnooze = parsed.changes.some(({ replacement }) => replacement?.alarm
-      && (replacement.alarm.snoozeDuration === undefined || replacement.alarm.snoozeTaper === undefined))
-    if (hasCustomSnooze && omitsSnooze) throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'This routine has custom snooze settings. Update the client to preserve both snooze fields before editing or moving it.' })
-    const prospective = [
-      ...current.records.filter(record => !changedDays.has(record.snapshot.dayOfWeek)).map(record => record.snapshot),
-      ...parsed.changes.flatMap(change => change.replacement ? [{ dayOfWeek: change.dayOfWeek, draft: change.replacement }] : []),
-    ]
-    try {
-      validateBedtimeWeek(parsed.side, prospective)
-    }
-    catch (error) { throw new TRPCError({ code: 'BAD_REQUEST', message: error instanceof Error ? error.message : 'Invalid bedtime week' }) }
-    for (const change of parsed.changes) {
-      const old = current.records.find(record => record.snapshot.dayOfWeek === change.dayOfWeek)
-      if (old) {
-        for (const kind of Object.keys(tables) as Kind[]) {
-          if (old.ids[kind].length) transaction.delete(tables[kind]).where(inArray(tables[kind].id, old.ids[kind])).run()
-          removed[kind].push(...old.ids[kind])
-        }
-        transaction.delete(bedtimeRoutines).where(and(eq(bedtimeRoutines.side, parsed.side), eq(bedtimeRoutines.dayOfWeek, change.dayOfWeek))).run()
-      }
-      if (!change.replacement) continue
-      const draft = normalizeBedtimeDraft(change.replacement)
-      const rows = compileBedtimeRoutine(parsed.side, { dayOfWeek: change.dayOfWeek, draft })
-      const temperature = rows.temperature.map(row => transaction.insert(temperatureSchedules).values(row).returning().get())
-      const power = rows.power.map(row => transaction.insert(powerSchedules).values(row).returning().get())
-      const alarm = rows.alarm.map(row => transaction.insert(alarmSchedules).values(row).returning().get())
-      transaction.insert(bedtimeRoutines).values({
-        side: parsed.side, dayOfWeek: change.dayOfWeek,
-        configuration: JSON.stringify(draft),
-        scheduleIds: JSON.stringify({ temperature: temperature.map(row => row.id), power: power.map(row => row.id), alarm: alarm.map(row => row.id) }),
-      }).run()
-      created.temperature.push(...temperature)
-      created.power.push(...power)
-      created.alarm.push(...alarm)
-    }
-    return { version: 1 as const, side: parsed.side, canCreate: true, routines: readSide(transaction, parsed.side).records.map(record => record.snapshot) }
-  }, { behavior: 'immediate' })
+  const delta = replaceBedtimeRoutineBatch(sqlite, [parsed])
+  const schedulerApplied = await applyRoutineSchedulerDelta(delta)
+  return { ...delta.snapshots[0], schedulerApplied }
+}
 
+/** Refresh committed rows; a later change cannot revive a removed schedule. */
+export async function applyRoutineSchedulerDelta({ removed, created }: RoutineDelta): Promise<boolean> {
   // Scheduling is acknowledged separately from persistence; no physical action is inferred.
   let schedulerApplied = false
   try {
@@ -141,7 +46,7 @@ export async function replaceBedtimeRoutines(input: z.infer<typeof routineChange
     schedulerApplied = true
   }
   catch (error) { console.error('Bedtime routine scheduler update failed:', error) }
-  return { ...result, schedulerApplied }
+  return schedulerApplied
 }
 
 /** Old calendar writers may not sever a bedtime routine's ownership or create a competing side. */

@@ -7,7 +7,7 @@ import { ControlService } from './service'
 import type { ControlAction } from './contract'
 
 /** Reuse the existing authority, locks, manual pause and hardware safety checks. */
-async function execute(action: ControlAction): Promise<unknown> {
+export async function executeControlAction(action: ControlAction): Promise<unknown> {
   const device = deviceRouter.createCaller({})
   const base = baseRouter.createCaller({})
   switch (action.kind) {
@@ -22,5 +22,5 @@ async function execute(action: ControlAction): Promise<unknown> {
 
 const globals = globalThis as typeof globalThis & { __sp_controlService?: ControlService }
 export function getControlService(): ControlService {
-  return globals.__sp_controlService ??= new ControlService({ store: createControlStore(sqlite), execute, runId: randomUUID() })
+  return globals.__sp_controlService ??= new ControlService({ store: createControlStore(sqlite), execute: executeControlAction, runId: randomUUID() })
 }
