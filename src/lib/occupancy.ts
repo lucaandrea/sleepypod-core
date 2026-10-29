@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto'
 /**
  * Virtual occupancy sensor — single source of truth shared by the HomeKit
  * OccupancySensor accessory and the web-app PresenceCard.
@@ -35,6 +34,7 @@ import { getLatestCapSenseSnapshot } from '@/src/streaming/piezoStream'
 import { RESTLESS_SCORE_MIN } from '@/src/lib/movement'
 import type { Side } from '@/src/hardware/types'
 import { evaluateCapacitance, parseCapacitanceCalibration } from './capacitanceLevel'
+import { capacitanceSourceKey } from './capacitanceIdentity'
 
 const MOVEMENT_WINDOW_MS = 15 * 60_000
 /** capSense2 nominally arrives at ~2 Hz. >30s gap = sensor / stream down. */
@@ -191,14 +191,15 @@ function readLevelSignal(side: Side): LevelSignal {
   // Scalar firmware lacks the independent channels needed by either calibration.
   const values = snapshot[side]
   if (!Array.isArray(values)) return { ...empty, ageMs }
-  const calibration = readCapSenseCalibration(side, snapshot.type)
-  if (!calibration) return { ...empty, ageMs }
+  const profile = readCapSenseCalibration(side, snapshot.type)
+  if (!profile) return { ...empty, ageMs }
+  const { calibration, sourceKey } = profile
   const result = evaluateCapacitance(values, calibration, snapshot[`${side}Status`])
   return { ...result, ageMs, ...(result.deviation === null
     ? {}
     : {
         sampleAt: snapshot.ts * 1000,
-        sourceKey: createHash('sha256').update(JSON.stringify([side, snapshot.type, calibration])).digest('hex'),
+        ...(sourceKey === null ? {} : { sourceKey }),
       }) }
 }
 
@@ -215,7 +216,8 @@ function readCapSenseCalibration(side: Side, format: 'capSense' | 'capSense2') {
       .limit(1)
       .all()
     if (!row) return null
-    return parseCapacitanceCalibration(row.parameters, format)
+    const calibration = parseCapacitanceCalibration(row.parameters, format)
+    return calibration ? { calibration, sourceKey: capacitanceSourceKey(side, row.parameters, calibration) } : null
   }
   catch {
     return null

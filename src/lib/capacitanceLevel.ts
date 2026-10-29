@@ -1,7 +1,7 @@
 import type { LevelSignal } from './occupancy'
 
 type CapacitanceFormat = 'capSense' | 'capSense2'
-interface Calibration {
+export interface CapacitanceCalibration {
   format: CapacitanceFormat
   means: number[]
   threshold: number
@@ -15,7 +15,7 @@ const asRecord = (value: unknown): Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
 
 /** Match Python's raw-unit calibration; old untagged z-score thresholds are not interchangeable. */
-export function parseCapacitanceCalibration(value: unknown, format: CapacitanceFormat): Calibration | null {
+export function parseCapacitanceCalibration(value: unknown, format: CapacitanceFormat): CapacitanceCalibration | null {
   const profile = asRecord(value)
   if (profile.format !== format && !(format === 'capSense' && profile.format === undefined)) return null
   const names = format === 'capSense' ? ['out', 'cen', 'in'] : ['A', 'B', 'C']
@@ -31,7 +31,7 @@ export function parseCapacitanceCalibration(value: unknown, format: CapacitanceF
 }
 
 /** Evaluate a complete live frame without inventing anatomy for legacy out/centre/in electrodes. */
-export function evaluateCapacitance(values: number[], calibration: Calibration, status?: string | null): Omit<LevelSignal, 'ageMs'> {
+export function evaluateCapacitance(values: number[], calibration: CapacitanceCalibration, status?: string | null): Omit<LevelSignal, 'ageMs'> {
   const empty = { active: false, deviation: null, threshold: calibration.threshold, zoneDeviations: null, zones: null }
   if (status != null && status !== 'good') return empty
   const legacy = calibration.format === 'capSense'
