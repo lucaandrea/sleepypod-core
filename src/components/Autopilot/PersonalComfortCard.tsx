@@ -100,6 +100,15 @@ export function PersonalComfortDetails({ data, pending, onConfigure, onMode, onF
         )}
         {data.runtime === 'stopped' && <p className="mt-2 text-fg-2">The Preview service is stopped.</p>}
       </div>
+      {data.learning && (
+        <div className="rounded-ctl border border-line p-4 text-sm">
+          <h3 className="font-medium">Learning from similar nights</h3>
+          <p className="mt-2 text-fg-2">{data.learning.reason}</p>
+          <p className="mt-2">{`${data.learning.nights} matched nights · ${data.learning.requiredNights} minimum · ${data.learning.validationNights} later nights held out for validation`}</p>
+          {data.learning.modelErrorF !== null && <p className="mt-2 text-xs text-fg-2">{`Comfort-label error: model ${data.learning.modelErrorF.toFixed(2)}°F · simpler baseline ${data.learning.baselineErrorF?.toFixed(2)}°F`}</p>}
+          {data.learning.suggestedOffsetF !== null && <p className="mt-2">{`Research suggestion: ${data.learning.suggestedOffsetF > 0 ? '+' : ''}${data.learning.suggestedOffsetF}°F. Not applied to the bed.`}</p>}
+        </div>
+      )}
       {state && (
         <>
           <div className="flex flex-wrap items-center gap-3">

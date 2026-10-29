@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { comfortApplicationSchema } from './application-contract'
 import { comfortSignalsSchema } from './signals'
 import { bedroomGuidanceSchema } from '@/src/bedroom/contract'
+import { thermalContextSchema, thermalLearningSchema } from './thermal-learning'
 
 export const COMFORT_ACTIVATION_REASON = 'Hardware qualification and reviewed Preview nights are pending.' as const
 
@@ -63,6 +64,7 @@ export const comfortEventSchema = z.object({
   bedroom: bedroomGuidanceSchema.nullable().optional(),
   timing: bedtimeStatusSchema.nullable().optional(),
   preview: previewEvidenceSchema.optional(),
+  thermalContext: thermalContextSchema.nullable().optional(),
 })
 export type ComfortEvent = z.infer<typeof comfortEventSchema>
 
@@ -88,5 +90,6 @@ export const comfortStatusSchema = z.object({
   signals: comfortSignalsSchema.nullable().optional(),
   bedroom: bedroomGuidanceSchema.nullable().optional(),
   timing: bedtimeStatusSchema.nullable().optional(),
+  learning: thermalLearningSchema.nullable().optional(),
 })
 export type ComfortStatus = z.infer<typeof comfortStatusSchema>

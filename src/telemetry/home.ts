@@ -37,8 +37,19 @@ export function readHomeTelemetry(now = Date.now()): Record<string, TelemetrySam
     readings[`state/${side}/climate`] = device({ currentTemperature: finite(reported?.currentTemperature),
       targetTemperature: finite(reported?.targetTemperature), isPowered: powered,
       mode: powered === null ? null : powered ? 'heat' : 'off', stateKind: 'reported' })
-    readings[`state/biometrics/${side}`] = readHomeVitals(biometricsDb.$client, side, now)
-    readings[`state/occupancy/${side}`] = readHomeOccupancy(side, now)
+    const occupancy = readHomeOccupancy(side, now)
+    const vitals = readHomeVitals(biometricsDb.$client, side, now)
+    // Fresh signal estimates alone are not evidence that a person is in bed.
+    const occupied = occupancy.available && occupancy.occupied === true && occupancy.classification === 'person'
+    readings[`state/biometrics/${side}`] = occupied
+      ? {
+          ...vitals,
+          expiresAt: vitals.expiresAt !== null && occupancy.expiresAt !== null
+            ? Math.min(vitals.expiresAt, occupancy.expiresAt)
+            : vitals.expiresAt,
+        }
+      : { ...vitals, available: false, reason: 'unqualified', heartRate: null, breathingRate: null, hrv: null }
+    readings[`state/occupancy/${side}`] = occupancy
     const pump = homeSensors.pump(side, now)
     readings[`pump/${side}/rpm`] = { ...pump, temperature: undefined }
     readings[`pump/${side}/loop_temp_c`] = { ...pump, rpm: undefined }

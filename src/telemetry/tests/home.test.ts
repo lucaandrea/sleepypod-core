@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 const sources = vi.hoisted(() => ({ fresh: vi.fn(), poll: vi.fn(), occupancy: vi.fn(), cap: vi.fn() }))
 vi.mock('@/src/db', () => ({ biometricsDb: { $client: {} } }))
-vi.mock('../vitals', () => ({ readHomeVitals: () => ({ available: false, ts: null }) }))
+vi.mock('../vitals', () => ({ readHomeVitals: () => ({ available: true, ts: 1700000000000, expiresAt: 1700000300000, heartRate: 60, breathingRate: 15, hrv: 40 }) }))
 vi.mock('@/src/hardware/dacMonitor.instance', () => ({ getDacMonitorIfRunning: () => ({ getFreshStatus: sources.fresh, getLastPollAt: sources.poll }) }))
 vi.mock('@/src/hardware/pumpStallNotification', () => ({ getPumpStallNotice: () => null }))
 vi.mock('@/src/lib/occupancy', () => ({ getOccupancy: sources.occupancy }))
@@ -40,4 +40,18 @@ it('requires both calibrated occupancy and fresh source/receipt clocks before ex
     throw new Error('missing calibration')
   })
   expect(readHomeOccupancy('left', now).available).toBe(false)
+})
+it('withholds apparent vitals from an empty or unqualified bed and expires them with occupancy', () => {
+  sources.cap.mockReturnValue({ ts: now / 1000, receivedAtMs: now })
+  for (const occupancy of [
+    { available: false, occupied: true, classification: 'person' },
+    { available: true, occupied: false, classification: 'none' },
+    { available: true, occupied: true, classification: 'object' },
+  ]) {
+    sources.occupancy.mockReturnValue(occupancy)
+    expect(readHomeTelemetry(now)['state/biometrics/right']).toMatchObject({ available: false, heartRate: null, breathingRate: null, hrv: null })
+  }
+  sources.occupancy.mockReturnValue({ available: true, occupied: true, classification: 'person' })
+  expect(readHomeTelemetry(now)['state/biometrics/right']).toMatchObject({ available: true, heartRate: 60, expiresAt: now + 30000 })
+  expect(readHomeTelemetry(now + 30000)['state/biometrics/right'].available).toBe(false)
 })

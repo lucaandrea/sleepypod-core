@@ -325,6 +325,18 @@ describe('mqtt.getStatus', () => {
 })
 
 describe('mqtt.testConnection', () => {
+  it('uses the stored password only for the exact saved endpoint and account', async () => {
+    bridgeMock.resolveConfig.mockResolvedValue({ config: { url: 'mqtts://broker:8883', username: 'owner', password: 'synthetic-secret', tlsEnabled: true } })
+    bridgeMock.testConnection.mockResolvedValue({ ok: true })
+    const input = { url: 'mqtts://broker:8883', username: 'owner', tlsEnabled: true, useSavedPassword: true }
+    await expect(caller.testConnection(input)).resolves.toEqual({ ok: true })
+    expect(bridgeMock.testConnection).toHaveBeenCalledWith({ url: input.url, username: 'owner', password: 'synthetic-secret', tlsEnabled: true })
+    for (const changed of [{ url: 'mqtts://other:8883' }, { username: 'other' }, { tlsEnabled: false }, { password: 'different' }]) {
+      await expect(caller.testConnection({ ...input, ...changed })).rejects.toMatchObject({ code: 'BAD_REQUEST' })
+    }
+    expect(bridgeMock.testConnection).toHaveBeenCalledTimes(1)
+  })
+
   it('passes input through to bridge.testConnection and returns its result', async () => {
     bridgeMock.testConnection.mockResolvedValue({ ok: true })
 

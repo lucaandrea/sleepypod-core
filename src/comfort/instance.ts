@@ -25,6 +25,7 @@ import { ComfortRuntime } from './runtime'
 import { createComfortStore } from './store'
 import { ComfortSignalReader } from './signal-reader'
 import { getBedroom } from '@/src/bedroom/instance'
+import { thermalContextSchema } from './thermal-learning'
 
 const globals = globalThis as typeof globalThis & { __sp_comfortRuntime?: ComfortRuntime, __sp_comfortSignals?: ComfortSignalReader, __sp_comfortOwner?: ReturnType<typeof createComfortOwner>, __sp_comfortApplication?: ComfortApplicationAdapter }
 function signalsReader() {
@@ -76,6 +77,10 @@ export function readComfortContext(side: Side, state: ComfortState, now: number,
   const affectedRoutine = alarmChange && window && [alarmChange.originalAt, alarmChange.at].some(at => at !== null && at >= window.start && at <= window.end)
   const alarmOverride = Boolean(affectedRoutine) || (alarmContext !== null && effectiveAlarmTargets(alarmContext, now).length > 0)
   const targetF = typeof reported?.targetTemperature === 'number' && Number.isFinite(reported.targetTemperature) ? reported.targetTemperature : null
+  const room = state.config.roomAware ? getBedroom().status().aggregates : []
+  const thermal = thermalContextSchema.safeParse({ targetF, waterF: reported?.currentTemperature,
+    roomF: room.find(metric => metric.metric === 'temperature' && metric.status === 'ready')?.value,
+    humidity: room.find(metric => metric.metric === 'humidity' && metric.status === 'ready')?.value })
   return {
     timezone,
     context: {
@@ -107,6 +112,7 @@ export function readComfortContext(side: Side, state: ComfortState, now: number,
         || (state.lastSegment === window?.segment && state.lastTargetF === targetF && state.lastAppliedAt > 0 && state.lastAppliedAt <= now)),
       signals: state.config.sensorAware ? signalsReader().read(side, timezone, now) : undefined,
       bedroom: state.config.roomAware ? getBedroom().guidance() : undefined,
+      thermalContext: thermal.success ? thermal.data : null,
     },
   }
 }

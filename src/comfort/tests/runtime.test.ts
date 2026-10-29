@@ -37,6 +37,21 @@ function harness() {
 }
 
 describe('production personal comfort Preview', () => {
+  it('samples research context at most every five minutes without changing the control proposal', async () => {
+    const { input, store, runtime } = harness()
+    input.thermalContext = { targetF: 75, waterF: 75, roomF: 74, humidity: 50 }
+    await runtime.evaluate('left')
+    const firstDecision = runtime.status('left').decision?.proposedF
+    for (const elapsed of [60000, 120000, 300000]) {
+      input.now += elapsed
+      input.device.observedAt = input.now
+      input.presence.observedAt = input.now
+      await runtime.evaluate('left')
+    }
+    expect(store.history('left').filter(event => event.thermalContext)).toHaveLength(2)
+    expect(runtime.status('left').decision?.proposedF).toBe(firstDecision)
+  })
+
   it('switches only mode after concurrent settings writes and preserves learning and manual pause', async () => {
     const { runtime, store, pending, input } = harness()
     pending.left = input.now
