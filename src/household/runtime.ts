@@ -2,12 +2,15 @@ import { sqlite } from '@/src/db'
 import { HouseholdStore } from './store'
 import { householdHttp } from './http'
 import { PersonalRuntime } from './personalRuntime'
+import { PersonalRoutineService } from './personalRoutines'
 import { assertControlCurrent } from '@/src/controls/context'
 import { getTemperatureControllerIfRunning } from '@/src/temperature/instance'
+import { withSideLock } from '@/src/hardware/sideLock'
 const shared = globalThis as typeof globalThis & {
   __sleepypodHousehold?: {
     store: HouseholdStore
     personalRuntime?: PersonalRuntime
+    personalRoutines?: PersonalRoutineService
     publicAttempts: number
     windowStarted: number
   }
@@ -40,9 +43,20 @@ export async function handleHouseholdRequest(request: Request) {
       return executeControlAction(action)
     },
   })
+  runtime.personalRoutines ??= new PersonalRoutineService({ database: sqlite, identities: runtime.store,
+    authority: runtime.personalRuntime.authority, enabled: () => process.env.SLEEPYPOD_PERSONAL_ROUTINES === '1',
+    withZones: (zones, operation) => zones.length === 2
+      ? withSideLock('left', () => withSideLock('right', operation))
+      : withSideLock(zones[0], operation),
+    refreshScheduler: async (delta) => {
+      const { applyRoutineSchedulerDelta } = await import('@/src/server/bedtimeRoutineStore')
+      return applyRoutineSchedulerDelta(delta)
+    },
+  })
   return householdHttp(request, {
     store: runtime.store,
     personalRuntime: runtime.personalRuntime,
+    personalRoutines: runtime.personalRoutines,
     verifySoloConfiguration: (side) => {
       const row = sqlite.prepare('SELECT bed_mode, unused_zone_mode FROM device_settings LIMIT 1').get() as {
         bed_mode: string

@@ -88,6 +88,9 @@ existing owner capabilities advertise `features.householdPreparation` with reaso
   remain false. `personalControls` remains false unless the separately gated
   [personal runtime](PERSONAL_CONTROL_API_V1.md) is enabled and the current
   arrangement is consistent. Preferences and drafts are not sent to hardware.
+- A separate optional `personalRoutinePublication` capability enables reviewed
+  publication through [the personal routine API](PERSONAL_ROUTINE_API_V1.md).
+  It defaults off and does not change the existing draft-save semantics.
 
 The web preparation document is `/household/index.html`; the standalone interactive
 tutorial is `/guide/marissa.html`. These are static documents outside the owner

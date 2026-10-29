@@ -128,6 +128,18 @@ test('real personal API keeps two browser accounts separate and routine drafts i
     expect(controlResponse.status()).toBe(409)
     expect(await controlResponse.json()).toMatchObject({ error: { code: 'not_ready' } })
     expect((await request.get(`/api/v1/me/controls/${requestId}`, { headers: memberHeaders })).status()).toBe(404)
+    const reviewResponse = await request.get('/api/v1/me/routines/review', { headers: memberHeaders })
+    expect(reviewResponse.status()).toBe(409)
+    expect(await reviewResponse.json()).toMatchObject({ error: { code: 'not_ready' } })
+    const publicationResponse = await request.post('/api/v1/me/routines/publish', { headers: memberHeaders, data: {
+      version: 1, requestId, scope: personalBed.scope, issuedAt: now, expiresAt: now + 30_000,
+      reviewRevision: 'a'.repeat(64), confirmReplaceLiveWeek: true, acknowledgeCurrentTargetEffect: true,
+    } })
+    expect(publicationResponse.status()).toBe(409)
+    expect(await publicationResponse.json()).toMatchObject({ error: { code: 'not_ready' } })
+    expect((await request.get(`/api/v1/me/routines/publications/${requestId}`, { headers: memberHeaders })).status()).toBe(404)
+    expect(await (await request.get('/api/v1/household/session', { headers: memberHeaders })).json())
+      .toMatchObject({ capabilities: { personalRoutinePublication: false } })
     for (const path of ['/api/settings', '/api/biometrics/sleep?side=left', '/api/trpc/settings.get', '/api/db-backup', '/api/v1/controls']) expect((await request.get(path, { headers: memberHeaders })).status()).toBe(401)
     expect((await request.get('/api/system/databases/rows?db=sleepypod&table=household_personal_settings', { headers: ownerHeaders })).status()).toBe(403)
     expect((await request.get('/api/db-backup', { headers: ownerHeaders })).status()).toBe(403)

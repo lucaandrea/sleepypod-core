@@ -124,8 +124,8 @@ WebSocket stream. Use a dedicated personal transport/view and the extracted pure
 temperature presentation. Refresh session plus bed scope before a new command;
 return explicit reconnection/review UI on 401/403/409. Hide controls while capability
 is false, preserve unknown outcomes visibly, and keep Stop accessible when current
-authority allows it. Weekly schedule drafts still say **draft only** until the
-separate publication contract is implemented.
+authority allows it. Weekly schedule drafts still say **draft only**. Publishing
+them requires the separately gated [routine publication contract](PERSONAL_ROUTINE_API_V1.md).
 
 ## Atomic routine storage prerequisite
 

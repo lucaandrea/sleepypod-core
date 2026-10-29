@@ -17,6 +17,7 @@ const env = {
   SLEEPYPOD_AUTH_TOKEN: randomBytes(32).toString('hex'),
   SLEEPYPOD_HOUSEHOLD_PREPARATION: '1',
   SLEEPYPOD_PERSONAL_RUNTIME: '0',
+  SLEEPYPOD_PERSONAL_ROUTINES: '0',
 }
 try {
   for (const args of [
