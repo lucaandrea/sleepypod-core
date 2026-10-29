@@ -344,6 +344,13 @@
       "when": 1793312060095,
       "tag": "0048_flat_zarda",
       "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "6",
+      "when": 1793313343959,
+      "tag": "0049_nosy_living_lightning",
+      "breakpoints": true
     }
   ]
 }

@@ -822,3 +822,20 @@ export const householdPersonRecords = sqliteTable('household_person_records', {
   uniqueIndex('idx_household_source_record').on(table.datasetId, table.sourceKind, table.sourceRecordKey),
   index('idx_household_person_history').on(table.householdId, table.sleeperId, table.startsAt),
 ])
+
+// Personal command receipts never enter the legacy owner-visible control table.
+export const householdControlReceipts = sqliteTable('household_control_receipts', {
+  requestId: text('request_id').primaryKey(),
+  accountId: text('account_id').notNull().references(() => householdAccounts.id),
+  personalRequest: text('personal_request').notNull(),
+  resolvedZones: text('resolved_zones').notNull(),
+  fingerprint: text('fingerprint').notNull(),
+  request: text('request').notNull(),
+  state: text('state', { enum: ['executing', 'acknowledged', 'not_dispatched', 'rejected', 'expired', 'unknown'] }).notNull(),
+  reason: text('reason'),
+  receivedAt: integer('received_at').notNull(),
+  finishedAt: integer('finished_at'),
+  dispatchCount: integer('dispatch_count').notNull().default(0),
+  lastDispatchAt: integer('last_dispatch_at'),
+  runId: text('run_id').notNull(),
+}, table => [index('idx_household_control_account').on(table.accountId, table.receivedAt)])

@@ -1,5 +1,5 @@
 import { MAX_TEMP, MIN_TEMP, type Side } from '@/src/hardware/types'
-import { ControlGuardError, withinDispatchGuard } from '@/src/controls/context'
+import { assertControlCurrent, ControlGuardError, withinDispatchGuard } from '@/src/controls/context'
 import type { RecordTemperatureApplication, TemperatureApplicationInput, TemperatureApplicationReceipt } from './applications'
 
 export class TemperatureBlockedError extends Error {
@@ -245,6 +245,7 @@ export class TemperatureController {
     if (this.deps.isBlocked(side)) throw new TemperatureBlockedError()
     // Conditional manual surfaces recheck their evidence after a reconnect, before any hold or hardware write.
     validateBeforeApply?.()
+    assertControlCurrent()
     this.deps.onManualControl?.(side)
     const now = this.deps.now()
     const previous = this.deps.readHold(side)
@@ -275,6 +276,7 @@ export class TemperatureController {
 
   async resume(side: Side): Promise<TemperatureControlStatus> {
     return this.deps.withSideLock(side, async () => {
+      assertControlCurrent()
       this.deps.onManualControl?.(side)
       this.deps.writeHold(side, null)
       return this.reconcileLocked(side)
@@ -283,6 +285,7 @@ export class TemperatureController {
 
   /** Explicit shutdown ends the hold; it must never reconcile an energizing target. */
   clearHoldLocked(side: Side): void {
+    assertControlCurrent()
     this.deps.writeHold(side, null)
     this.invalidate(side)
   }
@@ -292,6 +295,7 @@ export class TemperatureController {
     await this.deps.connect()
     if (this.deps.isBlocked(side)) throw new TemperatureBlockedError()
     if (!isCurrent()) return this.status(side)
+    assertControlCurrent()
     if (manual) this.deps.onManualControl?.(side)
     const selected = this.select(side, this.deps.now())
     const temperature = selected?.temperature ?? fallback
@@ -325,6 +329,7 @@ export class TemperatureController {
   }
 
   async powerOffLocked(side: Side, manual = false): Promise<void> {
+    assertControlCurrent()
     if (manual) this.deps.onManualControl?.(side)
     this.poweredOff[side] = true
     this.invalidate(side)
