@@ -1,6 +1,6 @@
 {
   "id": "sleepypod-biometric-bundle",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "schemaVersion": 1,
   "canonicalization": "finite-binary64-json-v1",
   "sampleRateHz": 500,
@@ -605,7 +605,7 @@
     },
     "sleep_stages": {
       "algorithmId": "retrospective-stage-rules-v1",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "runtime": "node",
       "requiredInputs": [
         "vitals",
@@ -626,7 +626,7 @@
   "sourceHashes": {
     "modules/common/biometrics/signal.py": "fff73469815673c8daebba9e2c9e7bcf97708939ad7a5639a52f0a53c9d75c18",
     "modules/piezo-processor/main.py": "0447dfaf0956f5dfd72aeb95f10e5b02654c81ec4a91a826f75935a04d154635",
-    "src/lib/sleep-stages.ts": "b1800e49ce8525d314333da6a29a63131a002d160bb294fa97b24df6e655e228",
+    "src/lib/sleep-stages.ts": "421a85f6c039407bf300f9b92080c8958cb7f1733e7b781c1a1318b6f5352398",
     "modules/piezo-processor/runtime_adapter.py": "f280dabdc76959208af9ffb3caf34167a4a784fba08d00e41b59e3c535c05b6f",
     "modules/common/biometrics/runtime.py": "dbe327ce6e6ae315cad83439903e4c5d6a5c594468086739504caa8ed028a944",
     "modules/common/biometrics/gates.py": "c46285ff1cdf95bd4184823fabd6ceb66b005f7c410ee87880de4e563edd6e7c",
@@ -635,7 +635,8 @@
     "modules/common/biometrics/frames.py": "99427d69cf63613c96e45f2f280b53a6e7db18997a28e579cd5e412684db259f",
     "modules/common/biometrics/replay.py": "29ec711d935e76e7118da7e0b417c1d8d5273b12832a11acc13ae37e4d52e95c",
     "modules/common/biometrics/live_input.py": "bc0a08648e56bad782dc0d280e4a70e757b5edd665d0745482bb79a5ecabbcbf",
-    "modules/common/biometrics/mechanical.py": "9b893fdae76f7ca57b82fbdc3ca13d75e58b71606e35c7c3368300e73ed8b62c"
+    "modules/common/biometrics/mechanical.py": "9b893fdae76f7ca57b82fbdc3ca13d75e58b71606e35c7c3368300e73ed8b62c",
+    "src/lib/stage-coverage.ts": "14c9cb92801f9fd10f9f094f9919ee5aece570b56a2b3fd1e3b52ce299c8e0c4"
   },
   "dependencyHashes": {
     "modules/piezo-processor/uv.lock": "ceb7356c660093dc79c3116884caa1c57f1ebaf3e544bd490476a9862e601c35",

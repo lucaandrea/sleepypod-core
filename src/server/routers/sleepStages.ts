@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { stagesWithinWindow } from '@/src/lib/stage-coverage'
 import { activateStageModel, getLibraryStageModel, getStoredStageModel, listStageModels, selectStageModel, setStageModel, uploadStageModel, validateModel } from '@/src/biometrics/stage-model-store'
 import { classifyWithStageModel, stageModelBlocks, stageModelSchema, type StageModel } from '@/src/lib/personal-stage-model'
 import { TRPCError } from '@trpc/server'
@@ -161,7 +162,7 @@ const changeSchema = z.object({
   agreementAfter: z.number().nullable(),
 })
 
-type LoadedNight = NightInputs & { record: typeof sleepRecords.$inferSelect }
+type LoadedNight = NightInputs & { window: { start: Date, end: Date }, record: typeof sleepRecords.$inferSelect }
 
 async function loadNights(side: Side, sleepRecordId: number | undefined, nights: number): Promise<LoadedNight[]> {
   const records = await biometricsDb
@@ -182,6 +183,7 @@ async function loadNights(side: Side, sleepRecordId: number | undefined, nights:
 
   return Promise.all(records.map(async record => ({
     record,
+    window: { start: record.enteredBedAt, end: record.leftBedAt },
     ...await loadStageInputs(side, record.enteredBedAt, record.leftBedAt),
     reference: await loadReference(side, record.enteredBedAt, record.leftBedAt),
   })))
@@ -449,8 +451,8 @@ export const sleepStagesRouter = router({
         const ruleset = (await loadStageClassifier(input.side)).ruleset
         const staged = loaded.map(night => ({
           night,
-          epochs: classifyWithStageModel(model, night.record.enteredBedAt, night.record.leftBedAt, night.vitalsData, night.movementData, ruleset),
-          rules: classifySleepStages(night.vitalsData, night.movementData, night.calibrationQuality, ruleset),
+          epochs: stagesWithinWindow(classifyWithStageModel(model, night.record.enteredBedAt, night.record.leftBedAt, night.vitalsData, night.movementData, ruleset), night.window),
+          rules: stagesWithinWindow(classifySleepStages(night.vitalsData, night.movementData, night.calibrationQuality, ruleset), night.window),
         }))
         const allReference = staged.flatMap(s => s.night.reference)
         return {
