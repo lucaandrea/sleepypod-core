@@ -122,6 +122,28 @@ describe('getOccupancy', () => {
     expect(r.available).toBe(true)
   })
 
+  it('updates live deviation without resetting a bounded adaptive calibration identity', () => {
+    const profile = { ...BASELINE_CAL, source: 'adaptive', qualification_epoch: {
+      version: 1, id: '0123456789abcdef0123456789abcdef', format: 'capSense2',
+      means: [14.45, 13.65, 19.3], threshold: 6, referenceMean: 1.157,
+    } }
+    calRows = [{ parameters: profile }]
+    snapshot = makeFrame('left', [18.45, 18.45, 17.65, 17.65, 23.3, 23.3, 1.157, 1.157])
+    const before = getOccupancy('left')
+    expect(before.classification).toBe('person')
+    const updated = structuredClone(profile)
+    updated.channels.A.mean += 0.25
+    calRows = [{ parameters: updated }]
+    const after = getOccupancy('left')
+    expect(after.level.sourceKey).toBe(before.level.sourceKey)
+    if (before.level.deviation === null) throw new Error('Expected a measured deviation')
+    expect(after.level.deviation).toBeCloseTo(before.level.deviation - 0.25)
+    expect(after.classification).toBe('person')
+    updated.channels.A.mean += 2
+    expect(getOccupancy('left').available).toBe(true)
+    expect(getOccupancy('left').level.sourceKey).toBeUndefined()
+  })
+
   it('returns occupied=true via the movement signal alone', () => {
     movementRows = [{ peak: 350 }]
     snapshot = null

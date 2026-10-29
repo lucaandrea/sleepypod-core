@@ -19,6 +19,7 @@ import maintenance_broker
 import maintenance_install
 import maintenance_plan
 import service_plan
+import stage_sensors
 
 FORMAT = 'sleepypod-upgrade/1'
 HELPERS = (maintenance_plan.SOCKET, maintenance_plan.SERVICE)
@@ -98,9 +99,11 @@ def context(old_directory, new_directory, old_helpers, new_helpers):
     new = service_plan.read_plan(new_directory)
     if old['config']['release'] == new['config']['release']:
         raise ValueError('Select a different staged release')
-    if {key: value for key, value in old['config'].items() if key != 'release'} != {
-            key: value for key, value in new['config'].items() if key != 'release'}:
-        raise ValueError('This updater changes only the release; data, credentials and sensors must remain fixed')
+    if {key: value for key, value in old['config'].items() if key not in ('release', 'modules')} != {
+            key: value for key, value in new['config'].items() if key not in ('release', 'modules')}:
+        raise ValueError('This updater changes only the release and verified sensor source; data and credentials must remain fixed')
+    if old['config'].get('modules') != new['config'].get('modules'):
+        stage_sensors.verify(Path(old['config']['modules']), Path(new['config']['modules']), Path(new['config']['release']))
     helpers = [maintenance_plan.read_plan(directory) for directory in (old_helpers, new_helpers)]
     for manifest, directory, plan in zip(helpers, (old_directory, new_directory), (old, new)):
         if manifest['controllerPlan'] != str(directory) or manifest['release'] != plan['config']['release']:

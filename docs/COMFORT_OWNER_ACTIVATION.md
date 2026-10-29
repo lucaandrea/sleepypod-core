@@ -43,6 +43,22 @@ identifiers and credentials are not exposed. Nonproduction hosts and missing
 hardware identities cannot qualify. Existing Preview reports remain readable;
 reports lacking hardware provenance cannot qualify activation.
 
+Adaptive capacitance profiles publish a persisted `qualification_epoch`. Ordinary
+15-minute baseline updates retain that epoch while the sum of absolute channel-mean
+changes from its fixed anchor stays within one quarter of the entry threshold.
+The anchor never follows each small update, so many small changes cannot evade the
+cumulative limit. Live occupancy still uses the latest means; this does not freeze
+the sensor baseline or treat an old observation as current.
+
+The quarter-threshold limit bounds the change in summed deviation; it is an
+engineering validation boundary, not a demonstrated accuracy margin. Manual
+recalibration, baseline reseeding, changed thresholds/reference compensation or
+excessive drift starts a new epoch. Malformed or out-of-budget epoch metadata
+withholds the qualification identity. Normal state/profile restoration retains a
+valid epoch across process restarts. Older producers without metadata keep strict
+parameter hashing until their first epoch publication. Existing qualifications and
+Preview records are never relabeled as belonging to a new epoch or build.
+
 ## Seven nights and explicit consent
 
 Each night must already have an explicit owner review of its exact retained source

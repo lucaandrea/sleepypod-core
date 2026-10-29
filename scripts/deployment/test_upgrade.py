@@ -163,6 +163,25 @@ class UpgradeTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'only the release'): self.apply()
         self.assertEqual(self.calls, [])
 
+    def test_sensor_source_update_is_verified_and_rolls_back_with_units(self):
+        self.plans[0]['config']['modules'] = str(self.root/'old-sensors')
+        self.plans[1]['config']['modules'] = str(self.root/'new-sensors')
+        self.failed_start = True
+        with patch.object(upgrade.stage_sensors, 'verify') as verify:
+            with self.assertRaisesRegex(RuntimeError, 'candidate failed'):
+                self.apply()
+        verify.assert_called_once_with(self.root/'old-sensors', self.root/'new-sensors', self.root/'release-1')
+        self.assert_old_units()
+        self.assertEqual(json.loads((self.operation/'upgrade.json').read_text())['phase'], 'rolled_back')
+
+    def test_unverified_sensor_source_rejects_before_stopping_anything(self):
+        self.plans[0]['config']['modules'] = str(self.root/'old-sensors')
+        self.plans[1]['config']['modules'] = str(self.root/'new-sensors')
+        with patch.object(upgrade.stage_sensors, 'verify', side_effect=ValueError('sensor mismatch')):
+            with self.assertRaisesRegex(ValueError, 'sensor mismatch'):
+                self.apply()
+        self.assertEqual(self.calls, [])
+
     def test_existing_candidate_record_rejected(self):
         (self.new/'activation.json').write_text('{}')
         with self.assertRaisesRegex(ValueError, 'installation record'): self.apply()
