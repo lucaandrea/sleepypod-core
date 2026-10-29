@@ -182,6 +182,12 @@ stateDiagram-v2
 
 - **Pod:** shift warm-up with the chosen wake occurrence, preserving the selected
   lead time and vibration settings; protect manual pause and stale assignment.
+  If the reviewed wake date has no enabled Pod alarm, offer “keep the bed alarm
+  off” or an explicitly reviewed one-time alarm for that date. Do not move the
+  following Monday's alarm into Saturday, enable a dormant weekend routine, or
+  present the next-occurrence edit API as a one-time alarm creator. A new dated
+  alarm needs its own durable creation/cancellation API and acceptance tests;
+  keep that choice unavailable until those exist.
 - **Clock:** use a proven Shortcut action for the selected alarm. If regular Clock
   lacks a reversible one-occurrence time change, preview a temporary one-shot
   alarm plus suppression/restoration of the original only after that sequence is
