@@ -32,12 +32,16 @@ room sensor is additional context, not a second controller writing temperatures.
 
 ## Current baseline and the important gaps
 
-- Luca is currently the only sleeper. Both zones follow his logical Left routine;
+- Luca is currently the only sleeper. Both thermal zones follow his logical Left routine;
   the solo sensor mode combines zones into a single logical recording. This is
   not biometric identification and does not yet prove side/middle accuracy.
 - His saved routine is Sunday–Thursday bedtime at 22:00, overnight target 70°F,
   Monday–Friday warming toward 105°F from 06:30 and vibration for 20 seconds at
   07:00. These are Luca's preferences, not defaults for Marissa.
+- The existing scheduled vibration command still targets **Left**. Temperature
+  following does not mirror wake vibration. Feeling the alarm from Right or the
+  middle has not been qualified; preserve the current ordinary wake and check
+  routing separately before promising wake coverage across the bed.
 - The Pod's saved weekend alarms are **disabled**. Luca's usual 08:00 weekend
   alarm may be in Clock or a light app; its actual source must be inventoried.
 - MQTT has been connected and publishing. Pod actuator commands over MQTT remain
