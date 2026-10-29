@@ -13,6 +13,13 @@ Both sensor zones feed that one sleeper's recording, and `unusedZoneMode=follow`
 makes the other thermal zone follow the same routine. This live configuration was
 explicitly requested on October 29. It does not establish new physical accuracy or
 transfer old qualification records to the changed arrangement.
+Temperature following does not copy scheduled vibration to the other zone: the
+current alarm dispatcher targets the routine's source side. Right/middle wake
+coverage remains unqualified and must not be inferred from thermal authority.
+
+See [the dated readiness record](HOUSEHOLD_READINESS_2026-10-29.md) for merged,
+deployed and remaining release gates. The guide is a practice document, not a
+claim that a second sleeper can already use live personal controls.
 
 Marissa is a planned future sleeper, not an active account or occupant. In roughly
 six weeks, she accepts her own invitation and chooses her own settings. A separate
