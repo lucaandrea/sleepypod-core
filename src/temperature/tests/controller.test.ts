@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { withSideLock } from '@/src/hardware/sideLock'
 import type { Side } from '@/src/hardware/types'
+import { ControlGuardError, withinControlRequest, withinDispatchGuard } from '@/src/controls/context'
 import { DEFAULT_HOLD_MS, TemperatureController, selectTemperatureRequest } from '../controller'
 import type { TemperatureControllerDeps, TemperatureRequest, TemperatureSource } from '../controller'
 
@@ -44,6 +45,52 @@ function harness() {
 }
 
 describe('shared passive policy arbitration', () => {
+  it.each(['temperature', 'power_on'] as const)('rechecks personal authority after %s reconnect before changing persistent intent', async (operation) => {
+    const context = harness(), paused = vi.fn()
+    const previous = request('manual', 71)
+    context.holds.left = previous
+    context.deps.onManualControl = paused
+    let current = true
+    context.deps.connect = async () => {
+      current = false
+    }
+    const check = () => {
+      if (!current) throw new ControlGuardError()
+    }
+    await expect(withinDispatchGuard(check, () => withSideLock('left', () => operation === 'temperature'
+      ? context.controller.setManualLocked('left', 80)
+      : context.controller.powerOnLocked('left', 80, () => true, true)))).rejects.toBeInstanceOf(ControlGuardError)
+    expect(context.holds.left).toBe(previous)
+    expect(paused).not.toHaveBeenCalled()
+    expect(context.apply).not.toHaveBeenCalled()
+  })
+
+  it.each(['temperature', 'power_on', 'power_off', 'resume', 'clear_hold'] as const)('expired %s commands leave existing intent and manual-pause state unchanged', async (operation) => {
+    const context = harness(), paused = vi.fn()
+    const previous = request('manual', 71)
+    context.holds.left = previous
+    context.deps.onManualControl = paused
+    let clock = 1000
+    const scope = { issuedAt: 1000, expiresAt: 2000, monotonicDeadline: 2000,
+      now: () => clock, monotonicNow: () => clock, beforeDispatch: vi.fn(),
+      dispatchCount: 0, deadlineRejected: false, closed: false }
+    const execute = async () => {
+      clock = 2000
+      switch (operation) {
+        case 'temperature': return context.controller.setManual('left', 80)
+        case 'power_on': return withSideLock('left', () => context.controller.powerOnLocked('left', 80, () => true, true))
+        case 'power_off': return withSideLock('left', () => context.controller.powerOffLocked('left', true))
+        case 'resume': return context.controller.resume('left')
+        case 'clear_hold': return withSideLock('left', async () => context.controller.clearHoldLocked('left'))
+      }
+    }
+    await expect(withinControlRequest(scope, execute)).rejects.toThrow('expired')
+    expect(context.holds.left).toBe(previous)
+    expect(context.powered.left).toBe(true)
+    expect(paused).not.toHaveBeenCalled()
+    expect(context.apply).not.toHaveBeenCalled()
+  })
+
   it('revalidates a conditional manual target after connecting, before persistence or manual pause', async () => {
     const context = harness(), paused = vi.fn()
     let current = true

@@ -64,6 +64,12 @@ export function assertControlDeadline(): void {
   }
 }
 
+/** Check before persisting intent as well as at the later hardware dispatch. */
+export function assertControlCurrent(): void {
+  assertControlDeadline()
+  assertDispatchGuards()
+}
+
 /** Persist the dispatch barrier before a byte can leave this process. */
 export function beforeControlWrite(): void {
   assertDispatchGuards()
