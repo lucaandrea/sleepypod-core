@@ -33,5 +33,6 @@ export async function readCapabilities() {
     comfortActive: ['left', 'right'].some(side => getComfortRuntimeIfRunning()?.status(side as 'left' | 'right').activation.current === true),
     comfortPreviewRunning: getComfortRuntimeIfRunning()?.isRunning() ?? false,
     roomContextFresh: Object.keys(new RoomSignalReader().read()).length > 0,
+    householdPreparationEnabled: process.env.SLEEPYPOD_HOUSEHOLD_PREPARATION === '1',
   })
 }

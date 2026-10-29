@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
-import { test, expect } from '@playwright/test'
+import { test, expect } from './ownerTest'
 
 test('owner alerts deliver once, persist read status and protect REST and tRPC', async ({ page, request, playwright }, testInfo) => {
   const origin = 'http://127.0.0.1:3218'

@@ -1,5 +1,5 @@
 import { writeFile } from 'node:fs/promises'
-import { expect, test } from '@playwright/test'
+import { expect, test } from './ownerTest'
 
 test('SleepyPod phone navigation reaches secondary controls and owner sign-out', async ({ page }) => {
   await page.addInitScript(() => {

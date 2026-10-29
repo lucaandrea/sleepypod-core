@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test'
+import { test, expect } from './ownerTest'
 
 const fields = { restfulness: 4, comfort: 'warm', caffeine: true, alcohol: false, exercise: true, notes: 'Synthetic private journal note' }
 const headers = () => ({ Authorization: `Bearer ${process.env.SLEEPYPOD_AUTH_TOKEN}` })

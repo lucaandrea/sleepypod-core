@@ -15,6 +15,7 @@ const env = {
   WATCH_UPLOAD_DIR: join(root, 'watch-upload'),
   SLEEPYPOD_BROWSER_FIXTURE: root,
   SLEEPYPOD_AUTH_TOKEN: randomBytes(32).toString('hex'),
+  SLEEPYPOD_HOUSEHOLD_PREPARATION: '1',
 }
 try {
   for (const args of [

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { test, expect } from '@playwright/test'
+import { test, expect } from './ownerTest'
 
 test('control receipts enforce owner auth, expiry, duplicate protection and OpenAPI contract', async ({ request, playwright }) => {
   const headers = { Authorization: `Bearer ${process.env.SLEEPYPOD_AUTH_TOKEN}` }

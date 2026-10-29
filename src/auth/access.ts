@@ -1,6 +1,8 @@
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
+import { browserScopeAllows, hasBrowserScope } from './browserScope'
 
 export const SESSION_COOKIE = 'sleepypod_session'
+export const PERSONAL_SESSION_COOKIE = 'sleepypod_personal_session'
 export const SESSION_SECONDS = 12 * 60 * 60
 const TOKEN_MIN_LENGTH = 32
 
@@ -23,22 +25,24 @@ export function validOwnerToken(received: unknown): boolean {
 }
 
 /** Signed, expiring browser credentials never contain the owner's API token. Rotation invalidates them. */
-export function issueSession(now = Date.now()): string {
+export function issueSession(now = Date.now(), scoped = false): string {
   const token = ownerToken()
   if (!token) throw new Error('Owner authentication is not configured')
   const payload = `${Math.floor(now / 1000) + SESSION_SECONDS}.${randomBytes(24).toString('base64url')}`
-  const signature = createHmac('sha256', token).update(`sleepypod-session-v1:${payload}`).digest('base64url')
-  return `${payload}.${signature}`
+  const version = scoped ? 'v2' : 'v1'
+  const signature = createHmac('sha256', token).update(`sleepypod-session-${version}:${payload}`).digest('base64url')
+  return `${scoped ? 'v2.' : ''}${payload}.${signature}`
 }
 
 function validSession(received: string, now = Date.now()): boolean {
   const token = ownerToken()
   if (!token || received.length > 256) return false
-  const [expires, nonce, signature, extra] = received.split('.')
+  const scoped = received.startsWith('v2.')
+  const [expires, nonce, signature, extra] = (scoped ? received.slice(3) : received).split('.')
   if (extra !== undefined || !/^\d+$/.test(expires ?? '') || !/^[\w-]{32}$/.test(nonce ?? '') || !signature) return false
   const remaining = Number(expires) - Math.floor(now / 1000)
   if (!Number.isFinite(remaining) || remaining <= 0 || remaining > SESSION_SECONDS) return false
-  const expected = createHmac('sha256', token).update(`sleepypod-session-v1:${expires}.${nonce}`).digest('base64url')
+  const expected = createHmac('sha256', token).update(`sleepypod-session-${scoped ? 'v2' : 'v1'}:${expires}.${nonce}`).digest('base64url')
   return equalSecret(signature, expected)
 }
 
@@ -62,8 +66,15 @@ export function authorized(headers: Headers, method = 'GET', streaming = false):
       && (!headers.has('origin') || sameOrigin(headers, streaming))
   }
   const cookies = (headers.get('cookie') ?? '').split(';').map(cookie => cookie.trim())
+  // An older owner login response must not reactivate owner APIs after a
+  // personal account switch in another tab. Explicit owner reconnection clears it.
+  if (!hasBrowserScope(headers) && cookies.some(cookie => cookie.startsWith(`${PERSONAL_SESSION_COOKIE}=`))) return false
   const matches = cookies.filter(cookie => cookie.startsWith(`${SESSION_COOKIE}=`))
   if (matches.length !== 1 || !validSession(matches[0].slice(SESSION_COOKIE.length + 1))) return false
+  const session = matches[0].slice(SESSION_COOKIE.length + 1)
+  if (session.startsWith('v2.') && !hasBrowserScope(headers)) return false
+  if (!session.startsWith('v2.') && process.env.SLEEPYPOD_HOUSEHOLD_PREPARATION === '1') return false
+  if (!browserScopeAllows(headers, 'owner', session)) return false
   if (streaming || !['GET', 'HEAD'].includes(method.toUpperCase())) return sameOrigin(headers, streaming)
   return !headers.has('origin') || sameOrigin(headers)
 }

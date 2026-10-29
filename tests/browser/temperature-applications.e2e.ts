@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test } from './ownerTest'
 
 test('temperature application history is authenticated, read-only and empty without physical writes', async ({ request, playwright }) => {
   const anonymous = await playwright.request.newContext({ baseURL: 'http://127.0.0.1:3218', storageState: { cookies: [], origins: [] } })

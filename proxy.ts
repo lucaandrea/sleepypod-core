@@ -10,7 +10,7 @@ const { locales } = linguiConfig
 //   api    — tRPC + REST endpoints, no locale needed
 //   panel  — tRPC panel dev tool, served as a plain route handler
 //   vendor — static vendored scripts in public/vendor (three.js fallback)
-const NO_LOCALE_PATH = /^\/(?:api|panel(?:\/|$)|vendor\/)/
+const NO_LOCALE_PATH = /^\/(?:api|panel(?:\/|$)|vendor\/|guide\/|household\/)/
 
 const getRequestLocale = (requestHeaders: Headers): string => {
   const langHeader = requestHeaders.get('accept-language') || undefined
@@ -50,6 +50,9 @@ export const proxy = (request: NextRequest) => {
 
   if (NO_LOCALE_PATH.test(pathname)) {
     if (pathname === '/api/auth/session') return
+    // These handlers resolve a revocable personal identity themselves. Never
+    // admit personal credentials into the broad legacy owner authorization.
+    if (pathname.startsWith('/api/v1/household/') || pathname.startsWith('/api/v1/me/')) return
     if (pathname.startsWith('/api/') || pathname.startsWith('/panel')) return requireAccess(request) ?? undefined
     return
   }

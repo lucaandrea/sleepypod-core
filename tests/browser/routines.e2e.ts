@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test'
+import { test, expect } from './ownerTest'
 import type { BedtimeDraft, RoutineSnapshot } from '../../src/lib/bedtimeRoutines'
 
 const draft: BedtimeDraft = {
