@@ -206,6 +206,37 @@ class NetworkTrialTests(unittest.TestCase):
         self.assertEqual(self.machine.tables, self.machine.original)
         self.assertFalse(any(command[0] in trial.FIREWALLS and '-N' in command for command in self.machine.calls))
 
+    def test_arming_failure_before_unit_creation_can_still_be_recovered(self):
+        original = self.machine.run
+        def missing_timer(command, check=True):
+            if command[0] == trial.SYSTEMD_RUN:
+                raise RuntimeError('Arming failed before unit creation')
+            if command[:2] == [trial.SYSTEMCTL, 'stop']:
+                return subprocess.CompletedProcess(command, 5, stdout='', stderr='Unit not loaded')
+            if command[:2] == [trial.SYSTEMCTL, 'show']:
+                return subprocess.CompletedProcess(command, 4, stdout='not-found\n', stderr='')
+            return original(command, check=check)
+        with patch.object(trial, 'run', missing_timer), self.assertRaisesRegex(RuntimeError, 'Arming failed'):
+            self.apply()
+        self.assertEqual(trial.read_record()['phase'], 'restored')
+        self.assertEqual(self.machine.tables, self.machine.original)
+
+    def test_unconfirmed_timer_stop_prevents_reusing_the_trial(self):
+        record = self.apply()
+        original = self.machine.run
+        def stop_failure(command, check=True):
+            if command[:2] == [trial.SYSTEMCTL, 'stop']:
+                return subprocess.CompletedProcess(command, 1, stdout='', stderr='Manager unavailable')
+            if command[:2] == [trial.SYSTEMCTL, 'show']:
+                return subprocess.CompletedProcess(command, 1, stdout='', stderr='Manager unavailable')
+            return original(command, check=check)
+        with patch.object(trial, 'run', stop_failure), self.assertRaisesRegex(RuntimeError, 'timer stopped'):
+            trial.recover(record['id'])
+        self.assertEqual(trial.read_record()['phase'], 'restore_failed')
+        with self.assertRaisesRegex(ValueError, 'unfinished'):
+            self.apply()
+        trial.recover(record['id'])
+
 
 class SecurePathTests(unittest.TestCase):
     def test_recovery_rejects_symlink_and_user_writable_parent(self):

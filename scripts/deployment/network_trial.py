@@ -185,11 +185,21 @@ def restore(record):
                 run([binary, '-w', '2', '-X', chain])
         except (RuntimeError, ValueError, subprocess.SubprocessError) as error:
             errors.append(str(error))
+    if not errors:
+        try:
+            timer = unit_name(record) + '.timer'
+            stopped = run([SYSTEMCTL, 'stop', timer], check=False)
+            if stopped.returncode:
+                # Arming may have failed before systemd created either unit.
+                loaded = run([SYSTEMCTL, 'show', timer, '-p', 'LoadState', '--value'], check=False)
+                if loaded.stdout.strip() != 'not-found':
+                    raise RuntimeError('Could not confirm recovery timer stopped')
+        except (RuntimeError, subprocess.SubprocessError) as error:
+            errors.append(str(error))
     record.update(phase='restore_failed' if errors else 'restored', restoredAt=time.time(), errors=errors)
     save(record)
     if errors:
         raise RuntimeError('Recovery incomplete; recovery service will retry: ' + '; '.join(errors))
-    run([SYSTEMCTL, 'stop', unit_name(record) + '.timer'])
     return record
 
 
