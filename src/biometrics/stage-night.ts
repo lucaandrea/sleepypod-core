@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { stagesWithinWindow } from '@/src/lib/stage-coverage'
 import { classifySleepStages, type SleepEpoch } from '@/src/lib/sleep-stages'
 import { classifyWithStageModel, type StageModel } from '@/src/lib/personal-stage-model'
 import type { StageRuleset } from '@/src/lib/sleep-stage-rules'
@@ -18,12 +19,12 @@ export function stageNight(
   let reason: StagedBy['reason'] = 'rules_selected'
   if (model) {
     try {
-      const epochs = classifyWithStageModel(model, window.start, window.end, vitalsData, movementData, ruleset)
+      const epochs = stagesWithinWindow(classifyWithStageModel(model, window.start, window.end, vitalsData, movementData, ruleset), window)
       if (epochs.length > 0) return { epochs, stagedBy: { engine: 'model', version: model.version, modelHash: dataHash(Object.fromEntries(Object.entries(model).filter(([, value]) => value !== undefined))), reason: 'active_model' } }
       reason = 'no_model_epochs'
     }
     catch { reason = 'model_evaluation_failed' }
   }
-  return { epochs: classifySleepStages(vitalsData, movementData, calibrationQuality, ruleset),
+  return { epochs: stagesWithinWindow(classifySleepStages(vitalsData, movementData, calibrationQuality, ruleset), window),
     stagedBy: { engine: 'rules', version: null, modelHash: null, reason } }
 }
