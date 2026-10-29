@@ -156,14 +156,25 @@ export const mqttRouter = router({
       url: z.string().url(),
       username: z.string().nullable().optional(),
       password: z.string().nullable().optional(),
+      useSavedPassword: z.boolean().optional(),
       tlsEnabled: z.boolean().optional(),
     }).strict())
     .output(z.object({ ok: z.boolean(), error: z.string().optional() }))
     .mutation(async ({ input }) => {
+      let password = input.password ?? null
+      if (input.useSavedPassword) {
+        const { config } = await resolveConfig()
+        // Never send a saved credential to a changed endpoint or a different account.
+        if (input.url !== config.url || (input.username ?? null) !== config.username
+          || (input.tlsEnabled ?? false) !== config.tlsEnabled || input.password != null) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Enter a password to test a different broker or account.' })
+        }
+        password = config.password
+      }
       return testConnection({
         url: input.url,
         username: input.username ?? null,
-        password: input.password ?? null,
+        password,
         tlsEnabled: input.tlsEnabled ?? false,
       })
     }),

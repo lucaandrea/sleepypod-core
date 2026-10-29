@@ -77,6 +77,22 @@ describe('personal comfort SQLite persistence', () => {
     finally { database.close() }
   })
 
+  it('retains sparse thermal observations for 90 days while ordinary history expires after 30', () => {
+    const database = migratedComfortDatabase()
+    try {
+      const store = createComfortStore(database)
+      const now = Date.parse('2026-10-25T12:00:00Z')
+      const thermalContext = { targetF: 70, waterF: 71, roomF: 75, humidity: 50 }
+      for (const days of [31, 91]) {
+        store.commit('left', defaultComfortState(), { ...comfortEvent(now - days * 86400000, 'preview', 'thermal'), thermalContext })
+      }
+      store.prune(now)
+      expect(store.history('left')).toHaveLength(1)
+      expect(store.history('left')[0].thermalContext).toEqual(thermalContext)
+    }
+    finally { database.close() }
+  })
+
   it('rolls state back when the event insert fails', () => {
     const database = migratedComfortDatabase()
     try {

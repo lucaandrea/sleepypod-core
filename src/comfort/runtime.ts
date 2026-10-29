@@ -8,9 +8,10 @@ import type { Side } from '@/src/hardware/types'
 import { COMFORT_ACTIVATION_REASON, comfortConfigSchema, comfortFeedbackSchema, type ComfortStatus } from './contract'
 import { comfortLocalDate, decideComfort, learnComfort, MANUAL_PAUSE_MS, type ComfortConfig, type ComfortContext, type ComfortDecision, type ComfortFeedback, type ComfortState } from './policy'
 import { comfortEvent, type ComfortStore } from './store'
+import type { ThermalContext, ThermalLearning } from './thermal-learning'
 
 const STORAGE_FAULT = 'Personal comfort is withheld because its current inputs, settings or observation journal are unavailable.'
-interface Observation { at: number, decision: ComfortDecision, stateKey: string, signals: ComfortSignals | null, timing: BedtimeStatus, bedroom: BedroomComfortGuidance | null }
+interface Observation { at: number, decision: ComfortDecision, stateKey: string, signals: ComfortSignals | null, timing: BedtimeStatus, bedroom: BedroomComfortGuidance | null, thermalContext?: ThermalContext | null }
 export class ComfortInputError extends Error {}
 
 export interface ComfortRuntimeDeps {
@@ -36,6 +37,7 @@ export class ComfortRuntime {
   private readonly runId = randomUUID()
   private observations: Partial<Record<Side, Observation>> = {}
   private recorded: Partial<Record<Side, { at: number, key: string }>> = {}
+  private thermalRecorded: Partial<Record<Side, number>> = {}
   private faults: Partial<Record<Side, string>> = {}
   private readonly entryTrackers = { left: new BedEntryTracker(), right: new BedEntryTracker() }
   private running = false
@@ -69,12 +71,23 @@ export class ComfortRuntime {
     const bedroomExpired = state?.config.roomAware && observation?.bedroom?.state === 'ready' && !currentBedroomGuidance(observation.bedroom, now)
     const fault = this.faults[side] ?? (this.deps.pendingPause(side) !== null ? STORAGE_FAULT : null)
     const active = state !== null && this.deps.activation?.admitted(side, state) === true
+    let learning: ThermalLearning | null = null
+    if (timezone && this.deps.store.learning) {
+      try {
+        learning = this.deps.store.learning(side, !fault && !signalExpired && !bedroomExpired
+        && observation?.stateKey === JSON.stringify(state) && observation.decision.eligible
+          ? observation.thermalContext ?? null
+          : null, timezone, now)
+      }
+      catch { /* Research availability must never interrupt the control policy. */ }
+    }
     let decision = fault || signalExpired || bedroomExpired || observation?.stateKey !== JSON.stringify(state) ? null : observation?.decision ?? null
     if (decision && state?.config.mode === 'active' && !active) {
       decision = { ...decision, eligible: false, proposedF: null, retainPreviousLease: false, reason: COMFORT_ACTIVATION_REASON }
     }
     return {
       apiVersion: 1, generatedAt: this.deps.now(), side, state, history, fault, timezone, deviceDate,
+      learning,
       evaluatedAt: observed?.at ?? null,
       decision,
       runtime: this.running ? 'running' : 'stopped',
@@ -185,6 +198,9 @@ export class ComfortRuntime {
         const key = JSON.stringify([preview, decision, context.window?.segment, context.owner, context.device.targetF,
           context.signals?.state, context.signals?.baselineDays, context.signals?.sampleAt, timing.status])
         const previous = this.recorded[side]
+        const lastThermal = this.thermalRecorded[side]
+        const recordThermal = decision.eligible && context.thermalContext
+          && (lastThermal === undefined || now < lastThermal || now - lastThermal >= 300_000)
         const record = state.config.mode !== 'off' && (!previous || previous.key !== key || now - previous.at >= 60_000 || now < previous.at)
         const event = record
           ? {
@@ -192,11 +208,13 @@ export class ComfortRuntime {
               session: context.window?.session ?? null, proposedF: decision.proposedF, reportedF: context.device.targetF,
               eligible: decision.eligible, deviceObservedAt: context.device.observedAt,
               presenceObservedAt: context.presence.observedAt, owner: context.owner, signals: context.signals ?? null, timing: timing.status, bedroom: context.bedroom ?? null, preview,
+              thermalContext: recordThermal ? context.thermalContext : null,
             }
           : undefined
         if (event || JSON.stringify(state) !== original) this.deps.store.commit(side, state, event, decision.pauseRequired)
+        if (event?.thermalContext) this.thermalRecorded[side] = now
         if (record) this.recorded[side] = { at: now, key }
-        this.observations[side] = { at: now, decision, stateKey: JSON.stringify(state), signals: context.signals ?? null, timing: timing.status, bedroom: context.bedroom ?? null }
+        this.observations[side] = { at: now, decision, stateKey: JSON.stringify(state), signals: context.signals ?? null, timing: timing.status, bedroom: context.bedroom ?? null, thermalContext: context.thermalContext ?? null }
         this.faults[side] = undefined
       }
       catch {

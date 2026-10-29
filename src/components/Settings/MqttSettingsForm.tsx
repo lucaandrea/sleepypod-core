@@ -135,6 +135,7 @@ function SettingsFields({ data, onSaved }: { data: MqttSettings, onSaved: () => 
   const updateMutation = trpc.mqtt.updateSettings.useMutation({
     onSuccess: () => {
       setPassword('')
+      testMutation.reset()
       onSaved()
     },
   })
@@ -175,6 +176,10 @@ function SettingsFields({ data, onSaved }: { data: MqttSettings, onSaved: () => 
       username: effectiveUsername,
       tlsEnabled,
       ...(password ? { password } : {}),
+      ...(!password && data.passwordIsSet && effectiveUrl === data.url
+        && effectiveUsername === data.username && tlsEnabled === data.tlsEnabled
+        ? { useSavedPassword: true }
+        : {}),
     })
   }
 
@@ -242,7 +247,7 @@ function SettingsFields({ data, onSaved }: { data: MqttSettings, onSaved: () => 
           autoComplete="new-password"
         />
       </div>
-      <p className="text-xs text-fg-2">Saving with a blank password keeps the saved password. Testing uses only a password entered here; re-enter it to test authentication.</p>
+      <p className="text-xs text-fg-2">A blank password keeps and tests the saved password for this broker and username. Enter a password when testing a different broker or account.</p>
 
       <SectionLabel className="mt-2">TOPICS</SectionLabel>
       <Field

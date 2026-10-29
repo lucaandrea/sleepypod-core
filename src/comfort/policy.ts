@@ -3,6 +3,7 @@ import type { ComfortSignals } from './signals'
 import type { ComfortApplication } from './application-contract'
 import type { BedroomComfortGuidance } from '@/src/bedroom/contract'
 import { currentBedroomGuidance } from '@/src/bedroom/fusion'
+import type { ThermalContext } from './thermal-learning'
 
 /** Personal comfort policy ported from the owner's Free Sleep thermal/policy.ts.
  * Pure decisions only: persistence and hardware belong to the shared controller.
@@ -76,6 +77,7 @@ export interface ComfortContext {
   signals?: ComfortSignals
   bedroom?: BedroomComfortGuidance
   timing?: BedtimeStatus
+  thermalContext?: ThermalContext | null
 }
 
 export interface ComfortDecision {

@@ -54,7 +54,7 @@ it('checks the resolved environment URL and uses only newly entered test credent
   fireEvent.change(screen.getByLabelText(/Broker URL/), { target: { value: 'mqtts://new-broker:8883' } })
   fireEvent.click(screen.getByRole('button', { name: 'Test connection' }))
   expect(state.test).toHaveBeenLastCalledWith({ url: 'mqtts://new-broker:8883', username: 'owner', tlsEnabled: true })
-  expect(screen.getByText(/Testing uses only a password entered here/)).toBeTruthy()
+  expect(screen.getByText(/Enter a password when testing a different broker or account/)).toBeTruthy()
   fireEvent.change(screen.getByLabelText(/Password/), { target: { value: 'synthetic-test-password' } })
   fireEvent.click(screen.getByRole('button', { name: 'Test connection' }))
   expect(state.test).toHaveBeenLastCalledWith(expect.objectContaining({ password: 'synthetic-test-password' }))
@@ -71,4 +71,9 @@ it('leaves secure URLs encrypted even when TLS is not required', () => {
   render(<MqttSettingsForm />)
   fireEvent.click(screen.getByRole('button', { name: 'Test connection' }))
   expect(state.test).toHaveBeenCalledWith(expect.objectContaining({ url: 'mqtts://broker:8883', tlsEnabled: false }))
+})
+it('tests the saved password without exposing it when the broker identity is unchanged', () => {
+  render(<MqttSettingsForm />)
+  fireEvent.click(screen.getByRole('button', { name: 'Test connection' }))
+  expect(state.test).toHaveBeenCalledWith({ url: 'mqtt://broker:1883', username: 'owner', tlsEnabled: false, useSavedPassword: true })
 })
