@@ -48,10 +48,6 @@ jobs:
         with:
           enable-cache: true
 
-      - name: Install locked runtime integration dependencies
-        working-directory: modules/piezo-processor
-        run: uv sync --locked --no-install-project
-
       - name: Build
         run: pnpm build
 
@@ -84,6 +80,12 @@ jobs:
             --exclude='.claude' \
             .
           mv /tmp/sleepypod-core.tar.gz .
+
+      # Create the host-only test environment after packaging, so Linux runner
+      # wheels and interpreter paths never become part of the Pod artifact.
+      - name: Install locked runtime integration dependencies
+        working-directory: modules/piezo-processor
+        run: uv sync --locked --no-install-project
 
       - name: Refresh tags (force, prune)
         # semantic-release runs `git fetch --tags` unconditionally and aborts
