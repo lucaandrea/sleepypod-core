@@ -55,10 +55,12 @@ describe('calendar-backed night previews', () => {
         return nextCalendarOccurrence('sunday', time, new Date(start)).getTime() === expected.getTime();
       });
       const rows = [{dayOfWeek:'saturday',time:'22:00',temperature:80,enabled:true}, {dayOfWeek:'sunday',time:'07:00',temperature:82,enabled:true}];
-      const spring = nightCurve(rows, new Date(2026, 2, 7));
-      const fall = nightCurve(rows, new Date(2026, 9, 31));
+      const power = [{dayOfWeek:'saturday',onTime:'22:00',offTime:'07:00',offDayOffset:1,onTemperature:70,endAction:'turn_off',enabled:true}];
+      const spring = nightCurve([], new Date(2026, 2, 7), power);
+      const fall = nightCurve([], new Date(2026, 9, 31), power);
+      matches.push(nightCurve(rows, new Date(2026, 2, 7))[0].at === spring[0].at);
       console.log(JSON.stringify({ matches, springHours:(spring[1].at-spring[0].at)/3600000, fallHours:(fall[1].at-fall[0].at)/3600000 }));
     `], { cwd: process.cwd(), env: { ...process.env, TZ: 'America/Los_Angeles' }, encoding: 'utf8', timeout: 20_000 })
-    expect(JSON.parse(result)).toEqual({ matches: [true, true, true], springHours: 8, fallHours: 10 })
+    expect(JSON.parse(result)).toEqual({ matches: [true, true, true, true], springHours: 8, fallHours: 10 })
   })
 })
