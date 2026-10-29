@@ -36,6 +36,22 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # semantic-release pushes tags through the repository's pre-push checks.
+      # Give those checks the same locked Python runtime as the main CI jobs.
+      - name: Setup Python for release validation
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.10'
+
+      - name: Setup uv for release validation
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+
+      - name: Install locked runtime integration dependencies
+        working-directory: modules/piezo-processor
+        run: uv sync --locked --no-install-project
+
       - name: Build
         run: pnpm build
 
