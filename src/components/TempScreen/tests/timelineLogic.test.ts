@@ -124,3 +124,31 @@ describe('targetAt', () => {
     expect(targetAt([[]], 0)).toBeNull()
   })
 })
+
+describe('power-only bedtime curves', () => {
+  const midnight = new Date(2026, 8, 27)
+  const power = { dayOfWeek: 'sunday', onTime: '22:00', offTime: '07:00', offDayOffset: 1, endAction: 'turn_off', onTemperature: 70, enabled: true }
+  it('shows the 70°F hold with no intermediate phases and does not call shutdown a new target', () => {
+    const curve = nightCurve([], midnight, [power])
+    expect(curve).toEqual([{ at: at(27, 22), temperature: 70 }, { at: at(28, 7), temperature: 70, boundary: true }])
+    expect(targetAt([curve], at(27, 23))).toBe(70)
+    expect(targetAt([curve], at(28, 7))).toBeNull()
+    expect(nextPoint([curve], at(27, 23))).toBeNull()
+  })
+  it('uses actual next-calendar-day phases inside the power window', () => {
+    const curve = nightCurve([row('sunday', '01:00', 99), row('monday', '01:00', 69), row('monday', '08:00', 85)], midnight, [power])
+    expect(curve).toEqual([{ at: at(27, 22), temperature: 70 }, { at: at(28, 1), temperature: 69 }, { at: at(28, 7), temperature: 69, boundary: true }])
+  })
+  it('does not invent next-day shutdowns or combine ambiguous starts', () => {
+    expect(nightCurve([], midnight, [{ ...power, offDayOffset: 0 }])).toEqual([])
+    expect(nightCurve([], midnight, [{ ...power, enabled: false }])).toEqual([])
+    expect(nightCurve([], midnight, [{ ...power, dayOfWeek: 'monday' }])).toEqual([])
+    expect(nightCurve([], midnight, [power, { ...power, onTime: '23:00' }])).toEqual([])
+    expect(nightCurve([], midnight, [{ ...power, endAction: 'maintain' }])).toEqual([])
+  })
+  it('puts a post-midnight start on its actual weekday', () => {
+    const curve = nightCurve([], midnight, [{ ...power, dayOfWeek: 'monday', onTime: '01:00', offDayOffset: 0 }])
+    expect(curve[0]).toEqual({ at: at(28, 1), temperature: 70 })
+    expect(curve.at(-1)?.at).toBe(at(28, 7))
+  })
+})

@@ -130,7 +130,7 @@ export function TempStage({ onExit }: { onExit: () => void }) {
     left: trpc.schedules.getAll.useQuery({ side: 'left' }, { staleTime: 60_000 }),
     right: trpc.schedules.getAll.useQuery({ side: 'right' }, { staleTime: 60_000 }),
   }
-  const curves = useMemo(() => stageCurves({ left: schedules.left.data?.temperature, right: schedules.right.data?.temperature }, win), [schedules.left.data, schedules.right.data, win])
+  const curves = useMemo(() => stageCurves({ left: schedules.left.data?.temperature, right: schedules.right.data?.temperature }, win, { left: schedules.left.data?.power, right: schedules.right.data?.power }), [schedules.left.data, schedules.right.data, win])
   // The Temp screen timeline's power and in-bed rows, on tonight's window.
   const recordsFrom = new Date(win.start - 12 * HOUR)
   const records = {
