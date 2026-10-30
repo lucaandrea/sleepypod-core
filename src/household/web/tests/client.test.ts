@@ -18,6 +18,22 @@ describe('personal-only transport', () => {
     const client = new PersonalBrowserClient(session, vi.fn(async () => new Response('a'.repeat(524289), { headers: { 'Content-Length': '1' } })))
     await expect(client.read('me/bed')).rejects.toThrow('too large')
   })
+  it('admits only validated read-only history routes and preserves an opaque encoded cursor', async () => {
+    const fetcher = vi.fn<typeof fetch>(async () => new Response('{}'))
+    const client = new PersonalBrowserClient(session, fetcher)
+    const query = new URLSearchParams({ startsAt: '1793314800000', endsAt: '1793336400000', kind: 'presence', limit: '30', cursor: 'opaque+cursor/with=padding' })
+    await client.read(`me/sleep?${query}`)
+    await client.read('me/sleep/10000000-0000-4000-8000-000000000001')
+    expect(fetcher.mock.calls[0]?.[0]).toContain('cursor=opaque%2Bcursor%2Fwith%3Dpadding')
+    for (const suffix of ['&side=left', '&sleeperId=someone', '&startsAt=1793314800000', '#fragment', '?kind=movement'])
+      await expect(client.read(`me/sleep?${query}${suffix}`)).rejects.toThrow()
+    for (const path of ['me/sleep', 'me/sleep?startsAt=01&endsAt=2&kind=presence', 'me/sleep/invalid', 'me/sleep/10000000-0000-4000-8000-000000000001?side=left'])
+      await expect(client.read(path)).rejects.toThrow()
+    await expect(client.read(`me/sleep?${query}`, 'POST', {})).rejects.toThrow()
+    await expect(client.read(`me/sleep?${query}`, 'PUT', {})).rejects.toThrow()
+    await expect(client.read(`me/sleep?${query}`, 'GET', {})).rejects.toThrow()
+    expect(fetcher).toHaveBeenCalledTimes(2)
+  })
   it('ignores late responses after account disposal', async () => {
     let finish!: (value: Response) => void
     const client = new PersonalBrowserClient(session, vi.fn(() => new Promise<Response>(resolve => finish = resolve)))
