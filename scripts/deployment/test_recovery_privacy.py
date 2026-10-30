@@ -3,7 +3,7 @@ import sqlite3
 import tempfile
 import unittest
 
-from recovery_privacy import require_legacy_recovery_data
+from recovery_privacy import require_legacy_recovery_data, REQUIRED_TABLES
 
 
 class RecoveryPrivacyTests(unittest.TestCase):
@@ -14,6 +14,9 @@ class RecoveryPrivacyTests(unittest.TestCase):
         self.path = self.directory/'sleepypod.db'
         self.database = sqlite3.connect(self.path)
         self.addCleanup(self.database.close)
+        for name in REQUIRED_TABLES:
+            self.database.execute('CREATE TABLE ' + name + ' (id INTEGER)')
+        self.database.commit()
 
     def test_empty_migrated_schema_and_legacy_browser_session_allow_recovery(self):
         self.database.executescript('CREATE TABLE households (id TEXT); CREATE TABLE household_accounts (id TEXT); '
@@ -54,6 +57,17 @@ class RecoveryPrivacyTests(unittest.TestCase):
         self.database.execute('BEGIN EXCLUSIVE')
         with self.assertRaisesRegex(ValueError, 'Cannot verify'): require_legacy_recovery_data(self.directory)
         self.database.rollback()
+
+    def test_an_empty_or_partial_database_cannot_authorize_recovery(self):
+        empty = self.directory/'empty'
+        empty.mkdir()
+        with sqlite3.connect(empty/'sleepypod.db'): pass
+        with self.assertRaisesRegex(ValueError, 'incomplete or corrupt'):
+            require_legacy_recovery_data(empty)
+        self.database.execute('DROP TABLE device_settings')
+        self.database.commit()
+        with self.assertRaisesRegex(ValueError, 'incomplete or corrupt'):
+            require_legacy_recovery_data(self.directory)
 
     def test_symlinked_database_directory_and_sidecars_are_refused(self):
         alias = self.directory/'alias'

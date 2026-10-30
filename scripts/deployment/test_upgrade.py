@@ -24,6 +24,8 @@ class UpgradeTests(unittest.TestCase):
         with sqlite3.connect(self.data/'sleepypod.db') as database:
             database.execute('CREATE TABLE alarm_schedules (time TEXT, duration INTEGER)')
             database.execute("INSERT INTO alarm_schedules VALUES ('07:00', 20)")
+            for name in ('device_settings', 'side_settings', 'power_schedules'):
+                database.execute('CREATE TABLE ' + name + ' (id INTEGER)')
         (self.data/'homekit').mkdir()
         (self.data/'homekit'/'pairing.json').write_text('private pairing fixture')
         self.units = self.root/'units'
@@ -121,12 +123,13 @@ class UpgradeTests(unittest.TestCase):
         self.assertTrue(all(not set(call) & set(service_plan.LEGACY_UNITS) for call in self.calls))
         self.assertEqual(json.loads((self.old/'activation.json').read_text())['phase'], 'superseded_by_upgrade')
 
-    def test_failed_candidate_restores_database_and_units(self):
+    def test_failed_candidate_with_readable_schema_restores_database_and_units(self):
         original = self.start
         def start(plan, *arguments):
             if plan == self.plans[1]:
                 with sqlite3.connect(self.data/'sleepypod.db') as database:
-                    database.execute('DROP TABLE alarm_schedules')
+                    database.execute('ALTER TABLE alarm_schedules ADD COLUMN candidate_only TEXT')
+                    database.execute("UPDATE alarm_schedules SET time='09:00'")
                 (self.data/'homekit'/'pairing.json').write_text('changed candidate state')
                 raise RuntimeError('failed after migration')
             return original(plan, *arguments)
@@ -137,6 +140,19 @@ class UpgradeTests(unittest.TestCase):
         self.assert_old_units()
         self.assertEqual(json.loads((self.operation/'upgrade.json').read_text())['phase'], 'rolled_back')
         self.assertEqual(len(list(self.operation.glob('replaced-data-*'))), 1)
+
+    def test_incomplete_candidate_schema_requires_recovery_without_erasing_current_data(self):
+        def start(plan, *_):
+            if plan == self.plans[1]:
+                with sqlite3.connect(self.data/'sleepypod.db') as database:
+                    database.execute('DROP TABLE alarm_schedules')
+                raise RuntimeError('candidate left incomplete schema')
+            self.fail('Must not restart an old runtime against an unknown household boundary')
+        with patch.object(upgrade, 'start_and_verify', start), self.assertRaisesRegex(ValueError, 'incomplete or corrupt'):
+            self.apply()
+        self.assertEqual(json.loads((self.operation/'upgrade.json').read_text())['phase'], 'recovery_required')
+        self.assertFalse(list(self.operation.glob('replaced-data-*')))
+        self.assertTrue((self.operation/'data-backup'/'sleepypod.db').is_file())
 
     def test_changed_routines_reject_candidate(self):
         def start(plan, *_):

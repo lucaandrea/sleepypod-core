@@ -3,6 +3,8 @@ from contextlib import closing
 import sqlite3
 import stat
 
+REQUIRED_TABLES = {'device_settings', 'side_settings', 'alarm_schedules', 'power_schedules'}
+
 
 def require_legacy_recovery_data(directory):
     """Check without reading private rows; even unassigned drafts prohibit legacy recovery."""
@@ -20,6 +22,9 @@ def require_legacy_recovery_data(directory):
             # One read transaction includes committed WAL data and pins the schema.
             database.execute('BEGIN')
             tables = [row[0] for row in database.execute("SELECT name FROM sqlite_master WHERE type='table'")]
+            if (not REQUIRED_TABLES.issubset(tables)
+                    or database.execute('PRAGMA quick_check').fetchall() != [('ok',)]):
+                raise ValueError('Cannot verify the household recovery boundary; configuration is incomplete or corrupt')
             for name in tables:
                 if name != 'households' and not name.startswith('household_'):
                     continue

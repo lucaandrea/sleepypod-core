@@ -45,8 +45,9 @@ unassigned preparation, revoked accounts, personal drafts, attribution epochs
 and future populated `household_*` tables. Empty migrated tables and the legacy
 browser-scope table alone do not mean that personal accounts exist.
 
-Checks read committed SQLite/WAL state without reading private row values. A
-missing, unreadable, corrupt or linked database fails closed. Checks run before
+Checks read committed SQLite/WAL state without reading private row values, verify
+the required Core tables, and run SQLite's `quick_check`. A missing, incomplete,
+unreadable, corrupt or linked database fails closed. Checks run before
 service changes and again after writers stop. Upgrade rollback checks both the
 current data and proposed backup before replacing files. A concurrent join or
 candidate write is preserved; it cannot silently vanish into an older backup.
