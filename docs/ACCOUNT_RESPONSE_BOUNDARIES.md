@@ -24,7 +24,8 @@ flowchart LR
 Before response headers are sent, an access change returns an authentication
 error. During an already-started stream, it ends the stream with an error;
 consumers must treat a truncated download as incomplete. Cancellation kills an
-archive producer and removes its temporary staging directory. Responses remain
+archive producer and removes its temporary staging directory. A later exit from
+that canceled producer cannot release a newer download's concurrency slot. Responses remain
 private/no-store and vary by credentials.
 
 The sensor WebSocket retains its original request identity and checks it on

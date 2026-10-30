@@ -90,6 +90,19 @@ async function loadRoute() {
 }
 
 describe('GET /api/export/archive', () => {
+  it('does not release a newer export when a canceled producer exits late', async () => {
+    const { GET } = await loadRoute()
+    const first = await GET(ownerRequest('http://localhost/api/export/archive?include=raw'))
+    const earlierChild = spawnMock.lastChild
+    if (!first.body || !earlierChild) throw new Error('Expected archive process')
+    await first.body.cancel()
+    const next = await GET(ownerRequest('http://localhost/api/export/archive?include=raw'))
+    expect(next.status).toBe(200)
+    earlierChild.emit('close', 1)
+    expect((await GET(ownerRequest('http://localhost/api/export/archive?include=raw'))).status).toBe(429)
+    await next.body?.cancel()
+  })
+
   it('cancels the archive process and staging if access changes before bytes are read', async () => {
     const { GET } = await loadRoute()
     const request = ownerRequest('http://localhost/api/export/archive?include=raw')

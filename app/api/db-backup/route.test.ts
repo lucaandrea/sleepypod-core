@@ -55,3 +55,24 @@ it('cancels a running backup when protection changes before the next output chun
   expect(child.kill).toHaveBeenCalledWith('SIGKILL')
   expect(state.remove).toHaveBeenCalledWith('/fixture/staging', { recursive: true, force: true })
 })
+
+it('does not release a newer backup when the canceled producer later exits', async () => {
+  const { GET } = await import('./route')
+  const first = await GET(ownerRequest('http://pod/api/db-backup'))
+  await first.body?.cancel()
+  const oldChild = child
+  const nextChild = Object.assign(new EventEmitter(), { stdout: new PassThrough(), stderr: new PassThrough(), kill: vi.fn(() => true) })
+  state.spawn.mockReturnValue(nextChild)
+  const next = await GET(ownerRequest('http://pod/api/db-backup'))
+  expect(next.status).toBe(200)
+  oldChild.emit('close', 1)
+  try {
+    expect((await GET(ownerRequest('http://pod/api/db-backup'))).status).toBe(429)
+  }
+  finally {
+    await next.body?.cancel()
+    nextChild.emit('close', 1)
+    nextChild.stdout.destroy()
+    nextChild.stderr.destroy()
+  }
+})

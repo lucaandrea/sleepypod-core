@@ -56,8 +56,10 @@ export async function GET(request: Request) {
 
     const cleanup = () => {
       const dir = stagingDir
+      // A canceled producer may exit after another request has acquired the slot.
+      if (!dir) return
       stagingDir = null
-      if (dir) rm(dir, { recursive: true, force: true }).catch(() => {})
+      rm(dir, { recursive: true, force: true }).catch(() => {})
       inflight = false
     }
     const abort = () => {
