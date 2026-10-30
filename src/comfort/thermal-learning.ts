@@ -46,7 +46,7 @@ export function evaluateThermalLearning(input: ThermalNight[], context: ThermalC
     .sort((first, second) => first.date.localeCompare(second.date))
   const report: ThermalLearning = { model: 'context-neighbors-v1', mode: 'research_preview', nights: nights.length,
     requiredNights: 20, trainingNights: 0, validationNights: 0, modelErrorF: null, baselineErrorF: null,
-    suggestedOffsetF: null, reason: 'Collecting matched room readings, reported water temperatures and morning comfort check-ins. At least 20 separate nights are required.' }
+    suggestedOffsetF: null, reason: 'Learning from room conditions, reported water temperature and your morning comfort check-ins. Each matched night needs quiet, occupied observations spanning at least four hours without large gaps. At least 20 separate nights are required; this research does not activate temperature changes.' }
   if (nights.length < 20) return report
   const validationCount = Math.max(5, Math.ceil(nights.length / 4))
   const training = nights.slice(0, -validationCount), validation = nights.slice(-validationCount)

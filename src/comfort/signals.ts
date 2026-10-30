@@ -5,6 +5,10 @@ export const BASELINE_DAYS_REQUIRED = 7
 export const BASELINE_WINDOWS_PER_DAY = 12
 export const HISTORY_DAY_MS = 86_400_000
 
+export const comfortSignalIssueSchema = z.enum(['missing_estimate', 'invalid_provenance', 'low_signal',
+  'low_quality', 'unsupported_estimate', 'stale_estimate', 'quiet_context', 'incomplete_windows', 'storage_unavailable'])
+export type ComfortSignalIssue = z.infer<typeof comfortSignalIssueSchema>
+
 const time = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER)
 export const comfortSignalsSchema = z.object({
   state: z.enum(['learning', 'ready', 'stale', 'review']), reason: z.string(),
@@ -14,6 +18,7 @@ export const comfortSignalsSchema = z.object({
   recentHeartRates: z.array(z.number().finite()).max(2),
   sourceSide: z.enum(['left', 'right']).nullable(),
   source: z.literal('qualified_live_pod'),
+  issue: comfortSignalIssueSchema.optional(),
 })
 export type ComfortSignals = z.infer<typeof comfortSignalsSchema>
 export interface ComfortWindow { start: number, end: number, heartRate: number, spanId: string, epoch: string, evidenceStart: number, evidenceEnd: number }

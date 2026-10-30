@@ -49,6 +49,26 @@ function fixture(days = 7, recentHeartRate = 60) {
 }
 
 describe('qualified personal baseline with real migrated SQLite', () => {
+  it('distinguishes poor signal, quality, missing provenance and missing data without granting eligibility', async () => {
+    for (const [mutation, issue] of [
+      ['UPDATE vitals_quality SET flags=json_insert(flags,\'$[#]\',\'low_signal\') WHERE vitals_id=(SELECT MAX(id) FROM vitals)', 'low_signal'],
+      ['UPDATE vitals_quality SET quality_score=0.1 WHERE vitals_id=(SELECT MAX(id) FROM vitals)', 'low_quality'],
+      ['UPDATE vitals SET processing_run_id=NULL WHERE id=(SELECT MAX(id) FROM vitals)', 'invalid_provenance'],
+      ['DELETE FROM vitals', 'missing_estimate'],
+      ['UPDATE vitals SET heart_rate=100 WHERE id=(SELECT MAX(id) FROM vitals)', 'unsupported_estimate'],
+    ]) {
+      const setup = fixture()
+      setup.database.exec(mutation)
+      expect(await setup.read()).toMatchObject({ state: 'stale', issue, sampleAt: null, recentHeartRates: [] })
+    }
+  })
+  it('names incomplete windows and storage failures without leaking query details', async () => {
+    const setup = fixture()
+    setup.database.prepare('DELETE FROM vitals WHERE timestamp=?').run(Date.parse('2026-10-25T10:06:30Z') / 1000)
+    expect(await setup.read()).toMatchObject({ state: 'stale', issue: 'incomplete_windows' })
+    setup.database.exec('DROP TABLE vitals_quality')
+    expect(await setup.read()).toMatchObject({ state: 'stale', issue: 'storage_unavailable', reason: expect.not.stringContaining('vitals_quality') })
+  })
   it('uses historical receipts from older quiet intervals while requiring the current interval for recent windows', async () => {
     const setup = fixture()
     expect(await setup.read()).toMatchObject({ state: 'ready', baselineDays: 7, baselineWindows: 84,

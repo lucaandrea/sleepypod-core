@@ -6,7 +6,7 @@ import { parseVitalEvidence, VITAL_EVIDENCE_QUERY } from '@/src/biometrics/mecha
 import { mechanicalSpanSchema, readMechanicalSnapshot } from '@/src/biometrics/mechanical/snapshot'
 import { MECHANICAL_MAX_SPANS } from '@/src/biometrics/mechanical/context'
 import { COMFORT_WINDOW_MS, HISTORY_DAY_MS, median, missingComfortSignals, personalBaseline, summarizeComfortSignals } from './signals'
-import type { ComfortSignals, ComfortWindow, PersonalBaseline } from './signals'
+import type { ComfortSignals, ComfortWindow, PersonalBaseline, ComfortSignalIssue } from './signals'
 
 const hash = z.string().regex(/^[a-f0-9]{64}$/)
 const identitySchema = z.object({ config_hash: hash, manifest_hash: hash, bundle_version: z.literal(1) })
@@ -16,13 +16,36 @@ const query = VITAL_EVIDENCE_QUERY.replace('SELECT v.*,', `SELECT v.*, r.config_
 type Span = z.infer<typeof mechanicalSpanSchema>
 type Estimate = ReturnType<typeof estimate>
 
+const issueMessages: Record<ComfortSignalIssue, string> = {
+  missing_estimate: 'No live Pod heart-rate estimate has been recorded for this side yet.',
+  invalid_provenance: 'The latest estimate is missing valid processing or mechanical evidence. Older readings cannot replace it.',
+  low_signal: 'The latest saved Pod estimate is flagged low signal. Raw sensor activity alone does not make it suitable for an adjustment.',
+  low_quality: 'The latest Pod estimate is below the comparison quality threshold. Waiting for a clearer signal.',
+  unsupported_estimate: 'The latest estimate is outside the conservative comparison envelope or carries another quality warning.',
+  stale_estimate: 'The latest Pod estimate is stale or has an invalid time. Waiting for a fresh estimate.',
+  quiet_context: 'Waiting for fresh confirmation that priming, vibration and base movement are idle.',
+  incomplete_windows: 'Waiting for two adjacent, complete five-minute summaries with fresh quiet-state evidence.',
+  storage_unavailable: 'Qualified sensor evidence could not be read. No temperature adjustment is proposed.',
+}
+
+class SignalUnavailable extends Error {
+  constructor(readonly issue: ComfortSignalIssue) { super(issueMessages[issue]) }
+}
+
 /** Keep source channel and numerical pipeline identity separate across restarts and routing changes. */
 function estimate(raw: unknown) {
-  const evidence = parseVitalEvidence(raw)
-  const identity = identitySchema.parse(raw)
+  if (raw === undefined) throw new SignalUnavailable('missing_estimate')
+  let evidence: ReturnType<typeof parseVitalEvidence>, identity: z.infer<typeof identitySchema>
+  try {
+    evidence = parseVitalEvidence(raw)
+    identity = identitySchema.parse(raw)
+  }
+  catch { throw new SignalUnavailable('invalid_provenance') }
+  if (evidence.flags.includes('low_signal')) throw new SignalUnavailable('low_signal')
+  if (evidence.row.quality_score < 0.5) throw new SignalUnavailable('low_quality')
   if (evidence.row.heart_rate === null || evidence.row.heart_rate < 30 || evidence.row.heart_rate > 90
-    || evidence.row.quality_score < 0.5 || evidence.flags.some(flag => !['no_hrv', 'no_br'].includes(flag) && !flag.startsWith('mechanical_context_v1:'))) {
-    throw new Error('Heart-rate estimate outside the conservative comparison envelope')
+    || evidence.flags.some(flag => !['no_hrv', 'no_br'].includes(flag) && !flag.startsWith('mechanical_context_v1:'))) {
+    throw new SignalUnavailable('unsupported_estimate')
   }
   return { ...evidence, heartRate: evidence.row.heart_rate,
     key: JSON.stringify([evidence.row.side, evidence.input.sourceSide, identity.config_hash, identity.manifest_hash]) }
@@ -91,7 +114,7 @@ export class ComfortSignalReader {
   private latest(side: Side, now: number) {
     const raw = this.database.prepare(`${query.replaceAll('JOIN ', 'LEFT JOIN ')} WHERE v.side=? ORDER BY v.timestamp DESC, v.id DESC LIMIT 1`).get(side)
     const value = estimate(raw)
-    if (value.timestampMs > now || now - value.timestampMs > 120_000 || value.proof.endMs > now) throw new Error('Latest estimate is not fresh')
+    if (value.timestampMs > now || now - value.timestampMs > 120_000 || value.proof.endMs > now) throw new SignalUnavailable('stale_estimate')
     return value
   }
 
@@ -128,18 +151,22 @@ export class ComfortSignalReader {
         const latest = this.latest(side, now), snapshot = readMechanicalSnapshot(this.database, now)
         const state = snapshot?.state
         if (!snapshot || !state || state.reasons.length || state.confirmedThroughMs === null || now >= state.validUntilMs
-          || state.confirmedThroughMs > now || latest.proof.spanId !== state.spanId || latest.proof.epoch !== state.epoch) throw new Error('Current quiet context unavailable')
+          || state.confirmedThroughMs > now || latest.proof.spanId !== state.spanId || latest.proof.epoch !== state.epoch) throw new SignalUnavailable('quiet_context')
         const confirmedThrough = state.confirmedThroughMs
         const spans = new Map(snapshot.spans.filter(span => span.id === state.spanId && span.epoch === state.epoch)
           .map(span => [span.id, { ...span, endMs: Math.min(span.endMs, confirmedThrough) }]))
-        if (!covered(latest, spans, now)) throw new Error('Latest estimate is unqualified')
+        if (!covered(latest, spans, now)) throw new SignalUnavailable('quiet_context')
         const recent = completeComfortWindows(this.rows(side, now - 20 * 60_000, now + 1, 32), latest.key, spans, now).slice(-2)
         const prepared = this.prepared[side]
         const baseline = prepared?.key === latest.key && prepared.timezone === timezone && prepared.at <= now && now - prepared.at < 10_000 ? prepared.baseline : null
         const expiresAt = Math.min(state.validUntilMs, latest.timestampMs + 120_000, (recent.at(-1)?.end ?? now) + 360_000)
-        return summarizeComfortSignals(baseline, recent, latest.input.sourceSide, expiresAt, now)
+        const result = summarizeComfortSignals(baseline, recent, latest.input.sourceSide, expiresAt, now)
+        return result.state === 'stale' ? { ...result, issue: 'incomplete_windows' as const } : result
       })()
     }
-    catch { return missingComfortSignals('Waiting for fresh, qualified Pod estimates and confirmed quiet hardware. Legacy and Apple Health readings are kept separate.') }
+    catch (error) {
+      const issue = error instanceof SignalUnavailable ? error.issue : 'storage_unavailable'
+      return { ...missingComfortSignals(issueMessages[issue]), issue }
+    }
   }
 }
