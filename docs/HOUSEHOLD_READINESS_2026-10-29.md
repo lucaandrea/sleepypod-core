@@ -38,8 +38,9 @@ over old physical qualification as if it applied to the new one.
 | [Core #65: solo presence across zones](https://github.com/lucaandrea/sleepypod-core/pull/65) | 21 focused tests, 6,743 related tests passed; hosted checks passed. | Logical comfort-presence adapter; physical detection is not established by these tests. |
 | [Core #66: person-bound command authority](https://github.com/lucaandrea/sleepypod-core/pull/66) | 115 focused tests; full related retry with two workers: 6,774 passed, 17 skipped; all seven exact-head hosted checks passed. | Internal service, no public control route or activation capability. |
 | [Core #68: personal control API and atomic routine storage](https://github.com/lucaandrea/sleepypod-core/pull/68) | 140 focused tests; mandatory related suite: 6,817 passed, 17 skipped; production build and two actual household browser scenarios passed; all seven final hosted checks passed. | Runtime defaults off; two-person assignments in tests are fixtures. |
+| [Core #69: personal routine publication](https://github.com/lucaandrea/sleepypod-core/pull/69) | Hosted unit suite: 8,505 passed, 19 skipped; hosted browser suite and all seven checks passed. Local: 151 focused and 6,845 related tests passed. | Separate publication flag defaults off; saved state and scheduler registration have separate receipts. |
 | [Native #47: personal account workspace](https://github.com/lucaandrea/sleepypod-ios/pull/47) | Hosted result: 1,010 passed, nine live-service tests skipped, zero failures. | Merged; not uploaded as a new TestFlight build. |
-| [Native #48: account preparation refinements](https://github.com/lucaandrea/sleepypod-ios/pull/48) | All four hosted checks passed; 1,010 passed, nine skipped; six temperature UI checks and unsigned Release build passed. | Installed TestFlight remains unchanged. Personal runtime integration is a later change. |
+| [Native #48: reusable temperature presentation](https://github.com/lucaandrea/sleepypod-ios/pull/48) | All four hosted checks passed; 1,010 passed, nine skipped; six temperature UI checks and unsigned Release build passed. | Installed TestFlight remains unchanged. Personal runtime integration is a later change. |
 
 The first broad Core #66 run had five timeouts in four independent files. Those
 files passed unchanged in an isolated two-worker run (57 tests); the complete
@@ -61,8 +62,10 @@ deployment, a TestFlight release, physical behavior or improved sleep outcomes.
    command API now resolve current account/assignment authority and recheck it
    at hardware dispatch. The separately gated [publication API](PERSONAL_ROUTINE_API_V1.md)
    adds whole-week review, revision checks and a durable save/refresh receipt.
-   Finish both clients, integrate the real side-transfer workflow and test
-   independent schedules and stale callbacks through that transition. These
+   The [isolated personal web workspace](PERSONAL_WEB_WORKSPACE.md) now includes
+   scoped controls, full-week draft editing, review and receipt recovery. Finish
+   native integration and the real side-transfer workflow, then test independent
+   schedules and stale callbacks through that transition. These
    implementations remain off on the live Pod.
 3. **Private history and Health integration.** Attach live observations to dated
    person assignments. Review Luca's legacy records explicitly instead of

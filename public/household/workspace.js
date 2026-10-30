@@ -1,9 +1,10 @@
-// This workspace uses only person-scoped preparation endpoints. It never sends
-// actuator commands, imports Health data, or falls back to legacy owner routes.
+// Account shell and isolated runtime both use personal APIs, without owner fallback.
+import { mountPersonalWorkspace, contextKey } from './personal-runtime.js'
+let personalWorkspace = null
+let personalContext = null
 const element = id => document.getElementById(id)
 let session = null
 let preferences = null
-let routines = null
 let pending = null
 let pendingKeySaved = false
 let generation = 0
@@ -11,7 +12,6 @@ let busy = false
 let invitationAttempt = null
 const activeRequests = new Set()
 const accountChannel = typeof BroadcastChannel === 'undefined' ? null : new BroadcastChannel('sleepypod-account')
-const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
 function secret() {
   const bytes = crypto.getRandomValues(new Uint8Array(32))
   return btoa(String.fromCharCode(...bytes)).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '')
@@ -37,9 +37,11 @@ async function request(path, method = 'GET', body, token, expectedSleeper = sess
     let browserRevision = null
     if (method !== 'GET' && ['household/setup', 'household/join', 'household/session'].includes(path)) {
       const stateResponse = await fetch('/api/auth/session', { cache: 'no-store', signal: controller.signal })
-      if (!stateResponse.ok) throw new Error('Browser account state is unavailable. Reconnect explicitly.')
+      if (!stateResponse.ok)
+        throw new Error('Browser account state is unavailable. Reconnect explicitly.')
       browserRevision = (await stateResponse.json()).browserScopeRevision
-      if (requestGeneration !== generation) throw new Error('The browser account changed. Reload before continuing.')
+      if (requestGeneration !== generation)
+        throw new Error('The browser account changed. Reload before continuing.')
     }
     const response = await fetch(`/api/v1/${path}`, {
       method, credentials: 'same-origin', cache: 'no-store', signal: controller.signal,
@@ -70,7 +72,8 @@ async function action(operation) {
   if (busy)
     return
   busy = true
-  document.querySelectorAll('button').forEach((button) => {
+  const buttons = [...document.querySelectorAll('button')].filter(button => !button.closest('#personal-runtime')).map(button => [button, button.disabled])
+  buttons.forEach(([button]) => {
     button.disabled = true
   })
   try {
@@ -81,8 +84,9 @@ async function action(operation) {
   }
   finally {
     busy = false
-    document.querySelectorAll('button').forEach((button) => {
-      button.disabled = false
+    buttons.forEach(([button, disabled]) => {
+      if (button.isConnected)
+        button.disabled = disabled
     })
   }
 }
@@ -91,18 +95,19 @@ function context() {
 }
 function clearPersonalView() {
   generation += 1
+  personalWorkspace?.dispose()
+  personalWorkspace = null
+  personalContext = null
   session = null
   preferences = null
-  routines = null
   invitationAttempt = null
   element('workspace').hidden = true
   element('connect').hidden = false
-  for (const name of ['device-list', 'invitation-list', 'draft-list', 'greeting', 'assignment'])
+  for (const name of ['device-list', 'invitation-list', 'greeting', 'assignment'])
     element(name).replaceChildren()
   element('invitation-result').hidden = true
   element('invitation-link').value = ''
   element('preferences-form').reset()
-  element('routine-form').reset()
 }
 function pendingConnection(value) {
   pending = value
@@ -146,12 +151,12 @@ async function refresh() {
     clearPersonalView()
     throw new Error('Update the personal app before editing an active routine. This preparation workspace can edit drafts only.')
   }
-  session = currentSession;
-  [preferences, routines] = results
+  session = currentSession
+  preferences = results[0]
   element('connect').hidden = true
   element('workspace').hidden = false
   element('greeting').textContent = `Hello, ${session.self.displayName}.`
-  element('assignment').textContent = session.self.assignment === 'solo' ? 'Sole current sleeper · either side · personal preparation workspace' : 'Your account is ready to prepare · no active bed side assigned yet'
+  element('assignment').textContent = session.self.assignment === 'solo' ? 'Sole current sleeper · either side' : session.self.assignment === 'unassigned' ? 'Your account is ready to prepare · no active bed side assigned yet' : `Your assigned side: ${session.self.assignment}`
   element('preference-temperature').value = preferences.preferences.preferredTemperatureF
   element('comfort').value = preferences.preferences.comfort
   element('display-unit').value = preferences.preferences.displayUnit
@@ -184,26 +189,19 @@ async function refresh() {
       await refresh()
       message('Invitation revoked.')
     })
-  element('draft-list').replaceChildren()
-  for (const routine of routines.routines)
-    addItem(element('draft-list'), `${routine.dayOfWeek} night`, `${routine.draft.power.onTime} bedtime · ${routine.draft.alarm?.time ?? 'no alarm'} wake · draft only`)
-  loadDraft()
-}
-function loadDraft() {
-  const found = routines?.routines.find(routine => routine.dayOfWeek === element('routine-day').value)
-  const draft = found?.draft
-  element('routine-bed').value = draft?.power.onTime ?? '22:00'
-  element('routine-wake').value = draft?.alarm?.time ?? draft?.power.offTime ?? '07:30'
-  element('routine-temperature').value = draft?.power.onTemperature ?? preferences?.preferences.preferredTemperatureF ?? 76
-  element('routine-warm').value = draft?.alarm?.alarmTemperature ?? 82
-  element('routine-vibrate').checked = draft?.alarm?.enabled ?? true
-  summarizeRoutine()
-}
-function summarizeRoutine() {
-  const bedtime = element('routine-bed').value, wake = element('routine-wake').value
-  const day = element('routine-day').value
-  const morning = days[(days.indexOf(day) + Number(wake <= bedtime)) % 7]
-  element('routine-summary').textContent = `${day} ${bedtime} → ${morning} ${wake}. Draft only; no real alarm is scheduled.`
+  const nextContext = contextKey(session) + JSON.stringify(session.capabilities)
+  if (personalContext !== nextContext) {
+    personalWorkspace?.dispose()
+    personalWorkspace = null
+    personalContext = null
+    personalWorkspace = mountPersonalWorkspace(element('personal-runtime'), session, preferences.preferences, () => {
+      clearPersonalView()
+      message('Your personal account or assignment changed. Reconnect to review it.', true)
+    })
+    personalContext = nextContext
+  }
+  else
+    personalWorkspace.updatePreferences(preferences.preferences)
 }
 async function finishPendingConnection() {
   if (!pending || !pendingKeySaved)
@@ -277,7 +275,8 @@ async function copyField(id) {
       message('Copied. Save or share it privately.')
       return
     }
-    catch { /* HTTP LAN origins can require manual copy. */ }
+    catch { /* HTTP LAN origins can require manual copy. */
+    }
   }
   input.type = 'text'
   input.focus()
@@ -303,26 +302,10 @@ element('preferences-form').addEventListener('submit', (event) => {
     if (result.sleeperId !== session.selfSleeperId)
       throw new Error('The personal account changed. Reload before continuing.')
     preferences = result
+    personalWorkspace?.updatePreferences(preferences.preferences)
     message('Your private preferences were saved. The bed target was not changed.')
   })
 })
-element('routine-form').addEventListener('submit', (event) => {
-  event.preventDefault()
-  action(async () => {
-    const day = element('routine-day').value
-    const existing = routines.routines.find(routine => routine.dayOfWeek === day)
-    if (existing && (existing.draft.temperatures.length > 0 || existing.draft.notes || existing.draft.power.endAction !== 'turn_off' || !existing.draft.power.enabled || (existing.draft.alarm && existing.draft.power.offTime !== existing.draft.alarm.time)))
-      throw new Error('This draft has additional phases or notes. Use the full editor to preserve them.')
-    const replacement = { dayOfWeek: day, draft: { power: { onTime: element('routine-bed').value, offTime: element('routine-wake').value, onTemperature: Number(element('routine-temperature').value), enabled: true, endAction: 'turn_off' }, temperatures: [], alarm: { ...(existing?.draft.alarm ?? { vibrationIntensity: 40, vibrationPattern: 'rise', duration: 20, wakeWindow: 0 }), time: element('routine-wake').value, alarmTemperature: Number(element('routine-warm').value), enabled: element('routine-vibrate').checked }, notes: '' } }
-    const week = [...routines.routines.filter(routine => routine.dayOfWeek !== day), replacement]
-    await request('me/routines', 'PUT', { ...context(), expectedRevision: routines.revision, routines: week })
-    await refresh()
-    message('Your night was saved as a private draft. No real bed routine or alarm changed.')
-  })
-})
-element('routine-day').addEventListener('change', loadDraft)
-for (const id of ['routine-bed', 'routine-wake'])
-  element(id).addEventListener('change', summarizeRoutine)
 element('invitation-form').addEventListener('submit', (event) => {
   event.preventDefault()
   action(async () => {
@@ -349,7 +332,8 @@ function announceAccountChange() {
   try {
     localStorage.setItem('sleepypod-account-change', `${Date.now()}:personal`)
   }
-  catch { /* No personal information is kept in browser storage. */ }
+  catch { /* No personal information is kept in browser storage. */
+  }
 }
 function otherAccountChanged() {
   for (const controller of activeRequests)
@@ -369,16 +353,23 @@ window.addEventListener('storage', (event) => {
     otherAccountChanged()
 })
 window.addEventListener('pagehide', () => {
+  clearPersonalView()
   for (const controller of activeRequests)
     controller.abort()
 })
+window.addEventListener('pageshow', (event) => {
+  if (event.persisted)
+    location.reload()
+})
 window.addEventListener('focus', async () => {
-  if (!session || busy) return
+  if (!session || busy)
+    return
   try {
     await request('household/session')
   }
   catch (error) {
-    if ([401, 409].includes(error.status)) otherAccountChanged()
+    if ([401, 409].includes(error.status))
+      otherAccountChanged()
   }
 })
 const inviteInFragment = new URLSearchParams(location.hash.slice(1)).get('invite')
