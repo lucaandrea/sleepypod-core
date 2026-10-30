@@ -79,7 +79,7 @@ def settle(token, revision, seconds, observe, sleep, monotonic):
             ready = False
         if ready:
             # Unexpected thermal activity fails immediately; it is not a transient readiness error.
-            handoff.require_thermal_idle(handoff.local_json('/api/device/status', token), core=True)
+            handoff.require_core_thermal_idle(token, observation)
             observed_at = monotonic()
             if fresh_since is None:
                 fresh_since = observed_at
@@ -93,10 +93,12 @@ def settle(token, revision, seconds, observe, sleep, monotonic):
 
 def restore(directory, plan, saved, record, sleep=time.sleep, monotonic=time.monotonic):
     """Restore service ownership and boot selection, preserving both sets of databases."""
+    handoff.require_legacy_recovery_data(Path(plan['config']['data']))
     record.update(bootOwner='unknown', activeOwner='transitioning')
     phase(directory, record, 'restoring_legacy')
     handoff.validate_installed(plan)
     handoff.stop_units(CORE_UNITS)
+    handoff.require_legacy_recovery_data(Path(plan['config']['data']))
     validate_legacy_definitions(saved)
     handoff.systemctl('disable', *CORE_UNITS)
     handoff.systemctl('enable', *LEGACY_UNITS)
@@ -159,7 +161,7 @@ def activate(directory, legacy, seconds=120, observe=handoff.core_observation,
         observation = observe(token, revision)
         if observation['device']['freshness'] != 'fresh' or observation['temperatureRuntime'] != 'ready':
             raise RuntimeError('Core readiness changed while selecting the boot owner')
-        handoff.require_thermal_idle(handoff.local_json('/api/device/status', token), core=True)
+        handoff.require_core_thermal_idle(token, observation)
         record['observation'] = observation
         record['bootOwner'] = 'sleepypod-core'
         record['requireIdleOnRestore'] = False

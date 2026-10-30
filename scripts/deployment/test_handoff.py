@@ -116,7 +116,8 @@ class HandoffTests(unittest.TestCase):
         for name in service_plan.CORE_UNITS:
             self.states[name] = {'LoadState': 'not-found', 'ActiveState': 'inactive', 'MainPID': '0',
                                  'UnitFileState': '', 'FragmentPath': '', 'DropInPaths': ''}
-        for name, replacement in [('UNIT_DIRECTORY', self.unit_directory), ('systemctl', self.control), ('unit_state', lambda name: dict(self.states[name]))]:
+        for name, replacement in [('UNIT_DIRECTORY', self.unit_directory), ('systemctl', self.control), ('unit_state', lambda name: dict(self.states[name])),
+                                  ('require_legacy_recovery_data', lambda _: None)]:
             context = patch.object(handoff, name, replacement)
             context.start()
             self.addCleanup(context.stop)
@@ -139,6 +140,16 @@ class HandoffTests(unittest.TestCase):
             for name in names:
                 self.states[name].update(ActiveState='active', MainPID='456')
         return ''
+
+    def test_restore_holds_personal_data_before_and_after_stopping_writers(self):
+        handoff.install(self.directory)
+        journal = json.loads((self.directory/'handoff.json').read_text())
+        for effects, should_stop in [([ValueError('personal recovery')], False), ([None, ValueError('personal recovery')], True)]:
+            self.calls.clear()
+            with patch.object(handoff, 'require_legacy_recovery_data', side_effect=effects), self.assertRaisesRegex(ValueError, 'personal recovery'):
+                handoff.restore(self.plan, journal)
+            self.assertEqual(any(call[0] == 'stop' for call in self.calls), should_stop)
+            self.assertFalse(any(call[0] == 'start' for call in self.calls))
 
     def prepare_trial(self):
         handoff.install(self.directory)

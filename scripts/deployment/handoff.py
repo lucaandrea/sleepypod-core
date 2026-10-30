@@ -12,6 +12,8 @@ import subprocess
 import time
 import urllib.error
 import urllib.request
+import maintenance_status
+from recovery_privacy import require_legacy_recovery_data
 
 from service_plan import CORE_UNIT, CORE_UNITS, LEGACY_UNITS, read_plan
 
@@ -132,6 +134,16 @@ def restored_idle(sleep=time.sleep, monotonic=time.monotonic):
 
 
 def core_observation(token, expected_revision):
+    try:
+        value = local_json(maintenance_status.PATH, token)
+    except urllib.error.HTTPError as error:
+        # Only an older release without this route may use the legacy owner API.
+        # Authentication failures, broken storage, redirects and malformed data
+        # never authorize fallback to a broader surface.
+        if error.code != 404:
+            raise
+    else:
+        return maintenance_status.parse(value, expected_revision)
     value = local_json('/api/v1/capabilities', token)
     if value.get('controller', {}).get('id') != 'sleepypod-core':
         raise ValueError('Unexpected controller response')
@@ -142,8 +154,16 @@ def core_observation(token, expected_revision):
             'temperatureRuntime': value['features']['temperatureControl']['runtime']}
 
 
+def require_core_thermal_idle(token, observation):
+    if 'maintenanceProtocol' in observation:
+        maintenance_status.require_idle(observation)
+    else:
+        require_thermal_idle(local_json('/api/device/status', token), core=True)
+
+
 def prerequisites(plan):
     config = plan['config']
+    require_legacy_recovery_data(Path(config['data']))
     if not stat.S_ISSOCK(Path(config['dacSocket']).stat().st_mode):
         raise ValueError('The inspected firmware socket is absent')
     manifest = json.loads((Path(config['release']) / 'bundle-manifest.json').read_text())
@@ -208,7 +228,9 @@ def install(directory):
 def restore(plan, journal):
     # Changed units need human review; never kill an unrelated replacement service.
     validate_installed(plan)
+    require_legacy_recovery_data(Path(plan['config']['data']))
     stop_units(CORE_UNITS)
+    require_legacy_recovery_data(Path(plan['config']['data']))
     validate_legacy(journal)
     systemctl('start', *LEGACY_UNITS)
     states = {name: unit_state(name) for name in LEGACY_UNITS}
@@ -256,7 +278,7 @@ def trial(directory, seconds, observe=core_observation, sleep=time.sleep, monoto
                 journal['observation'] = observation
                 if observation['device']['freshness'] == 'fresh':
                     if require_idle:
-                        require_thermal_idle(local_json('/api/device/status', token), core=True)
+                        require_core_thermal_idle(token, observation)
                     observed_at = monotonic()
                     if fresh_since is None:
                         fresh_since = observed_at
@@ -271,7 +293,13 @@ def trial(directory, seconds, observe=core_observation, sleep=time.sleep, monoto
     finally:
         journal['phase'] = 'restoring_legacy'
         private_json(journal_path, journal)
-        journal['restoration'] = restore(plan, journal)
+        try:
+            journal['restoration'] = restore(plan, journal)
+        except BaseException:
+            journal['phase'] = 'recovery_required'
+            journal['trialSucceeded'] = False
+            private_json(journal_path, journal)
+            raise
         journal['phase'] = 'trial_restored'
         journal['trialEndedAt'] = time.time()
         try:

@@ -98,6 +98,15 @@ class ActivationTests(unittest.TestCase):
         self.assertEqual(restored['phase'], 'rolled_back')
         self.assert_restored()
 
+    def test_legacy_rollback_holds_personal_data_before_and_after_stopping(self):
+        self.run_activation()
+        for effects, should_stop in [([ValueError('personal recovery')], False), ([None, ValueError('personal recovery')], True)]:
+            self.calls.clear()
+            with patch.object(handoff, 'require_legacy_recovery_data', side_effect=effects), self.assertRaisesRegex(ValueError, 'personal recovery'):
+                activate.rollback(self.directory)
+            self.assertEqual(any(call[0] == 'stop' for call in self.calls), should_stop)
+            self.assertFalse(any(call[0] in ('start', 'disable', 'enable') for call in self.calls))
+
     def test_unqualified_trial_never_mutates_services(self):
         original = dict(self.journal)
         cases = {'phase': 'installed_not_started', 'trialSucceeded': False, 'requireIdle': False,
