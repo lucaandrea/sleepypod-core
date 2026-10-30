@@ -41,6 +41,7 @@ over old physical qualification as if it applied to the new one.
 | [Core #69: personal routine publication](https://github.com/lucaandrea/sleepypod-core/pull/69) | Hosted unit suite: 8,505 passed, 19 skipped; hosted browser suite and all seven checks passed. Local: 151 focused and 6,845 related tests passed. | Separate publication flag defaults off; saved state and scheduler registration have separate receipts. |
 | [Core #70: isolated personal web controls and routine editor](https://github.com/lucaandrea/sleepypod-core/pull/70) | 35 focused tests and six browser scenarios passed locally. Hosted: 8,540 unit tests passed, 19 skipped; 38 browser checks passed, plus both builds, lint and typecheck. Merge tree verified identical. | Controls and publication remain disabled on the live Pod; a joining member is still unassigned. |
 | [Core #71: account changes during private responses](https://github.com/lucaandrea/sleepypod-core/pull/71) | Hosted: 8,565 unit tests passed, 19 skipped; 38 browser checks and all eight checks passed. Merge tree verified identical. | Response/stream access is rechecked; prior committed mutations and delivered bytes are not undone. |
+| [Core #72: persistent personal privacy boundary](https://github.com/lucaandrea/sleepypod-core/pull/72) | Hosted: 8,593 unit tests passed, 19 skipped; 39 browser checks and all eight checks passed. Merge tree verified identical. | Legacy owner access and shared biometric output close after assignment; real HomeKit occupancy reports unavailable. No live flags enabled. |
 | [Native #47: personal account workspace](https://github.com/lucaandrea/sleepypod-ios/pull/47) | Hosted result: 1,010 passed, nine live-service tests skipped, zero failures. | Merged; not uploaded as a new TestFlight build. |
 | [Native #48: reusable temperature presentation](https://github.com/lucaandrea/sleepypod-ios/pull/48) | All four hosted checks passed; 1,010 passed, nine skipped; six temperature UI checks and unsigned Release build passed. | Installed TestFlight remains unchanged. Personal runtime integration follows in #49. |
 | [Native #49: isolated personal controls and receipt recovery](https://github.com/lucaandrea/sleepypod-ios/pull/49) | All four hosted checks passed; the native chat verified 1,042 passed, nine skipped, zero failures in the downloaded result. | Merged, not uploaded to TestFlight. Routine publication is being validated separately in #50. |
@@ -56,9 +57,11 @@ deployment, a TestFlight release, physical behavior or improved sleep outcomes.
 
 ## What remains before Marissa can operate her side
 
-1. **Reviewed assignment activation.** Resolve stable accounts, preview Marissa
-   Left / Luca Right, preserve Luca's actual current routine, and apply only
-   Marissa's reviewed choices. Move assignments and routine ownership together.
+1. **Reviewed assignment activation.** The [side review](ARRANGEMENT_REVIEW_API_V1.md)
+   preserves the owner's actual operating week, uses the joining person's saved
+   draft, and requires separate private approvals. It remains inert even with
+   both approvals. Finish the coordinator that moves assignments and routine
+   ownership together, placing Marissa Left / Luca Right only after review.
    Invalidate old queued commands, snoozes, manual holds and qualification under
    the existing side locks. Joining alone must never perform this transition.
 2. **Personal live controls and weekly alarms.** The filtered bed snapshot and

@@ -490,7 +490,7 @@ describe('db schema definitions', () => {
       'notificationInbox', 'temperatureApplications',
       'roomContextSettings', 'roomContextLatest', 'roomContextHistory',
       'bedroomSettings', 'bedroomLatest', 'bedroomHistory',
-      'households', 'householdAccounts', 'householdBrowserScopes', 'householdDevices', 'householdInvitations', 'householdPersonalSettings', 'householdMutationReceipts',
+      'households', 'householdAccounts', 'householdBrowserScopes', 'householdDevices', 'householdInvitations', 'householdPersonalSettings', 'householdMutationReceipts', 'householdArrangementReviews', 'householdArrangementApprovals',
       'householdHistoryState', 'householdAttributionEpochs', 'householdPersonRecords', 'householdControlReceipts',
     ].sort())
   })

@@ -2,8 +2,9 @@ import { personalRoutinePublishSchema, type PersonalRoutineReview, type Personal
 import { personalRoutinesResponseSchema, personalWeekSchema, type HouseholdSession } from '../contract'
 import { personalControlRequestSchema, type PersonalControlAction, type PersonalControlReceipt } from '../controlContract'
 import type { PersonalBed } from '../bedContract'
+import { arrangementIndexSchema, proposeArrangementSchema, approveArrangementSchema, cancelArrangementSchema, type ArrangementReview } from '../arrangementContract'
 import { normalizeBedtimeDraft, validateBedtimeWeek } from '@/src/lib/bedtimeRoutines'
-import { controlReference, publicationReference, readOwnReceipt, receiptResolved, identifier, scopeMatches, readPersonalBed, samePersonSession, readRoutineReview, PersonalWebError, type RecoveryReference } from './protocol'
+import { controlReference, publicationReference, readOwnReceipt, receiptResolved, identifier, scopeMatches, readPersonalBed, samePersonSession, readRoutineReview, readArrangementReview, PersonalWebError, type RecoveryReference } from './protocol'
 import type { RecoveryJournal } from './recovery'
 import type { PersonalWebTransport } from './client'
 export type PersonalWeek = PersonalRoutineReview['draftWeek']
@@ -15,6 +16,8 @@ export interface PersonalWebState {
   draftLoad: number
   drafts: ReturnType<typeof personalRoutinesResponseSchema.parse> | null
   review: PersonalRoutineReview | null
+  arrangement: ArrangementReview | null
+  arrangementLoaded: boolean
   references: RecoveryReference[]
   results: Record<string, PersonalResult>
   message: string
@@ -49,7 +52,7 @@ export class PersonalWebWorkspace {
   constructor(readonly dependencies: Dependencies) {
     this.now = dependencies.now ?? Date.now
     this.uptime = dependencies.uptime ?? (() => performance.now())
-    this.state = { bed: null, fresh: false, scopeNeedsReview: false, draftLoad: 0, drafts: null, review: null, references: [], results: {},
+    this.state = { bed: null, fresh: false, scopeNeedsReview: false, draftLoad: 0, drafts: null, review: null, arrangement: null, arrangementLoaded: false, references: [], results: {},
       message: '', error: null, busy: [], storageReady: false, now: this.now() }
   }
 
@@ -395,13 +398,78 @@ export class PersonalWebWorkspace {
     }
   }
 
+  /** Review writes never touch the bed. A lost reply requires a GET, never a replay. */
+  private async arrangementOperation(operation: 'refresh' | 'propose' | 'approve' | 'cancel', ownerSide?: 'left' | 'right') {
+    if (this.disposed || this.state.busy.includes('arrangement') || (operation !== 'refresh' && !this.state.arrangementLoaded)) return
+    const generation = this.generation, reviewed = this.state.arrangement
+    this.update({ busy: [...this.state.busy, 'arrangement'], error: null })
+    try {
+      const session = await this.session(generation)
+      if (operation === 'refresh') {
+        const result = arrangementIndexSchema.parse(await this.dependencies.client.read('household/arrangement'))
+        this.check(generation)
+        this.update({ arrangement: result.review ? readArrangementReview(result.review, session) : null, arrangementLoaded: true,
+          message: 'Current side review checked. The bed arrangement is unchanged.' })
+        return
+      }
+      if (operation !== 'cancel' && !session.capabilities.arrangementReview)
+        throw new PersonalWebError('unavailable', 'Side-change review is not enabled on this Pod.')
+      const context = { version: 1, requestId: identifier(), expectedSessionRevision: session.sessionRevision, expectedAssignmentRevision: session.assignmentRevision }
+      let input: unknown
+      if (operation === 'propose') {
+        if (session.role !== 'owner') throw new PersonalWebError('invalid', 'The current owner prepares the side review.')
+        input = proposeArrangementSchema.parse({ ...context, ownerSide, confirmPreserveOperatingOwnerWeek: true })
+      }
+      else {
+        if (!reviewed) throw new PersonalWebError('invalid', 'Check the current side review first.')
+        const now = this.now()
+        if (operation === 'approve' && (!reviewed.canApprove || now < reviewed.createdAt || now >= reviewed.expiresAt))
+          throw new PersonalWebError('expired', 'This side review can no longer be approved. Check the current review.')
+        input = operation === 'cancel'
+          ? cancelArrangementSchema.parse({ ...context, reviewId: reviewed.reviewId })
+          : approveArrangementSchema.parse({ ...context, reviewId: reviewed.reviewId, issuedAt: now, expiresAt: now + 30_000,
+              confirmMySide: true, confirmMyRoutine: true, acknowledgeSeparateActivation: true })
+      }
+      // On any uncertain response, only a fresh GET unlocks another review action.
+      this.update({ arrangementLoaded: false })
+      const result = await this.dependencies.client.read(`household/arrangement${operation === 'propose' ? '' : `/${operation}`}`, 'POST', input)
+      this.check(generation)
+      const arrangement = readArrangementReview(result, session)
+      const expectedId = operation === 'propose' ? context.requestId : reviewed?.reviewId
+      if (arrangement.reviewId !== expectedId) throw new PersonalWebError('invalid', 'The reply belongs to a different side review. Check the current review.')
+      if ((operation === 'approve' && !arrangement.self.approved) || (operation === 'cancel' && arrangement.state !== 'cancelled'))
+        throw new PersonalWebError('invalid', 'The requested review result was not confirmed. Check the current review.')
+      this.update({ arrangement, arrangementLoaded: true, message: operation === 'cancel'
+        ? 'Side review cancelled. The bed is unchanged.'
+        : operation === 'approve' ? 'Your approval is saved. The bed stays in solo mode until a separate activation.' : 'Side review prepared. Each person must review and approve their own settings.' })
+    }
+    catch (error) {
+      this.update({ arrangementLoaded: false })
+      this.fail(error)
+    }
+    finally { this.update({ busy: this.state.busy.filter(value => value !== 'arrangement') }) }
+  }
+
+  refreshArrangement() { return this.arrangementOperation('refresh') }
+  proposeArrangement(ownerSide: 'left' | 'right', preserveOperatingWeek: boolean) {
+    if (!preserveOperatingWeek) return Promise.resolve()
+    return this.arrangementOperation('propose', ownerSide)
+  }
+
+  approveArrangement(confirmation: { side: boolean, routine: boolean, separateActivation: boolean }) {
+    if (!confirmation.side || !confirmation.routine || !confirmation.separateActivation) return Promise.resolve()
+    return this.arrangementOperation('approve')
+  }
+
+  cancelArrangement() { return this.arrangementOperation('cancel') }
+
   dispose() {
     this.disposed = true
     this.generation++
     this.readGeneration++
     this.dependencies.client.dispose()
     this.subscribers.clear()
-    this.state = { ...this.state, bed: null, drafts: null, review: null, references: [], results: {}, message: '', error: null, fresh: false }
+    this.state = { ...this.state, bed: null, drafts: null, review: null, arrangement: null, arrangementLoaded: false, references: [], results: {}, message: '', error: null, fresh: false }
   }
 }
 export const weekCopy = (week: PersonalWeek): PersonalWeek => week.map(entry => ({ dayOfWeek: entry.dayOfWeek, draft: normalizeBedtimeDraft(entry.draft) }))

@@ -5,6 +5,7 @@ import { householdIdSchema, householdSessionSchema, type HouseholdSession } from
 import { personalBedSchema, type PersonalBed } from '../bedContract'
 import { personalControlReceiptSchema, personalControlRequestSchema, type PersonalControlReceipt, type PersonalControlRequest } from '../controlContract'
 import { personalRoutineReceiptSchema, personalRoutineReviewSchema, type PersonalRoutinePublish, type PersonalRoutineReceipt, type PersonalRoutineReview } from '../routineContract'
+import { arrangementReviewSchema } from '../arrangementContract'
 import { normalizeBedtimeDraft } from '@/src/lib/bedtimeRoutines'
 export const identifier = () => {
   const bytes = crypto.getRandomValues(new Uint8Array(16))
@@ -70,6 +71,23 @@ export function readRoutineReview(input: unknown, session: HouseholdSession) {
     || [review.liveWeek, review.draftWeek, review.changes].some(week => new Set(week.map(night => night.dayOfWeek)).size !== week.length)
     || review.canPublish !== (review.reason === 'ready'))
     throw new PersonalWebError('invalid', 'The routine comparison is inconsistent with your personal bed assignment.')
+  return review
+}
+
+/** A shared proposal exposes the caller's private week and only partner readiness. */
+export function readArrangementReview(input: unknown, session: HouseholdSession) {
+  const review = arrangementReviewSchema.parse(input)
+  const owner = session.role === 'owner'
+  if (review.householdId !== session.householdId || review.podId !== session.podId || review.sleeperId !== session.selfSleeperId
+    || review.assignmentRevision !== session.assignmentRevision
+    || review.self.proposedSide === review.partner.proposedSide
+    || review.self.assignmentAtReview !== (owner ? 'solo' : 'unassigned')
+    || review.self.routineSource !== (owner ? 'preserved_operating_week' : 'own_private_draft')
+    || new Set(review.self.week.map(night => night.dayOfWeek)).size !== review.self.week.length
+    || review.expiresAt <= review.createdAt
+    || (review.canApprove && (review.state !== 'awaiting_approval' || review.self.approved))
+    || (review.state === 'approved_for_separate_activation' && (!review.self.approved || !review.partner.approved)))
+    throw new PersonalWebError('invalid', 'The side review is inconsistent with your personal account.')
   return review
 }
 
