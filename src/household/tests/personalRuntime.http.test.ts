@@ -10,6 +10,8 @@ import { issuePersonalSession, PERSONAL_COOKIE } from '../browserSession'
 import { personalRuntimeFixture } from './runtimeFixture'
 import { personalControlReceiptSchema } from '../controlContract'
 import { personalBedSchema } from '../bedContract'
+import { PersonalRoutineService } from '../personalRoutines'
+import { personalRoutineReceiptSchema, personalRoutineReviewSchema } from '../routineContract'
 
 let fixture: ReturnType<typeof personalRuntimeFixture>, dependencies: HouseholdHttpDependencies, directory: string, legacyKey: string
 function request(path: string, method = 'GET', body?: unknown, key?: string, headers: Record<string, string> = {}) {
@@ -143,5 +145,70 @@ describe('personal bed and control HTTP boundary', () => {
     expect(message).not.toContain('No hardware command was sent')
     expect(message).not.toContain('private-storage-failure')
     expect(message).toContain('could not be confirmed')
+  })
+})
+
+describe('reviewed routine HTTP boundary', () => {
+  function preparePublication(refreshScheduler: () => Promise<boolean> = async () => true) {
+    dependencies.personalRoutines = new PersonalRoutineService({ database: fixture.database, identities: fixture.identities,
+      authority: fixture.runtime.authority, enabled: () => true, now: () => fixture.clock.now,
+      withZones: async (_zones, operation) => operation(), refreshScheduler })
+    fixture.identities.updateRoutines(fixture.ownerKey, { requestId: randomUUID(), expectedSessionRevision: 1,
+      expectedAssignmentRevision: 1, expectedRevision: 1, routines: [{ dayOfWeek: 'sunday', draft: {
+        power: { onTime: '22:00', offTime: '07:15', onTemperature: 70, enabled: true, endAction: 'maintain' },
+        temperatures: [], alarm: null, notes: 'Own reviewed plan',
+      } }] })
+  }
+
+  async function reviewedRequest() {
+    const response = await householdHttp(request('me/routines/review', 'GET', undefined, fixture.ownerKey), dependencies)
+    expect(response.status).toBe(200)
+    expect(response.headers.get('cache-control')).toBe('private, no-store')
+    const review = personalRoutineReviewSchema.parse(await response.json())
+    expect(review.canPublish).toBe(true)
+    return { version: 1, requestId: randomUUID(), scope: review.scope, reviewRevision: review.reviewRevision,
+      issuedAt: fixture.clock.now, expiresAt: fixture.clock.now + 30_000, confirmReplaceLiveWeek: true, acknowledgeCurrentTargetEffect: true }
+  }
+
+  it('reviews and publishes an own draft through HTTP while exposing only its own receipt', async () => {
+    preparePublication()
+    const input = await reviewedRequest()
+    expect(fixture.database.prepare('SELECT * FROM bedtime_routines').all()).toEqual([])
+    const session = await householdHttp(request('household/session', 'GET', undefined, fixture.ownerKey), dependencies)
+    expect((await session.json()).capabilities.personalRoutinePublication).toBe(true)
+    const published = await householdHttp(request('me/routines/publish', 'POST', input, fixture.ownerKey), dependencies)
+    expect(published.status).toBe(200)
+    const receipt = personalRoutineReceiptSchema.parse(await published.json())
+    expect(receipt).toMatchObject({ state: 'saved', scheduler: 'refreshed', sourceSide: 'left' })
+    const lookup = await householdHttp(request(`me/routines/publications/${input.requestId}`, 'GET', undefined, fixture.ownerKey), dependencies)
+    expect(await lookup.json()).toEqual(receipt)
+    expect((await householdHttp(request(`me/routines/publications/${input.requestId}`, 'GET', undefined, fixture.memberKey), dependencies)).status).toBe(404)
+    expect((await householdHttp(request('me/routines/review', 'GET', undefined, fixture.memberKey), dependencies)).status).toBe(409)
+    expect(fixture.execute).not.toHaveBeenCalled()
+  })
+
+  it('rejects a legacy key, a caller-selected side and a draft changed after review', async () => {
+    preparePublication()
+    const input = await reviewedRequest()
+    expect((await householdHttp(request('me/routines/publish', 'POST', input, legacyKey), dependencies)).status).toBe(401)
+    expect((await householdHttp(request('me/routines/publish', 'POST', { ...input, side: 'right' }, fixture.ownerKey), dependencies)).status).toBe(400)
+    fixture.identities.updateRoutines(fixture.ownerKey, { requestId: randomUUID(), expectedSessionRevision: 1,
+      expectedAssignmentRevision: 1, expectedRevision: 2, routines: [] })
+    expect((await householdHttp(request('me/routines/publish', 'POST', input, fixture.ownerKey), dependencies)).status).toBe(409)
+    expect(fixture.database.prepare('SELECT * FROM bedtime_routines').all()).toEqual([])
+  })
+
+  it('does not return a private publication response after a browser switch during scheduler refresh', async () => {
+    preparePublication(async () => {
+      bindBrowserScope(incoming, 'signed_out', '')
+      return true
+    })
+    const input = await reviewedRequest()
+    const incoming = request('me/routines/publish', 'POST', input, undefined, browserHeaders())
+    const response = await householdHttp(incoming, dependencies)
+    expect(response.status).toBe(401)
+    expect(await response.text()).not.toContain('publishedWeek')
+    const saved = await householdHttp(request(`me/routines/publications/${input.requestId}`, 'GET', undefined, fixture.ownerKey), dependencies)
+    expect(await saved.json()).toMatchObject({ state: 'saved', scheduler: 'refreshed' })
   })
 })

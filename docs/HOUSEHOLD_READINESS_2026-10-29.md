@@ -37,7 +37,9 @@ over old physical qualification as if it applied to the new one.
 | [Core #64: person-owned history](https://github.com/lucaandrea/sleepypod-core/pull/64) | 53 focused tests, 6,730 related tests passed; hosted checks passed. | Internal attribution/query service; no live ingestion or personal history route yet. |
 | [Core #65: solo presence across zones](https://github.com/lucaandrea/sleepypod-core/pull/65) | 21 focused tests, 6,743 related tests passed; hosted checks passed. | Logical comfort-presence adapter; physical detection is not established by these tests. |
 | [Core #66: person-bound command authority](https://github.com/lucaandrea/sleepypod-core/pull/66) | 115 focused tests; full related retry with two workers: 6,774 passed, 17 skipped; all seven exact-head hosted checks passed. | Internal service, no public control route or activation capability. |
+| [Core #68: personal control API and atomic routine storage](https://github.com/lucaandrea/sleepypod-core/pull/68) | 140 focused tests; mandatory related suite: 6,817 passed, 17 skipped; production build and two actual household browser scenarios passed; all seven final hosted checks passed. | Runtime defaults off; two-person assignments in tests are fixtures. |
 | [Native #47: personal account workspace](https://github.com/lucaandrea/sleepypod-ios/pull/47) | Hosted result: 1,010 passed, nine live-service tests skipped, zero failures. | Merged; not uploaded as a new TestFlight build. |
+| [Native #48: account preparation refinements](https://github.com/lucaandrea/sleepypod-ios/pull/48) | All four hosted checks passed; 1,010 passed, nine skipped; six temperature UI checks and unsigned Release build passed. | Installed TestFlight remains unchanged. Personal runtime integration is a later change. |
 
 The first broad Core #66 run had five timeouts in four independent files. Those
 files passed unchanged in an isolated two-worker run (57 tests); the complete
@@ -55,12 +57,13 @@ deployment, a TestFlight release, physical behavior or improved sleep outcomes.
    Marissa's reviewed choices. Move assignments and routine ownership together.
    Invalidate old queued commands, snoozes, manual holds and qualification under
    the existing side locks. Joining alone must never perform this transition.
-2. **Personal live controls and weekly alarms.** Connect the real assignment
-   provider to the filtered bed snapshot and command API. Recheck device,
-   browser, account and configuration scope after asynchronous work and at actual
-   hardware dispatch. Personal routine publication is separate from draft save
-   and checks the current draft, live routine and assignment revisions. Test
-   independent schedules and stale callbacks through a side move.
+2. **Personal live controls and weekly alarms.** The filtered bed snapshot and
+   command API now resolve current account/assignment authority and recheck it
+   at hardware dispatch. The separately gated [publication API](PERSONAL_ROUTINE_API_V1.md)
+   adds whole-week review, revision checks and a durable save/refresh receipt.
+   Finish both clients, integrate the real side-transfer workflow and test
+   independent schedules and stale callbacks through that transition. These
+   implementations remain off on the live Pod.
 3. **Private history and Health integration.** Attach live observations to dated
    person assignments. Review Luca's legacy records explicitly instead of
    relabeling old Left history as Marissa's. Bind Health imports, exports, caches,

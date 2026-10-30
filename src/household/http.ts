@@ -8,6 +8,7 @@ import type { HouseholdStore } from './store'
 import { HouseholdError } from './store'
 import { issuePersonalSession, personalCookie, personalCredential } from './browserSession'
 import type { PersonalRuntime } from './personalRuntime'
+import type { PersonalRoutineService } from './personalRoutines'
 const MAX_BODY_BYTES = 128 * 1024
 const privacyHeaders = { 'Cache-Control': 'private, no-store', 'Vary': 'Authorization, Cookie', 'X-Content-Type-Options': 'nosniff' }
 async function jsonBody(request: Request): Promise<unknown> {
@@ -41,11 +42,15 @@ export interface HouseholdHttpDependencies {
   verifySoloConfiguration: (side: 'left' | 'right') => boolean
   allowPublicAttempt?: () => boolean
   personalRuntime?: PersonalRuntime
+  personalRoutines?: PersonalRoutineService
 }
 /** This namespace authorizes every route itself; personal credentials never enter legacy APIs. */
 export async function householdHttp(request: Request, dependencies: HouseholdHttpDependencies): Promise<Response> {
   const { store } = dependencies
-  const present = (session: ReturnType<HouseholdStore['session']>) => dependencies.personalRuntime?.session(session) ?? session
+  const present = (session: ReturnType<HouseholdStore['session']>) => {
+    const current = dependencies.personalRuntime?.session(session) ?? session
+    return dependencies.personalRoutines?.present(current) ?? current
+  }
   const url = new URL(request.url)
   const path = url.pathname.replace(/\/$/, '')
   const method = request.method
@@ -132,6 +137,17 @@ export async function householdHttp(request: Request, dependencies: HouseholdHtt
       if (receiptPath && method === 'GET') {
         const receipt = dependencies.personalRuntime.receipt(credential, receiptPath[1], assertRequestCurrent)
         return receipt ? reply(receipt) : reply({ error: { code: 'not_ready', message: 'No personal command receipt is available.' } }, 404)
+      }
+    }
+    if (dependencies.personalRoutines) {
+      if (path === '/api/v1/me/routines/review' && method === 'GET')
+        return reply(dependencies.personalRoutines.review(credential, assertRequestCurrent))
+      if (path === '/api/v1/me/routines/publish' && method === 'POST')
+        return reply(await dependencies.personalRoutines.publish(credential, mutationBody, assertRequestCurrent))
+      const publicationPath = path.match(/^\/api\/v1\/me\/routines\/publications\/([^/]+)$/)
+      if (publicationPath && method === 'GET') {
+        const receipt = dependencies.personalRoutines.get(credential, publicationPath[1], assertRequestCurrent)
+        return receipt ? reply(receipt) : reply({ error: { code: 'not_ready', message: 'No personal publication receipt is available.' } }, 404)
       }
     }
     if (path === '/api/v1/household/invitations') {
