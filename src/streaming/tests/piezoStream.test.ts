@@ -1,6 +1,9 @@
 // @vitest-environment node
 import { homeSensors } from '@/src/telemetry/sensorCache'
 import { TEST_OWNER_TOKEN } from '@/src/auth/tests/support'
+import { bindBrowserScope, browserScopeRevision } from '@/src/auth/browserScope'
+import { issueSession, SESSION_COOKIE } from '@/src/auth/access'
+import { migratedComfortDatabase } from '@/src/comfort/tests/databaseFixture'
 /**
  * Tests for the WebSocket streaming resource-management surfaces:
  *   - Bounded frame index (issue #324 — was unbounded, ~70MB at 24h)
@@ -66,6 +69,7 @@ const {
   frameIndex,
   clientSubscriptions,
   clientDroppedFrames,
+  clientAccess,
   FRAME_INDEX_RETENTION_S,
   MAX_BUFFERED_BYTES,
   WS_MAX_PAYLOAD_BYTES,
@@ -97,6 +101,7 @@ function fakeWs(opts: Partial<FakeWs> = {}): FakeWs {
     },
     ...opts,
   }
+  clientAccess.set(ws as unknown as WsClient, new Headers({ Authorization: `Bearer ${TEST_OWNER_TOKEN}` }))
   return ws
 }
 
@@ -1034,7 +1039,7 @@ describe('piezoStream — server lifecycle and protocol', () => {
     }
   })
 
-  it('uses the zero-byte early completion even if the requester closes during stat', async () => {
+  it('closes the seek source without sending after the requester closes during stat', async () => {
     const filePath = path.join(tmpRawDir, 'seek-zero-byte-close.RAW')
     const record = buildOuterRecord(1, [{ type: 'capSense', ts: 254, left: 1, right: 2 }])
     const port = startAndPort()
@@ -1060,10 +1065,9 @@ describe('piezoStream — server lifecycle and protocol', () => {
         configurable: true,
       })
       resolveStat({ size: 0 })
-      await waitUntil(() => send.mock.calls.length > 0)
+      await waitUntil(() => close.mock.calls.length === 1)
 
-      expect(send.mock.calls.some(([payload]) =>
-        JSON.parse(String(payload)).type === 'seek_complete')).toBe(true)
+      expect(send).not.toHaveBeenCalled()
       expect(close).toHaveBeenCalledOnce()
     }
     finally {
@@ -1071,6 +1075,43 @@ describe('piezoStream — server lifecycle and protocol', () => {
       send.mockRestore()
       open.mockRestore()
       await client.close()
+    }
+  })
+
+  it('closes a seek descriptor without replay when authority changes during its read', async () => {
+    const filePath = path.join(tmpRawDir, 'seek-revoked.RAW')
+    const record = buildOuterRecord(1, [{ type: 'capSense', ts: 254, left: 1, right: 2 }])
+    const port = startAndPort()
+    const client = await connectClient(port)
+    fs.writeFileSync(filePath, record)
+    await client.waitFor(m => m.type === 'capSense' && m.ts === 254)
+    const before = client.messages.length
+    let releaseRead!: () => void
+    const gate = new Promise<void>((resolve) => {
+      releaseRead = resolve
+    })
+    const read = vi.fn(async (buffer: Buffer) => {
+      await gate
+      record.copy(buffer)
+      return { bytesRead: record.length }
+    })
+    const close = vi.fn(async () => {})
+    const open = vi.spyOn(fs.promises, 'open').mockResolvedValue({ stat: async () => ({ size: record.length }), read, close } as never)
+    try {
+      const closed = new Promise<number>(resolve => client.ws.once('close', code => resolve(code)))
+      client.ws.send(JSON.stringify({ type: 'seek', timestamp: 254 }))
+      await waitUntil(() => read.mock.calls.length === 1)
+      vi.stubEnv('SLEEPYPOD_AUTH_TOKEN', TEST_OWNER_TOKEN + '-rotated')
+      releaseRead()
+      expect(await closed).toBe(1008)
+      expect(client.messages.slice(before)).toEqual([])
+      expect(close).toHaveBeenCalledOnce()
+    }
+    finally {
+      releaseRead()
+      vi.stubEnv('SLEEPYPOD_AUTH_TOKEN', TEST_OWNER_TOKEN)
+      open.mockRestore()
+      client.ws.terminate()
     }
   })
 
@@ -2324,6 +2365,40 @@ describe('piezoStream — handshake Host/Origin gate', () => {
 
   it('accepts a native client that sends no Origin', async () => {
     await expectConnects({})
+  })
+
+  it.each(['live', 'subscribe', 'get_waveform', 'get_time_range', 'seek', 'malformed'])('revokes an open socket before %s can return data', async (operation) => {
+    const result = await attemptHandshake(port, { Authorization: `Bearer ${TEST_OWNER_TOKEN}` })
+    expect(result.status).toBe(101)
+    const messages: string[] = []
+    result.client.on('message', data => messages.push(String(data)))
+    const closed = new Promise<number>(resolve => result.client.once('close', code => resolve(code)))
+    vi.stubEnv('SLEEPYPOD_AUTH_TOKEN', TEST_OWNER_TOKEN + '-rotated')
+    if (operation === 'live') broadcastFrame({ type: 'deviceStatus', ts: 1, private: 'must not escape' })
+    else result.client.send(operation === 'malformed' ? '{' : JSON.stringify({ type: operation, snapshot: true, requestId: 1, timestamp: 1 }))
+    expect(await closed).toBe(1008)
+    expect(messages).toEqual([])
+  })
+
+  it('withholds a live frame immediately after the browser changes to a personal account', async () => {
+    const databasePath = path.join(tmpRawDir, 'browser-scope.db')
+    migratedComfortDatabase(databasePath).close()
+    vi.stubEnv('DATABASE_URL', databasePath)
+    const session = issueSession(Date.now(), true)
+    const scope = bindBrowserScope(new Request('http://localhost/api/auth/session'), 'owner', session).split(';')[0]
+    const headers = new Headers({ host: `localhost:${port}`, origin: 'http://localhost:3000', cookie: `${scope}; ${SESSION_COOKIE}=${session}` })
+    const result = await attemptHandshake(port, Object.fromEntries(headers))
+    expect(result.status).toBe(101)
+    const messages: string[] = []
+    result.client.on('message', data => messages.push(String(data)))
+    const closed = new Promise<number>(resolve => result.client.once('close', code => resolve(code)))
+    const revision = browserScopeRevision(headers)
+    if (!revision) throw new Error('Expected browser scope')
+    headers.set('x-sleepypod-browser-revision', revision)
+    bindBrowserScope(new Request('http://localhost/api/household/session', { headers }), 'personal', 'changed-personal-session')
+    broadcastFrame({ type: 'deviceStatus', ts: 1, private: 'must not escape' })
+    expect(await closed).toBe(1008)
+    expect(messages).toEqual([])
   })
 
   it('rejects missing or wrong credentials before releasing sensor data', async () => {

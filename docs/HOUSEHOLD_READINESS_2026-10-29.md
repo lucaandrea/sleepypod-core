@@ -39,8 +39,10 @@ over old physical qualification as if it applied to the new one.
 | [Core #66: person-bound command authority](https://github.com/lucaandrea/sleepypod-core/pull/66) | 115 focused tests; full related retry with two workers: 6,774 passed, 17 skipped; all seven exact-head hosted checks passed. | Internal service, no public control route or activation capability. |
 | [Core #68: personal control API and atomic routine storage](https://github.com/lucaandrea/sleepypod-core/pull/68) | 140 focused tests; mandatory related suite: 6,817 passed, 17 skipped; production build and two actual household browser scenarios passed; all seven final hosted checks passed. | Runtime defaults off; two-person assignments in tests are fixtures. |
 | [Core #69: personal routine publication](https://github.com/lucaandrea/sleepypod-core/pull/69) | Hosted unit suite: 8,505 passed, 19 skipped; hosted browser suite and all seven checks passed. Local: 151 focused and 6,845 related tests passed. | Separate publication flag defaults off; saved state and scheduler registration have separate receipts. |
+| [Core #70: isolated personal web controls and routine editor](https://github.com/lucaandrea/sleepypod-core/pull/70) | 35 focused tests and six browser scenarios passed locally. Hosted: 8,540 unit tests passed, 19 skipped; 38 browser checks passed, plus both builds, lint and typecheck. Merge tree verified identical. | Controls and publication remain disabled on the live Pod; a joining member is still unassigned. |
 | [Native #47: personal account workspace](https://github.com/lucaandrea/sleepypod-ios/pull/47) | Hosted result: 1,010 passed, nine live-service tests skipped, zero failures. | Merged; not uploaded as a new TestFlight build. |
-| [Native #48: reusable temperature presentation](https://github.com/lucaandrea/sleepypod-ios/pull/48) | All four hosted checks passed; 1,010 passed, nine skipped; six temperature UI checks and unsigned Release build passed. | Installed TestFlight remains unchanged. Personal runtime integration is a later change. |
+| [Native #48: reusable temperature presentation](https://github.com/lucaandrea/sleepypod-ios/pull/48) | All four hosted checks passed; 1,010 passed, nine skipped; six temperature UI checks and unsigned Release build passed. | Installed TestFlight remains unchanged. Personal runtime integration follows in #49. |
+| [Native #49: isolated personal controls and receipt recovery](https://github.com/lucaandrea/sleepypod-ios/pull/49) | All four hosted checks passed; the native chat verified 1,042 passed, nine skipped, zero failures in the downloaded result. | Merged, not uploaded to TestFlight. Routine publication is being validated separately in #50. |
 
 The first broad Core #66 run had five timeouts in four independent files. Those
 files passed unchanged in an isolated two-worker run (57 tests); the complete
@@ -64,7 +66,7 @@ deployment, a TestFlight release, physical behavior or improved sleep outcomes.
    adds whole-week review, revision checks and a durable save/refresh receipt.
    The [isolated personal web workspace](PERSONAL_WEB_WORKSPACE.md) now includes
    scoped controls, full-week draft editing, review and receipt recovery. Finish
-   native integration and the real side-transfer workflow, then test independent
+   native routine-publication acceptance and the real side-transfer workflow, then test independent
    schedules and stale callbacks through that transition. These
    implementations remain off on the live Pod.
 3. **Private history and Health integration.** Attach live observations to dated

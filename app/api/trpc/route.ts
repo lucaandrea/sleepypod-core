@@ -6,7 +6,7 @@ import { fetchRequestHandler } from '@trpc/server/adapters/fetch'
 const handler = async (req: Request) => {
   const denied = requireAccess(req)
   if (denied) return denied
-  return privateApiResponse(await fetchRequestHandler({
+  return privateApiResponse(req, await fetchRequestHandler({
     endpoint: '/api/trpc',
     req,
     router: appRouter,

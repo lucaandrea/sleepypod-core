@@ -1,4 +1,4 @@
-import { ownerRequest } from '@/src/auth/tests/support'
+import { ownerRequest, TEST_OWNER_TOKEN } from '@/src/auth/tests/support'
 /**
  * Tests for the GET handler in app/api/export/archive/route.ts. Covers the
  * inflight guard, the staging-dir setup, conditional db backup, raw symlink
@@ -90,6 +90,35 @@ async function loadRoute() {
 }
 
 describe('GET /api/export/archive', () => {
+  it('does not release a newer export when a canceled producer exits late', async () => {
+    const { GET } = await loadRoute()
+    const first = await GET(ownerRequest('http://localhost/api/export/archive?include=raw'))
+    const earlierChild = spawnMock.lastChild
+    if (!first.body || !earlierChild) throw new Error('Expected archive process')
+    await first.body.cancel()
+    const next = await GET(ownerRequest('http://localhost/api/export/archive?include=raw'))
+    expect(next.status).toBe(200)
+    earlierChild.emit('close', 1)
+    expect((await GET(ownerRequest('http://localhost/api/export/archive?include=raw'))).status).toBe(429)
+    await next.body?.cancel()
+  })
+
+  it('cancels the archive process and staging if access changes before bytes are read', async () => {
+    const { GET } = await loadRoute()
+    const request = ownerRequest('http://localhost/api/export/archive?include=raw')
+    const response = await GET(request)
+    const child = spawnMock.lastChild
+    if (!child) throw new Error('Expected archive process')
+    vi.stubEnv('SLEEPYPOD_AUTH_TOKEN', TEST_OWNER_TOKEN + '-rotated')
+    await expect(response.arrayBuffer()).rejects.toThrow('access changed')
+    expect(child.kill).toHaveBeenCalledWith('SIGKILL')
+    expect(fsMock.rm).toHaveBeenCalledWith(expect.stringContaining('sp-export-'), { recursive: true, force: true })
+    const following = await GET(ownerRequest('http://localhost/api/export/archive?include=raw'))
+    expect(following.status).toBe(200)
+    if (!following.body) throw new Error('Expected archive stream')
+    await following.body.cancel()
+  })
+
   it('returns a gzip stream response with default params (raw + db)', async () => {
     process.env.BIOMETRICS_DATABASE_URL = 'file:/tmp/biometrics.db'
     const { GET } = await loadRoute()
