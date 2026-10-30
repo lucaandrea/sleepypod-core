@@ -84,13 +84,17 @@ existing owner capabilities advertise `features.householdPreparation` with reaso
   are excluded from legacy database browsing. Whole-database HTTP downloads are
   disabled when preparation is enabled or household data exists; encrypted
   administrator backups remain a separate operational responsibility.
-- `activateArrangement`, `personalHistory`, `healthImport` and `cloudAnalysis`
-  remain false. `personalControls` remains false unless the separately gated
+- `activateArrangement`, `healthImport` and `cloudAnalysis` remain false.
+  `personalHistory` remains false unless its separately gated read API below is
+  enabled. `personalControls` remains false unless the separately gated
   [personal runtime](PERSONAL_CONTROL_API_V1.md) is enabled and the current
   arrangement is consistent. Preferences and drafts are not sent to hardware.
 - A separate optional `personalRoutinePublication` capability enables reviewed
   publication through [the personal routine API](PERSONAL_ROUTINE_API_V1.md).
   It defaults off and does not change the existing draft-save semantics.
+- Separately gated [private recording history](PERSONAL_HISTORY_API_V1.md) reads
+  only already-attributed person records. `SLEEPYPOD_PERSONAL_HISTORY` defaults
+  off; it does not enable continuous ingestion, Health import or legacy claims.
 
 The web preparation document is `/household/index.html`; the standalone interactive
 tutorial is `/guide/marissa.html`. These are static documents outside the owner
@@ -229,11 +233,11 @@ endpoint to assign Marissa or move Luca automatically.
 
 ### Dated observations
 
-`src/household/personHistory.ts` adds a durable ownership boundary for the next
-integration gate. It is not called by signup, HTTP routes, the live sensor
-collector or the assignment controller. `personalHistory`, live controls and
-assignment activation remain unavailable in the preparation session. This is
-tested storage and query behavior, not a claim that two-sleeper operation is ready.
+`src/household/personHistory.ts` supplies the durable ownership boundary.
+The separately gated [personal history API](PERSONAL_HISTORY_API_V1.md) exposes
+its credential-scoped reads. Signup does not create attribution, and continuous
+source ingestion and the assignment coordinator are still absent. This is tested
+storage and read transport, not a claim that two-sleeper operation is ready.
 
 - A reviewed epoch binds a stable source dataset and half-open UTC interval to
   distinct sleeper identities and recorded zones. `solo_merged` admits only the
@@ -259,7 +263,7 @@ tested storage and query behavior, not a claim that two-sleeper operation is rea
   estimated sleep; the Pod variability metric is not Watch HRV. No Health import,
   model training, raw export or cloud analysis is enabled by this layer.
 
-Before exposing it, implement the reviewed assignment coordinator and source
+Before enabling the complete personal release, implement the reviewed assignment coordinator and source
 adapters with stable dataset identities, explicit timestamp conversion and full
 measurement-window provenance. Bind consent and current physical configuration
 to the review receipt; never expose `appendReviewedEpoch` directly as an HTTP

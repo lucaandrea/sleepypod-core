@@ -10,6 +10,7 @@ import { issuePersonalSession, personalCookie, personalCredential } from './brow
 import type { PersonalRuntime } from './personalRuntime'
 import type { PersonalRoutineService } from './personalRoutines'
 import type { ArrangementReviewService } from './arrangementReviews'
+import type { PersonalHistoryApi } from './historyApi'
 const MAX_BODY_BYTES = 128 * 1024
 const privacyHeaders = { 'Cache-Control': 'private, no-store', 'Vary': 'Authorization, Cookie', 'X-Content-Type-Options': 'nosniff' }
 async function jsonBody(request: Request): Promise<unknown> {
@@ -45,6 +46,7 @@ export interface HouseholdHttpDependencies {
   personalRuntime?: PersonalRuntime
   personalRoutines?: PersonalRoutineService
   arrangementReviews?: ArrangementReviewService
+  personalHistory?: PersonalHistoryApi
 }
 /** This namespace authorizes every route itself; personal credentials never enter legacy APIs. */
 export async function householdHttp(request: Request, dependencies: HouseholdHttpDependencies): Promise<Response> {
@@ -52,7 +54,8 @@ export async function householdHttp(request: Request, dependencies: HouseholdHtt
   const present = (session: ReturnType<HouseholdStore['session']>) => {
     const current = dependencies.personalRuntime?.session(session) ?? session
     const routines = dependencies.personalRoutines?.present(current) ?? current
-    return dependencies.arrangementReviews?.present(routines) ?? routines
+    const arrangement = dependencies.arrangementReviews?.present(routines) ?? routines
+    return dependencies.personalHistory?.present(arrangement) ?? arrangement
   }
   const url = new URL(request.url)
   const path = url.pathname.replace(/\/$/, '')
@@ -131,6 +134,9 @@ export async function householdHttp(request: Request, dependencies: HouseholdHtt
     }
     if (path === '/api/v1/household/session' && method === 'GET')
       return reply(present(store.session(credential)))
+    if (dependencies.personalHistory && ['GET', 'HEAD'].includes(method)
+      && (path === '/api/v1/me/sleep' || /^\/api\/v1\/me\/sleep\/[^/]+$/.test(path)))
+      return dependencies.personalHistory.response(request, credential, assertRequestCurrent)
     if (dependencies.arrangementReviews) {
       if (path === '/api/v1/household/arrangement' && method === 'GET')
         return reply({ version: 1, review: dependencies.arrangementReviews.latest(credential) })

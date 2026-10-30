@@ -203,7 +203,7 @@ export class PersonHistoryStore {
       const rows = this.database.prepare(`SELECT record.*, epoch.mode, epoch.basis FROM household_person_records record
         JOIN household_attribution_epochs epoch ON epoch.id = record.epoch_id
         WHERE record.household_id = ? AND record.sleeper_id = ? AND record.source_kind = ?
-          AND record.starts_at >= ? AND record.ends_at <= ? AND record.invalidated_at IS NULL AND epoch.revoked_at IS NULL
+          AND record.ends_at > ? AND record.starts_at < ? AND record.invalidated_at IS NULL AND epoch.revoked_at IS NULL
           AND record.sequence <= ? AND (record.starts_at < ? OR (record.starts_at = ? AND record.sequence < ?))
           ORDER BY record.starts_at DESC, record.sequence DESC LIMIT ?`)
         .all(session.householdId, session.selfSleeperId, query.kind, query.startsAt, query.endsAt, page.watermark, page.beforeStartsAt, page.beforeStartsAt, page.beforeSequence, query.limit + 1) as RecordRow[]
@@ -241,6 +241,11 @@ export class PersonHistoryStore {
   }
 
   record(credential: HouseholdCredential, personRecordId: string) {
+    return this.detail(credential, personRecordId).record
+  }
+
+  /** Revision and record come from one snapshot, including a missing own record. */
+  detail(credential: HouseholdCredential, personRecordId: string) {
     householdIdSchema.parse(personRecordId)
     return this.database.transaction(() => {
       const session = this.identities.session(credential)
@@ -248,7 +253,7 @@ export class PersonHistoryStore {
         JOIN household_attribution_epochs epoch ON epoch.id = record.epoch_id WHERE record.id = ?
         AND record.household_id = ? AND record.sleeper_id = ? AND record.invalidated_at IS NULL AND epoch.revoked_at IS NULL`)
         .get(personRecordId, session.householdId, session.selfSleeperId) as RecordRow | undefined
-      return row ? this.project(row) : null
+      return { record: row ? this.project(row) : null, attributionRevision: this.revision(session.householdId) }
     })()
   }
 }
