@@ -4,6 +4,13 @@
 It does not activate the retained Free Sleep controller or change boot selection.
 Use the initial migration/handoff procedure for a first installation instead.
 
+Use the complete `scripts/deployment/` module set from the reviewed commit,
+including `maintenance_status.py` and `recovery_privacy.py`; do not mix helper
+versions. Current tools hold legacy update/restore when personal household
+records exist, including unassigned drafts. See the [personal recovery
+boundary](PERSONAL_RECOVERY_BOUNDARY.md). The hold preserves data; it is not yet
+a supported personal-account recovery workflow.
+
 Before applying, verify the complete offline release manifest, run the matching
 software checks, and confirm the bed is empty, connected and filled with an
 attendant nearby. The tool requires idle thermal telemetry before switching and
@@ -11,9 +18,10 @@ for a continuous 30-second readiness window afterwards. It does not send an
 actuator command to make the bed idle. Saved routines can resume at startup.
 
 Render a new controller plan and maintenance plan with `service_plan.py` and
-`maintenance_plan.py`. Only the release path may change: sensor modules, data,
-credentials, DAC socket and maintenance socket must stay identical. Changes to
-these require a separately reviewed migration. Keep all old release files.
+`maintenance_plan.py`. Only the release path and an explicitly verified sensor
+source may change. Data, credentials, DAC socket and maintenance socket must
+stay identical. Other changes require a separately reviewed migration. Keep all
+old release files.
 
 ```text
 active Core → stop maintenance and all Core writers → private data backup
@@ -40,7 +48,9 @@ never the owner connection key. Backups contain private health and pairing data;
 keep them private and make an off-Pod copy. Do not commit or publish them.
 
 After a failed update, automatic rollback restores the previous Core and its
-quiesced data. A separate `replaced-data-*` directory retains the failed
+quiesced data only when the recovery guards still pass. Personal records created
+during the update or unreadable household state prevent that replacement and
+require recovery without starting the older runtime. A separate `replaced-data-*` directory retains the failed
 candidate's data for inspection. Unrecognized units, a corrupt backup, failed
 restoration or an interrupted restoration leave `recovery_required` instead of
 silently overwriting unknown state. Inspect that state before retrying.

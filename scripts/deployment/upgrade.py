@@ -20,6 +20,7 @@ import maintenance_install
 import maintenance_plan
 import service_plan
 import stage_sensors
+from recovery_privacy import require_legacy_recovery_data
 
 FORMAT = 'sleepypod-upgrade/1'
 HELPERS = (maintenance_plan.SOCKET, maintenance_plan.SERVICE)
@@ -158,11 +159,23 @@ def start_and_verify(plan, token, revision, seconds):
 def restore(directory, details, record, seconds=120):
     """Restore the previous Core, never starting the retained Free Sleep controller."""
     validate_units(details['oldUnits'], details['newUnits'])
+    data = Path(details['old']['config']['data'])
+    backup = directory/'data-backup'
+    require_legacy_recovery_data(data)
+    if record.get('backupComplete'):
+        require_legacy_recovery_data(backup)
     checkpoint(directory, record, 'restoring')
     stop_helpers()
     handoff.stop_units(service_plan.CORE_UNITS)
-    data = Path(details['old']['config']['data'])
-    backup = directory/'data-backup'
+    # Recheck after writers have stopped. A concurrent account creation must
+    # not disappear into a pre-account backup or an older runtime.
+    try:
+        require_legacy_recovery_data(data)
+        if record.get('backupComplete'):
+            require_legacy_recovery_data(backup)
+    except ValueError:
+        checkpoint(directory, record, 'recovery_required')
+        raise
     if record.get('backupComplete'):
         if inventory(backup) != record['backupInventory']:
             raise ValueError('Rollback backup changed; refusing to overwrite live data')
@@ -209,9 +222,10 @@ def upgrade(directory, old_directory, new_directory, old_helpers, new_helpers, s
     old_revision = maintenance_install.verify_release(Path(old['config']['release']))
     new_revision = maintenance_install.verify_release(Path(new['config']['release']))
     data = Path(old['config']['data'])
+    require_legacy_recovery_data(data)
     token = handoff.read_owner_key(Path(old['config']['environment']))
-    handoff.require_thermal_idle(handoff.local_json('/api/device/status', token), core=True)
-    handoff.core_observation(token, old_revision)
+    observation = handoff.core_observation(token, old_revision)
+    handoff.require_core_thermal_idle(token, observation)
     # Reserve space for backup, restore rehearsal and failed-candidate data.
     needed = sum(path.stat().st_size for path in data.rglob('*') if path.is_file()) * 4 + 128*1024*1024
     if shutil.disk_usage(data).free < needed:
@@ -226,6 +240,7 @@ def upgrade(directory, old_directory, new_directory, old_helpers, new_helpers, s
         stop_helpers()
         handoff.stop_units(service_plan.CORE_UNITS)
         checkpoint(directory, record, 'quiesced')
+        require_legacy_recovery_data(data)
         record['configurationBefore'] = configuration(data)
         record['backupInventory'] = copy_data(data, directory/'data-backup')
         check_databases(directory/'data-backup')

@@ -90,7 +90,10 @@ records original unit/drop-in hashes and enablement, writes only absent Core
 units and reloads systemd. It **does not start or enable anything**. A partial
 installation leaves a journal and never silently overwrites or deletes files;
 inspect its recorded creations before recovery. Keep `handoff.py`,
-`service_plan.py` and `prepare_offline.py` together, from the reviewed commit.
+`service_plan.py`, `prepare_offline.py`, `maintenance_status.py` and
+`recovery_privacy.py` together, from the reviewed commit. Initial handoff and
+retained-Free-Sleep rollback are held if personal household records exist;
+see the [personal recovery boundary](PERSONAL_RECOVERY_BOUNDARY.md).
 
 ## Replace an inactive release plan
 

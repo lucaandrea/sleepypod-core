@@ -42,9 +42,11 @@ over old physical qualification as if it applied to the new one.
 | [Core #70: isolated personal web controls and routine editor](https://github.com/lucaandrea/sleepypod-core/pull/70) | 35 focused tests and six browser scenarios passed locally. Hosted: 8,540 unit tests passed, 19 skipped; 38 browser checks passed, plus both builds, lint and typecheck. Merge tree verified identical. | Controls and publication remain disabled on the live Pod; a joining member is still unassigned. |
 | [Core #71: account changes during private responses](https://github.com/lucaandrea/sleepypod-core/pull/71) | Hosted: 8,565 unit tests passed, 19 skipped; 38 browser checks and all eight checks passed. Merge tree verified identical. | Response/stream access is rechecked; prior committed mutations and delivered bytes are not undone. |
 | [Core #72: persistent personal privacy boundary](https://github.com/lucaandrea/sleepypod-core/pull/72) | Hosted: 8,593 unit tests passed, 19 skipped; 39 browser checks and all eight checks passed. Merge tree verified identical. | Legacy owner access and shared biometric output close after assignment; real HomeKit occupancy reports unavailable. No live flags enabled. |
+| [Core #73: independent arrangement reviews](https://github.com/lucaandrea/sleepypod-core/pull/73) | Hosted: 8,630 unit tests passed, 19 skipped; 41 browser scenarios and all seven checks passed. Merge tree verified identical. | Each person approves their own settings privately. Approvals do not activate assignments. |
 | [Native #47: personal account workspace](https://github.com/lucaandrea/sleepypod-ios/pull/47) | Hosted result: 1,010 passed, nine live-service tests skipped, zero failures. | Merged; not uploaded as a new TestFlight build. |
 | [Native #48: reusable temperature presentation](https://github.com/lucaandrea/sleepypod-ios/pull/48) | All four hosted checks passed; 1,010 passed, nine skipped; six temperature UI checks and unsigned Release build passed. | Installed TestFlight remains unchanged. Personal runtime integration follows in #49. |
 | [Native #49: isolated personal controls and receipt recovery](https://github.com/lucaandrea/sleepypod-ios/pull/49) | All four hosted checks passed; the native chat verified 1,042 passed, nine skipped, zero failures in the downloaded result. | Merged, not uploaded to TestFlight. Routine publication is being validated separately in #50. |
+| [Native #50: personal routine publication](https://github.com/lucaandrea/sleepypod-ios/pull/50) | The native chat verified all four hosted checks and downloaded results: 1,071 passed, nine live-service skips, zero failures. | Merged, not uploaded. Native arrangement review is being validated separately in #51. |
 
 The first broad Core #66 run had five timeouts in four independent files. Those
 files passed unchanged in an isolated two-worker run (57 tests); the complete
@@ -85,6 +87,10 @@ deployment, a TestFlight release, physical behavior or improved sleep outcomes.
    Review shared HomeKit/MQTT telemetry and command consent; preserve pairings.
    MQTT live messages already use `retain:false` and clear legacy retained
    measurements on reconnect, but that does not itself establish personal consent.
+   The [administrative status and recovery hold](PERSONAL_RECOVERY_BOUNDARY.md)
+   keeps maintenance reads narrow and blocks legacy restore when personal records
+   exist. Complete durable, version-compatible personal recovery before activation;
+   this hold alone is not a supported personal-account backup/restore workflow.
 5. **Web/native acceptance and release.** Freeze real route fixtures, test two
    independent accounts, account switching, credential revocation, unknown command
    outcomes, reconnection and private-data isolation. Build both clients against

@@ -50,6 +50,9 @@ export const proxy = (request: NextRequest) => {
 
   if (NO_LOCALE_PATH.test(pathname)) {
     if (pathname === '/api/auth/session') return
+    // Only this passive endpoint accepts administrative bearer access after
+    // personal activation. Its handler rejects cookies and browser requests.
+    if (pathname === '/api/v1/maintenance/status') return
     // These handlers resolve a revocable personal identity themselves. Never
     // admit personal credentials into the broad legacy owner authorization.
     if (pathname.startsWith('/api/v1/household/') || pathname.startsWith('/api/v1/me/')) return
