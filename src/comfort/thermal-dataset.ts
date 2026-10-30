@@ -3,7 +3,7 @@ import type { Side } from '@/src/hardware/types'
 import { comfortEventSchema } from './contract'
 import { comfortLocalDate } from './policy'
 import { median } from './signals'
-import type { ThermalNight } from './thermal-learning'
+import type { ThermalContext, ThermalNight } from './thermal-learning'
 import { currentBedroomGuidance } from '@/src/bedroom/fusion'
 
 const MINIMUM_THERMAL_WINDOWS = 48
@@ -15,7 +15,7 @@ export function thermalDataset(database: Database.Database, side: Side, now: num
     .all(side) as { date: string, comfort: string }[]
   const rows = database.prepare('SELECT event FROM comfort_events WHERE side = ? AND observed_at >= ? AND observed_at <= ? AND json_extract(event, \'$.thermalContext\') IS NOT NULL ORDER BY observed_at LIMIT 50000')
     .all(side, now - 90 * 86400000, now) as { event: string }[]
-  const nights = new Map<string, { identity: string, samples: Map<number, { targetF: number, waterF: number, roomF: number, humidity: number }> }>()
+  const nights = new Map<string, { identity: string, samples: Map<number, { at: number, context: ThermalContext }> }>()
   const ambiguous = new Set<string>()
   for (const row of rows) {
     let value: unknown
@@ -42,18 +42,19 @@ export function thermalDataset(database: Database.Database, side: Side, now: num
     const group = nights.get(date) ?? { identity, samples: new Map() }
     if (group.identity !== identity) ambiguous.add(date)
     // At most one observation per five minutes so high-rate recording cannot dominate a night.
-    group.samples.set(Math.floor(event.at / 300000), context)
+    group.samples.set(Math.floor(event.at / 300000), { at: event.at, context })
     nights.set(date, group)
   }
   return reports.flatMap((feedback): ThermalNight[] => {
     const night = nights.get(feedback.date)
     if (!night || ambiguous.has(feedback.date) || night.samples.size < MINIMUM_THERMAL_WINDOWS
       || !['warm', 'cold', 'comfortable'].includes(feedback.comfort)) return []
-    const times = [...night.samples.keys()].sort((first, second) => first - second)
-    const firstTime = times[0], lastTime = times.at(-1)
-    if (firstTime === undefined || lastTime === undefined || (lastTime - firstTime) * 300_000 < 4 * 3_600_000
-      || times.some((time, index) => index > 0 && (time - times[index - 1]) * 300_000 > MAXIMUM_THERMAL_GAP_MS)) return []
-    const contexts = [...night.samples.values()]
+    // Buckets limit sample weight; only actual timestamps establish coverage and gaps.
+    const samples = [...night.samples.values()].sort((first, second) => first.at - second.at)
+    const firstSample = samples[0], lastSample = samples.at(-1)
+    if (!firstSample || !lastSample || lastSample.at - firstSample.at < 4 * 3_600_000
+      || samples.some((sample, index) => index > 0 && sample.at - samples[index - 1].at > MAXIMUM_THERMAL_GAP_MS)) return []
+    const contexts = samples.map(sample => sample.context)
     const targets = contexts.map(context => context.targetF)
     // A large overnight curve or wake warming makes one whole-night comfort label ambiguous.
     if (Math.max(...targets) - Math.min(...targets) > 2) return []

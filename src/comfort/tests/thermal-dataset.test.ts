@@ -9,13 +9,13 @@ const databases: ReturnType<typeof migratedComfortDatabase>[] = []
 afterEach(() => databases.splice(0).forEach(database => database.close()))
 const start = Date.parse('2026-10-20T22:00:00Z'), end = start + 8 * 3600000, now = end + 86400000
 
-function fixture(options: { environment?: 'test' | 'production', eligible?: boolean, research?: boolean, variableTarget?: boolean, side?: 'left' | 'right' } = {}) {
+function fixture(options: { environment?: 'test' | 'production', eligible?: boolean, research?: boolean, variableTarget?: boolean, side?: 'left' | 'right', sampleAt?: (index: number) => number } = {}) {
   const database = migratedComfortDatabase()
   databases.push(database)
   const store = createComfortStore(database)
   const state = defaultComfortState(), side = options.side ?? 'left'
   for (let index = 0; index < 49; index++) {
-    const at = start + index * 300000
+    const at = options.sampleAt?.(index) ?? start + index * 300000
     store.commit(side, state, { ...comfortEvent(at, 'preview', 'Synthetic fixture'),
       eligible: options.eligible ?? true,
       thermalContext: { targetF: options.variableTarget ? 70 + index % 5 : 70, waterF: 70, roomF: 75, humidity: 50 },
@@ -55,6 +55,19 @@ describe('thermal learning observation provenance', () => {
     expect(thermalDataset(database, 'left', now)).toHaveLength(1)
     const rows = database.prepare('SELECT event FROM comfort_events WHERE json_extract(event,\'$.kind\')=\'preview\'').all() as { event: string }[]
     expect(rows.every(row => JSON.parse(row.event).eligible === false)).toBe(true)
+  })
+  it('uses actual timestamps rather than bucket edges for the four-hour coverage boundary', () => {
+    const shortened = fixture({ sampleAt: index => start + index * 300000 + (index === 0 ? 299000 : 0) })
+    expect(thermalDataset(shortened.database, 'left', now)).toEqual([])
+    const shifted = fixture({ sampleAt: index => start + index * 300000 + 299000 })
+    expect(thermalDataset(shifted.database, 'left', now)).toHaveLength(1)
+  })
+  it('accepts an exact ten-minute gap but rejects one extra millisecond hidden by bucket rounding', () => {
+    for (const excessMs of [0, 1]) {
+      const { database } = fixture({ sampleAt: index => start + index * 300000 + (index === 25 ? excessMs : 0) })
+      database.prepare('DELETE FROM comfort_events WHERE observed_at = ?').run(start + 24 * 300000)
+      expect(thermalDataset(database, 'left', now)).toHaveLength(excessMs === 0 ? 1 : 0)
+    }
   })
   it('rejects sparse observations and source changes even when they have enough sample rows', () => {
     for (const modification of [
