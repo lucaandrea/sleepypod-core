@@ -1400,6 +1400,53 @@ exports[`complete Drizzle schema contracts > pins every main-database table, col
   {
     "checks": 0,
     "columns": [
+      "request_id | sql:text | logical:string/SQLiteText | not-null | default:none | primary-key | not-unique | not-autoincrement | enum:none",
+      "review_id | sql:text | logical:string/SQLiteText | not-null | default:none | not-primary-key | not-unique | not-autoincrement | enum:none",
+      "account_id | sql:text | logical:string/SQLiteText | not-null | default:none | not-primary-key | not-unique | not-autoincrement | enum:none",
+      "device_id | sql:text | logical:string/SQLiteText | not-null | default:none | not-primary-key | not-unique | not-autoincrement | enum:none",
+      "request_hash | sql:text | logical:string/SQLiteText | not-null | default:none | not-primary-key | not-unique | not-autoincrement | enum:none",
+      "created_at | sql:integer | logical:number/SQLiteInteger | not-null | default:none | not-primary-key | not-unique | not-autoincrement | enum:none",
+    ],
+    "exportName": "householdArrangementApprovals",
+    "foreignKeys": [
+      "household_arrangement_approvals_account_id_household_accounts_id_fk | columns:account_id | references:household_accounts(id) | on-delete:none | on-update:none",
+      "household_arrangement_approvals_device_id_household_devices_id_fk | columns:device_id | references:household_devices(id) | on-delete:none | on-update:none",
+      "household_arrangement_approvals_review_id_household_arrangement_reviews_id_fk | columns:review_id | references:household_arrangement_reviews(id) | on-delete:none | on-update:none",
+    ],
+    "indexes": [
+      "idx_household_arrangement_approval | unique | columns:review_id,account_id | where:none",
+    ],
+    "name": "household_arrangement_approvals",
+    "primaryKeys": [],
+    "uniqueConstraints": [],
+  },
+  {
+    "checks": 0,
+    "columns": [
+      "id | sql:text | logical:string/SQLiteText | not-null | default:none | primary-key | not-unique | not-autoincrement | enum:none",
+      "household_id | sql:text | logical:string/SQLiteText | not-null | default:none | not-primary-key | not-unique | not-autoincrement | enum:none",
+      "creator_account_id | sql:text | logical:string/SQLiteText | not-null | default:none | not-primary-key | not-unique | not-autoincrement | enum:none",
+      "request_hash | sql:text | logical:string/SQLiteText | not-null | default:none | not-primary-key | not-unique | not-autoincrement | enum:none",
+      "payload | sql:text | logical:string/SQLiteText | not-null | default:none | not-primary-key | not-unique | not-autoincrement | enum:none",
+      "created_at | sql:integer | logical:number/SQLiteInteger | not-null | default:none | not-primary-key | not-unique | not-autoincrement | enum:none",
+      "expires_at | sql:integer | logical:number/SQLiteInteger | not-null | default:none | not-primary-key | not-unique | not-autoincrement | enum:none",
+      "state | sql:text | logical:string/SQLiteText | not-null | default:open | not-primary-key | not-unique | not-autoincrement | enum:open,cancelled,consumed",
+    ],
+    "exportName": "householdArrangementReviews",
+    "foreignKeys": [
+      "household_arrangement_reviews_creator_account_id_household_accounts_id_fk | columns:creator_account_id | references:household_accounts(id) | on-delete:none | on-update:none",
+      "household_arrangement_reviews_household_id_households_id_fk | columns:household_id | references:households(id) | on-delete:none | on-update:none",
+    ],
+    "indexes": [
+      "idx_household_arrangement_reviews | non-unique | columns:household_id,created_at | where:none",
+    ],
+    "name": "household_arrangement_reviews",
+    "primaryKeys": [],
+    "uniqueConstraints": [],
+  },
+  {
+    "checks": 0,
+    "columns": [
       "id | sql:text | logical:string/SQLiteText | not-null | default:none | primary-key | not-unique | not-autoincrement | enum:none",
       "household_id | sql:text | logical:string/SQLiteText | not-null | default:none | not-primary-key | not-unique | not-autoincrement | enum:none",
       "dataset_id | sql:text | logical:string/SQLiteText | not-null | default:none | not-primary-key | not-unique | not-autoincrement | enum:none",

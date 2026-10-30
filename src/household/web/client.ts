@@ -12,10 +12,10 @@ export class PersonalBrowserClient implements PersonalWebTransport {
   }
 
   async read(path: string, method: 'GET' | 'PUT' | 'POST' = 'GET', body?: unknown): Promise<unknown> {
-    const allowed = /^(household\/session|me\/bed|me\/controls(?:\/[a-f0-9-]{36})?|me\/routines(?:\/(?:review|publish|publications\/[a-f0-9-]{36}))?)$/
+    const allowed = /^(household\/session|household\/arrangement(?:\/(?:approve|cancel|[a-f0-9-]{36}))?|me\/bed|me\/controls(?:\/[a-f0-9-]{36})?|me\/routines(?:\/(?:review|publish|publications\/[a-f0-9-]{36}))?)$/
     const allowedMethod = method === 'GET'
-      ? !['me/controls', 'me/routines/publish'].includes(path)
-      : method === 'PUT' ? path === 'me/routines' : ['me/controls', 'me/routines/publish'].includes(path)
+      ? !['me/controls', 'me/routines/publish', 'household/arrangement/approve', 'household/arrangement/cancel'].includes(path)
+      : method === 'PUT' ? path === 'me/routines' : ['me/controls', 'me/routines/publish', 'household/arrangement', 'household/arrangement/approve', 'household/arrangement/cancel'].includes(path)
     if (this.disposed || !allowed.test(path) || !allowedMethod)
       throw new PersonalWebError('account_changed', 'Reconnect the personal workspace before continuing.')
     const controller = new AbortController()

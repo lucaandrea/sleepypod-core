@@ -1,6 +1,7 @@
 import { useState, useSyncExternalStore } from 'react'
 import type { PersonalWebWorkspace } from './workspace'
 import { RoutineEditor } from './RoutineEditor'
+import { ArrangementReviewPanel } from './ArrangementReviewPanel'
 export function PersonalWorkspace({ workspace, preferredTemperatureF, displayUnit }: {
   workspace: PersonalWebWorkspace
   preferredTemperatureF: number
@@ -132,6 +133,7 @@ export function PersonalWorkspace({ workspace, preferredTemperatureF, displayUni
         </article>
       )}
       {state.drafts && <RoutineEditor key={`${state.drafts.revision}:${state.draftLoad}`} workspace={workspace} state={state} preferredTemperatureF={preferredTemperatureF} />}
+      <ArrangementReviewPanel workspace={workspace} state={state} />
     </div>
   )
 }

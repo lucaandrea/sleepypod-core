@@ -176,8 +176,12 @@ Full target routes (the table above identifies the implemented preparation subse
 - `/api/v1/household/invitations`: owner creates/revokes an expiring invitation.
 - `/api/v1/household/join`: single-use claim; does not activate the two-sleeper bed.
 - `/api/v1/household/devices`: list/revoke personal device credentials.
-- `/api/v1/household/arrangement/prepare` and `/confirm`: preview then atomically
-  change dated assignments, routine ownership and actual zone configuration.
+- `/api/v1/household/arrangement`, `/<reviewId>`, `/approve` and `/cancel`:
+  separately gated private proposal and independent approvals. See
+  [Shared side review v1](ARRANGEMENT_REVIEW_API_V1.md). These do not change the bed.
+- A future activation coordinator must atomically change dated assignments,
+  routine ownership and actual zone configuration after quiescing command sources.
+  There is no public activation endpoint yet.
 - `/api/v1/me/preferences`, `/routines`, `/sleep`, `/watch-references`, `/comfort`
   and `/wake/next`: person-owned data. These full routes share the `/api/v1/me`
   prefix. Read responses echo `sleeperId` and applicable revisions.

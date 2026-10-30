@@ -771,6 +771,28 @@ export const householdMutationReceipts = sqliteTable('household_mutation_receipt
   createdAt: integer('created_at').notNull(),
 })
 
+// An inert shared-arrangement review, with independently approved private plans.
+// Creating or approving it never changes physical assignments or live routines.
+export const householdArrangementReviews = sqliteTable('household_arrangement_reviews', {
+  id: text('id').primaryKey(),
+  householdId: text('household_id').notNull().references(() => households.id),
+  creatorAccountId: text('creator_account_id').notNull().references(() => householdAccounts.id),
+  requestHash: text('request_hash').notNull(),
+  payload: text('payload').notNull(),
+  createdAt: integer('created_at').notNull(),
+  expiresAt: integer('expires_at').notNull(),
+  state: text('state', { enum: ['open', 'cancelled', 'consumed'] }).notNull().default('open'),
+}, table => [index('idx_household_arrangement_reviews').on(table.householdId, table.createdAt)])
+
+export const householdArrangementApprovals = sqliteTable('household_arrangement_approvals', {
+  requestId: text('request_id').primaryKey(),
+  reviewId: text('review_id').notNull().references(() => householdArrangementReviews.id),
+  accountId: text('account_id').notNull().references(() => householdAccounts.id),
+  deviceId: text('device_id').notNull().references(() => householdDevices.id),
+  requestHash: text('request_hash').notNull(),
+  createdAt: integer('created_at').notNull(),
+}, table => [uniqueIndex('idx_household_arrangement_approval').on(table.reviewId, table.accountId)])
+
 // Persist the latest browser identity independently of response arrival order.
 // Only hashes are retained; this table cannot recreate a browser credential.
 export const householdBrowserScopes = sqliteTable('household_browser_scopes', {
