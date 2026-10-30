@@ -4,6 +4,8 @@ import { householdHttp } from './http'
 import { PersonalRuntime } from './personalRuntime'
 import { PersonalRoutineService } from './personalRoutines'
 import { ArrangementReviewService } from './arrangementReviews'
+import { PersonHistoryStore } from './personHistory'
+import { PersonalHistoryApi } from './historyApi'
 import { assertControlCurrent } from '@/src/controls/context'
 import { getTemperatureControllerIfRunning } from '@/src/temperature/instance'
 import { withSideLock } from '@/src/hardware/sideLock'
@@ -13,6 +15,7 @@ const shared = globalThis as typeof globalThis & {
     personalRuntime?: PersonalRuntime
     personalRoutines?: PersonalRoutineService
     arrangementReviews?: ArrangementReviewService
+    personalHistory?: PersonalHistoryApi
     publicAttempts: number
     windowStarted: number
   }
@@ -57,11 +60,14 @@ export async function handleHouseholdRequest(request: Request) {
   })
   runtime.arrangementReviews ??= new ArrangementReviewService({ database: sqlite, identities: runtime.store,
     enabled: () => process.env.SLEEPYPOD_ARRANGEMENT_REVIEW === '1' })
+  runtime.personalHistory ??= new PersonalHistoryApi({ identities: runtime.store, history: new PersonHistoryStore(sqlite, runtime.store),
+    enabled: () => preparationEnabled() && process.env.SLEEPYPOD_PERSONAL_HISTORY === '1' })
   return householdHttp(request, {
     store: runtime.store,
     personalRuntime: runtime.personalRuntime,
     personalRoutines: runtime.personalRoutines,
     arrangementReviews: runtime.arrangementReviews,
+    personalHistory: runtime.personalHistory,
     verifySoloConfiguration: (side) => {
       const row = sqlite.prepare('SELECT bed_mode, unused_zone_mode FROM device_settings LIMIT 1').get() as {
         bed_mode: string

@@ -116,6 +116,26 @@ test('real personal API keeps two browser accounts separate and routine drafts i
     await expect(page.getByLabel('Preferred overnight target')).toHaveValue('70')
     expect(await (await request.get('/api/routines?side=left', { headers: ownerHeaders })).json()).toEqual(beforeRoutines)
     const memberHeaders = { Authorization: `Bearer ${memberKey}` }
+    // The real history route returns attributed records only. Joining never
+    // adopts the old source-side rows from the seeded biometric database.
+    const historyRange = new URLSearchParams({ startsAt: String(Date.parse('2026-10-10T00:00:00Z')),
+      endsAt: String(Date.parse('2026-10-12T00:00:00Z')), kind: 'presence' }).toString()
+    const historyResponse = await request.get(`/api/v1/me/sleep?${historyRange}`, { headers: memberHeaders })
+    expect(historyResponse.status()).toBe(200)
+    expect(historyResponse.headers()['cache-control']).toBe('private, no-store')
+    const historySession = await (await request.get('/api/v1/household/session', { headers: memberHeaders })).json()
+    expect(historySession.capabilities.personalHistory).toBe(true)
+    expect(await historyResponse.json()).toMatchObject({ version: 1, scope: { sleeperId: historySession.selfSleeperId }, records: [], nextCursor: null,
+      interpretation: 'recordings_not_confirmed_sleep', intervalSelection: 'overlap_full_records' })
+    const historyHead = await request.head(`/api/v1/me/sleep?${historyRange}`, { headers: memberHeaders })
+    expect(historyHead.status()).toBe(200)
+    expect(await historyHead.text()).toBe('')
+    expect((await request.get(`/api/v1/me/sleep?${historyRange}`, { headers: ownerHeaders })).status()).toBe(401)
+    expect((await request.get(`/api/v1/me/sleep?${historyRange}&side=left`, { headers: memberHeaders })).status()).toBe(400)
+    expect((await request.get(`/api/v1/me/sleep/${randomUUID()}`, { headers: memberHeaders })).status()).toBe(404)
+    expect((await request.post('/api/v1/me/sleep', { headers: memberHeaders, data: {} })).status()).toBe(404)
+    const cookieHistory = await memberPage.evaluate(async range => (await fetch(`/api/v1/me/sleep?${range}`)).status, historyRange)
+    expect(cookieHistory).toBe(409)
     // Exercise the real Next GET/POST exports. A disabled runtime still returns
     // its contract and rejects commands deliberately, rather than a missing 405 route.
     const bedResponse = await request.get('/api/v1/me/bed', { headers: memberHeaders })

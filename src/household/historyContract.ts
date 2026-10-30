@@ -55,9 +55,11 @@ export const sourceObservationSchema = z.object({
 })
 export type SourceObservation = z.infer<typeof sourceObservationSchema>
 
-export const personalHistoryQuerySchema = z.object({
+export const personalHistoryRangeSchema = z.object({
   startsAt: historyTimeSchema, endsAt: historyTimeSchema,
   kind: historyKindSchema, limit: z.number().int().min(1).max(100).default(30),
+}).strict()
+export const personalHistoryQuerySchema = personalHistoryRangeSchema.extend({
   cursor: z.string().min(1).max(4096).optional(),
 }).strict().refine(value => value.endsAt > value.startsAt && value.endsAt - value.startsAt <= 90 * 86400_000,
   'Choose a positive history range of at most 90 days.')
@@ -72,5 +74,10 @@ export const personalHistoryRecordSchema = z.object({
     basis: z.enum(['legacy_owner_review', 'verified_arrangement']),
     identity: z.literal('reviewed_arrangement_not_biometric_identification'),
   }).strict(),
-}).strict()
+}).strict().superRefine((value, context) => {
+  const duration = value.endsAt - value.startsAt
+  if (duration <= 0 || duration > 86400_000
+    || (value.payload.kind === 'presence' && value.payload.reportedPresenceSeconds * 1000 > duration))
+    context.addIssue({ code: 'custom', message: 'A complete recording needs a valid interval and bounded presence duration.' })
+})
 export type PersonalHistoryRecord = z.infer<typeof personalHistoryRecordSchema>
