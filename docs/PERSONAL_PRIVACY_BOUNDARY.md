@@ -66,7 +66,9 @@ values/timestamps and `reason: privacy_required`. A fresh sensor value is not
 permission to disclose it to everyone using Apple Home or the MQTT broker.
 MQTT rechecks personal topics immediately before publishing, including cached
 snapshots. Empty retained-message tombstones still pass so stale retained data
-can be withdrawn. No broker credentials, accessory identifiers or HomeKit
+can be withdrawn. The HomeKit occupancy characteristic returns an unavailable
+error and sets its fault indicator; it never substitutes an empty-bed value.
+Both direct reads and periodic notifications recheck privacy. No broker credentials, accessory identifiers or HomeKit
 pairings are changed. Shared climate, water and pump status continue as before.
 
 This version does not add a consent switch or shared-actuator permissions. The
@@ -79,7 +81,8 @@ observations; the Pod cannot erase those external histories.
 Behavioral checks cover migrated/backfilled installations, persisted revocation,
 mode/flag changes, failed-transaction rollback, missing/corrupt storage, owner
 browser switching, in-flight response cancellation, actual WebSocket closure,
-Health-upload interruption and cached MQTT redaction. The tests use temporary
+Health-upload interruption, cached MQTT redaction and actual HomeKit characteristic
+reads/polling after access changes. The tests use temporary
 databases and synthetic observations, never the owner's live data.
 
 Two-person activation is still disabled. Its coordinator must lock both sides,
