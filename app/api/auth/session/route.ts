@@ -1,11 +1,14 @@
 import { authConfigured, authorized, issueSession, sameOrigin, SESSION_COOKIE, SESSION_SECONDS, PERSONAL_SESSION_COOKIE, validOwnerToken } from '@/src/auth/access'
 import { bindBrowserScope, hasBrowserScope, personalBrowserScopeActive, browserScopeRevision, BrowserScopeConflict } from '@/src/auth/browserScope'
+import { legacyPrivacyDenial, legacyPrivacyState } from '@/src/household/legacyPrivacy'
 
 export const dynamic = 'force-dynamic'
 
 export function GET(request: Request) {
   const personalSessionActive = hasBrowserScope(request.headers) ? personalBrowserScopeActive(request.headers) : (request.headers.get('cookie') ?? '').split(';').some(value => value.trim().startsWith(`${PERSONAL_SESSION_COOKIE}=`))
-  return Response.json({ configured: authConfigured(), authenticated: authorized(request.headers), personalSessionActive, browserScopeRevision: browserScopeRevision(request.headers) }, {
+  const privacy = legacyPrivacyState()
+  return Response.json({ configured: authConfigured(), authenticated: authorized(request.headers) && privacy === 'legacy', personalSessionActive,
+    personalConnectionRequired: privacy === 'personal_required', privacyAvailable: privacy !== 'unavailable', browserScopeRevision: browserScopeRevision(request.headers) }, {
     headers: { 'Cache-Control': 'no-store' },
   })
 }
@@ -38,6 +41,8 @@ export async function POST(request: Request) {
     exitPersonalSession = value.exitPersonalSession === true
   }
   catch { return new Response(null, { status: 400 }) }
+  const denied = legacyPrivacyDenial()
+  if (denied) return denied
   const headers = new Headers({ 'Cache-Control': 'no-store' })
   const preparation = process.env.SLEEPYPOD_HOUSEHOLD_PREPARATION === '1'
   const session = issueSession(Date.now(), preparation || exitPersonalSession || hasBrowserScope(request.headers))

@@ -1,5 +1,6 @@
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
 import { browserScopeAllows, hasBrowserScope } from './browserScope'
+import { legacyPrivacyDenial, legacyPrivacyState } from '@/src/household/legacyPrivacy'
 
 export const SESSION_COOKIE = 'sleepypod_session'
 export const PERSONAL_SESSION_COOKIE = 'sleepypod_personal_session'
@@ -80,9 +81,14 @@ export function authorized(headers: Headers, method = 'GET', streaming = false):
 }
 
 export function requireAccess(request: Request): Response | null {
-  if (authorized(request.headers, request.method)) return null
+  if (authorized(request.headers, request.method)) return legacyPrivacyDenial()
   return Response.json({ error: authConfigured() ? 'Authentication required' : 'Owner authentication is not configured' }, {
     status: authConfigured() ? 401 : 503,
     headers: { 'Cache-Control': 'no-store', 'WWW-Authenticate': 'Bearer' },
   })
+}
+
+/** Raw streams are an owner legacy surface, never a personal data channel. */
+export function legacyStreamAuthorized(headers: Headers): boolean {
+  return authorized(headers, 'GET', true) && legacyPrivacyState() === 'legacy'
 }

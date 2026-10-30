@@ -9,6 +9,7 @@
 
 import { Service, Characteristic, HapStatusError } from 'hap-nodejs'
 import { getOccupancy } from '@/src/lib/occupancy'
+import { legacyPrivacyState } from '@/src/household/legacyPrivacy'
 import type { Side } from '@/src/hardware/types'
 
 const POLL_MS = 5_000
@@ -22,6 +23,9 @@ export function buildOccupancySensor(side: Side): OccupancyAccessory {
   const service = new Service.OccupancySensor(`Bed ${side} occupancy`, side)
 
   const characteristicValue = (): number => {
+    // Apple Home is a shared audience. Withheld presence is unavailable, never
+    // an empty-bed observation that could trigger an automation.
+    if (legacyPrivacyState() !== 'legacy') throw new HapStatusError(-70402)
     const occupancy = getOccupancy(side)
     if (!occupancy.available) throw new HapStatusError(-70402)
     return occupancy.occupied

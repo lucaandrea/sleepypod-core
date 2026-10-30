@@ -232,3 +232,27 @@ test('real personal API keeps two browser accounts separate and routine drafts i
     await runFixture('pnpm', ['exec', 'tsx', 'tests/browser/fixture.ts', 'household-cleanup', original], { env: process.env })
   }
 })
+
+test('an older owner tab opens the isolated personal workspace after shared activation', async ({ page }) => {
+  // UI-only fixture: the persistent boundary itself is tested against migrated
+  // SQLite and real HTTP/stream guards. No shared browser database is activated.
+  await page.route('**/api/auth/session', route => route.fulfill({ json: {
+    configured: true, authenticated: false, personalConnectionRequired: true, privacyAvailable: true,
+  } }))
+  const oldOwnerRequests: string[] = []
+  page.on('request', (request) => {
+    const path = new URL(request.url()).pathname
+    if (path.startsWith('/api/') && path !== '/api/auth/session' && !path.startsWith('/api/v1/household/')) oldOwnerRequests.push(path)
+  })
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto('/en/sleep')
+  const workspace = page.getByRole('link', { name: 'Open my personal workspace' })
+  await expect(workspace).toBeVisible()
+  await expect(page.getByLabel('Connection key', { exact: true })).toHaveCount(0)
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390)
+  await page.screenshot({ path: test.info().outputPath('personal-connection-required.png'), fullPage: true })
+  await workspace.click()
+  await expect(page).toHaveURL(/\/household\/index.html$/)
+  await expect(page.getByRole('heading', { name: 'Join with an invitation' })).toBeVisible()
+  expect(oldOwnerRequests).toEqual([])
+})

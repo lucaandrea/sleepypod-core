@@ -1,5 +1,5 @@
 import type { IncomingHttpHeaders } from 'node:http'
-import { authorized } from '@/src/auth/access'
+import { legacyStreamAuthorized } from '@/src/auth/access'
 /**
  * WebSocket server for streaming raw sensor data to iOS clients.
  *
@@ -539,7 +539,7 @@ function cleanupClient(ws: WebSocket): void {
 /** Fresh authority also closes an existing socket immediately on its next operation. */
 function clientAuthorized(client: WebSocket): boolean {
   const headers = streamState.clientAccess.get(client)
-  if (headers && authorized(headers, 'GET', true)) return true
+  if (headers && legacyStreamAuthorized(headers)) return true
   if (client.readyState === WebSocket.OPEN) client.close(1008, 'Session access changed')
   return false
 }
@@ -895,7 +895,7 @@ const verifyClient: VerifyClientCallbackAsync = ({ req, origin }, callback) => {
   const rejection = handshakeRejection(req.headers.host, origin || undefined)
   if (rejection === null) {
     const headers = streamAuthHeaders(req.headers)
-    if (!authorized(headers, 'GET', true)) {
+    if (!legacyStreamAuthorized(headers)) {
       callback(false, 401, 'Authentication required', { 'Content-Type': 'text/plain' })
       return
     }

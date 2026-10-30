@@ -1,3 +1,4 @@
+import type DatabaseConstructor from 'better-sqlite3'
 // @vitest-environment node
 import { EventEmitter } from 'node:events'
 import { PassThrough } from 'node:stream'
@@ -12,7 +13,14 @@ const state = vi.hoisted(() => ({
 }))
 vi.mock('@/src/household/privacy', () => ({ householdBackupRestricted: () => state.restricted }))
 vi.mock('@/src/lib/dbInspect', () => ({ DB_FILES: { sleepypod: { path: '/fixture/config.db' } }, backupMarkerPath: () => '/fixture/marker' }))
-vi.mock('better-sqlite3', () => ({ default: class { backup = state.backup; close() {} } }))
+vi.mock('better-sqlite3', async () => {
+  const { default: ActualDatabase } = await vi.importActual<{ default: typeof DatabaseConstructor }>('better-sqlite3')
+  return { default: function (this: { backup: typeof state.backup, close: () => void }, path: string, options?: { fileMustExist?: boolean }) {
+    if (options?.fileMustExist && path === process.env.DATABASE_URL) return new ActualDatabase(path, options)
+    this.backup = state.backup
+    this.close = () => {}
+  } }
+})
 vi.mock('node:child_process', () => ({ spawn: state.spawn }))
 vi.mock('node:fs/promises', () => ({ mkdir: async () => {}, mkdtemp: async () => '/fixture/staging', rm: state.remove, writeFile: async () => {} }))
 

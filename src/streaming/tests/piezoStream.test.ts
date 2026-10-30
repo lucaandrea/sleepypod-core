@@ -3,6 +3,7 @@ import { homeSensors } from '@/src/telemetry/sensorCache'
 import { TEST_OWNER_TOKEN } from '@/src/auth/tests/support'
 import { bindBrowserScope, browserScopeRevision } from '@/src/auth/browserScope'
 import { issueSession, SESSION_COOKIE } from '@/src/auth/access'
+import Database from 'better-sqlite3'
 import { migratedComfortDatabase } from '@/src/comfort/tests/databaseFixture'
 /**
  * Tests for the WebSocket streaming resource-management surfaces:
@@ -2399,6 +2400,23 @@ describe('piezoStream — handshake Host/Origin gate', () => {
     broadcastFrame({ type: 'deviceStatus', ts: 1, private: 'must not escape' })
     expect(await closed).toBe(1008)
     expect(messages).toEqual([])
+  })
+
+  it('closes an existing owner stream and rejects reconnection after a personal privacy boundary', async () => {
+    const result = await attemptHandshake(port, { Authorization: `Bearer ${TEST_OWNER_TOKEN}` })
+    expect(result.status).toBe(101)
+    const messages: string[] = []
+    result.client.on('message', data => messages.push(String(data)))
+    const closed = new Promise<number>(resolve => result.client.once('close', code => resolve(code)))
+    const database = new Database(process.env.DATABASE_URL)
+    try {
+      database.prepare('INSERT INTO household_privacy_boundary VALUES (1, ?, \'test-arrangement\')').run(Date.now())
+    }
+    finally { database.close() }
+    broadcastFrame({ type: 'deviceStatus', ts: 1, private: 'must not escape' })
+    expect(await closed).toBe(1008)
+    expect(messages).toEqual([])
+    expect((await attemptHandshake(port, { Authorization: `Bearer ${TEST_OWNER_TOKEN}` })).status).toBe(401)
   })
 
   it('rejects missing or wrong credentials before releasing sensor data', async () => {

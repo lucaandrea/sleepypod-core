@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Characteristic } from 'hap-nodejs'
+import Database from 'better-sqlite3'
+import '@/src/auth/tests/support'
 import type { OccupancyResult } from '@/src/lib/occupancy'
 
 const occupancyMock = vi.fn<(side: 'left' | 'right') => OccupancyResult>()
@@ -76,6 +78,43 @@ describe('occupancySensor accessory', () => {
     occupancyMock.mockReturnValue(result(false))
     const { stop } = buildOccupancySensor('right')
     expect(occupancyMock).toHaveBeenCalledWith('right')
+    stop()
+  })
+
+  it('withdraws shared occupancy after personal activation without replacing the accessory', async () => {
+    occupancyMock.mockReturnValue(result(true))
+    const { service, stop } = buildOccupancySensor('left')
+    const identity = { UUID: service.UUID, subtype: service.subtype }
+    const characteristic = service.getCharacteristic(Characteristic.OccupancyDetected)
+    expect(await characteristic.handleGetRequest()).toBe(1)
+    const path = process.env.DATABASE_URL
+    if (!path) throw new Error('Privacy fixture is unavailable')
+    const database = new Database(path)
+    database.prepare('INSERT INTO household_privacy_boundary VALUES (1, ?, ?)').run(Date.now(), 'assigned')
+    database.close()
+    occupancyMock.mockClear()
+
+    await expect(characteristic.handleGetRequest()).rejects.toBe(-70402)
+    vi.advanceTimersByTime(5000)
+    expect(service.getCharacteristic(Characteristic.StatusFault).value).toBe(1)
+    expect(occupancyMock).not.toHaveBeenCalled()
+    expect({ UUID: service.UUID, subtype: service.subtype }).toEqual(identity)
+    await expect(characteristic.handleGetRequest()).rejects.toBe(-70402)
+    stop()
+  })
+
+  it('withdraws shared occupancy when its privacy storage cannot be verified', async () => {
+    occupancyMock.mockReturnValue(result(true))
+    const { service, stop } = buildOccupancySensor('right')
+    const characteristic = service.getCharacteristic(Characteristic.OccupancyDetected)
+    expect(await characteristic.handleGetRequest()).toBe(1)
+    vi.stubEnv('DATABASE_URL', `${process.env.DATABASE_URL}.missing`)
+    occupancyMock.mockClear()
+
+    vi.advanceTimersByTime(5000)
+    await expect(characteristic.handleGetRequest()).rejects.toBe(-70402)
+    expect(service.getCharacteristic(Characteristic.StatusFault).value).toBe(1)
+    expect(occupancyMock).not.toHaveBeenCalled()
     stop()
   })
 

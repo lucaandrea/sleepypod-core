@@ -8,6 +8,8 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import os from 'node:os'
+import '@/src/auth/tests/support'
+import Database from 'better-sqlite3'
 import { randomUUID } from 'node:crypto'
 
 // Hoisted state shared with the @/src/db mock factory — lets each test stub
@@ -1546,4 +1548,33 @@ describe('room subscription connection boundaries', () => {
     await shutdownMqttBridge()
     expect(source.connection).toHaveBeenLastCalledWith(false)
   })
+})
+
+it('redacts cached personal MQTT snapshots after the privacy boundary without changing discovery or pairing', async () => {
+  const fake = await startBridgeWithFake({ commands: false })
+  fake.connected = true
+  fake.emit('connect')
+  const database = new Database(process.env.DATABASE_URL)
+  try {
+    database.prepare('INSERT INTO household_privacy_boundary VALUES (1, ?, \'test-arrangement\')').run(Date.now())
+    telemetryMock.read.mockReturnValueOnce({
+      'state/biometrics/left': { available: true, heartRate: 72, privateLabel: 'must not escape' },
+      'state/occupancy/right': { available: true, occupied: true, privateLabel: 'must not escape' },
+      'state/left/climate': { available: true, targetTemperature: 70 },
+    })
+    fake.publish.mockClear()
+    piezoMock.state.listener?.({ type: 'deviceStatus' })
+    const messages = fake.publish.mock.calls.map(call => ({ topic: String(call[0]), value: JSON.parse(String(call[1])), options: call[2] }))
+    for (const kind of ['biometrics/left', 'occupancy/right']) {
+      const message = messages.find(entry => entry.topic.endsWith(`state/${kind}`))
+      expect(message?.value).toMatchObject({ available: false, reason: 'privacy_required', ts: null })
+      expect(message?.value).not.toHaveProperty('privateLabel')
+      expect(message?.options).toMatchObject({ retain: false })
+    }
+    expect(messages.find(entry => entry.topic.endsWith('state/left/climate'))?.value.targetTemperature).toBe(70)
+  }
+  finally {
+    database.close()
+    await shutdownMqttBridge()
+  }
 })

@@ -160,6 +160,15 @@ function describeSchema(module: Record<string, unknown>) {
 }
 
 const expectedTables: Record<string, TableSpec> = {
+  householdPrivacyBoundary: {
+    name: 'household_privacy_boundary',
+    columns: [
+      { name: 'id', notNull: true, default: 'fn' },
+      { name: 'required_at', notNull: true, default: undefined },
+      { name: 'reason', notNull: true, default: undefined },
+    ],
+    indexes: [],
+  },
   baseSchedules: {
     name: 'base_schedules',
     columns: [

@@ -40,6 +40,7 @@ import { onServerFrame } from './piezoStream'
 import { readHomeTelemetry } from '@/src/telemetry/home'
 import { homeDiscovery } from './mqttDiscovery'
 import { mqttEndpointIssue } from './mqttEndpoint'
+import { legacyPrivacyState } from '@/src/household/legacyPrivacy'
 
 // ---------------------------------------------------------------------------
 // Configuration resolution
@@ -227,6 +228,14 @@ function topic(...parts: string[]): string {
 function safePublish(t: string, payload: string | Buffer, opts: IClientPublishOptions): void {
   const c = state.client
   if (!c || !c.connected) return
+  // Recheck at the output boundary even if a telemetry snapshot was collected
+  // just before a separate worker committed the personal arrangement.
+  const personalTopic = (['left', 'right'] as const).some(side =>
+    t === topic('state', 'biometrics', side) || t === topic('state', 'occupancy', side))
+  if (payload.length > 0 && personalTopic && legacyPrivacyState() !== 'legacy') {
+    payload = JSON.stringify({ schemaVersion: 1, source: 'personal_privacy_boundary', available: false, ts: null, expiresAt: null,
+      reason: 'privacy_required', heartRate: null, breathingRate: null, hrv: null, occupied: null, classification: null })
+  }
   try {
     c.publish(t, payload, opts, (err?: Error | null) => {
       if (err) {

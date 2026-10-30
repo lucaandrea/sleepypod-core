@@ -1,4 +1,5 @@
 import { requireAccess } from '@/src/auth/access'
+import { privateApiResponse } from '@/src/auth/privateResponse'
 import { spawn } from 'node:child_process'
 import { mkdir, mkdtemp, open, rm } from 'node:fs/promises'
 import path from 'node:path'
@@ -39,7 +40,16 @@ export async function POST(request: Request): Promise<Response> {
   if (Number(request.headers.get('content-length')) > MAX_BYTES) return Response.json({ error: 'Upload exceeds 512 MiB' }, { status: 413 })
   if (shared.watchUploadBusy) return Response.json({ error: 'Another Watch import is running; retry when it finishes' }, { status: 409 })
   shared.watchUploadBusy = true
-  let signal = AbortSignal.any([request.signal, AbortSignal.timeout(WATCH_UPLOAD_TIMEOUT_MS)])
+  const accessAbort = new AbortController()
+  let accessDenied: Response | null = null
+  const checkAccess = () => {
+    accessDenied ??= requireAccess(request)
+    if (accessDenied) accessAbort.abort()
+    return accessDenied
+  }
+  // A quiet upload or running importer must also stop after an account change.
+  const accessTimer = setInterval(checkAccess, 1000)
+  let signal = AbortSignal.any([request.signal, accessAbort.signal, AbortSignal.timeout(WATCH_UPLOAD_TIMEOUT_MS)])
   let directory: string | undefined
   let tooLarge = false
   try {
@@ -53,12 +63,14 @@ export async function POST(request: Request): Promise<Response> {
     try {
       await request.body.pipeTo(new WritableStream<Uint8Array>({
         async write(chunk) {
+          if (checkAccess()) throw new Error('Upload access changed')
           bytes += chunk.byteLength
           if (bytes > MAX_BYTES) {
             tooLarge = true
             throw new Error('Upload exceeds 512 MiB')
           }
           await file.writeFile(chunk)
+          if (checkAccess()) throw new Error('Upload access changed')
         },
       }), { signal })
     }
@@ -66,7 +78,9 @@ export async function POST(request: Request): Promise<Response> {
       await file.close()
     }
     if (bytes === 0) return Response.json({ error: 'The uploaded file is empty' }, { status: 400 })
-    signal = AbortSignal.any([request.signal, AbortSignal.timeout(WATCH_IMPORT_TIMEOUT_MS)])
+    const beforeImport = checkAccess()
+    if (beforeImport) return beforeImport
+    signal = AbortSignal.any([request.signal, accessAbort.signal, AbortSignal.timeout(WATCH_IMPORT_TIMEOUT_MS)])
     const { side, days } = parsed.data
     const stdout = await new Promise<string>((resolve, reject) => {
       const child = spawn('python3', [path.resolve('scripts/import-watch-health.py'), filename,
@@ -83,9 +97,10 @@ export async function POST(request: Request): Promise<Response> {
       })
       child.on('close', code => code === 0 ? resolve(output) : reject(processError ?? new Error('Import failed')))
     })
-    return Response.json(resultSchema.parse(JSON.parse(stdout)))
+    return privateApiResponse(request, Response.json(resultSchema.parse(JSON.parse(stdout))))
   }
   catch {
+    if (accessDenied) return accessDenied
     return Response.json({ error: tooLarge
       ? 'Upload exceeds 512 MiB'
       : signal.aborted
@@ -93,6 +108,7 @@ export async function POST(request: Request): Promise<Response> {
         : 'Import failed. Use an Apple Health export.zip or export.xml. Some batches may have been saved; retrying is safe.' }, { status: tooLarge ? 413 : signal.aborted ? 408 : 422 })
   }
   finally {
+    clearInterval(accessTimer)
     try {
       if (directory) await rm(directory, { recursive: true, force: true })
     }

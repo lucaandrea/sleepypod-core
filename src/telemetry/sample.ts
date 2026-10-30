@@ -5,7 +5,7 @@ export interface TelemetrySample {
   expiresAt: number | null
   source: string
   available: boolean
-  reason: 'missing' | 'stale' | 'unqualified' | null
+  reason: 'missing' | 'stale' | 'unqualified' | 'privacy_required' | null
   [field: string]: unknown
 }
 

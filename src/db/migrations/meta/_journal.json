@@ -358,6 +358,20 @@
       "when": 1793316071798,
       "tag": "0050_tiny_drax",
       "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "6",
+      "when": 1793321875134,
+      "tag": "0051_household_privacy_boundary",
+      "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "6",
+      "when": 1793321875874,
+      "tag": "0052_household_privacy_triggers",
+      "breakpoints": true
     }
   ]
 }
