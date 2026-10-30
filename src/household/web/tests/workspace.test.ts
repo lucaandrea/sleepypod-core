@@ -187,6 +187,31 @@ describe('isolated personal browser commands', () => {
     expect(fixture.events).toEqual([])
     expect(fixture.workspace.getSnapshot().error).toContain('water and priming status')
   })
+  it.each(['empty', 'failure'])('does not let an older %s recovery scan hide a newly reserved unknown request', async (outcome) => {
+    const fixture = setup()
+    await fixture.workspace.start()
+    let release!: (value: RecoveryReference[]) => void
+    let reject!: (reason: Error) => void
+    vi.mocked(fixture.journal.list).mockImplementationOnce(() => new Promise((resolve, failure) => {
+      release = resolve
+      reject = failure
+    }))
+    const refreshing = fixture.workspace.refresh()
+    await vi.waitFor(() => expect(release).toBeTypeOf('function'))
+    const original = fixture.client.read
+    fixture.client.read = vi.fn(async (path, method, input) => {
+      const result = await original(path, method, input)
+      if (method === 'POST') throw new Error('reply lost')
+      return result
+    })
+    await fixture.workspace.control(action)
+    if (outcome === 'empty') release([])
+    else reject(new Error('older read failed'))
+    await refreshing
+    expect(fixture.workspace.getSnapshot().storageReady).toBe(true)
+    expect(fixture.workspace.getSnapshot().references).toHaveLength(1)
+    expect(fixture.workspace.canControl()).toBe(false)
+  })
   it('does not let a delayed pre-command refresh overwrite the new bed', async () => {
     const fixture = setup()
     await fixture.workspace.start()
@@ -212,6 +237,30 @@ describe('private routine publication', () => {
     await fixture.workspace.saveDraft(week)
     expect(fixture.events).toEqual(['draft'])
     expect(fixture.workspace.getSnapshot().drafts?.routines[0].draft.alarm?.snoozeDuration).toBe(541)
+  })
+  it('does not let a delayed draft reload replace a newer successful save', async () => {
+    const fixture = setup()
+    await fixture.workspace.start()
+    let release!: (value: unknown) => void
+    const old = structuredClone(fixture.workspace.getSnapshot().drafts)
+    const original = fixture.client.read
+    let hold = true
+    fixture.client.read = vi.fn(async (path, method, input) => {
+      if (path === 'me/routines' && !method && hold) {
+        hold = false
+        return new Promise(resolve => release = resolve)
+      }
+      return original(path, method, input)
+    })
+    const refreshing = fixture.workspace.refresh(true)
+    await vi.waitFor(() => expect(release).toBeTypeOf('function'))
+    const week = structuredClone(fixture.review.draftWeek)
+    week[0].draft.power.onTemperature = 68
+    expect(await fixture.workspace.saveDraft(week)).toBe(true)
+    release(old)
+    await refreshing
+    expect(fixture.workspace.getSnapshot().drafts?.revision).toBe(3)
+    expect(fixture.workspace.getSnapshot().drafts?.routines[0].draft.power.onTemperature).toBe(68)
   })
   it('requires both acknowledgments and rechecks the review before publishing', async () => {
     const fixture = setup()

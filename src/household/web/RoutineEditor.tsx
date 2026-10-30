@@ -298,7 +298,7 @@ export function RoutineEditor({ workspace, state, preferredTemperatureF }: {
       {publication && (
         <button
           type="button"
-          disabled={state.busy.includes('review')}
+          disabled={state.busy.some(value => ['review', 'draft', 'draft-reload'].includes(value))}
           onClick={async () => {
             if (dirty && !confirm('Replace your unsaved editor with the current operating week?'))
               return
@@ -328,59 +328,61 @@ export function RoutineEditor({ workspace, state, preferredTemperatureF }: {
         await workspace.saveDraft(week)
       }}
       >
-        <label>
-          Night beginning on
-          <select value={day} onChange={event => setDay(event.target.value as DayOfWeek)}>{DAYS_OF_WEEK.map(value => <option key={value} value={value}>{title(value)}</option>)}</select>
-        </label>
-        {draft
-          ? (
-              <>
-                <NightFields draft={draft} day={day} change={change} />
-                <button
-                  type="button"
-                  onClick={() => {
-                    setComparison(null)
-                    setWeek(week.filter(night => night.dayOfWeek !== day))
-                  }}
-                >
-                  {`Remove ${title(day)} from draft`}
-                </button>
-              </>
-            )
-          : (
-              <div className="notice">
-                <p>
-                  {`No ${title(day)} routine in this draft.`}
-                </p>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setComparison(null)
-                    setWeek([...week, { dayOfWeek: day, draft: { power: { onTime: '22:00', offTime: '07:15', onTemperature: preferredTemperatureF, enabled: true, endAction: 'turn_off' }, temperatures: [], alarm: null, notes: '' } }])
-                  }}
-                >
-                  {`Add ${title(day)} night`}
-                </button>
-              </div>
-            )}
-        <p className="small">
-          {week.length}
-          {' '}
-          nights in this draft. Removing a night will remove its live routine only if you later publish the full week. Temperatures in this editor are Fahrenheit to preserve the Pod’s whole-degree settings.
-        </p>
-        <button type="submit" className="primary" disabled={state.busy.includes('draft')}>Save my private draft</button>
-        <button
-          type="button"
-          disabled={state.busy.includes('refresh')}
-          onClick={() => {
-            if (!dirty || confirm('Discard unsaved edits and reload the saved draft?')) {
-              setComparison(null)
-              void workspace.refresh(true)
-            }
-          }}
-        >
-          Reload saved draft
-        </button>
+        <fieldset className="editor-fields" disabled={state.busy.some(value => ['draft', 'draft-reload'].includes(value))}>
+          <label>
+            Night beginning on
+            <select value={day} onChange={event => setDay(event.target.value as DayOfWeek)}>{DAYS_OF_WEEK.map(value => <option key={value} value={value}>{title(value)}</option>)}</select>
+          </label>
+          {draft
+            ? (
+                <>
+                  <NightFields draft={draft} day={day} change={change} />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setComparison(null)
+                      setWeek(week.filter(night => night.dayOfWeek !== day))
+                    }}
+                  >
+                    {`Remove ${title(day)} from draft`}
+                  </button>
+                </>
+              )
+            : (
+                <div className="notice">
+                  <p>
+                    {`No ${title(day)} routine in this draft.`}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setComparison(null)
+                      setWeek([...week, { dayOfWeek: day, draft: { power: { onTime: '22:00', offTime: '07:15', onTemperature: preferredTemperatureF, enabled: true, endAction: 'turn_off' }, temperatures: [], alarm: null, notes: '' } }])
+                    }}
+                  >
+                    {`Add ${title(day)} night`}
+                  </button>
+                </div>
+              )}
+          <p className="small">
+            {week.length}
+            {' '}
+            nights in this draft. Removing a night will remove its live routine only if you later publish the full week. Temperatures in this editor are Fahrenheit to preserve the Pod’s whole-degree settings.
+          </p>
+          <button type="submit" className="primary" disabled={state.busy.includes('draft')}>Save my private draft</button>
+          <button
+            type="button"
+            disabled={state.busy.includes('refresh') || state.busy.includes('draft')}
+            onClick={() => {
+              if (!dirty || confirm('Discard unsaved edits and reload the saved draft?')) {
+                setComparison(null)
+                void workspace.refresh(true)
+              }
+            }}
+          >
+            Reload saved draft
+          </button>
+        </fieldset>
       </form>
       {error && <p role="alert" className="notice">{error}</p>}
       {publication

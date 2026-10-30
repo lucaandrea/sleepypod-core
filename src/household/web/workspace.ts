@@ -37,6 +37,7 @@ export class PersonalWebWorkspace {
   private generation = 0
   private readGeneration = 0
   private controlEpoch = 0
+  private draftReadGeneration = 0
   private receivedUptime: number | null = null
   private subscribers = new Set<() => void>()
   private readonly now: () => number
@@ -78,14 +79,15 @@ export class PersonalWebWorkspace {
     return session
   }
 
-  private async references(generation: number) {
+  private async references(generation: number, reading: number) {
     try {
       const references = await this.dependencies.journal.list(this.dependencies.session)
       this.check(generation)
+      if (reading !== this.readGeneration) return
       this.update({ references, storageReady: true })
     }
     catch (error) {
-      this.update({ storageReady: false })
+      if (reading === this.readGeneration) this.update({ storageReady: false })
       throw error
     }
   }
@@ -105,7 +107,7 @@ export class PersonalWebWorkspace {
   }
 
   async refresh(includeDrafts = false) {
-    if (this.disposed || this.state.busy.includes('refresh') || this.activeReferences.size)
+    if (this.disposed || this.state.busy.includes('refresh') || this.activeReferences.size || (includeDrafts && this.state.busy.includes('draft')))
       return
     const generation = this.generation, reading = ++this.readGeneration
     this.update({ busy: [...this.state.busy, 'refresh'] })
@@ -120,7 +122,8 @@ export class PersonalWebWorkspace {
       this.tick()
       if (includeDrafts || !this.state.drafts)
         await this.loadDrafts(generation)
-      await this.references(generation)
+      if (reading !== this.readGeneration) return
+      await this.references(generation, reading)
     }
     catch (error) {
       if (reading === this.readGeneration) {
@@ -134,12 +137,17 @@ export class PersonalWebWorkspace {
   }
 
   private async loadDrafts(generation: number) {
-    const drafts = personalRoutinesResponseSchema.parse(await this.dependencies.client.read('me/routines'))
-    this.check(generation)
-    if (drafts.sleeperId !== this.dependencies.session.selfSleeperId || drafts.status !== 'draft_only')
-      throw new PersonalWebError('account_changed', 'This routine response does not belong to your draft workspace.')
-    this.update({ drafts, draftLoad: this.state.draftLoad + 1 })
-    return drafts
+    const reading = ++this.draftReadGeneration
+    this.update({ busy: [...this.state.busy, 'draft-reload'] })
+    try {
+      const drafts = personalRoutinesResponseSchema.parse(await this.dependencies.client.read('me/routines'))
+      this.check(generation)
+      if (drafts.sleeperId !== this.dependencies.session.selfSleeperId || drafts.status !== 'draft_only')
+        throw new PersonalWebError('account_changed', 'This routine response does not belong to your draft workspace.')
+      if (reading === this.draftReadGeneration) this.update({ drafts, draftLoad: this.state.draftLoad + 1 })
+      return drafts
+    }
+    finally { this.update({ busy: this.state.busy.filter(value => value !== 'draft-reload') }) }
   }
 
   tick() {
@@ -300,6 +308,8 @@ export class PersonalWebWorkspace {
     if (!this.state.drafts || this.state.busy.includes('draft'))
       return false
     const generation = this.generation, expectedRevision = this.state.drafts.revision
+    ++this.readGeneration
+    ++this.draftReadGeneration
     this.update({ busy: [...this.state.busy, 'draft'], error: null, review: null })
     try {
       const routines = personalWeekSchema.parse(week)
