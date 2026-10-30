@@ -105,9 +105,11 @@ test('real personal API keeps two browser accounts separate and routine drafts i
     await memberPage.getByRole('button', { name: 'Save my preferences' }).click()
     await expect(memberPage.getByRole('status')).toContainText('preferences were saved')
     await memberPage.getByLabel('Night beginning on').selectOption('friday')
-    await memberPage.getByRole('button', { name: 'Save this night as a draft' }).click()
-    await expect(memberPage.getByRole('status')).toContainText('No real bed routine or alarm changed')
-    await expect(memberPage.locator('#routine-summary')).toContainText('saturday')
+    await memberPage.getByRole('button', { name: 'Add Friday night' }).click()
+    await memberPage.getByLabel('Include a wake alarm').check()
+    await expect(memberPage.locator('#routine-summary')).toContainText('Saturday')
+    await memberPage.getByRole('button', { name: 'Save my private draft' }).click()
+    await expect(memberPage.getByTestId('personal-result')).toContainText('operating routine and alarm have not changed')
     await expect.poll(() => memberPage.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390)
     await memberPage.screenshot({ path: test.info().outputPath('personal-workspace-member.png'), fullPage: true })
     await page.reload()
@@ -223,7 +225,7 @@ test('real personal API keeps two browser accounts separate and routine drafts i
     await memberPage.reload()
     await expect(memberPage.getByRole('status')).toContainText('preparation workspace can edit drafts only')
     await expect(memberPage.getByLabel('Preferred overnight target')).not.toBeVisible()
-    await expect(memberPage.getByRole('button', { name: 'Save this night as a draft' })).not.toBeVisible()
+    await expect(memberPage.getByRole('button', { name: 'Save my private draft' })).not.toBeVisible()
   }
   finally {
     await memberContext.close()
