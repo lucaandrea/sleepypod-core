@@ -8,7 +8,7 @@ import { migratedComfortDatabase } from './databaseFixture'
 
 const fixture = vi.hoisted(() => ({
   database: null as Database.Database | null,
-  monitor: vi.fn(), base: vi.fn(), occupancy: vi.fn(), controller: vi.fn(), synced: true,
+  monitor: vi.fn(), base: vi.fn(), occupancy: vi.fn(), controller: vi.fn(), bedroom: vi.fn(), synced: true,
 }))
 vi.mock('@/src/db', async () => {
   const { drizzle: createDrizzle } = await import('drizzle-orm/better-sqlite3')
@@ -26,6 +26,7 @@ vi.mock('@/src/hardware/base/instance', () => ({ getBaseControllerIfRunning: fix
 vi.mock('@/src/lib/occupancy', () => ({ getOccupancy: fixture.occupancy }))
 vi.mock('@/src/temperature/instance', () => ({ getTemperatureControllerIfRunning: fixture.controller }))
 vi.mock('@/src/hardware/sideMutations', () => ({ hasFirmwareSynced: () => fixture.synced }))
+vi.mock('@/src/bedroom/instance', () => ({ getBedroom: fixture.bedroom }))
 const { readComfortContext } = await import('../instance')
 const { pauseComfortAfterManual, pendingManualPause } = await import('../manual')
 const { createComfortStore } = await import('../store')
@@ -41,11 +42,14 @@ beforeEach(() => {
   database.insert(schema.sideSettings).values([{ side: 'left', name: 'Left' }, { side: 'right', name: 'Right' }]).run()
   database.insert(schema.deviceState).values([{ side: 'left', isPowered: true }, { side: 'right', isPowered: false }]).run()
   database.insert(schema.powerSchedules).values(DAYS_OF_WEEK.map(dayOfWeek => ({ side: 'left' as const, dayOfWeek, onTime: '22:00', offTime: '07:00', onTemperature: 75 }))).run()
-  const side = { targetTemperature: 75, heatingDuration: 3600 }
+  const side = { targetTemperature: 75, currentTemperature: 75, heatingDuration: 3600 }
   fixture.monitor.mockReturnValue({ getFreshStatus: () => ({ leftSide: side, rightSide: side, waterLevel: 'ok', isPriming: false }), getLastPollAt: () => now - 1000 })
   fixture.base.mockReturnValue({ status: () => ({ state: 'connected', stale: false, lastUpdate: now - 500, moving: false, busy: false }) })
   fixture.occupancy.mockReturnValue({ level: { ageMs: 200 }, available: true, classification: 'person' })
   fixture.controller.mockReturnValue({ status: () => ({ source: 'schedule', targetTemperature: 75 }) })
+  fixture.bedroom.mockReturnValue({ status: () => ({ aggregates: [
+    { metric: 'temperature', status: 'ready', value: 74 }, { metric: 'humidity', status: 'ready', value: 50 },
+  ] }), guidance: () => ({ state: 'ready', offsetF: 0, reason: 'Fixture', sourceIds: ['temperature', 'humidity'], expiresAt: now + 60000, configuration: 'c'.repeat(64) }) })
 })
 afterEach(() => {
   fixture.database?.close()
@@ -53,6 +57,20 @@ afterEach(() => {
 })
 
 describe('live comfort input adapter', () => {
+  it('does not use an empty half as thermal exposure when a solo sleeper occupies the other half', () => {
+    fixture.database?.prepare('UPDATE device_settings SET bed_mode = \'solo-left\', unused_zone_mode = \'follow\'').run()
+    const state = defaultComfortState()
+    state.config.roomAware = true
+    const zone = (side: string) => ({ level: { active: side === 'right', ageMs: 100, sampleAt: now - 500, sourceKey: (side === 'left' ? 'a' : 'b').repeat(64) },
+      available: true, classification: side === 'right' ? 'person' : 'none' })
+    fixture.occupancy.mockImplementation(zone)
+    expect(readComfortContext('left', state, now).context).toMatchObject({ presence: { occupied: true }, thermalContext: null })
+    fixture.occupancy.mockImplementation(() => ({ ...zone('left'), classification: 'person', level: { ...zone('left').level, active: true } }))
+    expect(readComfortContext('left', state, now).context.thermalContext).toEqual({ targetF: 75, waterF: 75, roomF: 74, humidity: 50 })
+    fixture.occupancy.mockImplementation(() => ({ ...zone('left'), classification: 'person' }))
+    expect(readComfortContext('left', state, now).context.thermalContext).toBeNull()
+  })
+
   it('uses both calibrated zones for a sole sleeper and invalidates one-zone entry evidence', () => {
     fixture.database?.prepare('UPDATE device_settings SET bed_mode = \'solo-left\', unused_zone_mode = \'follow\'').run()
     fixture.occupancy.mockImplementation((side: string) => ({

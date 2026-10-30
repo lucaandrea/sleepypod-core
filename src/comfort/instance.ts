@@ -13,7 +13,7 @@ import { getBaseControllerIfRunning } from '@/src/hardware/base/instance'
 import { hasFirmwareSynced } from '@/src/hardware/sideMutations'
 import { withSideLock } from '@/src/hardware/sideLock'
 import type { Side } from '@/src/hardware/types'
-import { getOccupancy } from '@/src/lib/occupancy'
+import { getOccupancy, type OccupancyResult } from '@/src/lib/occupancy'
 import { scheduleSourceSide } from '@/src/lib/singleSleeper'
 import { readSleeperPresence } from '@/src/lib/sleeperPresence'
 import { getTemperatureControllerIfRunning } from '@/src/temperature/instance'
@@ -64,7 +64,9 @@ export function readComfortContext(side: Side, state: ComfortState, now: number,
   const status = monitor?.getFreshStatus(DEVICE_MAX_AGE_MS)
   const reported = side === 'left' ? status?.leftSide : status?.rightSide
   const deviceObservedAt = status ? observedTimestamp(monitor?.getLastPollAt(), now) : null
-  const presence = readSleeperPresence(side, { ...settings, ...Object.fromEntries(sides.map(row => [row.side, row])) }, now, getOccupancy)
+  const zones: Partial<Record<Side, OccupancyResult>> = {}
+  const readZone = (zone: Side) => zones[zone] ??= getOccupancy(zone)
+  const presence = readSleeperPresence(side, { ...settings, ...Object.fromEntries(sides.map(row => [row.side, row])) }, now, readZone)
   const states = db.select().from(deviceState).all()
   const mirror = states.find(row => row.side === side)
   const base = getBaseControllerIfRunning()?.status()
@@ -81,6 +83,12 @@ export function readComfortContext(side: Side, state: ComfortState, now: number,
   const thermal = thermalContextSchema.safeParse({ targetF, waterF: reported?.currentTemperature,
     roomF: room.find(metric => metric.metric === 'temperature' && metric.status === 'ready')?.value,
     humidity: room.find(metric => metric.metric === 'humidity' && metric.status === 'ready')?.value })
+  // Solo presence can come from the other half; that does not qualify this half's water reading as the sleeper's thermal exposure.
+  const thermalZone = state.config.roomAware ? readZone(side) : undefined
+  const thermalSampleAt = observedTimestamp(thermalZone?.level.sampleAt, now)
+  const thermalZoneOccupied = thermalZone?.available === true && thermalZone.classification === 'person'
+    && thermalZone.level.active === true && thermalSampleAt !== null && now - thermalSampleAt <= 30_000
+    && /^[a-f0-9]{64}$/.test(thermalZone.level.sourceKey ?? '')
   return {
     timezone,
     context: {
@@ -103,7 +111,7 @@ export function readComfortContext(side: Side, state: ComfortState, now: number,
         || (state.lastSegment === window?.segment && state.lastTargetF === targetF && state.lastAppliedAt > 0 && state.lastAppliedAt <= now)),
       signals: state.config.sensorAware ? signalsReader().read(side, timezone, now) : undefined,
       bedroom: state.config.roomAware ? getBedroom().guidance() : undefined,
-      thermalContext: thermal.success ? thermal.data : null,
+      thermalContext: thermal.success && thermalZoneOccupied ? thermal.data : null,
     },
   }
 }

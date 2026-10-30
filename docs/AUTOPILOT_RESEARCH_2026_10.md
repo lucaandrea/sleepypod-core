@@ -69,6 +69,11 @@ mechanically quiet, water is adequate, the reported target is known, room data
 is fresh and no manual pause, away state or alarm window is active. This does
 not make the proposal eligible and cannot satisfy the reviewed-night gate.
 
+In solo mode, logical presence on either half still identifies the sole sleeper,
+but a thermal training observation additionally needs fresh calibrated occupancy
+on the physical half supplying its water measurement. The empty half's water is
+not substituted for the sleeper's exposure, including when they cross the middle.
+
 Training requires observations spanning at least four hours, at least 48
 distinct five-minute bins, and no gap over ten minutes. A change of calibration
 attribution, schedule, hardware, build or bedroom configuration invalidates that
