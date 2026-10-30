@@ -77,10 +77,38 @@ the member's records. This API reads that store; it does not create epochs,
 silently claim old Left records, import Health data, or start sensor processes.
 
 Continuous source ingestion, explicit legacy claims, person-bound Health
-consent/import/export, web/native history screens and the real arrangement
+consent/import/export, the cross-client history release and the real arrangement
 coordinator remain integration work. The new routes do not by themselves make
 the two-person release ready. Keep the live flags disabled until the complete
 personal recovery and account release gates are satisfied.
+
+## Personal browser history
+
+The isolated household workspace includes a private recordings panel backed only
+by this API. It does not fall back to the owner-wide biometrics endpoints when
+an account has no attributed records. Users choose calendar dates in the
+browser's stated timezone and a recording type: bed presence, Pod vitals or
+movement. The through date is inclusive, including daylight-saving changes;
+the server's maximum range remains 90 times 24 hours.
+
+The panel retains one page in memory. Older pages replace it; reload starts a
+fresh snapshot. A bounded cursor and record-ID set rejects repeated pages and
+duplicate records anywhere in the cursor chain, including equal timestamps.
+After 256 continuations, users can choose an earlier date range. No recording
+body or cursor is written to localStorage, IndexedDB or a recovery journal.
+
+Each fetch rechecks the personal session before and after reading, validates the
+exact response scope and query, and rejects changed attribution or ordering.
+Visible loaded history rechecks access every 15 seconds. Filter changes,
+backgrounding the tab, account invalidation and disposal clear the page. Late
+responses cannot restore it. The history transport and loading state are
+independent of bed controls, so a slow history fetch does not disable Stop.
+
+Records keep historical side labels and complete interval boundaries. Missing
+vitals remain unavailable; zero HRV remains zero. Short presence recordings
+retain seconds instead of appearing as zero hours. The UI distinguishes an
+empty attributed history, an unavailable feature and a failed read, and never
+infers a sleep-duration total from these pages.
 
 ```mermaid
 flowchart LR
