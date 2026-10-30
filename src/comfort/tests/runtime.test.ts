@@ -37,6 +37,40 @@ function harness() {
 }
 
 describe('production personal comfort Preview', () => {
+  it('collects qualified thermal research when HR is unavailable without making the proposal eligible', async () => {
+    const { input, store, deps } = harness()
+    if (!input.window) throw new Error('Routine fixture missing')
+    input.window.phases = { revision: 'b'.repeat(64), startF: 75, changes: [] }
+    input.presence.entry = { measuredAt: input.now, sourceKey: 'c'.repeat(64), state: 'present' }
+    input.signals = missingComfortSignals('Low signal')
+    input.thermalContext = { targetF: 75, waterF: 75, roomF: 74, humidity: 50 }
+    input.bedroom = { state: 'ready', offsetF: 0, reason: 'Fixture', sourceIds: ['temperature', 'humidity'],
+      expiresAt: input.now + 60000, configuration: 'e'.repeat(64) }
+    deps.origin = { environment: 'production', buildRevision: 'a'.repeat(40), hardwareIdentity: 'd'.repeat(64) }
+    const learning = vi.spyOn(store, 'learning')
+    store.commit('left', { ...store.read('left'), config: { ...store.read('left').config, sensorAware: true, roomAware: true } })
+    const runtime = new ComfortRuntime(deps)
+    await runtime.evaluate('left')
+    expect(store.history('left')[0]).toMatchObject({ eligible: false, proposedF: null,
+      thermalContext: input.thermalContext, thermalObservation: { purpose: 'comfort_research' },
+      preview: { sensorReady: false } })
+    expect(runtime.status('left').decision).toMatchObject({ eligible: false, proposedF: null })
+    expect(learning).toHaveBeenLastCalledWith('left', input.thermalContext, 'America/Los_Angeles', input.now)
+    expect(store.read('left')).toMatchObject({ lastAppliedAt: 0, lastTargetF: null })
+    // A later manual change cannot silently enter the research dataset.
+    store.commit('left', { ...store.read('left'), pausedUntil: input.now + MANUAL_PAUSE_MS })
+    input.now += 300000
+    input.device.observedAt = input.now
+    input.presence.observedAt = input.now
+    input.presence.entry.measuredAt = input.now
+    input.bedroom.expiresAt = input.now + 60000
+    await runtime.evaluate('left')
+    expect(store.history('left')[0].thermalContext).toBeNull()
+    expect(store.history('left')[0].thermalObservation).toBeUndefined()
+    runtime.status('left')
+    expect(learning).toHaveBeenLastCalledWith('left', null, 'America/Los_Angeles', input.now)
+  })
+
   it('samples research context at most every five minutes without changing the control proposal', async () => {
     const { input, store, runtime } = harness()
     input.thermalContext = { targetF: 75, waterF: 75, roomF: 74, humidity: 50 }

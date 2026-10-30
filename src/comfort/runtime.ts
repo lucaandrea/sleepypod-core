@@ -9,9 +9,10 @@ import { COMFORT_ACTIVATION_REASON, comfortConfigSchema, comfortFeedbackSchema, 
 import { comfortLocalDate, decideComfort, learnComfort, MANUAL_PAUSE_MS, type ComfortConfig, type ComfortContext, type ComfortDecision, type ComfortFeedback, type ComfortState } from './policy'
 import { comfortEvent, type ComfortStore } from './store'
 import type { ThermalContext, ThermalLearning } from './thermal-learning'
+import { thermalObservation } from './thermal-observation'
 
 const STORAGE_FAULT = 'Personal comfort is withheld because its current inputs, settings or observation journal are unavailable.'
-interface Observation { at: number, decision: ComfortDecision, stateKey: string, signals: ComfortSignals | null, timing: BedtimeStatus, bedroom: BedroomComfortGuidance | null, thermalContext?: ThermalContext | null }
+interface Observation { at: number, decision: ComfortDecision, stateKey: string, signals: ComfortSignals | null, timing: BedtimeStatus, bedroom: BedroomComfortGuidance | null, thermalContext?: ThermalContext | null, thermalQualified: boolean }
 export class ComfortInputError extends Error {}
 
 export interface ComfortRuntimeDeps {
@@ -74,8 +75,9 @@ export class ComfortRuntime {
     let learning: ThermalLearning | null = null
     if (timezone && this.deps.store.learning) {
       try {
-        learning = this.deps.store.learning(side, !fault && !signalExpired && !bedroomExpired
-        && observation?.stateKey === JSON.stringify(state) && observation.decision.eligible
+        learning = this.deps.store.learning(side, !fault && !bedroomExpired
+        && observation?.stateKey === JSON.stringify(state)
+        && ((observation.decision.eligible && !signalExpired) || observation.thermalQualified)
           ? observation.thermalContext ?? null
           : null, timezone, now)
       }
@@ -199,7 +201,8 @@ export class ComfortRuntime {
           context.signals?.state, context.signals?.baselineDays, context.signals?.sampleAt, timing.status])
         const previous = this.recorded[side]
         const lastThermal = this.thermalRecorded[side]
-        const recordThermal = decision.eligible && context.thermalContext
+        const thermalReceipt = thermalObservation(state, rawContext, preview)
+        const recordThermal = (decision.eligible || thermalReceipt !== null) && context.thermalContext
           && (lastThermal === undefined || now < lastThermal || now - lastThermal >= 300_000)
         const record = state.config.mode !== 'off' && (!previous || previous.key !== key || now - previous.at >= 60_000 || now < previous.at)
         const event = record
@@ -209,12 +212,13 @@ export class ComfortRuntime {
               eligible: decision.eligible, deviceObservedAt: context.device.observedAt,
               presenceObservedAt: context.presence.observedAt, owner: context.owner, signals: context.signals ?? null, timing: timing.status, bedroom: context.bedroom ?? null, preview,
               thermalContext: recordThermal ? context.thermalContext : null,
+              ...(recordThermal && thermalReceipt ? { thermalObservation: thermalReceipt } : {}),
             }
           : undefined
         if (event || JSON.stringify(state) !== original) this.deps.store.commit(side, state, event, decision.pauseRequired)
         if (event?.thermalContext) this.thermalRecorded[side] = now
         if (record) this.recorded[side] = { at: now, key }
-        this.observations[side] = { at: now, decision, stateKey: JSON.stringify(state), signals: context.signals ?? null, timing: timing.status, bedroom: context.bedroom ?? null, thermalContext: context.thermalContext ?? null }
+        this.observations[side] = { at: now, decision, stateKey: JSON.stringify(state), signals: context.signals ?? null, timing: timing.status, bedroom: context.bedroom ?? null, thermalContext: context.thermalContext ?? null, thermalQualified: thermalReceipt !== null }
         this.faults[side] = undefined
       }
       catch {
