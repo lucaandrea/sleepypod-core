@@ -7,8 +7,15 @@ import type { Side } from '@/src/hardware/types'
 import { homeSensors } from './sensorCache'
 import { readHomeVitals } from './vitals'
 import { finite, sample, type TelemetrySample } from './sample'
+import { legacyPrivacyState } from '@/src/household/legacyPrivacy'
+
+function privateSample(fields: string[]): TelemetrySample {
+  return { schemaVersion: 1, ts: null, expiresAt: null, source: 'personal_privacy_boundary', available: false, reason: 'privacy_required',
+    ...Object.fromEntries(fields.map(field => [field, null])) }
+}
 
 export function readHomeOccupancy(side: Side, now = Date.now()): TelemetrySample {
+  if (legacyPrivacyState() !== 'legacy') return privateSample(['occupied', 'classification'])
   try {
     const occupancy = getOccupancy(side)
     const frame = getLatestCapSenseSnapshot()
@@ -21,6 +28,7 @@ export function readHomeOccupancy(side: Side, now = Date.now()): TelemetrySample
 
 /** Read existing sources only; this must never initialize or control hardware. */
 export function readHomeTelemetry(now = Date.now()): Record<string, TelemetrySample> {
+  const personal = legacyPrivacyState() !== 'legacy'
   const monitor = getDacMonitorIfRunning()
   const status = monitor?.getFreshStatus(15_000)
   const deviceAt = monitor?.getLastPollAt() ?? null
@@ -38,17 +46,19 @@ export function readHomeTelemetry(now = Date.now()): Record<string, TelemetrySam
       targetTemperature: finite(reported?.targetTemperature), isPowered: powered,
       mode: powered === null ? null : powered ? 'heat' : 'off', stateKind: 'reported' })
     const occupancy = readHomeOccupancy(side, now)
-    const vitals = readHomeVitals(biometricsDb.$client, side, now)
+    const vitals = personal ? privateSample(['heartRate', 'breathingRate', 'hrv']) : readHomeVitals(biometricsDb.$client, side, now)
     // Fresh signal estimates alone are not evidence that a person is in bed.
     const occupied = occupancy.available && occupancy.occupied === true && occupancy.classification === 'person'
-    readings[`state/biometrics/${side}`] = occupied
-      ? {
-          ...vitals,
-          expiresAt: vitals.expiresAt !== null && occupancy.expiresAt !== null
-            ? Math.min(vitals.expiresAt, occupancy.expiresAt)
-            : vitals.expiresAt,
-        }
-      : { ...vitals, available: false, reason: 'unqualified', heartRate: null, breathingRate: null, hrv: null }
+    readings[`state/biometrics/${side}`] = personal
+      ? vitals
+      : occupied
+        ? {
+            ...vitals,
+            expiresAt: vitals.expiresAt !== null && occupancy.expiresAt !== null
+              ? Math.min(vitals.expiresAt, occupancy.expiresAt)
+              : vitals.expiresAt,
+          }
+        : { ...vitals, available: false, reason: 'unqualified', heartRate: null, breathingRate: null, hrv: null }
     readings[`state/occupancy/${side}`] = occupancy
     const pump = homeSensors.pump(side, now)
     readings[`pump/${side}/rpm`] = { ...pump, temperature: undefined }

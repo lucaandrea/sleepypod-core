@@ -53,3 +53,18 @@ it('does not mount owner data when an account switch happens during owner login'
   expect(screen.queryByTestId('private-owner')).toBeNull()
   expect(screen.getByRole('alert').textContent).toContain('account changed')
 })
+
+it('offers personal connection instead of an owner-key login after shared activation', async () => {
+  fetchMock.mockResolvedValueOnce(response({ configured: true, authenticated: false, personalConnectionRequired: true }))
+  render(<ConnectionGate><div data-testid="private-owner">Owner history</div></ConnectionGate>)
+  expect((await screen.findByRole('link', { name: 'Open my personal workspace' })).getAttribute('href')).toBe('/household/index.html')
+  expect(screen.queryByLabelText('Connection key')).toBeNull()
+  expect(screen.queryByTestId('private-owner')).toBeNull()
+})
+
+it('does not mount cached owner data when privacy storage is unavailable', async () => {
+  fetchMock.mockResolvedValueOnce(response({ configured: true, authenticated: true, privacyAvailable: false }))
+  render(<ConnectionGate><div data-testid="private-owner">Owner history</div></ConnectionGate>)
+  await screen.findByRole('alert')
+  expect(screen.queryByTestId('private-owner')).toBeNull()
+})

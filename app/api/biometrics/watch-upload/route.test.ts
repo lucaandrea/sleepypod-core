@@ -1,4 +1,5 @@
 // @vitest-environment node
+import Database from 'better-sqlite3'
 import { ownerRequest } from '@/src/auth/tests/support'
 import { createServer, type Server } from 'node:http'
 import { mkdtemp, readdir, rm } from 'node:fs/promises'
@@ -179,4 +180,24 @@ it('rejects concurrent uploads and releases the slot after staging is cancelled'
   expect((await response).status).toBe(408)
   expect(await readdir(directory)).toEqual([])
   expect((await POST(ownerRequest('http://pod/api/biometrics/watch-upload?side=left', { method: 'POST', body: '<HealthData/>' }))).status).toBe(200)
+})
+
+it('stops a paused legacy Health upload when a personal arrangement activates', async () => {
+  const previousBatches = requests.length
+  let source: ReadableStreamDefaultController<Uint8Array> | undefined
+  const body = new ReadableStream<Uint8Array>({ start(controller) {
+    source = controller
+  } })
+  const pending = POST(ownerRequest('http://pod/api/biometrics/watch-upload?side=left', { method: 'POST', body, duplex: 'half' } as RequestInit))
+  source?.enqueue(new TextEncoder().encode('<HealthData>'))
+  const database = new Database(process.env.DATABASE_URL)
+  try {
+    database.prepare('INSERT INTO household_privacy_boundary VALUES (1, ?, \'test-arrangement\')').run(Date.now())
+  }
+  finally { database.close() }
+  const response = await pending
+  expect(response.status).toBe(403)
+  expect(await response.json()).toMatchObject({ code: 'personal_connection_required' })
+  expect(requests.length).toBe(previousBatches)
+  expect(await readdir(directory)).toEqual([])
 })

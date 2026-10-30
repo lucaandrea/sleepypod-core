@@ -52,8 +52,8 @@ flowchart LR
   history belonging to another sleeper. Shared wake-time announcements are opt-in.
 - Member credentials are rejected by every legacy REST, tRPC, raw stream, archive,
   model and backup surface. New person endpoints resolve `self` from credentials.
-  Legacy owner personal-data paths must also be restricted once other people's
-  data exists; old side-only clients must receive an explicit upgrade requirement
+  A persisted [personal privacy boundary](PERSONAL_PRIVACY_BOUNDARY.md) restricts
+  legacy owner paths once physical assignment or shared attribution is committed; old side-only clients must receive an explicit upgrade requirement
   rather than expose the new occupant's history.
 - Logout/account change cancels background work and clears visible caches. Every
   import page/write batch rechecks account, sleeper, session and consent revisions.

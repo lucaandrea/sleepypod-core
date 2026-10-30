@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'rea
 
 /** Keep device queries and streaming components unmounted until the owner has connected. */
 export function ConnectionGate({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<'checking' | 'connected' | 'locked' | 'unconfigured'>('checking')
+  const [state, setState] = useState<'checking' | 'connected' | 'locked' | 'unconfigured' | 'personal'>('checking')
   const [token, setToken] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -20,10 +20,11 @@ export function ConnectionGate({ children }: { children: ReactNode }) {
       try {
         const response = await fetch('/api/auth/session', { cache: 'no-store' })
         if (!response.ok) throw new Error('Controller unavailable')
-        const result = await response.json() as { configured: boolean, authenticated: boolean, personalSessionActive?: boolean }
+        const result = await response.json() as { configured: boolean, authenticated: boolean, personalSessionActive?: boolean, personalConnectionRequired?: boolean, privacyAvailable?: boolean }
+        if (result.privacyAvailable === false) throw new Error('Privacy state unavailable')
         if (alive && generation === accountGeneration.current) {
           personalSessionActive.current = result.personalSessionActive === true
-          setState(result.authenticated ? 'connected' : result.configured ? 'locked' : 'unconfigured')
+          setState(result.personalConnectionRequired ? 'personal' : result.authenticated ? 'connected' : result.configured ? 'locked' : 'unconfigured')
         }
       }
       catch {
@@ -68,12 +69,25 @@ export function ConnectionGate({ children }: { children: ReactNode }) {
     try {
       const currentResponse = await fetch('/api/auth/session', { cache: 'no-store' })
       if (!currentResponse.ok) throw new Error('Could not read the current browser account.')
-      const current = await currentResponse.json() as { browserScopeRevision?: string | null }
+      const current = await currentResponse.json() as { browserScopeRevision?: string | null, personalConnectionRequired?: boolean }
+      if (current.personalConnectionRequired) {
+        setState('personal')
+        setToken('')
+        return
+      }
       if (generation !== accountGeneration.current) throw new Error('The browser account changed. Reconnect explicitly.')
       const response = await fetch('/api/auth/session', {
         method: 'POST', headers: { 'Content-Type': 'application/json', ...(current.browserScopeRevision ? { 'X-Sleepypod-Browser-Revision': current.browserScopeRevision } : {}) }, body: JSON.stringify({ token, exitPersonalSession: personalSessionActive.current }),
       })
-      if (!response.ok) throw new Error(response.status === 401 ? 'That connection key was not accepted.' : 'Could not connect to the controller.')
+      if (!response.ok) {
+        const failure = await response.json().catch(() => null) as { code?: string } | null
+        if (failure?.code === 'personal_connection_required') {
+          setState('personal')
+          setToken('')
+          return
+        }
+        throw new Error(response.status === 401 ? 'That connection key was not accepted.' : 'Could not connect to the controller.')
+      }
       if (generation !== accountGeneration.current) throw new Error('The browser account changed while connecting. Try again explicitly.')
       setToken('')
       try {
@@ -97,20 +111,29 @@ export function ConnectionGate({ children }: { children: ReactNode }) {
       <form onSubmit={connect} className="flex w-full max-w-sm flex-col gap-5 rounded-card border border-line bg-surface p-7">
         <p className="font-mono text-sm text-fg-2">sleepypod</p>
         <h1 className="text-3xl font-medium">Connect to your Pod</h1>
+        {state === 'personal' && (
+          <>
+            <p className="text-fg-2">This bed uses personal accounts to keep each sleeper’s settings and sleep data private. Open your personal workspace to connect.</p>
+            {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- This isolated static document must replace the owner React shell, not navigate within it. */}
+            <a className="min-h-12 rounded-ctl bg-cool px-5 py-3 text-center font-medium text-inverse" href="/household/index.html">Open my personal workspace</a>
+          </>
+        )}
         {state === 'checking'
           ? <p role="status" className="text-fg-2">Checking your connection…</p>
-          : state === 'unconfigured'
-            ? <p className="text-fg-2">This controller needs an owner connection key. Complete controller setup before connecting.</p>
-            : (
-                <>
-                  <p className="text-fg-2">Enter your Pod connection key. Your browser keeps a private, temporary session.</p>
-                  <label className="flex flex-col gap-2">
-                    Connection key
-                    <input type="password" value={token} onChange={event => setToken(event.target.value)} autoComplete="current-password" spellCheck={false} required minLength={32} maxLength={4096} className="min-h-12 rounded-ctl border border-line-2 bg-field px-3" />
-                  </label>
-                  <button disabled={busy} className="min-h-12 rounded-ctl bg-cool px-5 font-medium text-inverse disabled:opacity-60">{busy ? 'Connecting…' : 'Connect to your Pod'}</button>
-                </>
-              )}
+          : state === 'personal'
+            ? null
+            : state === 'unconfigured'
+              ? <p className="text-fg-2">This controller needs an owner connection key. Complete controller setup before connecting.</p>
+              : (
+                  <>
+                    <p className="text-fg-2">Enter your Pod connection key. Your browser keeps a private, temporary session.</p>
+                    <label className="flex flex-col gap-2">
+                      Connection key
+                      <input type="password" value={token} onChange={event => setToken(event.target.value)} autoComplete="current-password" spellCheck={false} required minLength={32} maxLength={4096} className="min-h-12 rounded-ctl border border-line-2 bg-field px-3" />
+                    </label>
+                    <button disabled={busy} className="min-h-12 rounded-ctl bg-cool px-5 font-medium text-inverse disabled:opacity-60">{busy ? 'Connecting…' : 'Connect to your Pod'}</button>
+                  </>
+                )}
         {error && <p role="alert" className="text-danger">{error}</p>}
       </form>
     </main>

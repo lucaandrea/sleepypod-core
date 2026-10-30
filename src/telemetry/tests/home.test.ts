@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import '@/src/auth/tests/support'
+import Database from 'better-sqlite3'
 const sources = vi.hoisted(() => ({ fresh: vi.fn(), poll: vi.fn(), occupancy: vi.fn(), cap: vi.fn() }))
 vi.mock('@/src/db', () => ({ biometricsDb: { $client: {} } }))
 vi.mock('../vitals', () => ({ readHomeVitals: () => ({ available: true, ts: 1700000000000, expiresAt: 1700000300000, heartRate: 60, breathingRate: 15, hrv: 40 }) }))
@@ -54,4 +56,23 @@ it('withholds apparent vitals from an empty or unqualified bed and expires them 
   sources.occupancy.mockReturnValue({ available: true, occupied: true, classification: 'person' })
   expect(readHomeTelemetry(now)['state/biometrics/right']).toMatchObject({ available: true, heartRate: 60, expiresAt: now + 30000 })
   expect(readHomeTelemetry(now + 30000)['state/biometrics/right'].available).toBe(false)
+})
+
+it('withdraws shared vitals and occupancy after personal activation while preserving climate telemetry', () => {
+  const database = new Database(process.env.DATABASE_URL)
+  try {
+    sources.cap.mockReturnValue({ ts: now / 1000, receivedAtMs: now })
+    sources.occupancy.mockReturnValue({ available: true, occupied: true, classification: 'person' })
+    sources.fresh.mockReturnValue({ leftSide: { targetLevel: -20, currentTemperature: 75, targetTemperature: 70 } })
+    expect(readHomeTelemetry(now)['state/biometrics/left'].heartRate).toBe(60)
+    database.prepare('INSERT INTO household_privacy_boundary VALUES (1, ?, \'test-arrangement\')').run(now)
+    const readings = readHomeTelemetry(now)
+    for (const side of ['left', 'right'] as const) {
+      expect(readings[`state/biometrics/${side}`]).toMatchObject({ available: false, ts: null, heartRate: null, breathingRate: null, hrv: null, reason: 'privacy_required' })
+      expect(readings[`state/occupancy/${side}`]).toMatchObject({ available: false, ts: null, occupied: null, classification: null, reason: 'privacy_required' })
+      expect(readHomeOccupancy(side, now).occupied).toBeNull()
+    }
+    expect(readings['state/left/climate']).toMatchObject({ available: true, currentTemperature: 75, targetTemperature: 70 })
+  }
+  finally { database.close() }
 })

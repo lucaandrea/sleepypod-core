@@ -1602,6 +1602,20 @@ exports[`complete Drizzle schema contracts > pins every main-database table, col
   {
     "checks": 0,
     "columns": [
+      "id | sql:integer | logical:number/SQLiteInteger | not-null | default:auto | primary-key | not-unique | not-autoincrement | enum:none",
+      "required_at | sql:integer | logical:number/SQLiteInteger | not-null | default:none | not-primary-key | not-unique | not-autoincrement | enum:none",
+      "reason | sql:text | logical:string/SQLiteText | not-null | default:none | not-primary-key | not-unique | not-autoincrement | enum:none",
+    ],
+    "exportName": "householdPrivacyBoundary",
+    "foreignKeys": [],
+    "indexes": [],
+    "name": "household_privacy_boundary",
+    "primaryKeys": [],
+    "uniqueConstraints": [],
+  },
+  {
+    "checks": 0,
+    "columns": [
       "id | sql:text | logical:string/SQLiteText | not-null | default:none | primary-key | not-unique | not-autoincrement | enum:none",
       "pod_id | sql:text | logical:string/SQLiteText | not-null | default:none | not-primary-key | unique:households_pod_id_unique | not-autoincrement | enum:none",
       "setup_request_id | sql:text | logical:string/SQLiteText | not-null | default:none | not-primary-key | unique:households_setup_request_id_unique | not-autoincrement | enum:none",

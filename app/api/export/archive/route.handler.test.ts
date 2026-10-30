@@ -1,3 +1,4 @@
+import type DatabaseConstructor from 'better-sqlite3'
 import { ownerRequest, TEST_OWNER_TOKEN } from '@/src/auth/tests/support'
 /**
  * Tests for the GET handler in app/api/export/archive/route.ts. Covers the
@@ -47,8 +48,10 @@ const sqliteMock = vi.hoisted(() => ({
   ctor: vi.fn(),
 }))
 
-vi.mock('better-sqlite3', () => {
+vi.mock('better-sqlite3', async () => {
+  const { default: ActualDatabase } = await vi.importActual<{ default: typeof DatabaseConstructor }>('better-sqlite3')
   const Database = vi.fn(function (this: Record<string, unknown>, ...args: unknown[]) {
+    if ((args[1] as { fileMustExist?: boolean } | undefined)?.fileMustExist && args[0] === process.env.DATABASE_URL) return new ActualDatabase(args[0] as string, args[1] as object)
     sqliteMock.ctor(...args)
     this.backup = sqliteMock.backup
     this.close = sqliteMock.close

@@ -780,6 +780,14 @@ export const householdBrowserScopes = sqliteTable('household_browser_scopes', {
   expiresAt: integer('expires_at').notNull(),
 })
 
+// This one-way boundary outlives account revocation and arrangement changes.
+// It has no household foreign key: deleting membership must not reopen exports.
+export const householdPrivacyBoundary = sqliteTable('household_privacy_boundary', {
+  id: integer('id').primaryKey(),
+  requiredAt: integer('required_at').notNull(),
+  reason: text('reason').notNull(),
+})
+
 // Reviewed source intervals describe attribution, not physical sensor identity.
 // They never change the hardware arrangement or claim old rows during signup.
 export const householdHistoryState = sqliteTable('household_history_state', {
