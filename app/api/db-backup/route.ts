@@ -1,4 +1,5 @@
 import { requireAccess } from '@/src/auth/access'
+import { privateApiResponse } from '@/src/auth/privateResponse'
 import { spawn } from 'node:child_process'
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
@@ -33,7 +34,9 @@ async function backupSqlite(dbPath: string, outPath: string): Promise<void> {
 export async function GET(request: Request) {
   const denied = requireAccess(request)
   if (denied) return denied
-  if (householdBackupRestricted(DB_FILES.sleepypod.path)) return Response.json({ error: 'Whole-database downloads are unavailable for personal households. Use an encrypted administrator backup and person-scoped exports.' }, { status: 403, headers: { 'Cache-Control': 'private, no-store' } })
+  const backupAccess = () => householdBackupRestricted(DB_FILES.sleepypod.path) ? Response.json({ error: 'Whole-database downloads are unavailable for personal households. Use an encrypted administrator backup and person-scoped exports.' }, { status: 403, headers: { 'Cache-Control': 'private, no-store' } }) : null
+  const restricted = backupAccess()
+  if (restricted) return restricted
   if (inflight) {
     return Response.json({ error: 'A backup is already in progress, retry shortly' }, { status: 429, headers: { 'Retry-After': '30' } })
   }
@@ -59,6 +62,7 @@ export async function GET(request: Request) {
     }
     const abort = () => {
       tarChild.kill('SIGKILL')
+      settle()
       cleanup()
     }
     const watchdog = setTimeout(abort, WATCHDOG_MS)
@@ -80,12 +84,12 @@ export async function GET(request: Request) {
     })
 
     const stamp = new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '')
-    return new Response(Readable.toWeb(tarChild.stdout) as ReadableStream<Uint8Array>, {
+    return privateApiResponse(request, new Response(Readable.toWeb(tarChild.stdout) as ReadableStream<Uint8Array>, {
       headers: {
         'Content-Type': 'application/gzip',
         'Content-Disposition': `attachment; filename="sleepypod-databases-${stamp}.tar.gz"`,
       },
-    })
+    }), { additionalAccess: backupAccess, onCancel: abort })
   }
   catch (error) {
     if (stagingDir) await rm(stagingDir, { recursive: true, force: true }).catch(() => {})

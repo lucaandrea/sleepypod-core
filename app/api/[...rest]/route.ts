@@ -6,7 +6,7 @@ import { createOpenApiFetchHandler } from 'trpc-to-openapi'
 const handler = async (req: Request) => {
   const denied = requireAccess(req)
   if (denied) return denied
-  return privateApiResponse(await createOpenApiFetchHandler({
+  return privateApiResponse(req, await createOpenApiFetchHandler({
     endpoint: '/api',
     req,
     router: appRouter,

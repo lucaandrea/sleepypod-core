@@ -1,4 +1,5 @@
 import { requireAccess } from '@/src/auth/access'
+import { privateApiResponse } from '@/src/auth/privateResponse'
 /**
  * MCP endpoint (Streamable HTTP, stateless).
  *
@@ -47,7 +48,7 @@ async function handler(req: Request): Promise<Response> {
   })
   try {
     await server.connect(transport)
-    return await transport.handleRequest(req)
+    return privateApiResponse(req, await transport.handleRequest(req))
   }
   finally {
     // The response body is already materialized in JSON mode, so closing here

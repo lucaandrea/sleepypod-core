@@ -113,9 +113,12 @@ function createStreamState() {
     // undefined subscribes the client to every sensor type.
     clientSubscriptions: new Map<WebSocket, Set<SensorType> | undefined>(),
     clientDroppedFrames: new Map<WebSocket, number>(),
+    clientAccess: new Map<WebSocket, Headers>(),
   }
 }
 const streamState = streamGlobal.__sleepypodSensorStream ??= createStreamState()
+// Existing sockets from a hot reload have no new authority entry and fail closed.
+streamState.clientAccess ??= new Map<WebSocket, Headers>()
 
 const NATS_SOURCE_DISABLED = process.env.PIEZO_NATS_DISABLED === '1'
 function natsTiming(value: string | undefined, fallback: number, allowZero: boolean): number {
@@ -530,6 +533,15 @@ function cleanupClient(ws: WebSocket): void {
   streamState.snapshotClients.delete(ws)
   streamState.clientSubscriptions.delete(ws)
   streamState.clientDroppedFrames.delete(ws)
+  streamState.clientAccess.delete(ws)
+}
+
+/** Fresh authority also closes an existing socket immediately on its next operation. */
+function clientAuthorized(client: WebSocket): boolean {
+  const headers = streamState.clientAccess.get(client)
+  if (headers && authorized(headers, 'GET', true)) return true
+  if (client.readyState === WebSocket.OPEN) client.close(1008, 'Session access changed')
+  return false
 }
 
 /**
@@ -539,7 +551,7 @@ function cleanupClient(ws: WebSocket): void {
  * would otherwise cause unbounded server memory growth.
  */
 function sendWithBackpressure(client: WebSocket, payload: string): boolean {
-  if (client.readyState !== WebSocket.OPEN) return false
+  if (client.readyState !== WebSocket.OPEN || !clientAuthorized(client)) return false
   // Account for the pending payload — checking bufferedAmount alone lets each
   // send push the buffer past MAX_BUFFERED_BYTES before the next call notices.
   const payloadByteSize = Buffer.byteLength(payload)
@@ -556,6 +568,15 @@ function sendWithBackpressure(client: WebSocket, payload: string): boolean {
   }
 }
 
+/** Protocol acknowledgments remain deliverable when sensor frames are dropped. */
+function sendControlMessage(client: WebSocket, payload: string): void {
+  if (client.readyState !== WebSocket.OPEN || !clientAuthorized(client)) return
+  try {
+    client.send(payload)
+  }
+  catch { /* The connection may have closed. */ }
+}
+
 function sendSnapshot(ws: WebSocket): void {
   sendWithBackpressure(ws, JSON.stringify({
     type: 'snapshot',
@@ -565,6 +586,7 @@ function sendSnapshot(ws: WebSocket): void {
 }
 
 function handleClientMessage(ws: WebSocket, raw: Buffer | string): void {
+  if (!clientAuthorized(ws)) return
   try {
     const msg = JSON.parse(typeof raw === 'string' ? raw : raw.toString('utf-8'))
 
@@ -575,14 +597,14 @@ function handleClientMessage(ws: WebSocket, raw: Buffer | string): void {
       if (!Array.isArray(requested) || requested.length === 0) {
         // Empty or missing → subscribe to all (undefined = no filter)
         streamState.clientSubscriptions.set(ws, undefined)
-        ws.send(JSON.stringify({ type: 'subscribed', sensors: [...ALL_SENSOR_TYPES] }))
+        sendControlMessage(ws, JSON.stringify({ type: 'subscribed', sensors: [...ALL_SENSOR_TYPES] }))
         console.log('[sensorStream] Client subscribed to: all')
       }
       else {
         const valid = requested.filter(
           (s): s is SensorType => (ALL_SENSOR_TYPES as readonly string[]).includes(s))
         if (valid.length === 0) {
-          ws.send(JSON.stringify({
+          sendControlMessage(ws, JSON.stringify({
             type: 'error',
             message: `No valid sensor types in request. Valid types: ${ALL_SENSOR_TYPES.join(', ')}`,
           }))
@@ -590,7 +612,7 @@ function handleClientMessage(ws: WebSocket, raw: Buffer | string): void {
         }
         else {
           streamState.clientSubscriptions.set(ws, new Set(valid))
-          ws.send(JSON.stringify({ type: 'subscribed', sensors: valid }))
+          sendControlMessage(ws, JSON.stringify({ type: 'subscribed', sensors: valid }))
           console.log('[sensorStream] Client subscribed to: %s', valid.join(', '))
         }
       }
@@ -607,14 +629,14 @@ function handleClientMessage(ws: WebSocket, raw: Buffer | string): void {
     }
     else if (msg.type === 'get_time_range') {
       if (streamState.snapshotClients.has(ws)) {
-        ws.send(JSON.stringify({ type: 'time_range', ...streamState.recentFrames.range(), file: null }))
+        sendControlMessage(ws, JSON.stringify({ type: 'time_range', ...streamState.recentFrames.range(), file: null }))
         return
       }
       if (streamState.frameIndex.length === 0) {
-        ws.send(JSON.stringify({ type: 'time_range', min: 0, max: 0, file: null }))
+        sendControlMessage(ws, JSON.stringify({ type: 'time_range', min: 0, max: 0, file: null }))
       }
       else {
-        ws.send(JSON.stringify({
+        sendControlMessage(ws, JSON.stringify({
           type: 'time_range',
           min: streamState.frameIndex[0].ts,
           max: streamState.frameIndex[streamState.frameIndex.length - 1].ts,
@@ -625,7 +647,7 @@ function handleClientMessage(ws: WebSocket, raw: Buffer | string): void {
     else if (msg.type === 'seek') {
       const targetTs = msg.timestamp as number
       if (typeof targetTs !== 'number' || !isFinite(targetTs)) {
-        ws.send(JSON.stringify({ type: 'error', message: 'seek requires a numeric timestamp' }))
+        sendControlMessage(ws, JSON.stringify({ type: 'error', message: 'seek requires a numeric timestamp' }))
         return
       }
       // Fire-and-forget: handleSeek settles internally (errors are caught
@@ -633,11 +655,11 @@ function handleClientMessage(ws: WebSocket, raw: Buffer | string): void {
       void handleSeek(ws, targetTs)
     }
     else {
-      ws.send(JSON.stringify({ type: 'error', message: `Unknown message type: ${msg.type}` }))
+      sendControlMessage(ws, JSON.stringify({ type: 'error', message: `Unknown message type: ${msg.type}` }))
     }
   }
   catch {
-    ws.send(JSON.stringify({ type: 'error', message: 'Invalid message format' }))
+    sendControlMessage(ws, JSON.stringify({ type: 'error', message: 'Invalid message format' }))
   }
 }
 
@@ -680,16 +702,17 @@ function findIndexEntry(targetTs: number): number {
  * not affected.
  */
 async function handleSeek(ws: WebSocket, targetTs: number): Promise<void> {
+  if (!clientAuthorized(ws)) return
   if (!streamState.indexedFilePath) {
-    ws.send(JSON.stringify({ type: 'error', message: 'No RAW file indexed yet' }))
-    ws.send(JSON.stringify({ type: 'seek_complete' }))
+    sendControlMessage(ws, JSON.stringify({ type: 'error', message: 'No RAW file indexed yet' }))
+    sendControlMessage(ws, JSON.stringify({ type: 'seek_complete' }))
     return
   }
 
   const idx = findIndexEntry(targetTs)
   if (idx < 0) {
-    ws.send(JSON.stringify({ type: 'error', message: 'No frames indexed yet' }))
-    ws.send(JSON.stringify({ type: 'seek_complete' }))
+    sendControlMessage(ws, JSON.stringify({ type: 'error', message: 'No frames indexed yet' }))
+    sendControlMessage(ws, JSON.stringify({ type: 'seek_complete' }))
     return
   }
 
@@ -711,7 +734,7 @@ async function handleSeek(ws: WebSocket, targetTs: number): Promise<void> {
     if (rawBytesToRead <= 0) {
       await fh.close()
       fh = null
-      ws.send(JSON.stringify({ type: 'seek_complete' }))
+      sendControlMessage(ws, JSON.stringify({ type: 'seek_complete' }))
       return
     }
     const bytesToRead = Math.min(rawBytesToRead, MAX_SEEK_BUFFER)
@@ -722,6 +745,7 @@ async function handleSeek(ws: WebSocket, targetTs: number): Promise<void> {
     let seekBuffer = Buffer.alloc(bytesToRead)
     let readTotal = 0
     while (readTotal < bytesToRead) {
+      if (!clientAuthorized(ws)) return
       const { bytesRead } = await fh.read(
         seekBuffer,
         readTotal,
@@ -743,6 +767,7 @@ async function handleSeek(ws: WebSocket, targetTs: number): Promise<void> {
     let recordsSinceYield = 0
 
     while (bufPos < seekBuffer.length && !done) {
+      if (!clientAuthorized(ws)) return
       // Yield to the event loop periodically — the parse of a large replay
       // is CPU-bound and would otherwise block live frames.
       if (++recordsSinceYield >= 500) {
@@ -788,16 +813,15 @@ async function handleSeek(ws: WebSocket, targetTs: number): Promise<void> {
     if (ws.readyState === WebSocket.OPEN) {
       // Report partial replays so the client can re-seek if needed instead of
       // assuming it received the full window.
-      ws.send(JSON.stringify({
+      sendControlMessage(ws, JSON.stringify({
         type: 'seek_complete',
         ...(droppedDuringReplay > 0 && { incomplete: true, droppedFrames: droppedDuringReplay }),
       }))
     }
   }
-  catch {
-    if (fh !== null) {
-      await fh.close().catch(() => { /* ignore */ })
-    }
+  catch { /* The source can disappear during rotation or disconnect. */ }
+  finally {
+    if (fh !== null) await fh.close().catch(() => {})
   }
 }
 
@@ -904,8 +928,13 @@ export function startPiezoStreamServer(): WebSocketServer {
 
   streamState.wss.on('connection', (ws, request) => {
     const headers = streamAuthHeaders(request.headers)
+    streamState.clientAccess.set(ws, headers)
+    if (!clientAuthorized(ws)) {
+      cleanupClient(ws)
+      return
+    }
     const accessCheck = setInterval(() => {
-      if (!authorized(headers, 'GET', true)) ws.close(1008, 'Session expired')
+      clientAuthorized(ws)
     }, 30_000)
     accessCheck.unref()
     ws.once('close', () => clearInterval(accessCheck))
@@ -1299,6 +1328,7 @@ export const __test__ = {
   get natsSourceActive(): boolean { return streamState.natsSource !== null },
   clientSubscriptions: streamState.clientSubscriptions,
   clientDroppedFrames: streamState.clientDroppedFrames,
+  clientAccess: streamState.clientAccess,
   FRAME_INDEX_RETENTION_S,
   MAX_BUFFERED_BYTES,
   WS_MAX_PAYLOAD_BYTES,
@@ -1352,6 +1382,7 @@ export async function shutdownPiezoStreamServer(): Promise<void> {
         // events leaks if any handler failed to fire.
         streamState.clientSubscriptions.clear()
         streamState.clientDroppedFrames.clear()
+        streamState.clientAccess.clear()
         console.log('[sensorStream] WebSocket server closed')
         resolve()
       })
