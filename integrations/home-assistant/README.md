@@ -1,5 +1,11 @@
 # House automation templates
 
+For an overview of the bed using existing MQTT entities, install the
+[Tonight and Signals dashboard](dashboards/README.md). It includes authenticated
+app links for routines and controls and keeps house automations opt-in. The
+[Free Sleep HA compatibility review](../../docs/research/free-sleep-ha-assessment.md)
+explains why Core uses its native integration rather than the legacy component.
+
 These six Home Assistant blueprints are an opt-in starting point for qualified
 house integrations. Installing a blueprint does not create an automation or
 select a device. Every created automation starts **disabled**, and its separate
