@@ -1,0 +1,292 @@
+# Core MQTT dashboard; change entity IDs and the Pod URL for your installation.
+title: Sleepypod
+views:
+- title: Tonight
+  path: tonight
+  icon: mdi:bed-king-outline
+  type: sections
+  max_columns: 3
+  header:
+    card:
+      type: markdown
+      text_only: true
+      content: '# Your bed, connected
+
+        Live Pod readings in Home Assistant. Open Sleepypod for temperature controls, routines and alarms.'
+  badges:
+  - type: entity
+    entity: sensor.sleepypod_eight_pod_water_level
+    name: Water
+    show_name: true
+    color: blue
+  - type: entity
+    entity: sensor.sleepypod_eight_pod_ambient_temperature
+    name: Pod ambient
+    show_name: true
+    color: orange
+  - type: entity
+    entity: sensor.sleepypod_eight_pod_ambient_humidity
+    name: Pod humidity
+    show_name: true
+    color: teal
+  sections:
+  - type: grid
+    cards:
+    - type: heading
+      heading: Left side
+      icon: mdi:bed
+    - type: tile
+      entity: climate.sleepypod_eight_pod_left_side
+      name: Left thermal state
+      state_content:
+      - state
+      - current_temperature
+      color: blue
+      tap_action:
+        action: url
+        url_path: http://sleepypod.local:3000/en
+      icon_tap_action:
+        action: none
+    - type: tile
+      entity: binary_sensor.sleepypod_eight_pod_left_bed_occupancy
+      name: Left bed presence
+      color: teal
+      tap_action:
+        action: more-info
+      icon_tap_action:
+        action: none
+    - type: entity
+      entity: sensor.sleepypod_eight_pod_left_pump_loop_temp
+      name: Water loop
+      icon: mdi:water-thermometer
+      tap_action:
+        action: more-info
+    - type: markdown
+      content: Bed presence is not sleep or identity. Reported thermal state is separate from the measured
+        water loop. “Heat” means active thermal control and may include cooling.
+  - type: grid
+    cards:
+    - type: heading
+      heading: Right side
+      icon: mdi:bed
+    - type: tile
+      entity: climate.sleepypod_eight_pod_right_side
+      name: Right thermal state
+      state_content:
+      - state
+      - current_temperature
+      color: purple
+      tap_action:
+        action: url
+        url_path: http://sleepypod.local:3000/en
+      icon_tap_action:
+        action: none
+    - type: tile
+      entity: binary_sensor.sleepypod_eight_pod_right_bed_occupancy
+      name: Right bed presence
+      color: teal
+      tap_action:
+        action: more-info
+      icon_tap_action:
+        action: none
+    - type: entity
+      entity: sensor.sleepypod_eight_pod_right_pump_loop_temp
+      name: Water loop
+      icon: mdi:water-thermometer
+      tap_action:
+        action: more-info
+    - type: markdown
+      content: Bed presence is not sleep or identity. Reported thermal state is separate from the measured
+        water loop. “Heat” means active thermal control and may include cooling.
+  - type: grid
+    cards:
+    - type: heading
+      heading: Make yourself comfortable
+      icon: mdi:moon-waning-crescent
+    - type: button
+      name: Open bed controls
+      icon: mdi:bed-king-outline
+      show_state: false
+      tap_action:
+        action: url
+        url_path: http://sleepypod.local:3000/en
+      hold_action:
+        action: none
+    - type: button
+      name: Routines & alarms
+      icon: mdi:alarm
+      show_state: false
+      tap_action:
+        action: url
+        url_path: http://sleepypod.local:3000/en/schedule
+      hold_action:
+        action: none
+    - type: button
+      name: Bedroom sensors
+      icon: mdi:home-thermometer-outline
+      show_state: false
+      tap_action:
+        action: url
+        url_path: http://sleepypod.local:3000/en/home
+      hold_action:
+        action: none
+    - type: button
+      name: Autopilot & learning
+      icon: mdi:creation
+      show_state: false
+      tap_action:
+        action: url
+        url_path: http://sleepypod.local:3000/en/autopilot
+      hold_action:
+        action: none
+    - type: markdown
+      content: '### One place for your settings
+
+        These links open the authenticated Sleepypod app. This dashboard monitors MQTT data and does not
+        send bed commands or edit schedules.
+
+
+        **Left and right are bed sides, not assigned people.** Your sleeper arrangement stays in Sleepypod.'
+    - type: markdown
+      content: '### When a reading is unavailable
+
+        Missing or unqualified signals stay unavailable. They are never replaced with zero or “empty.”
+        Pod ambient readings can differ from the Govee room sensor; open **Bedroom sensors** for its source
+        and freshness.'
+- title: Signals
+  path: signals
+  icon: mdi:chart-timeline-variant
+  type: sections
+  max_columns: 3
+  header:
+    card:
+      type: markdown
+      text_only: true
+      content: '# Understand the signals
+
+        History is reported telemetry. Bed presence is not sleep, and beat-interval variability is not
+        Apple Watch HRV.'
+  sections:
+  - type: grid
+    cards:
+    - type: heading
+      heading: Left signals
+      icon: mdi:heart-pulse
+    - type: tile
+      entity: sensor.sleepypod_eight_pod_left_heart_rate
+      name: Heart rate
+      color: red
+      tap_action:
+        action: more-info
+      icon_tap_action:
+        action: none
+    - type: tile
+      entity: sensor.sleepypod_eight_pod_left_breathing_rate
+      name: Breathing rate
+      color: teal
+      tap_action:
+        action: more-info
+      icon_tap_action:
+        action: none
+    - type: tile
+      entity: sensor.sleepypod_eight_pod_left_beat_interval_variability
+      name: Beat-interval variability
+      color: purple
+      tap_action:
+        action: more-info
+      icon_tap_action:
+        action: none
+    - type: tile
+      entity: sensor.sleepypod_eight_pod_left_pump_rpm
+      name: Pump speed
+      color: blue
+      tap_action:
+        action: more-info
+      icon_tap_action:
+        action: none
+    - type: tile
+      entity: binary_sensor.sleepypod_eight_pod_left_pump_stall_warning
+      name: Pump stall notice
+      color: amber
+      tap_action:
+        action: more-info
+      icon_tap_action:
+        action: none
+  - type: grid
+    cards:
+    - type: heading
+      heading: Right signals
+      icon: mdi:heart-pulse
+    - type: tile
+      entity: sensor.sleepypod_eight_pod_right_heart_rate
+      name: Heart rate
+      color: red
+      tap_action:
+        action: more-info
+      icon_tap_action:
+        action: none
+    - type: tile
+      entity: sensor.sleepypod_eight_pod_right_breathing_rate
+      name: Breathing rate
+      color: teal
+      tap_action:
+        action: more-info
+      icon_tap_action:
+        action: none
+    - type: tile
+      entity: sensor.sleepypod_eight_pod_right_beat_interval_variability
+      name: Beat-interval variability
+      color: purple
+      tap_action:
+        action: more-info
+      icon_tap_action:
+        action: none
+    - type: tile
+      entity: sensor.sleepypod_eight_pod_right_pump_rpm
+      name: Pump speed
+      color: blue
+      tap_action:
+        action: more-info
+      icon_tap_action:
+        action: none
+    - type: tile
+      entity: binary_sensor.sleepypod_eight_pod_right_pump_stall_warning
+      name: Pump stall notice
+      color: amber
+      tap_action:
+        action: more-info
+      icon_tap_action:
+        action: none
+  - type: grid
+    cards:
+    - type: heading
+      heading: Last 12 hours
+      icon: mdi:history
+    - type: history-graph
+      title: Bed presence
+      hours_to_show: 12
+      entities:
+      - entity: binary_sensor.sleepypod_eight_pod_left_bed_occupancy
+        name: Left
+      - entity: binary_sensor.sleepypod_eight_pod_right_bed_occupancy
+        name: Right
+    - type: history-graph
+      title: Water-loop temperature
+      hours_to_show: 12
+      entities:
+      - entity: sensor.sleepypod_eight_pod_left_pump_loop_temp
+        name: Left
+      - entity: sensor.sleepypod_eight_pod_right_pump_loop_temp
+        name: Right
+    - type: markdown
+      content: A gap in a graph means missing history. Pump stall notices are software warnings, not a
+        leak test or proof that the hardware is healthy. Use the app for diagnostic details.
+    - type: button
+      name: Open diagnostics
+      icon: mdi:stethoscope
+      show_state: false
+      tap_action:
+        action: url
+        url_path: http://sleepypod.local:3000/en/system
+      hold_action:
+        action: none
