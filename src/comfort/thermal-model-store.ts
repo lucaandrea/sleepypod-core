@@ -16,7 +16,7 @@ export const thermalModelStatusSchema = z.object({
   reason: z.string(),
 })
 
-/** Keep one physical/schedule/calibration context per fit; a side change cannot silently pool people. */
+/** Keep one physical, schedule and calibration context per fit; household profiles use a separate boundary. */
 function snapshot(audit: ThermalDatasetAudit) {
   const latest = [...audit.proofs].sort((first, second) => second.date.localeCompare(first.date))[0]
   const proofs = audit.proofs.filter(proof => proof.configuration === latest?.configuration).sort((first, second) => first.date.localeCompare(second.date))
