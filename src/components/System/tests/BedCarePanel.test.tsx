@@ -4,7 +4,7 @@ import { evaluateBedCare } from '@/src/bed-care/evaluate'
 import { BedCareSummary } from '../BedCarePanel'
 
 const now = 1_800_000_000_000
-const data = evaluateBedCare({ now, hardware: { at: now, water: 'low', priming: false }, blockedSides: ['left'], recording: null, lastExportAt: now - 1000 })
+const data = evaluateBedCare({ now, hardware: { at: now, water: 'low', priming: false }, blockedSides: ['left'], protectionEnabled: true, recording: null, lastExportAt: now - 1000 })
 describe('bed care screen', () => {
   it('offers specific diagnostics and review steps without a repair, prime or reset button', () => {
     const retry = vi.fn()

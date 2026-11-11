@@ -1,5 +1,6 @@
 import { beforeEach, expect, it, vi } from 'vitest'
-const mocks = vi.hoisted(() => ({ monitor: vi.fn(), status: vi.fn(), at: vi.fn(), block: vi.fn(), recording: vi.fn(), backup: vi.fn() }))
+const mocks = vi.hoisted(() => ({ monitor: vi.fn(), status: vi.fn(), at: vi.fn(), block: vi.fn(), recording: vi.fn(), backup: vi.fn(), settings: vi.fn() }))
+vi.mock('@/src/db', () => ({ db: { select: () => ({ from: () => ({ limit: () => ({ get: mocks.settings }) }) }) } }))
 vi.mock('@/src/hardware/dacMonitor.instance', () => ({ getDacMonitorIfRunning: mocks.monitor }))
 vi.mock('@/src/hardware/pumpStallGuard', () => ({ shouldBlock: mocks.block }))
 vi.mock('@/src/recording-health/instance', () => ({ getRecordingHealth: mocks.recording }))
@@ -13,6 +14,17 @@ beforeEach(() => {
   mocks.block.mockReturnValue(false)
   mocks.backup.mockResolvedValue(Date.now() - 1000)
   mocks.recording.mockResolvedValue(null)
+  mocks.settings.mockReturnValue({ enabled: true })
+})
+it('keeps a missing settings row unknown and exposes an explicitly disabled guard', async () => {
+  mocks.settings.mockReturnValue(undefined)
+  expect((await getBedCare()).checks[1].state).toBe('unknown')
+  mocks.settings.mockReturnValue({ enabled: false })
+  expect((await getBedCare()).checks[1].state).toBe('attention')
+  mocks.settings.mockImplementation(() => {
+    throw new Error('private database')
+  })
+  expect((await getBedCare()).checks[1].state).toBe('unknown')
 })
 it('reuses the running observation without requesting hardware writes or starting a monitor', async () => {
   const report = await getBedCare()

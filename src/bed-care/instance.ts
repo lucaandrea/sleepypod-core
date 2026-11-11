@@ -2,6 +2,8 @@ import { getDacMonitorIfRunning } from '@/src/hardware/dacMonitor.instance'
 import { shouldBlock } from '@/src/hardware/pumpStallGuard'
 import { lastBackupAt } from '@/src/lib/dbInspect'
 import { getRecordingHealth } from '@/src/recording-health/instance'
+import { db } from '@/src/db'
+import { deviceSettings } from '@/src/db/schema'
 import { evaluateBedCare, type CareSources } from './evaluate'
 import { CARE_MAX_AGE_MS } from './contract'
 
@@ -18,7 +20,12 @@ export async function getBedCare() {
   }
   catch { /* Unknown protection state is never reported as clear. */ }
   if (!status && blockedSides?.length === 0) blockedSides = null
-  return evaluateBedCare({ now, blockedSides,
+  let protectionEnabled: boolean | null = null
+  try {
+    protectionEnabled = db.select({ enabled: deviceSettings.pumpStallProtectionEnabled }).from(deviceSettings).limit(1).get()?.enabled ?? null
+  }
+  catch { /* Missing settings are not evidence that protection is enabled. */ }
+  return evaluateBedCare({ now, blockedSides, protectionEnabled,
     hardware: status && at != null ? { at, water: status.waterLevel, priming: status.isPriming } : null,
     recording: recording.status === 'fulfilled' ? recording.value : null,
     lastExportAt: backup.status === 'fulfilled' ? backup.value : null })

@@ -49,7 +49,7 @@ export function BedCareSummary({ data, unavailable, pending, now, language, onRe
       </div>
       <p role="status" className="mt-4 text-sm text-fg-2">
         {fresh
-          ? `Checked ${new Date(data.generatedAt).toLocaleTimeString()}. Each source is verified separately.`
+          ? `Checked ${new Date(data.generatedAt).toLocaleTimeString()}. Each source is checked separately.`
           : pending && !data ? 'Reading care checks…' : 'Care checks unavailable. Reconnect and check again; saved information cannot establish the bed’s current condition.'}
       </p>
       {data && (

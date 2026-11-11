@@ -8,7 +8,7 @@ function required<Value>(value: Value | null | undefined): Value {
   return value
 }
 function sources(): CareSources {
-  return { now, hardware: { at: now - 10_000, water: 'ok', priming: false }, blockedSides: [], lastExportAt: now - 86_400_000 + 0.75,
+  return { now, hardware: { at: now - 10_000, water: 'ok', priming: false }, blockedSides: [], protectionEnabled: true, lastExportAt: now - 86_400_000 + 0.75,
     recording: { apiVersion: 1, generatedAt: now - 15_000, expiresAt: now + 10_000, state: 'ready', summary: 'Ready', historicalWindowHours: 24,
       checks: [{ id: 'sensor-cap', title: 'Presence', state: 'ok', detail: 'Fresh source', nextStep: null, observedAt: now - 15_000 },
         { id: 'storage', title: 'Storage', state: 'ok', detail: '600 MB available', nextStep: null, observedAt: now - 15_000 }] } }
@@ -60,5 +60,13 @@ describe('bed care observations', () => {
     const report = evaluateBedCare(input)
     expect(report.checks.filter(check => check.id !== 'backup').every(check => check.state === 'unknown')).toBe(true)
     expect(report.checks.find(check => check.id === 'recording')?.evidence).toEqual([])
+  })
+  it('reports disabled and unreadable protection settings without implying a healthy pump', () => {
+    const disabled = evaluateBedCare({ ...sources(), protectionEnabled: false }).checks[1]
+    expect(disabled).toMatchObject({ state: 'attention', detail: 'Automatic pump-stall protection is turned off.' })
+    expect(evaluateBedCare({ ...sources(), protectionEnabled: null }).checks[1].state).toBe('unknown')
+    const blocked = evaluateBedCare({ ...sources(), protectionEnabled: null, blockedSides: ['right'] }).checks[1]
+    expect(blocked.state).toBe('attention')
+    expect(blocked.detail).toContain('Right')
   })
 })

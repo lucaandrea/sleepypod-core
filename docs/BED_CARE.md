@@ -24,6 +24,11 @@ are retained. No current monitor and no recorded protection is unknown, not proo
 that circulation is healthy. Failed requests and expired observations withdraw
 current UI claims.
 
+The saved pump-protection setting is read independently. Disabled protection is
+explicitly shown as needing attention; an unreadable setting is unknown. An active
+block remains visible even when the monitor or setting is unavailable. Reading
+care never enables this opt-in protection or dismisses a recorded incident.
+
 The `.last-backup` marker establishes only that the server generated an export.
 Its filesystem timestamp can have fractional milliseconds; the contract normalizes
 it to integer milliseconds. Missing or future markers remain unknown. Download
@@ -55,3 +60,8 @@ API-access tests passed; TypeScript, ESLint and the production build passed. All
 browser run retained a strict-selector failure (two explanatory paragraphs matched);
 the corrected assertion targets the recovery step explicitly. Rendered 390px and
 1024px care views were inspected; the existing visual system is unchanged.
+
+The first full push gate caught a missing `health.care` practice-mode handler
+(7,237 other tests passed). The added handler uses the same pure evaluator and
+synthetic demo sources; the coverage gate and direct handler regression now cover
+it. Disabled/missing pump-protection settings have separate regressions.

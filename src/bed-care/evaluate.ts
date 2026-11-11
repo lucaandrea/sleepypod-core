@@ -5,6 +5,7 @@ export interface CareSources {
   now: number
   hardware: { at: number, water: 'low' | 'ok', priming: boolean } | null
   blockedSides: Array<'left' | 'right'> | null
+  protectionEnabled: boolean | null
   recording: RecordingHealth | null
   lastExportAt: number | null
 }
@@ -26,10 +27,11 @@ export function evaluateBedCare(input: CareSources): BedCare {
     nextStep: !currentHardware ? 'Check the Pod connection before deciding whether to refill or prime.' : currentHardware.water === 'low' ? 'Follow the refill instructions for your exact Pod model. Inspect for visible wetness or kinked hoses if refills are unusually frequent.' : currentHardware.priming ? 'Let the current priming cycle finish; do not start another.' : 'No refill is indicated by this reading. Open thermal diagnostics if delivery feels wrong.',
     observedAt: currentHardware?.at ?? null, destination: 'thermal', evidence: [] })
   const blocked = input.blockedSides
-  add({ id: 'circulation', title: 'Circulation protection', state: blocked === null ? 'unknown' : blocked.length ? 'attention' : 'checked',
-    detail: blocked === null ? 'Protection state could not be read.' : blocked.length ? `${blocked.map(side => side === 'left' ? 'Left' : 'Right').join(' and ')} has an active circulation protection.` : 'No active circulation protection is recorded. This does not verify pump flow or rule out a leak.',
+  const protectionState = blocked?.length || input.protectionEnabled === false ? 'attention' : blocked === null || input.protectionEnabled === null ? 'unknown' : 'checked'
+  add({ id: 'circulation', title: 'Circulation protection', state: protectionState,
+    detail: blocked?.length ? `${blocked.map(side => side === 'left' ? 'Left' : 'Right').join(' and ')} has an active circulation protection.` : input.protectionEnabled === false ? 'Automatic pump-stall protection is turned off.' : protectionState === 'unknown' ? 'Protection settings or current state could not be verified.' : 'Protection is enabled and no active circulation protection is recorded. This does not verify pump flow or rule out a leak.',
     nextStep: blocked?.length ? 'Review the pump alert and its recovery instructions. This check does not dismiss protection or restart circulation.' : 'If you notice wetness, unusual noise or poor temperature delivery, inspect the bed and review thermal diagnostics.',
-    observedAt: blocked === null ? null : now, destination: 'dashboard', evidence: [] })
+    observedAt: protectionState === 'unknown' ? null : now, destination: 'dashboard', evidence: [{ title: 'Automatic protection', detail: input.protectionEnabled === null ? 'The saved protection setting could not be read.' : input.protectionEnabled ? 'Enabled in the saved settings. This is not a physical pump test.' : 'Disabled in the saved settings. Review the protection settings before deciding whether to enable them; this page never changes them.' }] })
   const recordingChecks = currentRecording?.checks.filter(check => check.id !== 'storage') ?? []
   const recordingState = recordingChecks.some(check => check.state === 'attention') ? 'attention' : !recordingChecks.length || recordingChecks.some(check => check.state === 'unknown') ? 'unknown' : 'checked'
   add({ id: 'recording', title: 'Sensors & recording services', state: recordingState,
