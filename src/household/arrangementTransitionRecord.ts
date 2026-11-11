@@ -21,12 +21,15 @@ const rowSchema = z.object({
   id: householdIdSchema, household_id: householdIdSchema, review_id: householdIdSchema,
   account_id: householdIdSchema, device_id: householdIdSchema, run_id: householdIdSchema,
   request_hash: digest, request: z.string().max(8192), admission_revision: revisionSchema,
-  state: z.enum(['held', 'committed']), created_at: instant, committed_at: instant.nullable(), context: z.string().max(8192),
+  state: z.enum(['held', 'committed', 'cancelled']), created_at: instant, committed_at: instant.nullable(), context: z.string().max(8192),
   archive: z.string().max(4 * 1024 * 1024).nullable(), committed_hash: digest.nullable(),
   processing: z.string().max(8192).nullable(), recovery: z.string().max(16384).nullable(),
-}).strict().refine(row => row.state === 'held'
-  ? row.committed_at === null && row.archive === null && row.committed_hash === null && row.processing === null && row.recovery === null
-  : row.committed_at !== null && row.committed_at >= row.created_at && row.archive !== null && row.committed_hash !== null && row.processing !== null)
+  cancellation: z.string().max(16384).nullable(),
+}).strict().refine(row => row.state === 'committed'
+  ? row.committed_at !== null && row.committed_at >= row.created_at && row.archive !== null
+  && row.committed_hash !== null && row.processing !== null && row.cancellation === null
+  : row.committed_at === null && row.archive === null && row.committed_hash === null && row.processing === null && row.recovery === null
+    && (row.state === 'cancelled' ? row.cancellation !== null : row.cancellation === null))
 export type ArrangementTransitionRow = z.infer<typeof rowSchema>
 
 /** One strict reader serves initial commit and recovery; neither path repairs an invalid receipt. */

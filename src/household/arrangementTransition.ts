@@ -41,6 +41,7 @@ export class ArrangementTransitionStore {
   }
 
   private receipt(row: TransitionRow): ArrangementTransitionReceipt {
+    if (row.state === 'cancelled') throw reject()
     return { operationId: row.id, reviewId: row.review_id, state: row.state, admissionRevision: row.admission_revision,
       createdAt: row.created_at, committedAt: row.committed_at, hardware: 'held_for_runtime_recovery' }
   }

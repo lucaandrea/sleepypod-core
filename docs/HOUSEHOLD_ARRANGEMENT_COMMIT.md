@@ -14,6 +14,8 @@ stateDiagram-v2
     Reviewed --> Held: Persist hold and private receipt together
     Held --> Held: Stop, timeout, stale evidence or failed write
     Held --> CommittedHeld: Both weeks + identities + archive + close solo epoch
+    Held --> Cancelled: Fresh attended cancellation after verified restart
+    Cancelled --> SoloReady: Receipt and release commit together
     CommittedHeld --> Recovery: Separate runtime and processing verification
     Recovery --> Ready: Atomic verified recovery (internal)
 ```
@@ -144,14 +146,45 @@ contain no other person's preferences, algorithm data or process identifiers.
 They acknowledge admission release and explicitly state that physical movement
 was not requested; they do not claim a bed-movement test.
 
+## Cancellation before commit
+
+`ArrangementCancellationStore` is an internal exit from an uncommitted hold. It
+does not undo a committed two-person arrangement. The current original owner
+device must request a fresh preview and confirm keeping the solo arrangement,
+the empty attended bed, and that saved routines may resume. A verified new Linux
+controller generation, independently fresh empty/off/stationary observations,
+unchanged solo attribution and drained writes are required before release.
+
+The preview binds the current operating controls, including routines, temporary
+actions, automation rules and relevant device settings. If those change, a fresh
+preview is required; cancellation never restores an outdated copy. Unpublished
+personal drafts and preferences, credentials and live telemetry are excluded
+from that digest and remain untouched. A partner may cancel their arrangement
+review without trapping the owner in the hold.
+
+With a reserved biometric source and a FULL-durability configuration transaction,
+cancellation marks the review and transition cancelled, saves its exact request
+and receipt, and releases admission together. It preserves all routine, profile,
+calibration, personal-history and attribution data. Receipt/write failures,
+expiry, source changes or a pending Stop roll back the release. Replaying the
+same saved request can return its historical result after expiry or a later hold;
+it cannot release that later hold or restart the cancelled arrangement.
+
+Migration 0066 adds only a nullable cancellation receipt. Its upgrade test checks
+existing held and committed records, private account data and the active hold
+remain unchanged, including a repeated migration and foreign-key integrity.
+Focused tests cover cancellation/recovery/transition compatibility, partial
+writes, changed controls, independent freshness, Stop, source reservations and
+durable reopening. No live cancellation, service restart or bed action was run.
+
 ## Runtime integration still required
 
 A committed storage transaction is **not completed physical activation**. Before
 exposing activation in either app, implement and test:
 
 1. Shared native/web review of maintenance effects, private plans and limits.
-2. Cancellation/recovery receipts and a separately attended recheck, including
-   restart before commit and failure after commit.
+2. Wire the implemented cancellation/recovery receipts to a separately attended
+   recheck, including restart before commit and failure after commit.
 3. Producer shutdown/reload: scheduler, keepalives, auto-on/off, temperature
    requests, comfort leases, reactive rules, base queues and alarm restoration.
    Old callbacks must not capture fresh admission using stale in-memory policy.
