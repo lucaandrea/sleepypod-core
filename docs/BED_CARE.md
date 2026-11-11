@@ -24,6 +24,11 @@ are retained. No current monitor and no recorded protection is unknown, not proo
 that circulation is healthy. Failed requests and expired observations withdraw
 current UI claims.
 
+Source-dependent advice expires with the observation. Former refill/priming advice
+is retained only inside the dated disclosure, with reconnect/recheck guidance in
+the current next-step position. Complete viewport tests verify all five diagnostic
+links remain clickable around the mobile navigation.
+
 The saved pump-protection setting is read independently. Disabled protection is
 explicitly shown as needing attention; an unreadable setting is unknown. An active
 block remains visible even when the monitor or setting is unavailable. Reading
@@ -65,3 +70,10 @@ The first full push gate caught a missing `health.care` practice-mode handler
 (7,237 other tests passed). The added handler uses the same pure evaluator and
 synthetic demo sources; the coverage gate and direct handler regression now cover
 it. Disabled/missing pump-protection settings have separate regressions.
+
+At `0c05b29b`, all push gates passed, including 7,242 tests with 17 explicit skips.
+The finish review then requested complete viewport captures, expiring advice with
+its source, and a canonical product contract. The added refill/priming regressions
+and all six care-view unit cases passed; full-viewport browser checks also verify
+that the five links are not covered by fixed navigation. Native incident/settings
+navigation is verified separately in its parity record.

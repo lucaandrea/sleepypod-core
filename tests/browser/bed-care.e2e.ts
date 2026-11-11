@@ -23,13 +23,25 @@ for (const width of [390, 1024]) {
     const care = page.getByRole('region', { name: 'Bed care', exact: true })
     await expect(care.getByText('Water & priming', { exact: true })).toBeVisible()
     await expect(care.getByText('No current water reading is available.', { exact: true })).toBeVisible()
-    await care.screenshot({ path: testInfo.outputPath(`bed-care-${width}.png`) })
+    await page.screenshot({ path: testInfo.outputPath(`bed-care-${width}-top.png`) })
+    for (const name of ['View temperature delivery', 'Review pump alerts', 'Open recording diagnostics', 'Review storage', 'Open backups']) {
+      const link = care.getByRole('link', { name, exact: true })
+      await link.evaluate(element => element.scrollIntoView({ block: 'center', behavior: 'instant' }))
+      await expect(link).toBeVisible()
+      expect(await link.evaluate((element) => {
+        const bounds = element.getBoundingClientRect()
+        return element.contains(document.elementFromPoint(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2))
+      })).toBe(true)
+      if (name === 'Open recording diagnostics') await page.screenshot({ path: testInfo.outputPath(`bed-care-${width}-middle.png`) })
+    }
     await expect(care.getByRole('button', { name: /Prime|Restart|Delete|Reset|Dismiss/ })).toHaveCount(0)
     await page.route('**/api/trpc/health.care**', route => route.abort())
     await page.clock.fastForward(35_000)
     await expect(care.getByRole('status')).toContainText('Care checks unavailable')
     await care.getByText('A careful recovery, step by step', { exact: true }).click()
     await expect(care.getByText(/^Before software maintenance, export a backup/)).toBeVisible()
+    await care.getByRole('link', { name: 'Find instructions for your Pod' }).scrollIntoViewIfNeeded()
+    await page.screenshot({ path: testInfo.outputPath(`bed-care-${width}-recovery.png`) })
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
   })
 }

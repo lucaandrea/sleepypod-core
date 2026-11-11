@@ -26,4 +26,14 @@ describe('bed care screen', () => {
     }
     expect(screen.getAllByText('See last observation')).toHaveLength(5)
   })
+  it.each([false, true])('withdraws old refill or priming advice (priming=%s)', (priming) => {
+    const report = evaluateBedCare({ now, hardware: { at: now, water: 'ok', priming }, blockedSides: [], protectionEnabled: true, recording: null, lastExportAt: null })
+    render(<BedCareSummary data={report} now={now + 31_000} unavailable={false} pending={false} language="en" onRetry={() => {}} />)
+    const row = screen.getByRole('heading', { name: 'Water & priming' }).closest('li')
+    if (!row) throw new Error('Missing water observation')
+    expect(within(row).getByRole('note', { name: 'Next step' }).textContent).toBe('Reconnect and check again before acting on this observation.')
+    const previous = within(row).getByText(`Advice for that observation: ${report.checks[0].nextStep}`)
+    expect(previous.closest('details')?.open).toBe(false)
+    expect(previous.parentElement?.textContent).toContain('Observed ')
+  })
 })

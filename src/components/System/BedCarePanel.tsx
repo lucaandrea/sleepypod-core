@@ -97,16 +97,23 @@ function CareRow({ check, current, language, lastExportAt }: { check: CareCheck,
             . This is not proof of a saved off-Pod backup.
           </p>
         )}
-        <p className="mt-2 text-sm text-fg-2">{check.nextStep}</p>
+        <p role="note" aria-label="Next step" className="mt-2 text-sm text-fg-2">{current ? check.nextStep : 'Reconnect and check again before acting on this observation.'}</p>
         {(!current || check.evidence.length > 0) && (
           <details className="mt-2">
             <summary className="min-h-11 cursor-pointer py-3 text-sm">{current ? 'See individual checks' : 'See last observation'}</summary>
             {!current && (
-              <p className="mb-3 text-sm text-fg-2">
-                {check.observedAt === null ? 'No verified observation.' : `Observed ${new Date(check.observedAt).toLocaleString()}.`}
-                {' '}
-                {check.detail}
-              </p>
+              <div className="mb-3 text-sm text-fg-2">
+                <p>
+                  {check.observedAt === null ? 'No verified observation.' : `Observed ${new Date(check.observedAt).toLocaleString()}.`}
+                  {' '}
+                  {check.detail}
+                </p>
+                <p className="mt-2">
+                  Advice for that observation:
+                  {' '}
+                  {check.nextStep}
+                </p>
+              </div>
             )}
             <ul className="space-y-3 text-sm text-fg-2">
               {check.evidence.map(item => (
