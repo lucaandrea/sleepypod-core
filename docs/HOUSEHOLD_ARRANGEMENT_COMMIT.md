@@ -177,6 +177,37 @@ Focused tests cover cancellation/recovery/transition compatibility, partial
 writes, changed controls, independent freshness, Stop, source reservations and
 durable reopening. No live cancellation, service restart or bed action was run.
 
+## Automatic-service suspension and recovery
+
+`suspendAutomaticServices()` is an internal lifecycle operation to call after
+persisting the hardware hold. It pauses initialization, cancels the scheduler's
+clock wait, and drains scheduled work, automation evaluation, temperature
+reconciliation, keepalives and occupancy-triggered power changes. Diagnostic
+connections, MQTT and HomeKit remain available for reads and explicit Stop.
+
+The lifecycle and its keepalive/occupancy producers share process-global state
+across Next.js module instances. Replacing or stopping a keepalive cancels a
+refresh still waiting for its side lock, while shutdown waits for a refresh
+already dispatched. New timers cannot start during shutdown. Old temperature
+loops and keepalives retain their original admission revision and cannot resume
+merely because a later household hold is released.
+
+Suspension cancels snooze timers before draining both side-operation queues,
+including state updates after a hardware reply. Only then does it clear active
+alarm timers and wait for already-running alarm publications. This prevents an
+old snooze callback from installing another timer after suspension completes.
+Persisted alarm state remains available for verified restoration.
+
+`resumeAutomaticServices()` requires released admission, successful suspension
+and a fresh startup. It waits for background initialization and reports failures;
+a partial resume is suspended again. Startup under an existing durable hold
+starts observability without restoring alarms or automatic command producers.
+
+These functions are not a public activation API. The coordinator must still
+verify current processing and service-generation evidence before releasing a
+hold and requesting a resume. No live Pod, routine or household assignment was
+changed by this implementation.
+
 ## Runtime integration still required
 
 A committed storage transaction is **not completed physical activation**. Before
@@ -185,8 +216,8 @@ exposing activation in either app, implement and test:
 1. Shared native/web review of maintenance effects, private plans and limits.
 2. Wire the implemented cancellation/recovery receipts to a separately attended
    recheck, including restart before commit and failure after commit.
-3. Producer shutdown/reload: scheduler, keepalives, auto-on/off, temperature
-   requests, comfort leases, reactive rules, base queues and alarm restoration.
+3. Connect the implemented automatic-service suspension/resume to the coordinator
+   and verify it together with base queues and actual processing acknowledgments.
    Old callbacks must not capture fresh admission using stale in-memory policy.
 4. Reconcile the actual processing receipts with the committed fingerprint and
    review any later personal-profile migration. The implemented default reset and
@@ -261,3 +292,11 @@ added. The next full run had one connection reset in the unchanged WebSocket
 replay test (9,425 passed); all 137 streaming tests passed in isolation and the
 complete final suite then passed. The failed run remains in the evidence record;
 neither the streaming code nor its assertions/timeouts were changed.
+
+Automatic-service lifecycle validation passes **9,501 tests, 19 existing skips**,
+including 344 focused startup, suspension, cross-module timer, queued-operation,
+alarm-publication and explicit-resume checks. TypeScript, full ESLint and the
+production build pass. An earlier full run had one HTTP 501 WebSocket handshake
+failure; the isolated 137-case streaming suite and final complete run both passed.
+That failure is retained as a transient observation, not claimed as a fixed
+streaming defect. No live household transition was attempted.

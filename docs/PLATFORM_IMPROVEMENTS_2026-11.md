@@ -177,3 +177,21 @@ skips**. TypeScript, full ESLint, both migration checks and production build pas
 The initial full-run failure was two omitted schema-contract expectations for the
 new receipt table; both were updated and the complete suite passed afterward.
 Hosted checks and the complete runtime recovery path remain separate gates.
+
+### Arrangement automatic-service lifecycle — local implementation
+
+Core PR 104 is merged as `32e08120650142bf011bb4ea1f7e1b7538e6d3f0`;
+its tree `8d87a7568ee55506c6ed944fd3ebd8aac9e7ba1b` matches the tested head.
+The follow-up adds shared, drainable suspension and explicit fresh resume for
+automatic services, including old keepalive refreshes, occupancy producers,
+rule evaluations and post-command alarm state updates. Held startup retains
+diagnostics and Stop but cannot restore automatic producers.
+
+The focused lifecycle suite passes 344 tests; the full suite passes 9,501 tests
+with 19 existing skips. TypeScript, full ESLint and production build pass. An
+earlier full run had one WebSocket handshake failure (HTTP 501); all 137 streaming
+cases passed in isolation, and the final full suite passed without changing the
+streaming implementation, assertions or timeouts. The failed log remains retained.
+The public arrangement API still reports
+activation unavailable; coordinator wiring, private learning migration and
+attended hardware acceptance remain outstanding. Live solo behavior is unchanged.
