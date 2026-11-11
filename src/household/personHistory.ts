@@ -4,7 +4,7 @@ import { z } from 'zod'
 import { householdIdSchema } from './contract'
 import type { PersonHistorySource } from './historySource'
 import { HouseholdError, type HouseholdCredential, type HouseholdStore } from './store'
-import { attributionEpochSchema, historyTimeSchema, personalHistoryQuerySchema, personalHistoryRecordSchema, sourceObservationSchema, type AttributionEpochInput, type PersonalHistoryQuery, type SourceObservation } from './historyContract'
+import { attributionEpochSchema, historyTimeSchema, historySourceRecordSchema, personalHistoryQuerySchema, personalHistoryRecordSchema, sourceObservationSchema, type AttributionEpochInput, type PersonalHistoryQuery, type SourceObservation } from './historyContract'
 
 interface EpochRow {
   id: string
@@ -185,6 +185,20 @@ export class PersonHistoryStore {
   private overlappingPresence(input: SourceObservation, sleeperId: string) {
     return this.database.prepare(`SELECT id FROM household_person_records WHERE household_id = ? AND sleeper_id = ?
       AND source_kind = 'presence' AND starts_at < ? AND ends_at > ? LIMIT 1`).get(input.householdId, sleeperId, input.endsAt, input.startsAt) !== undefined
+  }
+
+  /** A source adapter found that a formerly usable row is now malformed. Keep
+   * its private copy for audit, but never display or reassign it after rejection. */
+  rejectSourceObservation(input: unknown) {
+    const parsed = historySourceRecordSchema.parse(input)
+    return this.database.transaction(() => {
+      this.source.verify(parsed.householdId, parsed.datasetId)
+      const updated = this.database.prepare(`UPDATE household_person_records SET invalidated_at = ?
+        WHERE household_id = ? AND dataset_id = ? AND source_kind = ? AND source_record_key = ? AND invalidated_at IS NULL`)
+        .run(this.now(), parsed.householdId, parsed.datasetId, parsed.kind, parsed.sourceRecordKey)
+      if (updated.changes > 0) this.bumpRevision(parsed.householdId)
+      return { invalidated: updated.changes > 0 }
+    }).immediate()
   }
 
   private project(row: RecordRow) {
