@@ -11,7 +11,7 @@ import { LastNightCard } from './LastNightCard'
 import { currentTonightRead, morningInPodZone, personalComfortMode } from './tonightSummary'
 
 /** The everyday plan stays visible in both layouts; detailed editors keep their existing authority. */
-export function TonightOverview({ side, name, sleepSide = side, sleepName = name, timeZone }: { side: Side, name: string, sleepSide?: Side, sleepName?: string, timeZone?: string }) {
+export function TonightOverview({ side, name, sleepSide = side, sleepName = name, timeZone, morning: showMorning }: { side: Side, name: string, sleepSide?: Side, sleepName?: string, timeZone?: string, morning?: boolean }) {
   const lang = langFromPath(usePathname())
   const now = useNow(1000).getTime()
   const options = { refetchInterval: 30_000, retry: false as const, refetchOnWindowFocus: 'always' as const }
@@ -34,7 +34,7 @@ export function TonightOverview({ side, name, sleepSide = side, sleepName = name
     }
     catch { return 'Time unavailable' }
   }
-  const morning = morningInPodZone(now, timeZone)
+  const morning = showMorning ?? morningInPodZone(now, timeZone)
   return (
     <section aria-label="Tonight overview" className="mb-5 min-w-0 space-y-4 [overflow-wrap:anywhere]">
       {morning && (

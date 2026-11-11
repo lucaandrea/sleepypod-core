@@ -8,6 +8,7 @@ import { Link2, Power } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button, NoticeStack, PageHeader, Skeleton } from '@/src/components/ds'
 import { TonightOverview } from './TonightOverview'
+import { morningInPodZone } from './tonightSummary'
 import { ComfortLimitCard } from './ComfortLimitCard'
 import { RecordingHealthCard } from '@/src/components/Sleep/RecordingHealthCard'
 import { EnvironmentInfoPanel } from '@/src/components/EnvironmentInfo/EnvironmentInfoPanel'
@@ -135,6 +136,7 @@ export const TempScreen = () => {
   // Stepper variant: Night / Dawn read and edit tonight's schedule per side.
   const isStepper = variant === 'stepper'
   const now = useNow()
+  const morning = morningInPodZone(now.getTime(), settings?.device?.timezone)
   // Per side, so choosing Night on one card doesn't switch the other — unless linked.
   const [stepperTab, setStepperTab] = useState<Record<Side, StepperTab>>({ left: 'now', right: 'now' })
   const handleTabChange = (side: Side, tab: StepperTab) => {
@@ -209,7 +211,7 @@ export const TempScreen = () => {
     />
   )
 
-  const overview = <TonightOverview key={overviewSide} side={overviewSide} name={sideName(overviewSide)} sleepSide={contextSide} sleepName={sideName(contextSide)} timeZone={settings?.device?.timezone} />
+  const overview = <TonightOverview key={overviewSide} side={overviewSide} name={sideName(overviewSide)} sleepSide={contextSide} sleepName={sideName(contextSide)} morning={morning} timeZone={settings?.device?.timezone} />
   const details = (
     <details className="my-5 rounded-card border border-line p-4">
       <summary className="min-h-11 cursor-pointer py-2 font-medium">Comfort limits and recording checks</summary>
@@ -244,7 +246,7 @@ export const TempScreen = () => {
           <div className={`${CONTEXT} max-[899px]:order-first`}>
             <span className="sp-label" role="status">Connecting…</span>
             <p className="text-xs text-fg-2">Saved alarms remain available while hardware status reconnects.</p>
-            <LastNightCard side={contextSide} name={sideName(contextSide)} />
+            {!morning && <LastNightCard side={contextSide} name={sideName(contextSide)} />}
             <AlarmCard side={contextSide} />
           </div>
         </div>
@@ -323,7 +325,7 @@ export const TempScreen = () => {
             <TonightCard side={contextSide} unit={unit} />
           </div>
           <EnvironmentInfoPanel side={contextSide} unit={unit} />
-          <LastNightCard side={contextSide} name={sideName(contextSide)} />
+          {!morning && <LastNightCard side={contextSide} name={sideName(contextSide)} />}
           <AlarmCard side={contextSide} />
         </div>
       </div>
