@@ -870,6 +870,7 @@ export const householdArrangementTransitions = sqliteTable('household_arrangemen
   archive: text('archive'),
   committedHash: text('committed_hash'),
   processing: text('processing'),
+  recovery: text('recovery'),
 }, table => [index('idx_household_arrangement_transitions').on(table.householdId, table.createdAt)])
 
 // Persist the latest browser identity independently of response arrival order.

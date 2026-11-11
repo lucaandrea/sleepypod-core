@@ -1562,6 +1562,7 @@ exports[`complete Drizzle schema contracts > pins every main-database table, col
       "archive | sql:text | logical:string/SQLiteText | nullable | default:none | not-primary-key | not-unique | not-autoincrement | enum:none",
       "committed_hash | sql:text | logical:string/SQLiteText | nullable | default:none | not-primary-key | not-unique | not-autoincrement | enum:none",
       "processing | sql:text | logical:string/SQLiteText | nullable | default:none | not-primary-key | not-unique | not-autoincrement | enum:none",
+      "recovery | sql:text | logical:string/SQLiteText | nullable | default:none | not-primary-key | not-unique | not-autoincrement | enum:none",
     ],
     "exportName": "householdArrangementTransitions",
     "foreignKeys": [

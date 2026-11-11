@@ -15,7 +15,7 @@ stateDiagram-v2
     Held --> Held: Stop, timeout, stale evidence or failed write
     Held --> CommittedHeld: Both weeks + identities + archive + close solo epoch
     CommittedHeld --> Recovery: Separate runtime and processing verification
-    Recovery --> Ready: Future reviewed release coordinator
+    Recovery --> Ready: Atomic verified recovery (internal)
 ```
 
 `begin` requires an enabled internal coordinator, an authenticated owner device,
@@ -69,9 +69,10 @@ unassigned. Importing a row that crosses the boundary cannot move an old persona
 record or silently attribute merged output to the joining sleeper.
 
 Existing private copies retain their sleeper IDs. The bounded importer continues
-to withhold intervals without exactly one eligible reviewed epoch. A later
-recovery coordinator must explicitly append the assigned epoch after verifying
-both the live pipeline configuration and physical arrangement.
+to withhold intervals without exactly one eligible reviewed epoch. The internal
+recovery store explicitly appends the assigned epoch only after verifying the
+live pipeline configuration and fresh independent physical observations. Runtime
+wiring and the attended app flow remain separate work.
 
 ### Processing acknowledgments
 
@@ -105,7 +106,7 @@ The biometric source manifest and generated browser-worker identity change with
 this code. Prior profile artifacts stay retained; existing compatibility checks
 must still pass before an artifact can be used with the changed engine.
 
-## Recovery integration still required
+## Verified recovery storage
 
 A read-only Linux service-generation reader verifies the current process against
 systemd's active MainPID and invocation, the kernel boot identity and `/proc`
@@ -117,7 +118,33 @@ an application UUID, changed environment value or reused PID alone is insufficie
 `HardwareAdmissionStore.releaseWithReceipt` can save the coordinator's synchronous
 reconciliation and release in one FULL-durability transaction. Wrong revisions,
 failed receipt writes, failed admission writes and callback changes to the hold
-roll back together. It is internal, and no recovery coordinator calls it yet.
+roll back together. `ArrangementRecoveryStore` now uses this internal primitive;
+neither store is registered on an HTTP route or called automatically at startup.
+
+The initial hold stores the verified service generation, and commit rejects a
+changed process even if an application run ID was reused. After the committed
+arrangement survives a real restart, recovery requires a new attended request
+from the same current owner device, current session/assignment revisions, the
+exact committed settings, still-valid approving devices, an unchanged reviewed
+recording source, both fresh processing receipts and fresh empty/off/stationary
+observations. A Stop awaiting its acknowledgment prevents release.
+
+Recovery reserves the biometric source against concurrent writes while the FULL
+configuration transaction opens the assigned attribution epoch, saves the
+private recovery evidence and advances admission to its open revision. It
+rechecks runtime evidence and drain again before release. Failed epoch, receipt
+or release writes roll back all three changes. The new epoch starts at the
+verified recovery time; earlier processing samples do not retroactively claim
+the reload gap.
+
+The exact saved request can replay its historical receipt after a lost response,
+expiry or later hold without performing any write. Changed request contents,
+revoked credentials and malformed saved evidence cannot replay. Client receipts
+contain no other person's preferences, algorithm data or process identifiers.
+They acknowledge admission release and explicitly state that physical movement
+was not requested; they do not claim a bed-movement test.
+
+## Runtime integration still required
 
 A committed storage transaction is **not completed physical activation**. Before
 exposing activation in either app, implement and test:
@@ -131,9 +158,9 @@ exposing activation in either app, implement and test:
 4. Reconcile the actual processing receipts with the committed fingerprint and
    review any later personal-profile migration. The implemented default reset and
    sample-boundary acknowledgments are prerequisites, not completed activation.
-5. Exact committed-state reconciliation, fresh independent observations, a new
-   reviewed assigned recording epoch, and a durable release receipt coupled to
-   admission reopening. Neither time passing nor drain completion releases it.
+5. Connect the implemented reconciliation/epoch/release transaction to the
+   coordinator and the separate attended recovery flow. Neither time passing,
+   an accepted restart request nor drain completion may trigger automatic release.
 
 There is no public API that can invoke these incomplete recovery steps today.
 
@@ -182,3 +209,22 @@ Discovery verified the same 671 files exactly once; all 57 shell cases and the
 complete final suite passed. An overlapping build/typecheck removed generated
 Next type files during that check; the retained failure was followed by a clean
 typecheck after the production build completed.
+
+The verified recovery storage follow-up passes **9,426 Core tests, 19 existing
+skips**. Focused transition/recovery checks cover generation changes, original
+and recovery request expiry, revoked credentials, missing/stale processing,
+changed settings/source, database reopen, whole-interval attribution, exact
+replay and receipt corruption. SQL fault injection proves epoch/receipt/release
+rollback; a second connection proves the biometric source stays reserved until
+the configuration commit finishes. A Stop injected at the final receipt write
+also rolls back the operation. TypeScript, full ESLint, both migration checks,
+the generated schema contract and the production build pass. The generated snapshot changes only
+the nullable recovery column and migration identity.
+
+The first recovery fixture omitted the independently saved personal preferences
+required by the existing review contract; correcting the fixture preserved that
+requirement. A full run passed before two final commit-boundary guards were
+added. The next full run had one connection reset in the unchanged WebSocket
+replay test (9,425 passed); all 137 streaming tests passed in isolation and the
+complete final suite then passed. The failed run remains in the evidence record;
+neither the streaming code nor its assertions/timeouts were changed.
