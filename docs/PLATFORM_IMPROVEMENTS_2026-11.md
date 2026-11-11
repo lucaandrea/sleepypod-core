@@ -195,3 +195,9 @@ streaming implementation, assertions or timeouts. The failed log remains retaine
 The public arrangement API still reports
 activation unavailable; coordinator wiring, private learning migration and
 attended hardware acceptance remain outstanding. Live solo behavior is unchanged.
+
+The hosted thermal-forecast audit timeout was profiled and traced to repeated ICU
+timezone formatter construction. Shared bounded formatter reuse preserves every
+recording/source audit, fixture, assertion and timeout. The corrected local full
+coverage suite passes **9,512 tests, 19 existing skips**; production build,
+TypeScript and focused lint pass. Final hosted checks remain a separate gate.

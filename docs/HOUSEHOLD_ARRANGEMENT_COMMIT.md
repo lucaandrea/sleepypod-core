@@ -300,3 +300,16 @@ production build pass. An earlier full run had one HTTP 501 WebSocket handshake
 failure; the isolated 137-case streaming suite and final complete run both passed.
 That failure is retained as a transient observation, not claimed as a fixed
 streaming defect. No live household transition was attempted.
+
+The first hosted run passed the browser, build, type and lint checks but exceeded
+the unchanged 30-second thermal-forecast audit guard (9,500 tests passed). A CPU
+profile found repeated ICU timezone formatter construction in source-day conversion
+and timezone validation. A bounded shared cache now reuses those immutable
+formatters, including invalid-zone results; recording audits and time-dependent
+evidence are still rechecked. The fixture, assertions, coverage and timeout are
+unchanged. Comparable local coverage runs measured 9.0 seconds before and 3.2
+seconds after; the final full suite measured 2.7 seconds for that test.
+
+The corrected full suite passes **9,512 tests, 19 existing skips**, including 11
+new timezone/DST/eviction checks. TypeScript, focused ESLint and the production
+build pass. These local results do not replace final hosted or live acceptance.
