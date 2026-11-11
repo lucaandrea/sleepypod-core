@@ -1,0 +1,117 @@
+# Person-owned check-ins
+
+New personal check-ins belong to the authenticated sleeper, independently of
+their physical bed side. A prepared member can describe their own night before
+the household activates assigned sides. This does not claim that the Pod measured
+their sleep or that a particular recording belongs to them.
+
+This delivery is the storage and HTTP contract. Matching web/native editors and
+personal learning enrollment remain separate work. The feature defaults off and
+does not change the working solo installation.
+
+```mermaid
+flowchart LR
+    Credential[Personal account] --> CheckIn[Own calendar date and source time zone]
+    CheckIn --> Store[Person-owned journal]
+    Store --> Read[Private bounded reads]
+    Store --> Receipt[Metadata-only write receipt]
+    Delete[Explicit deletion with current revision] --> Tombstone[Empty content and new revision]
+    Tombstone --> Replay[Old save cannot recreate content]
+```
+
+## Identity and storage
+
+`household_journal_entries` has one entry per account and local date. Each row
+retains the original sleeper identifier and source time zone. Ownership is
+resolved from the current personal credential, never from a caller-supplied
+account, a current side assignment or an occupancy estimate. Reassigning the bed
+does not retarget a note to the new sleeper on that side.
+
+The schema is generated in migration `0069_loving_garia.sql`. No legacy journal,
+feedback, comfort state, model, recording or routine is copied or modified. The
+personal journal cannot train or activate a model. Future learning must join
+explicitly reviewed person-attributed observations with compatible sensor-zone
+provenance; the date of a self-report is not sufficient attribution by itself.
+
+## Routes
+
+All routes require a personal credential. Browser requests also pin
+`X-Sleepypod-Sleeper-Id` to the current account and retain the existing same-origin
+and browser-revision checks. The installation-owner connection key does not grant
+access to personal check-ins.
+
+- `GET /api/v1/me/journal?date=2026-11-10` reads one entry or its deletion revision.
+- `GET /api/v1/me/journal?from=2026-11-01&through=2026-11-10` reads up to 90
+  inclusive calendar dates, newest first, omitting deleted entries.
+- `POST /api/v1/me/journal` saves or deletes one entry with a fresh request UUID,
+  expected session/assignment revisions, date, expected entry revision, expected
+  source time zone and validated journal fields. `fields: null` deletes content.
+- `GET /api/v1/me/journal/requests/<request UUID>` reconciles a lost response.
+  Another account or an unknown request receives no receipt.
+
+Every response carries its authenticated identity/revision scope and the explicit
+interpretation `personal_self_report_not_sleep_measurement`. Unknown, duplicate,
+cross-account and side selectors are rejected. Reads are revalidated as response
+bytes are consumed; revocation, browser account switches, disabled capability,
+changed content and interrupted requests withdraw queued private output. No read
+or reconnect replays a write.
+
+The session capability `personalJournal` requires both
+`SLEEPYPOD_HOUSEHOLD_PREPARATION=1` and `SLEEPYPOD_PERSONAL_JOURNAL=1`. The latter is
+off by default and independent of hardware control or arrangement activation.
+
+## Edits, deletion and retry behavior
+
+The saved revision must match before an edit or deletion commits. This prevents
+an old editor from overwriting a newer note or recreating deleted content. The
+entry and its request receipt share one SQLite transaction. Identical request
+replay returns only the original metadata receipt, while a changed payload or
+another account cannot reuse that request identifier.
+
+Receipts contain the date, revision, source time zone, result and commit time;
+they never store note text, habit fields or a duplicate request body. Deletion
+sets the current fields to SQL NULL and retains a new revision. A previous save
+receipt may still say that its historical request succeeded; clients must read
+the current entry separately before displaying current content. An intentional
+new entry after deletion must use the deletion revision and a new request UUID.
+
+This is logical deletion from the current journal, not a claim of secure erasure
+from SQLite free pages, WAL files, existing backups or user exports. Historical
+learning archives and their original/derived copies have a separate pending
+deletion workflow. There is no automatic enrollment of these new notes into
+derived models, so this delivery creates no model copies to remove.
+
+## Calendar and evidence boundaries
+
+Existing entries retain their original time zone after travel or a controller
+time-zone change. New entries require the current configured zone. Dates must
+exist in that zone and cannot be in the future. Detailed habit timestamps must
+fall within the preceding day or wake date and not after the controller clock.
+Clock rollback cannot update either a saved entry or a deletion tombstone.
+
+The existing detailed habit contract preserves `not_logged`, `none` and `yes`.
+Omitting detail during an older-client edit preserves compatible prior detail;
+changing a habit clears its incompatible timing. A check-in is a subjective
+observation, not a sleep measurement or evidence that a temperature change helped.
+
+## Validation
+
+Real migrated SQLite and HTTP tests cover two-account separation, changed bed
+assignment, optimistic concurrency, exact retry, deletion and stale recreation,
+receipt privacy, transaction rollback, reopening the database, daylight-saving
+dates, a skipped local date, future data, backward clocks, bounded reads,
+revocation, browser switches, interrupted uploads and generic corruption errors.
+The focused journal, household HTTP and schema run passes 114 tests. The initial
+browser-switch fixture omitted the required browser-revision header; it was
+corrected and the failed result retained separately. TypeScript, full ESLint,
+both generated-migration checks and the production build pass.
+
+The default full run passed 9,744 cases with 19 existing skips and three
+five-second timeouts in unchanged deployment/archiver shell fixtures. Earlier
+runs and a single-worker repeat timed out in different cases; the serial repeat
+passed 85 of 86. Direct profiling of the deployment helper completed the sampled
+cases in about one second. These observations do not establish a root cause or
+a clean full-suite result. No test assertions, fixtures or time limits were
+relaxed; the failed logs are retained. Hosted validation remains required.
+
+No Pod, phone, routine or account was changed during these synthetic source tests.
