@@ -5,9 +5,17 @@ their physical bed side. A prepared member can describe their own night before
 the household activates assigned sides. This does not claim that the Pod measured
 their sleep or that a particular recording belongs to them.
 
-This delivery is the storage and HTTP contract. Matching web/native editors and
-personal learning enrollment remain separate work. The feature defaults off and
-does not change the working solo installation.
+This delivery includes storage, the HTTP contract and a personal web editor.
+The editor keeps drafts in memory, distinguishes unsaved changes from saved
+entries, and reconciles a lost save response by reading its receipt and the
+current entry without resending the write. Closing or changing dates requires
+review of any draft; hiding the page clears its private content. Access is
+rechecked around requests and while the workspace remains open.
+
+Native editor parity and personal learning enrollment remain separate work.
+The feature defaults off; implemented source and browser-fixture checks do not
+establish live deployment, feature enablement or physical verification. No
+working solo settings or hardware controls are changed by this feature.
 
 ```mermaid
 flowchart LR
@@ -106,12 +114,19 @@ browser-switch fixture omitted the required browser-revision header; it was
 corrected and the failed result retained separately. TypeScript, full ESLint,
 both generated-migration checks and the production build pass.
 
-The default full run passed 9,744 cases with 19 existing skips and three
-five-second timeouts in unchanged deployment/archiver shell fixtures. Earlier
-runs and a single-worker repeat timed out in different cases; the serial repeat
-passed 85 of 86. Direct profiling of the deployment helper completed the sampled
-cases in about one second. These observations do not establish a root cause or
-a clean full-suite result. No test assertions, fixtures or time limits were
-relaxed; the failed logs are retained. Hosted validation remains required.
+The final full source run passes 9,766 tests with 19 existing skips. The four
+personal-journal browser scenarios pass on desktop, phone, tablet and enlarged
+text, including lost-response reconciliation, saved-versus-unsaved state,
+deletion, draft review and hidden-page privacy. The focused state/API run passes
+72 tests. Independent rendered review accepted the final unsaved-state and
+documentation corrections; hosted validation remains required.
+
+Earlier full runs had five-second shell-fixture timeouts. Isolated repeats and
+process profiling reproduced slow successful commands, with no stable improvement
+from changing worker pools. Those failed results are retained. The real-process
+suites now run sequentially with an integration-specific budget and explicit
+child-process deadlines; see [shell integration tests](SHELL_INTEGRATION_TESTS.md).
+All 101 shell integration cases pass. Production scripts and behavioral
+assertions are unchanged.
 
 No Pod, phone, routine or account was changed during these synthetic source tests.
