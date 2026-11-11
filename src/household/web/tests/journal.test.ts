@@ -5,10 +5,11 @@ import { personalJournalWriteSchema, type PersonalJournalReceipt, type PersonalJ
 import { PersonalJournalWorkspace } from '../journal'
 import { PersonalWebError } from '../protocol'
 import { personalJournalPath } from '../journalPaths'
+import { personalJournalPatterns } from '../../personalJournalPatterns'
 
 function setup() {
   const session = householdSessionSchema.parse({ ...preparation.ownerSession,
-    capabilities: { ...preparation.ownerSession.capabilities, personalJournal: true } })
+    capabilities: { ...preparation.ownerSession.capabilities, personalJournal: true, personalJournalPatterns: true } })
   const zone = 'America/Los_Angeles', now = Date.parse('2026-11-11T12:00:00Z')
   const entries = new Map<string, PersonalJournalSelection>(), receipts = new Map<string, PersonalJournalReceipt>()
   const envelope = () => ({ version: 1, generatedAt: now, interpretation: 'personal_self_report_not_sleep_measurement',
@@ -28,6 +29,10 @@ function setup() {
       return { ...envelope(), receipt }
     }
     if (path.startsWith('me/journal/requests/')) return { ...envelope(), receipt: receipts.get(path.split('/').at(-1) ?? '') ?? null }
+    if (path.startsWith('me/journal/patterns?')) {
+      const query = Object.fromEntries(new URLSearchParams(path.split('?')[1]))
+      return { ...envelope(), query, ...personalJournalPatterns([...entries.values()].filter(item => item.date >= query.from && item.date <= query.through), now) }
+    }
     const date = new URLSearchParams(path.split('?')[1]).get('date') ?? ''
     return { ...envelope(), currentTimeZone: zone, query: { date },
       entries: [entries.get(date) ?? { date, revision: null, timeZone: null, record: null }] }
@@ -206,4 +211,91 @@ it('validates personal route selectors and mutation bodies before transport', ()
     expect(personalJournalPath(path, 'GET', undefined)).toBe(false)
   expect(personalJournalPath('me/journal', 'POST', { accountId: 'other' })).toBe(false)
   expect(personalJournalPath('me/journal?date=2026-11-10', 'PUT', undefined)).toBe(false)
+})
+
+it('compares saved personal entries without sending a draft or any mutation', async () => {
+  const fixture = setup()
+  await draft(fixture)
+  await fixture.workspace.save()
+  fixture.workspace.edit({ notes: 'An unsaved note must not enter comparisons.' })
+  await fixture.workspace.loadPatterns('2026-11-01', '2026-11-10')
+  expect(fixture.workspace.getSnapshot().patterns?.cohorts[0].dates).toBe(1)
+  expect(JSON.stringify(fixture.workspace.getSnapshot().patterns)).not.toContain('A private synthetic note.')
+  expect(JSON.stringify(fixture.workspace.getSnapshot().patterns)).not.toContain('An unsaved note')
+  expect(fixture.workspace.getSnapshot().draft?.notes).toBe('An unsaved note must not enter comparisons.')
+  expect(writes(fixture)).toHaveLength(1)
+  expect(fixture.client.read.mock.calls.filter(([path]) => path.includes('patterns'))).toEqual([['me/journal/patterns?from=2026-11-01&through=2026-11-10']])
+})
+
+it.each(['clearPatterns', 'clear', 'dispose'] as const)('discards a late comparison when %s hides it', async (operation) => {
+  const fixture = setup()
+  await draft(fixture)
+  let resolve!: (value: unknown) => void
+  fixture.client.read.mockImplementation((path) => {
+    if (path.includes('/patterns?')) {
+      return new Promise((finish) => {
+        resolve = finish
+      })
+    }
+    return fixture.read(path)
+  })
+  const loading = fixture.workspace.loadPatterns('2026-11-01', '2026-11-10')
+  await vi.waitFor(() => expect(resolve).toBeDefined())
+  fixture.workspace[operation]()
+  resolve(await fixture.read('me/journal/patterns?from=2026-11-01&through=2026-11-10'))
+  await loading
+  expect(fixture.workspace.getSnapshot()).toMatchObject({ patterns: null, patternsBusy: false })
+  expect(writes(fixture)).toHaveLength(0)
+})
+
+it('withdraws comparisons when their capability is disabled while keeping the current private draft', async () => {
+  const fixture = setup()
+  await draft(fixture)
+  await fixture.workspace.loadPatterns('2026-11-01', '2026-11-10')
+  expect(fixture.workspace.getSnapshot().patterns).not.toBeNull()
+  fixture.session.capabilities.personalJournalPatterns = false
+  await fixture.workspace.checkAccess()
+  expect(fixture.workspace.getSnapshot()).toMatchObject({ patterns: null, patternsAvailable: false, dirty: true })
+  expect(fixture.workspace.getSnapshot().draft?.notes).toBe('A private synthetic note.')
+  fixture.client.read.mockClear()
+  await fixture.workspace.loadPatterns('2026-11-01', '2026-11-10')
+  expect(fixture.client.read.mock.calls.every(([path]) => path === 'household/session')).toBe(true)
+})
+
+it('rejects mismatched comparison scope and dates without exposing their content', async () => {
+  for (const mismatch of ['account', 'date']) {
+    const fixture = setup()
+    await draft(fixture)
+    fixture.client.read.mockImplementation(async (path) => {
+      const result = await fixture.read(path)
+      if (!path.includes('/patterns?')) return result
+      const changed = result as { scope: { accountId: string }, query: { through: string } }
+      if (mismatch === 'account') changed.scope.accountId = '40000000-0000-4000-8000-000000000099'
+      else changed.query.through = '2026-11-09'
+      return changed
+    })
+    await fixture.workspace.loadPatterns('2026-11-01', '2026-11-10')
+    expect(fixture.workspace.getSnapshot().patterns).toBeNull()
+    if (mismatch === 'account') expect(fixture.invalidated).toHaveBeenCalledOnce()
+    else expect(fixture.workspace.getSnapshot().patternsError).toContain('could not be verified')
+  }
+})
+
+it('withdraws the old comparison before an uncertain save and never sends it again', async () => {
+  const fixture = setup()
+  await draft(fixture)
+  await fixture.workspace.loadPatterns('2026-11-01', '2026-11-10')
+  fixture.client.read.mockImplementation((path, method) => method === 'POST' ? Promise.reject(new Error('lost')) : fixture.read(path))
+  await fixture.workspace.save()
+  expect(fixture.workspace.getSnapshot()).toMatchObject({ patterns: null, patternsBusy: false })
+  await fixture.workspace.loadPatterns('2026-11-01', '2026-11-10')
+  expect(fixture.workspace.getSnapshot().patterns).toBeNull()
+  expect(writes(fixture)).toHaveLength(1)
+})
+
+it('rejects non-range comparison routes before any transport', () => {
+  const path = 'me/journal/patterns?from=2026-11-01&through=2026-11-10'
+  expect(personalJournalPath(path, 'GET', undefined)).toBe(true)
+  for (const suffix of ['&side=left', '&accountId=other', '&through=2026-11-11', '#fragment']) expect(personalJournalPath(path + suffix, 'GET', undefined)).toBe(false)
+  expect(personalJournalPath(path, 'POST', {})).toBe(false)
 })

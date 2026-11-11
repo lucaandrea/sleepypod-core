@@ -1,5 +1,6 @@
 import { householdIdSchema } from '../contract'
 import { parsePersonalJournalQuery, personalJournalWriteSchema } from '../personalJournalContract'
+import { parsePersonalJournalPatternsQuery } from '../personalJournalPatterns'
 
 /** A personal check-in never accepts an account, mattress side or arbitrary destination. */
 export function personalJournalPath(path: string, method: string, body: unknown): boolean {
@@ -12,6 +13,10 @@ export function personalJournalPath(path: string, method: string, body: unknown)
       return true
     }
     if (method !== 'GET' || body !== undefined) return false
+    if (pathname === 'me/journal/patterns' && search) {
+      parsePersonalJournalPatternsQuery(new URLSearchParams(search))
+      return true
+    }
     if (pathname === 'me/journal' && search) {
       parsePersonalJournalQuery(new URLSearchParams(search))
       return true

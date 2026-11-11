@@ -12,6 +12,7 @@ import { issuePersonalSession, PERSONAL_COOKIE } from '../browserSession'
 import { PersonalJournalStore } from '../personalJournal'
 import { PersonalJournalApi } from '../personalJournalApi'
 import { personalJournalReadResponseSchema, personalJournalWriteResponseSchema } from '../personalJournalContract'
+import { personalJournalPatternsResponseSchema } from '../personalJournalPatterns'
 
 let database: Database.Database, identities: HouseholdStore, journal: PersonalJournalStore, dependencies: HouseholdHttpDependencies
 let now: number, enabled: boolean, directory: string, owner: string, member: string, legacy: string
@@ -182,4 +183,43 @@ it('returns a generic unavailable response for corrupt saved content without ech
   const result = await householdHttp(request(`me/journal?date=${date}`), dependencies)
   expect(result.status).toBe(503)
   expect(await result.text()).not.toContain('private-corruption-marker')
+})
+
+it('serves note-free patterns from only the authenticated person, without counting a partner’s journal', async () => {
+  journal.write(owner, input())
+  journal.write(member, { ...input(), fields: { ...input().fields, notes: 'private-member-marker', comfort: 'warm' } })
+  const path = `me/journal/patterns?from=${date}&through=${date}`
+  const session = await householdHttp(request('household/session'), dependencies)
+  expect((await session.json()).capabilities.personalJournalPatterns).toBe(true)
+  for (const key of [owner, member]) {
+    const result = await householdHttp(request(path, 'GET', undefined, key), dependencies)
+    expect(result.status).toBe(200)
+    expect(result.headers.get('cache-control')).toContain('no-store')
+    const patterns = personalJournalPatternsResponseSchema.parse(await result.json())
+    expect(patterns.scope.accountId).toBe(identities.session(key).accountId)
+    expect(patterns.cohorts[0].dates).toBe(1)
+    expect(patterns.cohorts[0].comparisons.every(item => item.warmRateDifferencePoints === null && item.excludedCount === 1)).toBe(true)
+    expect(JSON.stringify(patterns)).not.toMatch(/Private HTTP fixture|private-member-marker/)
+  }
+  expect((await householdHttp(request(path, 'GET', undefined, legacy), dependencies)).status).toBe(401)
+  expect((await householdHttp(request(path, 'POST', input()), dependencies)).status).not.toBe(200)
+  enabled = false
+  expect((await householdHttp(request(path), dependencies)).status).toBe(409)
+})
+
+it.each(['revoked', 'scope', 'disabled', 'deleted', 'aborted'])('withdraws queued personal comparisons after %s', async (change) => {
+  const saved = journal.write(owner, input()), abort = new AbortController()
+  const pending = await householdHttp(new Request(request(`me/journal/patterns?from=${date}&through=${date}`), { signal: abort.signal }), dependencies)
+  if (change === 'revoked') database.prepare('UPDATE household_devices SET revoked_at = ?').run(now)
+  if (change === 'scope') database.prepare('UPDATE household_accounts SET session_revision = session_revision + 1').run()
+  if (change === 'disabled') enabled = false
+  if (change === 'deleted') journal.write(owner, { ...input(), expectedRevision: saved.revision, fields: null })
+  if (change === 'aborted') abort.abort()
+  await expect(pending.text()).rejects.toThrow('changed before delivery')
+})
+
+it.each(['me/journal/patterns', 'me/journal/patterns?date=2026-11-10',
+  'me/journal/patterns?from=2026-01-01&through=2026-11-10',
+  'me/journal/patterns?from=2026-11-01&through=2026-11-10&accountId=another'])('rejects unsupported comparison selectors %s', async (path) => {
+  expect((await householdHttp(request(path), dependencies)).status).toBe(400)
 })

@@ -3,12 +3,13 @@ import { writeFile } from 'node:fs/promises'
 import { expect, test, type Page } from '@playwright/test'
 import { mockPersonal } from './personal-fixture'
 import { personalJournalWriteSchema, type PersonalJournalReceipt, type PersonalJournalSelection } from '../../src/household/personalJournalContract'
-import { sourceDate } from '../../src/lib/localDates'
+import { sourceDate, shiftHistoryDate } from '../../src/lib/localDates'
+import { personalJournalPatterns, parsePersonalJournalPatternsQuery } from '../../src/household/personalJournalPatterns'
 
 /** Synthetic personal records; every request is intercepted before it reaches the fixture server. */
-async function mockJournal(page: Page) {
+async function mockJournal(page: Page, patterns = false) {
   const personal = await mockPersonal(page)
-  Object.assign(personal.session.capabilities, { personalJournal: true })
+  Object.assign(personal.session.capabilities, { personalJournal: true, personalJournalPatterns: patterns })
   const now = Date.now(), zone = 'America/Los_Angeles', today = sourceDate(now / 1000, zone)
   const entries = new Map<string, PersonalJournalSelection>(), receipts = new Map<string, PersonalJournalReceipt>()
   const writes: unknown[] = []
@@ -38,6 +39,11 @@ async function mockJournal(page: Page) {
     await fixture.delayRead()
     if (fixture.failRead) return route.fulfill({ status: 503, json: { error: 'private error must not be displayed' } })
     if (url.pathname.includes('/requests/')) return route.fulfill({ json: { ...envelope(), receipt: receipts.get(url.pathname.split('/').at(-1) ?? '') ?? null } })
+    if (url.pathname.endsWith('/patterns')) {
+      const query = parsePersonalJournalPatternsQuery(url.searchParams)
+      return route.fulfill({ json: { ...envelope(), query,
+        ...personalJournalPatterns([...entries.values()].filter(item => item.date >= query.from && item.date <= query.through), Date.now()) } })
+    }
     const date = url.searchParams.get('date') ?? ''
     return route.fulfill({ json: { ...envelope(), currentTimeZone: zone, query: { date },
       entries: [entries.get(date) ?? { date, revision: null, timeZone: null, record: null }] } })
@@ -179,4 +185,105 @@ test('failed and disabled reads have usable recovery without inventing a saved c
   await panel(page).getByRole('button', { name: 'Open my check-in' }).click()
   await expect(panel(page)).toContainText('not enabled on this Pod yet')
   expect(fixture.writes).toEqual([])
+})
+
+function seedPatterns(fixture: Awaited<ReturnType<typeof mockJournal>>) {
+  const now = Date.now(), timeZone = 'America/Los_Angeles'
+  for (let index = 0; index < 10; index++) {
+    const date = shiftHistoryDate(fixture.today, -index), bedtimeAt = Date.parse(`${date}T06:00:00Z`)
+    fixture.entries.set(date, { date, revision: randomUUID(), timeZone, record: {
+      date, timeZone, createdAt: now, updatedAt: now, fields: {
+        restfulness: 4, comfort: index < 5 ? 'warm' : 'comfortable', caffeine: true, alcohol: false, exercise: false,
+        notes: 'Private comparison fixture note.', context: {
+          version: 1, bedtimeAt, caffeine: { status: 'yes', unit: 'milligrams', amount: index < 5 ? 200 : 100,
+            lastAt: bedtimeAt - (index < 5 ? 2 : 8) * 3_600_000 },
+          alcohol: { status: 'not_logged', unit: 'usStandardDrinks' }, exercise: { status: 'none', unit: 'minutes' },
+          stress: index < 5 ? 'higher' : 'usual',
+        },
+      },
+    } })
+  }
+}
+
+test('personal habit comparisons show only saved counts with honest empty states across sizes', async ({ page }) => {
+  const fixture = await mockJournal(page, true)
+  await open(page)
+  const disclosure = panel(page).locator('details.journal-patterns')
+  await disclosure.locator('summary').first().click()
+  await disclosure.getByRole('button', { name: 'Compare saved check-ins' }).click()
+  const result = disclosure.getByRole('region', { name: 'Your habit comparisons', exact: true })
+  await expect(result).toContainText('No saved check-ins in this range')
+  await disclosure.screenshot({ path: test.info().outputPath('patterns-empty.png') })
+  seedPatterns(fixture)
+  await disclosure.getByRole('button', { name: 'Compare saved check-ins' }).click()
+  await expect(result).toContainText('10 saved dates')
+  await expect(result).toContainText('too warm on 5 of 5 dates')
+  await expect(result).toContainText('100 percentage points higher')
+  await expect(result).not.toContainText('Private comparison fixture note')
+  await expect(result).not.toContainText('left side')
+  await page.setViewportSize({ width: 1440, height: 1000 })
+  await disclosure.getByLabel('Compare through').focus()
+  const compare = disclosure.getByRole('button', { name: 'Compare saved check-ins' })
+  // Native date fields expose multiple keyboard segments before the next control.
+  for (let step = 0; step < 8; step++) {
+    if (await compare.evaluate(element => element === document.activeElement)) break
+    await page.keyboard.press('Tab')
+  }
+  await expect(compare).toBeFocused()
+  await disclosure.screenshot({ path: test.info().outputPath('patterns-desktop.png') })
+  await captureWorkspace(page, 'patterns-desktop-workspace')
+  await disclosure.getByText('Comparison definitions and counts', { exact: true }).click()
+  await expect(result).toContainText('Excluded: 10')
+  await page.setViewportSize({ width: 1024, height: 1100 })
+  await disclosure.screenshot({ path: test.info().outputPath('patterns-tablet-counts.png') })
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.emulateMedia({ colorScheme: 'dark', reducedMotion: 'reduce' })
+  await page.addStyleTag({ content: ':root{font-size:24px}' })
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390)
+  await disclosure.screenshot({ path: test.info().outputPath('patterns-phone-dark-large.png') })
+  await captureWorkspace(page, 'patterns-phone-workspace')
+  await disclosure.getByLabel('Compare from').fill(shiftHistoryDate(fixture.today, -1))
+  await expect(result).toHaveCount(0)
+  await disclosure.getByRole('button', { name: 'Compare saved check-ins' }).click()
+  await expect(result).toContainText('No comparison has enough usable dates yet')
+  await expect(result).not.toContainText('percentage points higher')
+  await disclosure.screenshot({ path: test.info().outputPath('patterns-phone-insufficient.png') })
+  expect(fixture.writes).toEqual([])
+  expect(fixture.posts).toEqual([])
+  expect(fixture.unexpected).toEqual([])
+})
+
+test('personal comparison failure preserves the draft and hiding removes returned data', async ({ page }) => {
+  const fixture = await mockJournal(page, true)
+  seedPatterns(fixture)
+  await open(page)
+  await edit(page)
+  const disclosure = panel(page).locator('details.journal-patterns')
+  await disclosure.locator('summary').first().click()
+  fixture.failRead = true
+  let releaseRead = () => {}
+  const delayedRead = new Promise<void>((resolve) => {
+    releaseRead = resolve
+  })
+  fixture.delayRead = () => delayedRead
+  await disclosure.getByRole('button', { name: 'Compare saved check-ins' }).click()
+  await expect(disclosure.getByRole('button', { name: 'Comparing saved check-ins…' })).toBeDisabled()
+  await disclosure.screenshot({ path: test.info().outputPath('patterns-loading.png') })
+  fixture.delayRead = async () => {}
+  releaseRead()
+  await expect(disclosure.getByRole('alert')).toContainText('Your draft is unchanged')
+  await expect(panel(page).getByLabel('Anything to remember?')).toHaveValue('Felt comfortable after an earlier bedtime.')
+  await disclosure.screenshot({ path: test.info().outputPath('patterns-error.png') })
+  fixture.failRead = false
+  await disclosure.getByRole('button', { name: 'Compare saved check-ins' }).click()
+  await expect(disclosure.getByRole('region', { name: 'Your habit comparisons', exact: true })).toBeVisible()
+  await disclosure.locator('summary').first().click()
+  await expect(disclosure.getByRole('region', { name: 'Your habit comparisons', exact: true })).toHaveCount(0)
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' })
+    document.dispatchEvent(new Event('visibilitychange'))
+  })
+  await expect(panel(page).getByLabel('Anything to remember?')).toHaveCount(0)
+  expect(fixture.writes).toEqual([])
+  expect(fixture.posts).toEqual([])
 })

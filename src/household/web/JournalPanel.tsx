@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import type { PersonalJournalWorkspace, PersonalJournalState } from './journal'
 import { JournalContextEditor } from '@/src/components/Sleep/JournalContextEditor'
 import { sourceDate } from '@/src/lib/localDates'
+import { JournalPatternsPanel } from './JournalPatternsPanel'
 
 export function JournalPanel({ journal }: { journal: PersonalJournalWorkspace }) {
   const state = useSyncExternalStore(journal.subscribe, journal.getSnapshot)
@@ -189,6 +190,7 @@ function JournalPanelContent({ journal, state }: { journal: PersonalJournalWorks
               </div>
             </section>
           )}
+          <JournalPatternsPanel journal={journal} state={state} />
         </>
       )}
     </article>

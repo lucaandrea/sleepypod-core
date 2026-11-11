@@ -27,12 +27,12 @@ const envelope = {
   version: z.literal(1), generatedAt: instant, scope: personalHistoryScopeSchema,
   interpretation: z.literal('personal_self_report_not_sleep_measurement'),
 }
+export const personalJournalRangeSchema = z.object({ from: journalDateSchema, through: journalDateSchema }).strict().refine((value) => {
+  const days = (Date.parse(value.through) - Date.parse(value.from)) / 86_400_000
+  return days >= 0 && days < 90
+}, 'Choose at most 90 calendar dates.')
 const querySchema = z.union([
-  z.object({ date: journalDateSchema }).strict(),
-  z.object({ from: journalDateSchema, through: journalDateSchema }).strict().refine((value) => {
-    const days = (Date.parse(value.through) - Date.parse(value.from)) / 86_400_000
-    return days >= 0 && days < 90
-  }, 'Choose at most 90 calendar dates.'),
+  z.object({ date: journalDateSchema }).strict(), personalJournalRangeSchema,
 ])
 export const personalJournalReadResponseSchema = z.object({
   ...envelope, currentTimeZone: personalJournalTimeZoneSchema,

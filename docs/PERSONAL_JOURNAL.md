@@ -51,6 +51,9 @@ access to personal check-ins.
 - `GET /api/v1/me/journal?date=2026-11-10` reads one entry or its deletion revision.
 - `GET /api/v1/me/journal?from=2026-11-01&through=2026-11-10` reads up to 90
   inclusive calendar dates, newest first, omitting deleted entries.
+- `GET /api/v1/me/journal/patterns?from=2026-11-01&through=2026-11-10` compares
+  saved personal check-ins within the same bounded range. It returns only
+  aggregate comfort/context counts, never notes or individual observations.
 - `POST /api/v1/me/journal` saves or deletes one entry with a fresh request UUID,
   expected session/assignment revisions, date, expected entry revision, expected
   source time zone and validated journal fields. `fields: null` deletes content.
@@ -64,7 +67,7 @@ bytes are consumed; revocation, browser account switches, disabled capability,
 changed content and interrupted requests withdraw queued private output. No read
 or reconnect replays a write.
 
-The session capability `personalJournal` requires both
+The session capabilities `personalJournal` and `personalJournalPatterns` require both
 `SLEEPYPOD_HOUSEHOLD_PREPARATION=1` and `SLEEPYPOD_PERSONAL_JOURNAL=1`. The latter is
 off by default and independent of hardware control or arrangement activation.
 
@@ -130,3 +133,46 @@ All 101 shell integration cases pass. Production scripts and behavioral
 assertions are unchanged.
 
 No Pod, phone, routine or account was changed during these synthetic source tests.
+
+## Private habit comparisons
+
+The open check-in panel includes an optional **Habits and feeling too warm**
+disclosure. Choose a range of at most 90 dates and explicitly compare saved
+entries. The response belongs only to the current personal credential; the
+installation owner cannot read a partner's journal through this endpoint.
+
+Retained time zones stay in separate groups. Each comparison displays the two
+group definitions, usable-date counts, too-warm counts and excluded entries.
+A percentage-point difference appears only with at least five distinct saved
+dates in **each** group. This is a display threshold, not statistical validation.
+Zero is shown as zero; missing context is excluded, never interpreted as no
+activity or comfortable sleep. Timing compares only valid logged observations
+relative to the reported bedtime. Quantity comparisons split at the median of
+logged amounts in the selected range.
+
+These are exploratory associations in self-reported temperature comfort. They
+do not establish causation, objective sleep improvement or which setting to use.
+Room conditions, season, other habits and routine changes are potential
+confounders. Legacy side-owned journals, Watch data and unsaved drafts are not
+pooled into these results. Nothing trains a model or changes bed settings.
+
+Results remain in memory while open. Changing the range, saving an entry, closing
+the disclosure, hiding the page or losing account access clears them. A failed
+comparison preserves an unsaved check-in and offers an explicit retry. Pending
+saves block comparison until the current saved result is known. Read delivery
+revalidates the account, capability and underlying data before returning bytes.
+
+The added contract, account/HTTP and client-state tests cover separate people,
+separate time zones, excluded observations, invalid ranges and counts, queued
+response withdrawal, capability loss, late replies and saved-only comparisons.
+Rendered verification and hosted checks are recorded separately from source
+coverage; these tests do not establish physical or clinical performance.
+
+Comparison validation passes 70 focused tests and six production-browser
+scenarios, including a bounded keyboard traversal through native date segments,
+phone/tablet/desktop, dark/enlarged text, empty/insufficient/loading/error states
+and draft preservation. Production build, TypeScript and lint pass. The
+independent reviewer identified exclusion-ordering as the sole material visual
+fix, then scored it resolved after the complete capture set was refreshed.
+Hosted release, native comparison parity and actual user observations remain
+separate work. No statistical or sleep-outcome claim follows from these tests.

@@ -46,3 +46,23 @@ changes hardware, imports Health data or activates shared-bed arrangements.
 Account isolation and stale-write behavior require contract/HTTP tests in
 addition to rendered browser flows. Native parity and actual delivery remain
 separate work in the platform implementation ledger.
+
+## Habit-comparison extension
+
+Keep the two-answer check-in path primary. After its editor, an optional
+**Habits and feeling too warm** disclosure contains a bounded date range and one
+explicit comparison action. It reads saved entries only, preserving the current
+draft. Use the incumbent native date fields, typography, palette, focus states
+and plain separated result rows; no new visual world or card grid.
+
+A result leads with its source, selected range and read time. Within each retained
+time zone, show usable and too-warm counts for both groups before the difference;
+keep all group definitions and excluded counts available. Empty, insufficient,
+loading and failed reads must remain distinct. A difference is an exploratory
+association, never a causal claim or automatic bed adjustment. The existing
+account/hide withdrawal and independent Stop behavior remain unchanged.
+
+Required captures add desktop, tablet, phone/dark/enlarged text, empty,
+insufficient-data and failed-read states to the existing journal evidence.
+Fixtures must be labelled synthetic in the review packet. No external imagery,
+new media asset or comp is required for this code-led extension.

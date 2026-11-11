@@ -1,6 +1,7 @@
 import type { z } from 'zod'
 import type { HouseholdSession } from '../contract'
 import { personalJournalReadResponseSchema, personalJournalWriteResponseSchema, type PersonalJournalReceipt } from '../personalJournalContract'
+import { parsePersonalJournalPatternsQuery, personalJournalPatternsResponseSchema, type PersonalJournalPatterns } from '../personalJournalPatterns'
 import type { PersonalWebTransport } from './client'
 import { identifier, PersonalWebError, samePersonSession } from './protocol'
 import { journalDateSchema, journalFieldsSchema, type JournalFields } from '@/src/journal/contract'
@@ -25,6 +26,10 @@ export interface PersonalJournalState {
   pending: PendingCheckIn | null
   error: string | null
   message: string | null
+  patternsAvailable: boolean
+  patternsBusy: boolean
+  patterns: PersonalJournalPatterns | null
+  patternsError: string | null
 }
 const scopeFor = (session: HouseholdSession): Scope => ({ podId: session.podId, householdId: session.householdId,
   accountId: session.accountId, sleeperId: session.selfSleeperId, sessionRevision: session.sessionRevision,
@@ -37,11 +42,13 @@ export class PersonalJournalWorkspace {
   private generation = 0
   private disposed = false
   private checking = false
+  private patternsGeneration = 0
   private listeners = new Set<() => void>()
   private state: PersonalJournalState
   constructor(private readonly dependencies: { session: HouseholdSession, client: PersonalWebTransport, invalidated: () => void, now?: () => number }) {
     this.state = { available: dependencies.session.capabilities.personalJournal === true, busy: false, page: null,
-      draft: null, dirty: false, pending: null, error: null, message: null }
+      draft: null, dirty: false, pending: null, error: null, message: null,
+      patternsAvailable: dependencies.session.capabilities.personalJournalPatterns === true, patternsBusy: false, patterns: null, patternsError: null }
   }
 
   getSnapshot = () => this.state
@@ -64,6 +71,7 @@ export class PersonalJournalWorkspace {
 
   clear() {
     this.generation += 1
+    this.clearPatterns()
     this.update({ page: null, draft: null, dirty: false, pending: null, busy: false, error: null, message: null })
   }
 
@@ -87,16 +95,20 @@ export class PersonalJournalWorkspace {
     const session = samePersonSession(await this.dependencies.client.read('household/session'), this.dependencies.session)
     this.current(generation)
     const available = session.capabilities.personalJournal === true
-    this.update({ available })
+    const patternsAvailable = session.capabilities.personalJournalPatterns === true
+    this.update({ available, patternsAvailable })
+    if (!patternsAvailable) this.clearPatterns()
     if (!available) throw new PersonalWebError('disabled', 'Personal check-ins are not enabled on this Pod yet.')
     return session
   }
 
-  private async scoped<Result extends { scope: Scope }>(path: string, parse: (input: unknown) => Result, generation: number) {
+  private async scoped<Result extends { scope: Scope }>(path: string, parse: (input: unknown) => Result, generation: number, needsPatterns = false) {
     const before = await this.session(generation)
+    if (needsPatterns && !before.capabilities.personalJournalPatterns) throw new PersonalWebError('patterns_disabled', 'Personal comparisons are unavailable.')
     const result = parse(await this.dependencies.client.read(path))
     this.current(generation)
     const after = await this.session(generation)
+    if (needsPatterns && !after.capabilities.personalJournalPatterns) throw new PersonalWebError('patterns_disabled', 'Personal comparisons are unavailable.')
     if (!sameScope(scopeFor(before), scopeFor(after)) || !sameScope(result.scope, scopeFor(after)))
       throw new PersonalWebError('account_changed', 'The check-in account changed.')
     return result
@@ -111,10 +123,41 @@ export class PersonalJournalWorkspace {
   }
 
   private show(page: JournalPage, message: string | null = null) {
+    this.clearPatterns()
     const selected = page.entries[0], saved = selected.record?.fields
     this.update({ page, draft: { restfulness: saved?.restfulness ?? null, comfort: saved?.comfort ?? null,
       notes: saved?.notes ?? '', context: journalContextDraft(saved ?? blankFields, selected.timeZone ?? page.currentTimeZone) },
     dirty: false, pending: null, error: null, message })
+  }
+
+  clearPatterns() {
+    this.patternsGeneration += 1
+    this.update({ patterns: null, patternsBusy: false, patternsError: null })
+  }
+
+  /** Compare saved entries only; editing a draft cannot enter the source cohort. */
+  async loadPatterns(from: string, through: string) {
+    if (this.disposed || !this.state.page || this.state.busy || this.state.pending || this.state.patternsBusy) return
+    const generation = this.generation, operation = ++this.patternsGeneration
+    this.update({ patterns: null, patternsBusy: true, patternsError: null })
+    try {
+      const query = parsePersonalJournalPatternsQuery(new URLSearchParams({ from, through }))
+      const path = `me/journal/patterns?${new URLSearchParams(query)}`
+      const result = await this.scoped(path, personalJournalPatternsResponseSchema.parse, generation, true)
+      this.current(generation)
+      if (operation !== this.patternsGeneration) return
+      if (result.query.from !== from || result.query.through !== through) throw new PersonalWebError('invalid', 'Comparison dates changed.')
+      this.update({ patterns: result })
+    }
+    catch (error) {
+      if (generation !== this.generation || operation !== this.patternsGeneration) return
+      const code = error instanceof PersonalWebError ? error.code : null
+      if (['authentication', 'account_changed', 'disabled'].includes(code ?? '')) this.fail(error, generation)
+      else this.update({ patternsError: code === 'patterns_disabled'
+        ? 'Personal comparisons are not enabled on this Pod. Your check-in is still available.'
+        : 'Comparisons could not be verified. Choose a range of up to 90 dates and try again. Your draft is unchanged.' })
+    }
+    finally { if (generation === this.generation && operation === this.patternsGeneration) this.update({ patternsBusy: false }) }
   }
 
   /** Call only after the editor confirms discarding any unsaved draft or uncertain result. */
@@ -176,6 +219,7 @@ export class PersonalJournalWorkspace {
       return
     }
     if (remove && !page.entries[0].record) return
+    this.clearPatterns()
     const selected = page.entries[0], generation = ++this.generation
     const pending: PendingCheckIn = { requestId: identifier(), date: selected.date,
       timeZone: selected.timeZone ?? page.currentTimeZone, outcome: remove ? 'deleted' : 'saved' }

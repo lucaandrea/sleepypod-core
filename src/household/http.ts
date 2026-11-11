@@ -149,7 +149,7 @@ export async function householdHttp(request: Request, dependencies: HouseholdHtt
       && /^\/api\/v1\/me\/learning\/(archives|records(?:\/[^/]+)?)$/.test(path))
       return dependencies.personalLearning.response(request, credential, assertRequestCurrent)
     if (dependencies.personalJournal && ['GET', 'HEAD', 'POST'].includes(method)
-      && (path === '/api/v1/me/journal' || (method !== 'POST' && /^\/api\/v1\/me\/journal\/requests\/[^/]+$/.test(path))))
+      && (path === '/api/v1/me/journal' || (method !== 'POST' && (path === '/api/v1/me/journal/patterns' || /^\/api\/v1\/me\/journal\/requests\/[^/]+$/.test(path)))))
       return dependencies.personalJournal.response(request, credential, mutationBody, assertRequestCurrent)
     if (dependencies.arrangementCoordinator) {
       const coordinator = dependencies.arrangementCoordinator

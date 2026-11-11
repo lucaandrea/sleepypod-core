@@ -3,12 +3,14 @@ import { householdIdSchema, type HouseholdSession } from './contract'
 import { HouseholdError, type HouseholdCredential, type HouseholdStore } from './store'
 import type { PersonalJournalStore } from './personalJournal'
 import { parsePersonalJournalQuery, personalJournalReadResponseSchema, personalJournalWriteResponseSchema } from './personalJournalContract'
+import { parsePersonalJournalPatternsQuery, personalJournalPatterns, personalJournalPatternsResponseSchema } from './personalJournalPatterns'
 
 export class PersonalJournalApi {
   constructor(private readonly dependencies: { identities: HouseholdStore, journal: PersonalJournalStore, enabled: () => boolean, now?: () => number }) {}
 
   present(session: HouseholdSession): HouseholdSession {
-    return { ...session, capabilities: { ...session.capabilities, personalJournal: this.dependencies.enabled() } }
+    const enabled = this.dependencies.enabled()
+    return { ...session, capabilities: { ...session.capabilities, personalJournal: enabled, personalJournalPatterns: enabled } }
   }
 
   /** A save happens once; response delivery only revalidates identity and reads its metadata-only receipt. */
@@ -34,7 +36,12 @@ export class PersonalJournalApi {
     else {
       try {
         if (!['GET', 'HEAD'].includes(request.method)) throw new Error('Unsupported method')
-        if (path === '/api/v1/me/journal') {
+        if (path === '/api/v1/me/journal/patterns') {
+          const query = parsePersonalJournalPatternsQuery(url.searchParams)
+          select = () => ({ query, ...personalJournalPatterns(this.dependencies.journal.list(credential, query.from, query.through), generatedAt) })
+          schema = personalJournalPatternsResponseSchema
+        }
+        else if (path === '/api/v1/me/journal') {
           const query = parsePersonalJournalQuery(url.searchParams)
           select = () => ({ query, currentTimeZone: this.dependencies.journal.currentTimeZone(), entries: 'date' in query
             ? [this.dependencies.journal.read(credential, query.date)]
