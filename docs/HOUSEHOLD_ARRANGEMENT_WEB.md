@@ -99,5 +99,15 @@ transition read was pending. The entry lifecycle now keeps them hidden and inert
 until that read establishes an ordinary workspace; the new case passes and checks
 that the read itself sends no mutation.
 
+The first hosted full browser run also exposed account-save feedback being
+overwritten by the asynchronous maintenance-ready callback. Loading feedback now
+stays in the maintenance panel, preserving the account action's result. The real
+two-account scenario selects that result explicitly rather than assuming the
+whole page has only one live status region.
+
+After that correction, the rebuilt app passed the complete local browser suite:
+99 scenarios, including the real two-account API flow. The earlier hosted failure
+is retained as evidence; the corrected PR head still needs its own hosted checks.
+
 No live controller was restarted, no side assignment or routine was changed, and
 no physical activation or native delivery is established by these checks.

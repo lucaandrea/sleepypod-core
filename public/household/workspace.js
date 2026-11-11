@@ -211,17 +211,12 @@ async function refresh() {
         element('personal-editors').hidden = maintenanceActive
         element('personal-editors').inert = maintenanceActive
         element('personal-account-notice').hidden = maintenanceActive
-        if (!maintenanceActive) {
-          message('Your personal workspace is ready.')
-          return
-        }
+        if (!maintenanceActive) return
         generation += 1
         for (const controller of activeRequests) controller.abort()
         element('invitation-link').value = ''
-        if (mode === 'checking') {
-          message('Checking for an unfinished side change before opening your controls and account editors.')
-          return
-        }
+        // The maintenance panel owns loading feedback; preserve account-save results here.
+        if (mode === 'checking') return
         element('assignment').textContent = 'Side change in progress · check the saved transition below'
         message('Finish the attended side change before using ordinary bed controls.')
       },
