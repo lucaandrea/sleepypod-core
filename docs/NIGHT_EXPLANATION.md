@@ -77,3 +77,9 @@ browser flows. The first full unit run found missing demo/screen test contracts
 and the new index snapshot; those were corrected. Its two existing CLI groups
 also hit their five-second limits under concurrent load. All affected groups
 passed with two workers: 140 tests, unchanged assertions and timeout guards.
+
+The complete clean-checkout regression run then passed **8,977 tests across 645
+files**, with 19 existing environment-dependent skips. A previous run overlapped
+a Git merge and read an unresolved migration journal; its 26 failed cases are
+retained as invalid-run evidence. The final run used the resolved, unchanged tree
+throughout, with two workers and the original timeout limits.
