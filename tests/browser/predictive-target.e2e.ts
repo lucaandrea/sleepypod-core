@@ -12,7 +12,8 @@ test('predictive reads require owner authentication and cannot accept targets or
   const anonymous = await playwright.request.newContext({ baseURL, storageState: { cookies: [], origins: [] } })
   try {
     for (const path of ['/api/v1/comfort/predictive/preview?side=left', '/api/trpc/comfort.predictiveTargetPreview',
-      '/api/v1/comfort/predictive/recordings?side=left', '/api/trpc/comfort.predictiveRecordings']) {
+      '/api/v1/comfort/predictive/recordings?side=left', '/api/trpc/comfort.predictiveRecordings',
+      '/api/v1/comfort/predictive/outcomes?side=left', '/api/trpc/comfort.predictiveOutcomes']) {
       expect((await anonymous.get(path)).status()).toBe(401)
     }
   }
@@ -27,6 +28,10 @@ test('predictive reads require owner authentication and cannot accept targets or
   expect(recordings.status()).toBe(200)
   expect(recordings.headers()['cache-control']).toContain('no-store')
   expect(await recordings.json()).toMatchObject({ records: 0, sessions: 0, activationAvailable: false })
+  const outcomes = await request.get('/api/v1/comfort/predictive/outcomes?side=left', { headers })
+  expect(outcomes.status()).toBe(200)
+  expect(outcomes.headers()['cache-control']).toContain('no-store')
+  expect(await outcomes.json()).toMatchObject({ considered: 0, scored: 0, models: [], activationAvailable: false })
   expect((await request.get('/api/v1/comfort/predictive/preview?side=middle', { headers })).status()).toBe(400)
   expect((await (await request.get('/api/v1/comfort?side=left', { headers })).json()).state).toEqual(before.state)
 })

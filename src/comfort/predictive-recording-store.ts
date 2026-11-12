@@ -15,6 +15,26 @@ function verifiedRecord(input: unknown) {
   return record
 }
 
+/** Stream verified rows so historical inspection does not retain every parsed payload. */
+export function* verifiedPredictiveRecordings(database: Database.Database, side: Side, now: number) {
+  const records = database.prepare(`SELECT id,observed_at AS observedAt,recorded_at AS recordedAt,session,content_hash AS contentHash,
+      length(CAST(record AS BLOB)) AS bytes
+      FROM predictive_recordings WHERE side=? AND recorded_at>=? ORDER BY recorded_at DESC LIMIT 9001`)
+    .all(side, now - PREDICTIVE_RECORDING_RETENTION_MS) as Array<{ id: string, observedAt: number, recordedAt: number, session: string, contentHash: string, bytes: number }>
+  if (records.length > 9000 || records.some(row => row.bytes <= 0 || row.bytes > 32_768)
+    || records.reduce((total, row) => total + row.bytes, 0) > 64 * 1024 ** 2) throw new Error('Prospective inspection exceeds its limit.')
+  for (const row of records) {
+    const payload = database.prepare('SELECT record FROM predictive_recordings WHERE id=?').get(row.id) as { record: string }
+    const value = verifiedRecord(JSON.parse(payload.record))
+    if (value.id !== row.id || value.request.side !== side || value.recordedAt !== row.recordedAt || value.recordedAt > now
+      || value.request.observedAt !== row.observedAt || value.source.session !== row.session
+      || predictiveContentHash(value) !== row.contentHash || value.forecasts.requestHash !== predictiveContentHash(value.request)) {
+      throw new Error('Prospective evidence failed its integrity check.')
+    }
+    yield value
+  }
+}
+
 /** Never replace an existing observation or infer an outcome from the proposed target. */
 export function createPredictiveRecordings(database: Database.Database) {
   function append(input: unknown, now: number) {
@@ -34,29 +54,19 @@ export function createPredictiveRecordings(database: Database.Database) {
     })
   }
   function status(side: Side, now: number) {
-    const records = database.prepare(`SELECT id,observed_at AS observedAt,recorded_at AS recordedAt,session,content_hash AS contentHash,
-      length(CAST(record AS BLOB)) AS bytes
-      FROM predictive_recordings WHERE side=? AND recorded_at>=? ORDER BY recorded_at DESC LIMIT 9001`)
-      .all(side, now - PREDICTIVE_RECORDING_RETENTION_MS) as Array<{ id: string, observedAt: number, recordedAt: number, session: string, contentHash: string, bytes: number }>
-    if (records.length > 9000 || records.some(row => row.bytes <= 0 || row.bytes > 32_768)
-      || records.reduce((total, row) => total + row.bytes, 0) > 64 * 1024 ** 2) throw new Error('Prospective inspection exceeds its limit.')
     const counts = { candidate: 0, hold: 0, withheld: 0 }, nights = new Set<string>()
-    for (const row of records) {
-      const payload = database.prepare('SELECT record FROM predictive_recordings WHERE id=?').get(row.id) as { record: string }
-      const value = verifiedRecord(JSON.parse(payload.record))
-      if (value.id !== row.id || value.request.side !== side || value.recordedAt !== row.recordedAt || value.recordedAt > now
-        || value.request.observedAt !== row.observedAt || value.source.session !== row.session
-        || predictiveContentHash(value) !== row.contentHash || value.forecasts.requestHash !== predictiveContentHash(value.request)) {
-        throw new Error('Prospective evidence failed its integrity check.')
-      }
+    let records = 0, latestAt: number | null = null
+    for (const value of verifiedPredictiveRecordings(database, side, now)) {
+      records++
+      latestAt ??= value.recordedAt
       counts[value.selection.disposition]++
       nights.add(value.source.session)
     }
     return predictiveRecordingStatusSchema.parse({ apiVersion: 1, side, generatedAt: now, mode: 'research_preview', activationAvailable: false,
-      records: records.length, sessions: nights.size, candidates: counts.candidate, holds: counts.hold, withheld: counts.withheld,
-      latestAt: records[0]?.recordedAt ?? null,
+      records, sessions: nights.size, candidates: counts.candidate, holds: counts.hold, withheld: counts.withheld,
+      latestAt,
       outcomeNotice: 'Unapplied targets have no observed outcome. These records do not establish comfort benefit.',
-      reason: records.length
+      reason: records
         ? 'Production Preview comparisons are recorded at most once every five minutes, with exact source and model identities. No proposed change was sent.'
         : 'Waiting for production Preview, current guarded readings and its five-minute predecessor. No research comparison has been recorded.' })
   }
