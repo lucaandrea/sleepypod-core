@@ -56,7 +56,9 @@ describe('bounded read-only research process', () => {
       join(bundleDirectory, 'predictive-worker.cjs'))
     expect(result).toMatchObject({ side: 'left', generatedAt: now, records: 1, sessions: 1, candidates: 1, activationAvailable: false })
     expect([readFileSync(paths.database), readFileSync(paths.biometrics)]).toEqual(before)
-  })
+    // The real child retains its 10-second deadline; the harness also includes
+    // migration/setup and coverage instrumentation on shared CI hosts.
+  }, 15_000)
   it.each(['request hash', 'side', 'time', 'future record'] as const)('rejects a status result with mismatched %s', async (kind) => {
     const paths = files(), { record } = predictiveRecordingFixture(), now = record.recordedAt
     const database = new Database(paths.database)
