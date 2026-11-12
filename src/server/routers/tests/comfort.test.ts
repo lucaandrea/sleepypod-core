@@ -9,10 +9,11 @@ const targetResponse = vi.hoisted(() => vi.fn())
 const responseModels = vi.hoisted(() => ({ status: vi.fn(), train: vi.fn() }))
 const responsePreview = vi.hoisted(() => vi.fn())
 const predictivePreview = vi.hoisted(() => vi.fn())
+const predictiveRecordings = vi.hoisted(() => vi.fn())
 const reports = vi.hoisted(() => ({ list: vi.fn(), detail: vi.fn(), review: vi.fn() }))
 vi.mock('@/src/comfort/instance', () => ({ getComfortRuntime: () => runtime, getPreviewReports: () => reports, getComfortOwner: () => owner,
   getTargetResponseAudit: targetResponse, getTargetResponseModels: () => responseModels, previewTargetResponse: responsePreview,
-  previewPredictiveControl: predictivePreview }))
+  previewPredictiveControl: predictivePreview, getPredictiveRecordingStatus: predictiveRecordings }))
 const { comfortRouter } = await import('../comfort')
 const caller = comfortRouter.createCaller({})
 
@@ -31,6 +32,16 @@ beforeEach(() => {
 })
 
 describe('personal comfort API contract', () => {
+  it('reads historical Preview counts without accepting records or enabling collection', async () => {
+    const result = { apiVersion: 1, side: 'left', generatedAt: 1, mode: 'research_preview', activationAvailable: false,
+      records: 0, sessions: 0, candidates: 0, holds: 0, withheld: 0, latestAt: null, reason: 'Waiting',
+      outcomeNotice: 'Unapplied targets have no observed outcome. These records do not establish comfort benefit.' }
+    predictiveRecordings.mockReturnValue(result)
+    expect(await caller.predictiveRecordings({ side: 'left' })).toEqual(result)
+    await expect(caller.predictiveRecordings({ side: 'left', record: {}, activate: true } as never)).rejects.toMatchObject({ code: 'BAD_REQUEST' })
+    expect(predictiveRecordings).toHaveBeenCalledExactlyOnceWith('left')
+    expect(runtime.configure).not.toHaveBeenCalled()
+  })
   it('reads predictive research without accepting client targets or starting controls', async () => {
     const result = { apiVersion: 1, policy: 'bounded-water-tracking-v1', side: 'left', generatedAt: 1,
       mode: 'research_preview', activationAvailable: false, objective: 'bounded-routine-water-target', disposition: 'withheld',
