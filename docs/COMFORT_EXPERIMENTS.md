@@ -484,3 +484,30 @@ predates this final regression and is not represented as an exact final-head che
 The production package also builds successfully. Final hosted regression and
 deployment remain distinct requirements. Logs are retained under
 `/tmp/sleepypod-experiment-host-*`, including the failing Stop regression.
+
+## Retained observation journal
+
+Migration `0076_square_stellaris.sql` adds private observation windows and their
+ordered sensor packets. Each window binds an actual admitted plan, its exact
+scheduled start/end and its original physical zones. Packets retain each zone's
+own device/presence clocks, target, control provenance and unavailable readings.
+The journal accepts no observations outside that admission or after cancellation.
+
+Writes use FULL SQLite synchronization with authorization checked at both ends
+of the transaction. Identical retries keep one packet; reusing a clock with
+different measurements is rejected. Collection is bounded to one packet per ten
+seconds and at most 10,000 packets per window. Missing intervals remain gaps.
+The header and packet roll back together on a storage or authorization failure.
+
+Independent reads verify the original admission, plan and complete content-digest
+chain, so a deleted or altered input cannot silently support a saved comparison.
+Finalization waits for the original reviewed end, including cancelled or partial
+windows. Reopening a database preserves both those boundaries and source identity.
+
+The focused experiment/schema suite passes 275 tests, TypeScript and focused lint
+pass. The initial schema-contract run detected the two newly generated tables;
+the reviewed snapshot update adds only those tables. These are source-level
+storage checks. The runtime collector, source-backed exposure publication and
+withdrawal, execution/recovery endpoints, native interface and prospective
+hardware acceptance remain unfinished. No live source, admission, routine or
+hardware state was changed.
