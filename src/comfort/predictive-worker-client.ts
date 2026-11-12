@@ -5,6 +5,7 @@ import { predictiveContentHash } from './predictive-recording-store'
 import { predictiveStatusRequestSchema, predictiveStatusResultSchema, predictiveWorkerRequestSchema, predictiveWorkerResultSchema,
   type PredictiveWorkerRequest } from './predictive-recording-contract'
 import type { Side } from '@/src/hardware/types'
+import { predictiveOutcomeRequestSchema, predictiveOutcomeResultSchema } from './predictive-outcome-contract'
 
 interface Paths { database: string, biometrics: string }
 const globals = globalThis as typeof globalThis & { __sp_predictiveChild?: symbol }
@@ -76,6 +77,17 @@ export async function readPredictiveRecordingStatus(side: Side, now: number, pat
   const result = await runProcess(request, (value) => {
     const response = predictiveStatusResultSchema.parse(value)
     if (response.requestHash !== predictiveContentHash(request) || response.data.side !== side || response.data.generatedAt !== now) throw new Error('Different status observation.')
+    return response
+  }, paths, signal, entry)
+  return result.data
+}
+
+/** Observed outcomes use the same bounded process and cannot apply a candidate. */
+export async function readPredictiveOutcomes(side: Side, now: number, paths: Paths, signal: AbortSignal, entry = predictiveWorkerEntry()) {
+  const request = predictiveOutcomeRequestSchema.parse({ version: 1, operation: 'outcomes', side, at: now })
+  const result = await runProcess(request, (value) => {
+    const response = predictiveOutcomeResultSchema.parse(value)
+    if (response.requestHash !== predictiveContentHash(request) || response.data.side !== side || response.data.generatedAt !== now) throw new Error('Different outcome observation.')
     return response
   }, paths, signal, entry)
   return result.data

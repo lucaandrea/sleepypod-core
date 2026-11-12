@@ -40,7 +40,7 @@ import { previewPredictiveTarget } from './predictive-policy'
 import { predictiveTargetPreviewSchema } from './predictive-contract'
 import { PredictiveCollector } from './predictive-collector'
 import { createPredictiveRecordings } from './predictive-recording-store'
-import { readPredictiveRecordingStatus, runPredictiveWorker } from './predictive-worker-client'
+import { readPredictiveRecordingStatus, readPredictiveOutcomes, runPredictiveWorker } from './predictive-worker-client'
 import type { PreviewEvidence } from './report-contract'
 
 /** Inspect retained evidence without starting the comfort runtime or sending hardware commands. */
@@ -160,6 +160,10 @@ export async function getPredictiveRecordingStatus(side: Side) {
   const status = await readPredictiveRecordingStatus(side, Date.now(), { database: sqlite.name, biometrics: biometricsDb.$client.name }, new AbortController().signal)
   return { ...status,
     collector: globals.__sp_predictiveCollector?.status() ?? { running: false, fault: null } }
+}
+
+export function getPredictiveOutcomes(side: Side) {
+  return readPredictiveOutcomes(side, Date.now(), { database: sqlite.name, biometrics: biometricsDb.$client.name }, new AbortController().signal)
 }
 function signalsReader() {
   return globals.__sp_comfortSignals ??= new ComfortSignalReader(biometricsDb.$client)

@@ -6,7 +6,7 @@ import Database from 'better-sqlite3'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { migratedComfortDatabase } from './databaseFixture'
 import { predictiveRecordingFixture } from './predictiveRecordingFixture'
-import { predictiveWorkerEntry, readPredictiveRecordingStatus, runPredictiveWorker } from '../predictive-worker-client'
+import { predictiveWorkerEntry, readPredictiveRecordingStatus, readPredictiveOutcomes, runPredictiveWorker } from '../predictive-worker-client'
 import { createPredictiveRecordings, predictiveContentHash } from '../predictive-recording-store'
 import { evaluatePredictiveRecording } from '../predictive-worker'
 
@@ -56,9 +56,13 @@ describe('bounded read-only research process', () => {
       join(bundleDirectory, 'predictive-worker.cjs'))
     expect(result).toMatchObject({ side: 'left', generatedAt: now, records: 1, sessions: 1, candidates: 1, activationAvailable: false })
     expect([readFileSync(paths.database), readFileSync(paths.biometrics)]).toEqual(before)
-    // The real child retains its 10-second deadline; the harness also includes
-    // migration/setup and coverage instrumentation on shared CI hosts.
-  }, 15_000)
+    const outcomes = await readPredictiveOutcomes('left', now, paths, new AbortController().signal,
+      join(bundleDirectory, 'predictive-worker.cjs'))
+    expect(outcomes).toMatchObject({ considered: 1, pending: 1, scored: 0, activationAvailable: false })
+    expect([readFileSync(paths.database), readFileSync(paths.biometrics)]).toEqual(before)
+    // Each real child retains its 10-second deadline. This harness runs two
+    // reads plus database setup and coverage instrumentation on shared hosts.
+  }, 25_000)
   it.each(['request hash', 'side', 'time', 'future record'] as const)('rejects a status result with mismatched %s', async (kind) => {
     const paths = files(), { record } = predictiveRecordingFixture(), now = record.recordedAt
     const database = new Database(paths.database)
