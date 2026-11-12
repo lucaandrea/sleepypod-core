@@ -63,7 +63,23 @@ by the update. Additional optional pause helpers remain supported.
 The signal takes up to one publication interval to reach Home Assistant; it is
 not an emergency stop. Quiet does not reverse an earlier light change, stop a
 moving shade, cancel a wake alarm, or mute a currently playing audio session.
-Endel/audio integration and the web/native quiet controls remain to be completed.
+Endel/audio integration and the native quiet controls remain to be completed.
+
+## Personal browser controls
+
+The personal workspace includes **Someone is resting**, after Tonight. A person
+can start or update a 30-minute, one-hour, two-hour or eight-hour request, and end
+only their own request. The shared end and their personal end remain separate.
+Times are displayed in the browser's time zone. This does not modify the Pod's
+routine time zone, temperature schedule, or alarm.
+
+The panel refreshes while visible, withdraws expired observations, and checks
+the authenticated person and household revisions around reads and writes. It
+clears displayed state when backgrounded and is disposed on account replacement
+or entry into arrangement maintenance. A lost reply retains a read-only receipt
+check. Neither polling nor reconnect resends the mutation. If no receipt exists,
+the result stays uncertain until a fresh controller response is beyond the
+original request's expiry; a new change then needs another explicit action.
 
 ## Verification and remaining delivery
 
@@ -72,7 +88,7 @@ MQTT publication fixtures, and Home Assistant's real script engine with stubbed
 accessory services. They exercise independent requests, revision conflicts,
 lost replies, expiry, revoked access, response-delivery changes, failed storage,
 per-packet checks and unchanged personal routines. No real bed or house action
-is issued by these tests. Device deployment, user interfaces and attended
+is issued by these tests. Device deployment, native controls and attended
 qualification remain separate work; this does not complete platform item 17.
 
 The focused validation passes 187 Core cases, all 76 Home Assistant script/schema
@@ -81,3 +97,16 @@ production build and focused TypeScript/lint checks pass. Initial fixture failur
 (the new dependency mock, missing browser Origin, and a shifted test clock) are
 retained with their corrected reruns. Full pre-push and hosted results are recorded
 with the release PR; these counts are not physical qualification.
+
+The initial broad pre-push run exposed two omitted schema expectations and a
+room-transport fixture missing the new quiet dependency. After correction, the
+same pre-push checks pass **8,376 tests with 17 existing skips**, including the
+real MQTT transport. Browser controls add **27 passing workspace/transport tests**
+and **four passing Playwright flows** covering partner-request preservation,
+lost replies, unavailable readings and keyboard use at desktop, phone, tablet
+and enlarged text sizes. The final production build passes, followed by **nine integrated browser checks**
+including the real personal API and existing account-workspace flows. Independent
+visual review inspected all 11 desktop, phone, tablet, enlarged-text, keyboard,
+uncertain and unavailable-state captures and found no material fixes. These are
+local synthetic-account results; hosted checks, deployment and physical acceptance
+are not inferred from them.
