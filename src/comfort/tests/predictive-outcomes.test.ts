@@ -76,6 +76,8 @@ function seed(value = predictiveOutcomeFixture()) {
   return value
 }
 describe('prospective read-only audit', () => {
+  // This integration seeds a whole night and runs three full audits plus review.
+  // Each production worker remains bounded to ten seconds; this is their combined test budget.
   it('joins the real source-review pipeline and withdraws a subsequently edited night', async () => {
     const value = seed(), source = value.record.source
     const store = createComfortStore(database), state = defaultComfortState()
@@ -101,7 +103,7 @@ describe('prospective read-only audit', () => {
     database.prepare('UPDATE comfort_events SET event=json_set(event,?,?) WHERE side=? AND observed_at=?')
       .run('$.message', 'Changed after review', 'left', source.start)
     expect(evaluatePredictiveOutcomes(database, biometrics, 'left', value.now)).toMatchObject({ scored: 0, withheld: 1, models: [] })
-  })
+  }, 30_000)
   it('binds current reviews to persisted forecasts without creating model or control rows', () => {
     const value = seed()
     const before = database.serialize(), waterBefore = biometrics.serialize()

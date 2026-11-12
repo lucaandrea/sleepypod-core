@@ -49,12 +49,11 @@ personal/owner privacy boundary applies to the endpoint.
 ## What this does not prove
 
 This delivers prospective **collection**, not a measured sleep benefit or an
-active predictive controller. Evaluation against subsequent water measurements
-is still separate work. A candidate that was not applied has no observed
-counterfactual outcome. Holding the target and sleeping well does not validate
-the candidate. Later evaluation must account for actual target history, source
-freshness, artifacts, movement, routine boundaries and reviewed nights, then
-separately assess comfort feedback and unwanted adjustments.
+active predictive controller. The separate [outcome audit](PREDICTIVE_OUTCOMES.md)
+compares unchanged-target forecasts with later water measurements from reviewed
+nights. A candidate that was not applied has no observed counterfactual outcome.
+Holding the target and sleeping well does not validate that candidate. Actual
+comfort feedback and unwanted adjustments still require separate assessment.
 
 ```mermaid
 flowchart LR
@@ -62,7 +61,8 @@ flowchart LR
   Child --> Check[Recheck current state and source age]
   Check --> Record[Immutable prospective comparison]
   Record --> View[Historical counts and limitations]
-  Record -. separate future evaluation .-> Outcomes[Actual later measurements]
+  Record --> Audit[Separate reviewed outcome audit]
+  Outcomes[Actual later measurements] --> Audit
 ```
 
 Software checks cover source identity, malformed/future/expired data, changed
