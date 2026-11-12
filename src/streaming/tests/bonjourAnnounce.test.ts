@@ -33,7 +33,7 @@ vi.mock('node:os', () => {
   const api = { hostname: () => 'eight-pod' }
   return { ...api, default: api }
 })
-vi.mock('@homebridge/ciao', () => ({ getResponder: mocks.getResponder }))
+vi.mock('../mdnsResponder', () => ({ loadDiscoveryResponder: () => ({ getResponder: mocks.getResponder }) }))
 
 const SERVICE_FILE = '/etc/avahi/services/sleepypod.service'
 const STATE_KEY = '__sleepypod_bonjour_lifecycle__'

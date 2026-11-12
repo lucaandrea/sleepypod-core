@@ -13,9 +13,11 @@ It also logged success when reloading a stopped Avahi daemon failed.
 
 Core now checks for an actual Avahi process and a usable service file. Otherwise,
 `@homebridge/ciao` publishes `_sleepypod._tcp`, with the HTTP port, `wsPort`, protocol
-version and the system hostname. Ciao is already a dependency of the HomeKit bridge;
-the direct dependency pins the same installed version. It is externalized from Next
-bundles so both consumers use its shared, reference-counted responder.
+version and the system hostname. Ciao is already a locked dependency of the HomeKit
+bridge. The fallback resolves it from the installed `hap-nodejs` package, so both
+consumers use the same reference-counted responder. This retains the existing
+dependency lock and biometric manifest identity instead of invalidating saved
+numerical profiles for an unrelated discovery change.
 
 This uses ciao's DNS-SD responder and network-interface monitoring rather than
 sending one announcement and assuming clients can resolve it later. See the
@@ -38,16 +40,23 @@ sending one announcement and assuming clients can resolve it later. See the
 
 ## Validation
 
-The 29 focused tests cover missing/stopped Avahi, configured and invalid ports,
+The 29 lifecycle tests cover missing/stopped Avahi, configured and invalid ports,
 read-only files, stale installer configuration, failed reload, duplicate module
 imports, publication cancellation, repeated Stop/restart races, failed resource
 creation/withdrawal, automatic retry and cancellation of retry.
+An additional real-module test verifies that the loader returns HomeKit's installed
+ciao instance without starting a responder. The combined discovery, biometric
+manifest and schedule-rollback suites pass 76 tests.
 
 TypeScript and targeted lint pass. The production Next build passes with the ciao
 runtime dependency included in its standalone output. Normal pre-push and hosted
-checks remain required before merge.
+checks remain required before merge. The initial hosted run caught the direct
+dependency's changed lock hash and a schedule-rollback timeout. The dependency
+change was removed; the exact rollback test passed locally without changing its
+assertions or timeout. The failed hosted run is retained, and the corrected release
+must pass the full hosted suite before it is merged or activated.
 
-A bundled copy of the actual discovery module ran as a separate **45-second probe**
+A bundled copy of the initial discovery module ran as a separate **45-second probe**
 on the Pod, after checking the existing loopback web server. Its SHA-256 was verified
 before execution. The probe used the controller's Node 24 runtime and did not load
 hardware, database, scheduler, MQTT or HomeKit controller modules.

@@ -2,7 +2,7 @@
 import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
 import { hostname } from 'node:os'
-import type { CiaoService, Responder } from '@homebridge/ciao'
+import { loadDiscoveryResponder, type DiscoveryService, type DiscoveryResponder } from './mdnsResponder'
 
 const SERVICE_FILE = '/etc/avahi/services/sleepypod.service'
 const STATE_KEY = '__sleepypod_bonjour_lifecycle__'
@@ -12,8 +12,8 @@ interface Announcement {
   started: Promise<void>
   cleanup?: Promise<void>
   avahi: boolean
-  service?: CiaoService
-  responder?: Responder
+  service?: DiscoveryService
+  responder?: DiscoveryResponder
 }
 
 interface Lifecycle {
@@ -118,7 +118,7 @@ async function announce(announcement: Announcement, previousStop: Promise<void>)
       return
     }
 
-    const { getResponder } = await import('@homebridge/ciao')
+    const { getResponder } = loadDiscoveryResponder()
     if (announcement.cancelled) return
     announcement.responder = getResponder()
     announcement.service = announcement.responder.createService({
