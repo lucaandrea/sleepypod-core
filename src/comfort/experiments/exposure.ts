@@ -16,6 +16,7 @@ export const experimentSampleSchema = z.object({
   bindingHash: experimentHashSchema, routineHash: experimentHashSchema, wakeHash: experimentHashSchema,
   // Selection provenance must come from the shared authority, not a matching temperature alone.
   selectedRequestId: z.string().max(200).nullable(),
+  selectedUntil: experimentInstantSchema.nullable().optional(),
   attributionAmbiguous: z.boolean(),
 }).strict()
 export type ExperimentSample = z.infer<typeof experimentSampleSchema>

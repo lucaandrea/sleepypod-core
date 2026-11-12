@@ -22,7 +22,8 @@ async function fixture() {
     const sample: ExperimentSample = { at, deviceAt: at, presenceAt: at, targetF: 75,
       powered: true, occupied: true, waterAdequate: true, priming: false, vibrating: false, baseMoving: false,
       bindingHash: test.plan.context.bindingHash, routineHash: test.plan.context.routineHash, wakeHash: test.plan.context.wakeHash,
-      selectedRequestId: test.authority.status('left').requestId, attributionAmbiguous: false }
+      selectedRequestId: test.authority.selectedRequest('left')?.id ?? null,
+      selectedUntil: test.authority.selectedRequest('left')?.expiresAt ?? null, attributionAmbiguous: false }
     return { at, zones: [{ side: 'left' as const, sample }] }
   }
   const append = (offset = 0) => journal.append(grant.review.id, window.date, input(offset), () => {})

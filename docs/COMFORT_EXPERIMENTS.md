@@ -511,3 +511,50 @@ storage checks. The runtime collector, source-backed exposure publication and
 withdrawal, execution/recovery endpoints, native interface and prospective
 hardware acceptance remain unfinished. No live source, admission, routine or
 hardware state was changed.
+
+## Runtime observation collection
+
+The production host now creates the first source packet before an experimental
+hardware write can occur. A recording failure withdraws every zone in that
+admission. Subsequent packets use the current shared authority's request identity
+and each physical zone's independent observation clocks. This read happens outside
+the authority's policy callback, avoiding recursive selection.
+
+Completed-window publication and source sealing use one durable transaction.
+Failure rolls back both, so restarting can retry without losing the original
+window or duplicating a completed result. Each tick processes at most two pending
+windows; a corrupt source cannot prevent later windows from being considered.
+
+For solo-anywhere treatment, overlapping physical zones count once. Every occupied
+zone must match the treatment; an unknown zone is not presumed empty. Sensor loss
+reduces usable coverage without inventing a different sleeper. The collection
+interval caps each contribution, leaving missing ticks unknown. Matching target
+values without an active selected experiment request do not qualify.
+
+The source reference also covers original manual interruptions and the retained
+command journal. Resolving an uncertain command later does not turn it into an
+acknowledged treatment. Comparison reads revalidate the retained observations and
+interruption sources; missing, edited or unreferenced scheduled evidence is shown
+as withdrawn. The current production API still exposes planning only. Activation
+and recovery transport/UI work and attended prospective observations remain.
+
+Regular packets follow lease renewal and include its actual expiry. A missing
+later packet cannot extend treatment beyond that expiry, and recorded manual or
+uncertain-command times clip the affected interval without shortening the original
+reviewed night. The verification cache holds only hashes and withdrawal flags,
+is bounded to eight entries per database, and invalidates on same-connection
+changes, other-connection commits, clock reversal or sixty seconds of age.
+
+The integration coverage run passed **10,289 tests with 19 existing skips**.
+That run predates the final expiry/interruption and verification-cache refinements;
+the final focused experiment, temperature-controller and schema suite passed
+**466 tests**, and the production build passed. Both the earlier failed nested-
+transaction tests and the passing correction are retained in
+`/tmp/sleepypod-experiment-collector-*`. Hosted checks and physical acceptance are
+separate requirements; nothing has been deployed to the Pod from this change.
+
+Core PR 131 passed all seven hosted checks and merged as
+`e91ffcbc02e0ffd6e7f4814385c8127bcddc8bb3`. Its tree
+`9d9fba96a2e73dc209103013bb0f38c5c5c18782` exactly matches tested head
+`fc3fe6040052d6a3f02bc06d1dc99eb0672007dd`. The recorder is a subsequent change;
+that merge is not evidence of recorder deployment or real-night acceptance.

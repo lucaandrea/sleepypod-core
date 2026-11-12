@@ -81,6 +81,26 @@ export class ExperimentObservationJournal {
     return value
   }
 
+  /** The collector schedules by the persisted clock, including after a process restart. */
+  due(admissionId: string, nightDate: string, at: number, initialOnly = false): boolean {
+    identifier.parse(admissionId)
+    experimentDateSchema.parse(nightDate)
+    experimentInstantSchema.parse(at)
+    const row = this.database.prepare('SELECT * FROM comfort_experiment_observation_windows WHERE admission_id = ? AND night_date = ? AND subject_key = ?')
+      .get(admissionId, nightDate, this.subject) as WindowRow | undefined
+    if (!row) return true
+    const binding = this.binding(row)
+    if (initialOnly) return false
+    if (row.finalized_at !== null) return false
+    const latest = this.database.prepare('SELECT * FROM comfort_experiment_observations WHERE window_id = ? ORDER BY position DESC LIMIT 1')
+      .get(row.id) as ObservationRow | undefined
+    if (!latest || latest.position !== row.sample_count - 1 || latest.digest !== row.tail_digest)
+      throw new Error('The observation source tail is unavailable')
+    const packet = this.packet(latest, binding)
+    if (at < packet.at) throw new Error('The observation clock moved backwards')
+    return at - packet.at >= EXPERIMENT_OBSERVATION_INTERVAL_MS
+  }
+
   /** Only the runtime collector calls this; both authorization checks share the durable write transaction. */
   append(admissionId: string, nightDate: string, input: Pick<ExperimentObservation, 'at' | 'zones'>, assertCurrent: () => void): string {
     identifier.parse(admissionId)
@@ -160,7 +180,7 @@ export class ExperimentObservationJournal {
   }
 
   /** Seal only after the original complete window, including when it ended with missing samples. */
-  finalize(id: string, assertCurrent: () => void): RetainedExperimentWindow {
+  finalize(id: string, assertCurrent: () => void, publish?: (retained: RetainedExperimentWindow) => void): RetainedExperimentWindow {
     return durableTransaction(this.database, () => {
       assertCurrent()
       const current = this.read(id), now = this.now()
@@ -170,6 +190,8 @@ export class ExperimentObservationJournal {
       assertCurrent()
       const result = this.read(id)
       if (!result) throw new Error('The finalized observations are unavailable')
+      publish?.(result)
+      assertCurrent()
       return result
     })
   }

@@ -20,6 +20,8 @@ export const experimentObservationSchema = z.object({
   zones: z.array(z.object({ side: z.enum(['left', 'right']), sample: experimentSampleSchema }).strict()).min(1).max(2),
 }).strict().refine(value => new Set(value.zones.map(zone => zone.side)).size === value.zones.length
   && value.zones.every(zone => zone.sample.at === value.at
+    && (zone.sample.selectedRequestId === null || (zone.sample.selectedUntil !== null
+      && zone.sample.selectedUntil !== undefined && zone.sample.selectedUntil > value.at))
     && (zone.sample.deviceAt === null || zone.sample.deviceAt <= value.at)
     && (zone.sample.presenceAt === null || zone.sample.presenceAt <= value.at)))
 export type ExperimentObservation = z.infer<typeof experimentObservationSchema>
