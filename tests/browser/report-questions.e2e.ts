@@ -213,6 +213,9 @@ test('keyboard focus follows review, cancellation, answer and separate saving', 
     await page.keyboard.press('o')
     await page.keyboard.press('Enter')
     await expect(questions.getByLabel('Answer with', { exact: true })).toHaveValue('openai')
+    // Linux Chromium can leave the native select popup open after Enter; close it before checking document tab order.
+    await page.keyboard.press('Escape')
+    await expect(questions.getByLabel('Answer with', { exact: true })).toBeFocused()
     await page.keyboard.press('Tab')
     await expect(questions.getByLabel('Model ID', { exact: true })).toBeFocused()
     await page.keyboard.type('synthetic-selected-model')
