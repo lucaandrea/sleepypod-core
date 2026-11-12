@@ -51,15 +51,20 @@ describe('bounded read-only research process', () => {
     const database = new Database(paths.database)
     createPredictiveRecordings(database).append(record, now)
     database.close()
-    const before = [readFileSync(paths.database), readFileSync(paths.biometrics)]
+    const filenames = [paths.database, paths.biometrics]
+    const before = filenames.map(filename => readFileSync(filename))
+    // Native equality still checks every byte without deep-walking SQLite files.
+    const expectUnchangedFiles = () => filenames.forEach((filename, index) => {
+      expect(readFileSync(filename).equals(before[index])).toBe(true)
+    })
     const result = await readPredictiveRecordingStatus('left', now, paths, new AbortController().signal,
       join(bundleDirectory, 'predictive-worker.cjs'))
     expect(result).toMatchObject({ side: 'left', generatedAt: now, records: 1, sessions: 1, candidates: 1, activationAvailable: false })
-    expect([readFileSync(paths.database), readFileSync(paths.biometrics)]).toEqual(before)
+    expectUnchangedFiles()
     const outcomes = await readPredictiveOutcomes('left', now, paths, new AbortController().signal,
       join(bundleDirectory, 'predictive-worker.cjs'))
     expect(outcomes).toMatchObject({ considered: 1, pending: 1, scored: 0, activationAvailable: false })
-    expect([readFileSync(paths.database), readFileSync(paths.biometrics)]).toEqual(before)
+    expectUnchangedFiles()
     // Each real child retains its 10-second deadline. This harness runs two
     // reads plus database setup and coverage instrumentation on shared hosts.
   }, 25_000)

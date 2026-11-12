@@ -76,8 +76,6 @@ function seed(value = predictiveOutcomeFixture()) {
   return value
 }
 describe('prospective read-only audit', () => {
-  // This integration seeds a whole night and runs three full audits plus review.
-  // Each production worker remains bounded to ten seconds; this is their combined test budget.
   it('joins the real source-review pipeline and withdraws a subsequently edited night', async () => {
     const value = seed(), source = value.record.source
     const store = createComfortStore(database), state = defaultComfortState()
@@ -98,12 +96,12 @@ describe('prospective read-only audit', () => {
     const before = database.serialize(), waterBefore = biometrics.serialize()
     expect(evaluatePredictiveOutcomes(database, biometrics, 'left', value.now)).toMatchObject({ scored: 1, withheld: 0,
       models: [{ reviewedNights: 1, horizons: [{ minutes: 15, meanNightErrorF: 0.5 }, { minutes: 30, meanNightErrorF: 1 }] }] })
-    expect(database.serialize()).toEqual(before)
-    expect(biometrics.serialize()).toEqual(waterBefore)
+    expect(database.serialize().equals(before)).toBe(true)
+    expect(biometrics.serialize().equals(waterBefore)).toBe(true)
     database.prepare('UPDATE comfort_events SET event=json_set(event,?,?) WHERE side=? AND observed_at=?')
       .run('$.message', 'Changed after review', 'left', source.start)
     expect(evaluatePredictiveOutcomes(database, biometrics, 'left', value.now)).toMatchObject({ scored: 0, withheld: 1, models: [] })
-  }, 30_000)
+  })
   it('binds current reviews to persisted forecasts without creating model or control rows', () => {
     const value = seed()
     const before = database.serialize(), waterBefore = biometrics.serialize()
@@ -111,8 +109,8 @@ describe('prospective read-only audit', () => {
     expect(result).toMatchObject({ considered: 1, scored: 1, pending: 0, withheld: 0, activationAvailable: false,
       models: [{ artifactId: value.record.forecasts.holdIdentity?.id, comparisons: 1, reviewedNights: 1,
         horizons: [{ minutes: 15, meanNightErrorF: 0.5, meanNightPersistenceErrorF: 0.5 }, { minutes: 30, meanNightErrorF: 1 }] }] })
-    expect(database.serialize()).toEqual(before)
-    expect(biometrics.serialize()).toEqual(waterBefore)
+    expect(database.serialize().equals(before)).toBe(true)
+    expect(biometrics.serialize().equals(waterBefore)).toBe(true)
     value.audit.proofs[0].configuration = 'f'.repeat(64)
     expect(evaluatePredictiveOutcomes(database, biometrics, 'left', value.now, () => value.audit)).toMatchObject({ scored: 0, withheld: 1, models: [] })
   })
