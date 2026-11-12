@@ -27,17 +27,21 @@ export function getExperimentExecutionIdentity(): ExperimentExecutionIdentity {
   return shared.__sp_experimentIdentity
 }
 
-/** Construct only after the shared temperature authority exists. Reads never start hardware. */
+/** Join the existing lifecycle; neither construction nor reads start hardware. */
 export function getExperimentExecution(): ExperimentExecutionHost {
   if (!shared.__sp_experimentHost) {
-    const authority = getTemperatureControllerIfRunning()
-    if (!authority) throw new Error('The shared temperature authority is not running')
     shared.__sp_experimentHost = new ExperimentExecutionHost({
       database: sqlite, now: Date.now, monotonicNow: () => performance.now(),
       enabled: () => getComfortRuntimeIfRunning()?.isRunning() === true,
       pendingManualPause, subject: principal => getExperimentExecutionIdentity().subject(principal),
       resolve: principal => getExperimentExecutionIdentity().resolve(principal),
-      owner: getComfortOwner(), authority, withSideLock,
+      owner: getComfortOwner(), withSideLock,
+      authority: { replacePolicy: (...arguments_) => {
+        // Cold startup waits for the first firmware poll before constructing the shared authority.
+        const authority = getTemperatureControllerIfRunning()
+        if (!authority) throw new Error('The shared temperature authority is not running')
+        return authority.replacePolicy(...arguments_)
+      } },
       sample: (side, at, identity) => {
         const state = createComfortStore(sqlite).read(side)
         const { context } = readComfortContext(side, state, at, false)
