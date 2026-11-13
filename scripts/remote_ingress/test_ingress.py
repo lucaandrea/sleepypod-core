@@ -73,6 +73,8 @@ class ConfigurationTests(unittest.TestCase):
         for port in [80, 0, -1, 65536, True, '18080']:
             with self.subTest(port=port), self.assertRaises(ValueError):
                 render(HOST, '10.0.1.69', port)
+        with self.assertRaises(ValueError):
+            render(HOST, '127.0.0.1', 18080, 18080)
 
     def test_bundle_is_exclusive_inactive_and_contains_no_owner_key(self):
         with tempfile.TemporaryDirectory() as temporary:

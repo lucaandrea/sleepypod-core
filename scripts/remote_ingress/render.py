@@ -38,6 +38,8 @@ def render(host, pod, listen_port=18080, pod_port=3000):
     """Preserve the client's principal; Core still authorizes every admitted API call."""
     host, pod = validate_host(host), validate_pod(pod)
     listen_port, pod_port = validate_port(listen_port), validate_port(pod_port)
+    if pod == '127.0.0.1' and listen_port == pod_port:
+        raise ValueError('The Pod upstream cannot point back to this ingress listener')
     # Remote writes are explicit. Maintenance, priming, raw commands and
     # arrangement activation stay local even if an owner key is presented.
     writes = '|'.join([
