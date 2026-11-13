@@ -76,14 +76,26 @@ def read_intent(path):
     connection = sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=2.0)
     try:
         connection.execute("BEGIN")
+        transition_table = connection.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='household_arrangement_transitions'").fetchone()
+        has_transition = bool(transition_table and connection.execute(
+            "SELECT 1 FROM household_arrangement_transitions WHERE state='committed' LIMIT 1").fetchone())
         if not connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='households'").fetchone():
+            if has_transition:
+                raise ValueError("Reviewed arrangement lost its household configuration")
             return None
-        households = connection.execute("SELECT id, assignment_revision, effective_at FROM households WHERE mode='assigned' LIMIT 2").fetchall()
+        households = connection.execute("SELECT id, mode, assignment_revision, effective_at FROM households LIMIT 2").fetchall()
         if not households:
+            if has_transition:
+                raise ValueError("Reviewed arrangement lost its household configuration")
             return None
         if len(households) != 1:
-            raise ValueError("Ambiguous assigned household")
-        household_id, revision, effective_at = households[0]
+            raise ValueError("Ambiguous household configuration")
+        household_id, mode, revision, effective_at = households[0]
+        if mode == "solo-anywhere" and not has_transition:
+            return None
+        if mode != "assigned":
+            raise ValueError("Returning from an assigned arrangement requires a reviewed processing intent")
         row = connection.execute(
             "SELECT id, committed_at, CASE WHEN length(CAST(processing AS BLOB)) <= ? THEN processing ELSE NULL END "
             "FROM household_arrangement_transitions WHERE household_id=? AND state='committed' "
@@ -135,8 +147,17 @@ class ArrangementProcessing:
         self._last_poll = now
         try:
             intent = read_intent(self.config_path)
-            if intent is None and self.required:
-                raise ValueError("Assigned processing intent disappeared")
+            if intent is None:
+                # A new daemon must not forget a previously adopted boundary after config loss.
+                connection = self.connection()
+                if connection is None:
+                    raise ValueError("Recording database unavailable")
+                has_receipts = connection.execute(
+                    "SELECT 1 FROM sqlite_master WHERE type='table' AND name='household_processing_receipts'").fetchone()
+                previously_adopted = bool(has_receipts and connection.execute(
+                    "SELECT 1 FROM household_processing_receipts LIMIT 1").fetchone())
+                if self.required or previously_adopted:
+                    raise ValueError("Assigned processing intent disappeared")
             if intent is not None:
                 self.required = True
                 source = self.connection().execute("SELECT id, dataset_id, created_at_ms FROM biometric_history_identity LIMIT 2").fetchall()

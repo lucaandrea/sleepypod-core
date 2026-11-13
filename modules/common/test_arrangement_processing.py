@@ -131,6 +131,72 @@ def test_changed_source_and_disappeared_intent_do_not_reuse_old_acknowledgment(r
     assert biometrics.execute("SELECT * FROM household_processing_receipts").fetchone() == original
 
 
+@pytest.mark.parametrize("change", [
+    "UPDATE households SET mode='solo-anywhere'",
+    "UPDATE households SET mode='unknown'",
+    "DELETE FROM households",
+    "DROP TABLE households",
+    "INSERT INTO households VALUES ('unexpected-household', 'solo-anywhere', 1, 1)",
+])
+def test_fresh_process_cannot_treat_a_changed_assignment_as_legacy_solo(rig, change):
+    configuration, biometrics, _, consumer, resets, clock = rig
+    configuration.execute(change)
+    configuration.commit()
+    restarted = ArrangementProcessing(consumer.config_path, lambda: biometrics, "sleep-detector",
+                                     lambda desired: resets.append(desired) or True, clock, clock)
+    sample = int(clock.now * 1000)
+    assert not restarted.before_frame(sample)
+    restarted.after_frame(sample)
+    assert restarted.problem
+    assert resets == []
+    assert biometrics.execute("SELECT * FROM household_processing_receipts").fetchall() == []
+
+
+@pytest.mark.parametrize("previous_component", ["sleep-detector", "piezo-processor"])
+def test_saved_adoption_survives_process_restart_when_configuration_is_removed(rig, previous_component):
+    configuration, biometrics, _, consumer, _, clock = rig
+    sample = int(clock.now * 1000)
+    assert consumer.before_frame(sample)
+    consumer.after_frame(sample)
+    biometrics.execute("UPDATE household_processing_receipts SET component=?", (previous_component,))
+    biometrics.commit()
+    saved = biometrics.execute("SELECT * FROM household_processing_receipts").fetchall()
+    configuration.execute("DELETE FROM households")
+    configuration.execute("DELETE FROM household_arrangement_transitions")
+    configuration.commit()
+    restarted = ArrangementProcessing(consumer.config_path, lambda: biometrics, "sleep-detector",
+                                     lambda _: pytest.fail('unexpected reset'), clock, clock)
+    clock.now += 2
+    assert not restarted.before_frame(int(clock.now * 1000))
+    restarted.after_frame(int(clock.now * 1000))
+    assert restarted.problem
+    assert biometrics.execute("SELECT * FROM household_processing_receipts").fetchall() == saved
+
+
+@pytest.mark.parametrize("transition_state", ["held", "cancelled", None])
+def test_uncommitted_solo_household_keeps_legacy_processing(rig, transition_state):
+    configuration, _, _, consumer, resets, clock = rig
+    configuration.execute("UPDATE households SET mode='solo-anywhere', assignment_revision=1")
+    if transition_state is None:
+        configuration.execute("DELETE FROM household_arrangement_transitions")
+    else:
+        configuration.execute("UPDATE household_arrangement_transitions SET state=?", (transition_state,))
+    configuration.commit()
+    assert consumer.before_frame(int(clock.now * 1000))
+    assert consumer.intent is None and consumer.problem is None
+    assert resets == []
+
+
+def test_missing_recording_database_cannot_confirm_legacy_identity(rig):
+    configuration, _, _, consumer, _, clock = rig
+    configuration.execute("DELETE FROM households")
+    configuration.execute("DELETE FROM household_arrangement_transitions")
+    configuration.commit()
+    consumer.connection = lambda: None
+    assert not consumer.before_frame(int(clock.now * 1000))
+    assert consumer.problem == "Recording database unavailable"
+
+
 def test_recording_database_replacement_blocks_receipt(rig):
     _, biometrics, _, consumer, resets, clock = rig
     biometrics.execute("UPDATE biometric_history_identity SET dataset_id=?", (str(uuid4()),))
@@ -170,9 +236,10 @@ def test_legacy_solo_is_unchanged_and_missing_database_is_not_created(tmp_path):
     path = tmp_path / "solo.db"
     with sqlite3.connect(path) as connection:
         connection.execute("CREATE TABLE side_settings(side TEXT)")
-    consumer = ArrangementProcessing(path, lambda: None, "sleep-detector", lambda _: pytest.fail('unexpected reset'))
-    assert consumer.before_frame(float('nan'))
-    assert consumer.intent is None
+    with sqlite3.connect(":memory:") as biometrics:
+        consumer = ArrangementProcessing(path, lambda: biometrics, "sleep-detector", lambda _: pytest.fail('unexpected reset'))
+        assert consumer.before_frame(float('nan'))
+        assert consumer.intent is None
     path.unlink()
     with pytest.raises(sqlite3.OperationalError):
         read_intent(path)
