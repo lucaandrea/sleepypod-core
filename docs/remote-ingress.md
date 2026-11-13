@@ -97,8 +97,10 @@ Before publishing, verify the actual Core release refuses missing/incorrect
 credentials on every private-data and control API and is configured with its
 owner/personal authentication. Separately enumerate the intentionally public
 sign-in/bootstrap responses and confirm they contain no private data or controls.
-The local proxy tests use a synthetic origin; they prove
-transport behavior, not the deployed controller's authorization configuration.
+The transport suite uses a synthetic origin. A separate integration suite runs
+the production Core authentication, Host filter, owner connection handler and
+personal account handlers behind the actual proxy, with isolated fixture accounts
+and storage. Neither suite establishes the deployed controller's configuration.
 
 After publishing, verify the certificate, fresh owner and personal challenges,
 account switching and revocation, no-store responses and an ordinary read on
@@ -117,6 +119,7 @@ redirect itself. Core and tunnel/provider logs retain their own separate policie
 
 ```sh
 python3 scripts/remote_ingress/test_ingress.py -v
+pnpm exec vitest run --config scripts/remote_ingress/vitest.config.mts
 ```
 
 Nginx is required; its absence fails rather than silently skipping the checks.
@@ -124,7 +127,13 @@ The suite starts only a loopback synthetic origin and a task-owned Nginx process
 then shuts both down. It verifies individual bearer identities, browser cookies,
 connection challenges, host/origin validation, explicit writes, blocked maintenance,
 no caching, size limits and no replay after a lost command response. It never
-contacts a Pod or publishes a hostname. GitHub runs the same suite on Linux.
+contacts a Pod or publishes a hostname. The second suite verifies exact Core Host
+configuration, owner/personal separation, fresh identity challenges, browser
+account switching and stale-editor rejection, sign-out, revoked devices and the
+personal privacy boundary. Only SQLite storage is redirected into the fixture;
+it does not start instrumentation, a controller or hardware services. This is
+local HTTP connector traffic, not certificate, TLS or cellular acceptance.
+GitHub runs both suites on Linux.
 
 Primary references:
 - [Nginx proxy configuration](https://nginx.org/en/docs/http/ngx_http_proxy_module.html)
