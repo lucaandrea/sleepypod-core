@@ -79,8 +79,10 @@ native login flow before publishing; do not claim Safari success verifies iOS.
 Do not weaken an employer's VPN or device policies to make the connection work.
 
 Before publishing, verify the actual Core release refuses missing/incorrect
-credentials on every exposed API and is configured with its owner/personal
-authentication. The local proxy tests use a synthetic origin; they prove
+credentials on every private-data and control API and is configured with its
+owner/personal authentication. Separately enumerate the intentionally public
+sign-in/bootstrap responses and confirm they contain no private data or controls.
+The local proxy tests use a synthetic origin; they prove
 transport behavior, not the deployed controller's authorization configuration.
 
 After publishing, verify the certificate, fresh owner and personal challenges,
