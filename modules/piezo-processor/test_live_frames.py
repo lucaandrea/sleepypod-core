@@ -120,7 +120,8 @@ def test_main_rejects_backlog_and_resets_before_accepting_recovery(monkeypatch, 
     with sqlite3.connect(config_path) as connection:
         connection.execute('CREATE TABLE side_settings(side TEXT)')
     monkeypatch.setattr(main, 'SLEEPYPOD_DB', config_path)
-    monkeypatch.setattr(main, "open_biometrics_db", lambda: SimpleNamespace(close=lambda: None))
+    # Legacy admission now inspects durable adoption receipts as well as current configuration.
+    monkeypatch.setattr(main, "open_biometrics_db", lambda: sqlite3.connect(":memory:"))
     monkeypatch.setattr(main, "report_health", lambda *args: None)
     monkeypatch.setattr(main, "read_snapshot", lambda _, now: quiet_snapshot(now))
     monkeypatch.setattr(main, "KNOWN_RECORD_TYPES", {"piezo-dual"})
