@@ -35,6 +35,11 @@ ordinary native controls use HTTPS independently. Cloud model training, some
 advanced settings and any write absent from the list also require the local app.
 The ingress is therefore not a claim of complete remote feature parity.
 
+The native Status screen's six-read tRPC batch is supported, including Wi-Fi
+status and the four services' active/inactive labels. This exception does not
+admit log contents, shell commands or maintenance. A batch mixing an approved
+status read with a restricted procedure is rejected in full.
+
 ## Prepare without changing a live system
 
 On the intended home connector, use a verified Pod address and a hostname you
@@ -51,6 +56,16 @@ The output must be a new directory. The generator accepts only a DNS hostname,
 an explicit private IPv4 Pod address and unprivileged ports; it does not accept
 credentials. `deployment.json` records `published: false` and `started: false`.
 It does not alter Pod services, Homebridge, Home Assistant, Tailscale or routines.
+
+Core also checks the incoming Host header. Before deployment, append **only the
+exact selected hostname** to the Pod service's existing `SLEEPYPOD_ALLOWED_HOSTS`
+configuration, preserving existing entries. For example, an existing value of
+`pod.example.net` becomes `pod.example.net,sleep.example.com`. Do not use a wildcard
+or replace the header with a LAN address: the browser's Host and Origin must
+agree for login and cookie-authenticated actions. The generated metadata records
+this requirement as unapplied; the renderer does not edit the Pod environment or
+restart its controller. Apply it with the reviewed deployment and maintenance
+window. Until then Core correctly returns `403 Host not allowed` for that domain.
 
 With Nginx installed, validate the rendered file using its absolute paths:
 
@@ -87,7 +102,9 @@ transport behavior, not the deployed controller's authorization configuration.
 
 After publishing, verify the certificate, fresh owner and personal challenges,
 account switching and revocation, no-store responses and an ordinary read on
-cellular and the permitted work network. Then perform an attended ordinary
+cellular and the permitted work network. Check the native Status screen as well
+as temperatures; a successful initial connection does not verify its health batch.
+Then perform an attended ordinary
 control/readback. An uncertain command must be inspected by receipt rather than
 resent. Disconnect the connector separately and verify local Pod routines remain
 independent. These observations are still outstanding.
